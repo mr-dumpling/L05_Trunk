@@ -1,0 +1,85 @@
+Index: frameworks/base/packages/Keyguard/src/com/face/scanner/FaceActivity.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/face/scanner/FaceActivity.java	(revision 5678)
++++ frameworks/base/packages/Keyguard/src/com/face/scanner/FaceActivity.java	(revision 5679)
+@@ -87,6 +87,7 @@
+     private static final int Face_DEMO_REMOVE_REQUEST = 303;
+     //Add by junwei.shen, for deal Face entry timeout, at 2017.7.4
+     private static final int Face_ENTRY_TIMEOUT = 304;
++    private static final int FROM_SETTING = 400;
+     
+     public static final int MSG_SHOW_HINT1_TV = 0x001;
+     public static final int MSG_SHOW_HINT2_TV = 0x002;
+@@ -106,6 +107,7 @@
+     public String HINT_TEXT_4;
+     
+     private int mRequestType;
++    private int mFromSource;
+     private boolean isFMode;
+     private User user; // 
+     private boolean isNotHacker; 
+@@ -246,6 +248,7 @@
+         HINT_TEXT_4 = getString(R.string.ic_default_no_face_data_info);
+         //isFMode = getIntent().getBooleanExtra("isFMode", false);
+         mRequestType = getIntent().getIntExtra("requestType", 0);
++        mFromSource = getIntent().getIntExtra("source", 0);
+        // Log.d(TAG, "mRequestType:"+mRequestType+", isFMode:"+isFMode);
+         /*if(isFMode)
+         {
+@@ -568,6 +571,9 @@
+         mCameraView.releaseCamera();
+         stopThread();
+         super.onPause();
++        if (mRequestType == Face_NEW_REQUEST && mFromSource == FROM_SETTING) {
++            finish();
++        }
+     }
+ 
+     private void stopThread() {
+Index: frameworks/base/packages
+===================================================================
+--- frameworks/base/packages	(revision 5678)
++++ frameworks/base/packages	(revision 5679)
+
+Property changes on: frameworks/base/packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/CMCC_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE/frameworks/base/packages:r4676-4677
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 5678)
++++ frameworks/base	(revision 5679)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/CMCC_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE/frameworks/base:r4676-4677
+Index: packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 5678)
++++ packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 5679)
+@@ -72,6 +72,7 @@
+     private static final int FACE_NEW_REQUEST = 300;
+     private static final int FACE_REPLACE_REQUEST = 301;
+     private static final int FACE_REMOVE_REQUEST = 302;
++    private static final int FROM_SETTING = 400;
+ 
+     private static final int REFLASUH_UI_ENTRY_FACEDATA_NUM = 11;
+ 	private int isPrivacyMode = 0;  //added by iuv luyang
+@@ -534,6 +535,7 @@
+         Intent intent = new Intent();
+         intent.setClassName("com.android.systemui", "com.face.scanner.FaceActivity");//
+ 		intent.putExtra("requestType",request);
++		intent.putExtra("source",FROM_SETTING);
+         startActivityForResult(intent,request);
+     }
+ 
+Index: packages/apps/Settings
+===================================================================
+--- packages/apps/Settings	(revision 5678)
++++ packages/apps/Settings	(revision 5679)
+
+Property changes on: packages/apps/Settings
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/CMCC_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE/packages/apps/Settings:r4676-4677

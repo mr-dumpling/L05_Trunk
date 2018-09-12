@@ -1,0 +1,148 @@
+Index: frameworks/base/cmds/bootanimation/bootanimation_main.cpp
+===================================================================
+--- frameworks/base/cmds/bootanimation/bootanimation_main.cpp	(revision 1077)
++++ frameworks/base/cmds/bootanimation/bootanimation_main.cpp	(revision 1078)
+@@ -73,8 +73,12 @@
+         property_get("persist.sys.mute.state", volume, "-1");
+         int nVolume = -1;
+         nVolume = atoi(volume);
++		char volume1[PROPERTY_VALUE_MAX];
++		property_get("persist.sys.mutepower.state", volume1, "-1");
++        int nVolume1 = -1;
++        nVolume1 = atoi(volume1);
+         ALOGD("[BootAnimation %s %d]nVolume=%d",__FUNCTION__,__LINE__,nVolume);
+-        if(nVolume == 0 || nVolume == 1 ){
++        if(nVolume == 0 || nVolume == 1 || nVolume1 == 1 ){
+             sePaly = false;
+         }
+         ALOGD("before new BootAnimation...");
+
+Property changes on: frameworks/base/cmds/bootanimation/bootanimation_main.cpp
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/cmds/bootanimation/bootanimation_main.cpp:r723
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1077)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1078)
+@@ -5999,6 +5999,7 @@
+     <string name="sound_settings_example_summary">Ring volume at 80%</string>
+ 
+     <string name="silent_mode_option_title">Silent mode</string>
++    <string name="mute_power_mode_option">Mute power on &amp; off ringtone</string>
+     <!-- Sound: Title for the option managing media volume. [CHAR LIMIT=30] -->
+     <string name="media_volume_option_title">Media volume</string>
+ 
+Index: packages/apps/Settings/res/xml/sound_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/sound_settings.xml	(revision 1077)
++++ packages/apps/Settings/res/xml/sound_settings.xml	(revision 1078)
+@@ -82,6 +82,9 @@
+                 android:persistent="false"
+                 android:ringtoneType="alarm" />
+ 
++         <SwitchPreference
++                android:key="mute_power_mode"
++                android:title="@string/mute_power_mode_option" />
+         <!-- Other sounds -->
+         <Preference
+                 android:key="other_sounds"
+Index: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1077)
++++ packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1078)
+@@ -73,6 +73,7 @@
+ import java.util.Arrays;
+ import java.util.List;
+ import java.util.Objects;
++import android.os.SystemProperties;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+ 
+@@ -80,6 +81,7 @@
+     private static final String TAG = "SoundSettings";
+ 	
+ 	private static final String KEY_SILENT_MODE = "silent_mode";
++	private static final String KEY_MUTE_POWER_MODE = "mute_power_mode";
+     private static final String KEY_MEDIA_VOLUME = "media_volume";
+     private static final String KEY_ALARM_VOLUME = "alarm_volume";
+     private static final String KEY_RING_VOLUME = "ring_volume";
+@@ -122,6 +124,7 @@
+     private Preference mAlarmRingtonePreference;
+     private TwoStatePreference mVibrateWhenRinging;
+ 	private SwitchPreference mSilentModePreference;
++	private SwitchPreference mMutePowerModePreference;
+     private ComponentName mSuppressor;
+     private int mRingerMode = -1;
+ 
+@@ -191,6 +194,7 @@
+         initRingtones();
+         initVibrateWhenRinging();
+ 		initSilentMode();
++		initMutePowerMode();
+         updateRingerMode();
+         updateEffectsSuppressor();
+ 
+@@ -213,6 +217,7 @@
+         ///M: ALPS02723215 update the switch status when resume.
+         updateVibrateWhenRinging();
+ 		updateSilentMode();
++		updateMutePowerMode();
+         for (VolumeSeekBarPreference volumePref : mVolumePrefs) {
+             volumePref.onActivityResume();
+         }
+@@ -547,6 +552,49 @@
+ 			
+ 	}
+ 
++	private void updateMutePowerMode() {
++			if (mSilentModePreference== null) return;
++			boolean silentMode=Settings.System.getInt(getContentResolver(),
++					Settings.System.VIBRATE_IN_SILENT, 0) != 0;
++			String vmHeapSize = SystemProperties.get("persist.sys.mutepower.state", "STAT");
++			boolean isChecked  = vmHeapSize.equals("1");
++			mMutePowerModePreference.setChecked(isChecked);
++		}
++
++	private void initMutePowerMode(){
++		mMutePowerModePreference=(SwitchPreference)getPreferenceScreen().findPreference(KEY_MUTE_POWER_MODE);
++		final int stream=mAudioManager.getRingerModeInternal();
++		if (mMutePowerModePreference== null) {
++            Log.i(TAG, "Preference not found: " + KEY_SILENT_MODE);
++            return;
++        }
++        if (!mVoiceCapable) {
++            getPreferenceScreen().removePreference(mMutePowerModePreference);
++            mMutePowerModePreference= null;
++            return;
++        }
++        mMutePowerModePreference.setPersistent(false);
++  		updateMutePowerMode();
++        mMutePowerModePreference.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
++			
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++            	
++                final boolean val = (Boolean) newValue;
++
++				if(val){
++					SystemProperties.set("persist.sys.mutepower.state","1");
++				
++				}else{
++					SystemProperties.set("persist.sys.mutepower.state","2");
++				}
++                return Settings.System.putInt(getContentResolver(),
++                        Settings.System.VIBRATE_IN_SILENT,
++                        val ? 1 : 0);
++         	   }
++			
++     		 });
++		}
+ 	private void setSilentMode(){
+ 		int zenMode=mNotificationManager.getZenMode();
+ 		switch (zenMode) {
+
+Property changes on: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java:r723

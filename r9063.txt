@@ -1,0 +1,1129 @@
+Index: vendor/branch/5058A_TelefonicaPeru/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 0)
++++ vendor/branch/5058A_TelefonicaPeru/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 9063)
+@@ -0,0 +1,1124 @@
++/*
++ * Copyright (C) 2006 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.dialer;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.app.DialogFragment;
++import android.app.KeyguardManager;
++import android.app.ProgressDialog;
++import android.app.backup.BackupManager;
++import android.content.ActivityNotFoundException;
++import android.content.ContentResolver;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.res.Configuration;
++
++import android.content.Intent;
++import android.database.Cursor;
++import android.content.ComponentName;
++import android.net.Uri;
++import android.os.Looper;
++import android.os.IBinder;
++import android.os.PowerManager;
++import android.os.ServiceManager;
++import android.os.SystemProperties;
++import android.os.LocaleList;
++
++import android.provider.Settings;
++import android.telecom.PhoneAccount;
++import android.telecom.PhoneAccountHandle;
++import android.telecom.TelecomManager;
++import android.telephony.PhoneNumberUtils;
++import android.telephony.TelephonyManager;
++import android.text.TextUtils;
++import android.util.Log;
++import android.view.WindowManager;
++import android.widget.EditText;
++import android.widget.Toast;
++import android.provider.Settings;
++
++
++import com.android.common.io.MoreCloseables;
++import com.android.contacts.common.compat.CompatUtils;
++import com.android.contacts.common.compat.TelephonyManagerCompat;
++import com.android.contacts.common.database.NoNullCursorAsyncQueryHandler;
++import com.android.contacts.common.util.ContactDisplayUtils;
++import com.android.contacts.common.widget.SelectPhoneAccountDialogFragment;
++import com.android.contacts.common.widget.SelectPhoneAccountDialogFragment.SelectPhoneAccountListener;
++import com.android.dialer.calllog.PhoneAccountUtils;
++import com.android.dialer.util.PhoneNumberUtil;
++import com.android.dialer.util.TelecomUtil;
++import com.android.internal.telephony.PhoneConstants;
++import com.mediatek.contacts.simcontact.SubInfoUtils;
++import com.mediatek.dialer.ext.ExtensionManager;
++import com.mediatek.dialer.util.DialerFeatureOptions;
++import com.mediatek.telephony.TelephonyManagerEx;
++import com.mediatek.dialer.mmi.NvRAMAgent;
++
++
++import java.util.ArrayList;
++import java.util.List;
++import java.io.File;
++import java.io.FileReader;
++import java.io.IOException;
++import java.util.Locale;
++import java.lang.reflect.Method;
++
++
++
++
++
++/**
++ * Helper class to listen for some magic character sequences
++ * that are handled specially by the dialer.
++ *
++ * Note the Phone app also handles these sequences too (in a couple of
++ * relatively obscure places in the UI), so there's a separate version of
++ * this class under apps/Phone.
++ *
++ * TODO: there's lots of duplicated code between this class and the
++ * corresponding class under apps/Phone.  Let's figure out a way to
++ * unify these two classes (in the framework? in a common shared library?)
++ */
++public class SpecialCharSequenceMgr {
++    private static final String TAG = "SpecialCharSequenceMgr";
++	private final static int kSystemRootStateUnknow=-1;
++	private final static int kSystemRootStateDisable=0; 
++	private final static int kSystemRootStateEnable=1;
++	private final static String CERTIFICATE_VERSION="V1.0";
++	private static int systemRootState=kSystemRootStateUnknow;
++	private static final int CU_REF_START = 166;
++	private static final int CU_REF_LENGTH = 20;
++	private static IBinder binder;
++	private static NvRAMAgent agent; 
++	private static byte[] product_info = null;
++    private static final String TAG_SELECT_ACCT_FRAGMENT = "tag_select_acct_fragment";
++
++    private static final String SECRET_CODE_ACTION = "android.provider.Telephony.SECRET_CODE";
++    private static final String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
++    private static final String MMI_IMEI_DISPLAY = "*#06#";
++    private static final String MMI_REGULATORY_INFO_DISPLAY = "*#07#";
++    private static final String MMI_TEST_DEVICE = "*#2886#";
++
++    /// M: add for handle reboot meta secret code @{
++    private static final String FK_SUPPORTED = "1";
++    private static final String FK_REBOOT_META_SUPPORT = "ro.mtk_rebootmeta_support";
++    private static final String MMI_USB_REBOOT_META_SECRET_CODE = "*#*#3641122#*#*";
++    private static final String MMI_WIFI_REBOOT_META_SECRET_CODE = "*#*#3642233#*#*";
++	private static final String MMI_EXTERNAL_VERSION = "*#92#";    
++	private static final String MMI_INTERNAL_VERSION = "*#7522#";	
++	private static final String MMI_CALL_TIMES="###232#";	
++	private static final String MMI_RESET_FACTORY="*#336699*#"; 	
++	private static final String ENGINEER_MODE_TEST = "*#1923#";	
++	private static final String CUSTOMER_VER_EXTERNAL = "*#837837#";	
++	private static final String CUSTOMER_VERSION_INTERNAL= "*#168*#";	
++	private static final String MMI_TEST_FOR_TCL = "*#458#";	
++	private static final String INTERNAL_VER_FOR_TCL = "*#208*#";	
++	private static final String MMI_CHECK_ROOT= "*#858#";
++	private static final String MMI_CHECK_Efused= "*#9463*5#";
++	private static final String MMI_CHECK_ROOT2="*#7668#";
++	private static final String CUSTOMER_VERSION_FOR_TCL = "*#3228#";
++	private static final String ENGINEER_MODE_TEST_TCL="*#*#82533284#*#*";
++	private static final String MMI_ENGLISH_LANGUAGE="*#0044#";
++	private static final String MMI_FRENCH_LANGUAGE="*#0033#";
++    /// @}
++
++    /**
++     * Remembers the previous {@link QueryHandler} and cancel the operation when needed, to
++     * prevent possible crash.
++     *
++     * QueryHandler may call {@link ProgressDialog#dismiss()} when the screen is already gone,
++     * which will cause the app crash. This variable enables the class to prevent the crash
++     * on {@link #cleanup()}.
++     *
++     * TODO: Remove this and replace it (and {@link #cleanup()}) with better implementation.
++     * One complication is that we have SpecialCharSequenceMgr in Phone package too, which has
++     * *slightly* different implementation. Note that Phone package doesn't have this problem,
++     * so the class on Phone side doesn't have this functionality.
++     * Fundamental fix would be to have one shared implementation and resolve this corner case more
++     * gracefully.
++     */
++    private static QueryHandler sPreviousAdnQueryHandler;
++
++    public static class HandleAdnEntryAccountSelectedCallback extends SelectPhoneAccountListener{
++        final private Context mContext;
++        final private QueryHandler mQueryHandler;
++        final private SimContactQueryCookie mCookie;
++
++        public HandleAdnEntryAccountSelectedCallback(Context context,
++                QueryHandler queryHandler, SimContactQueryCookie cookie) {
++            mContext = context;
++            mQueryHandler = queryHandler;
++            mCookie = cookie;
++        }
++
++        @Override
++        public void onPhoneAccountSelected(PhoneAccountHandle selectedAccountHandle,
++                boolean setDefault) {
++            /// M: to support CDMA ADN query, uri should change to PBR if CDMA sim @{
++            final TelecomManager telecomManager =
++                    (TelecomManager) mContext.getSystemService(Context.TELECOM_SERVICE);
++            int subId = TelephonyManager.getDefault().getSubIdForPhoneAccount(
++                    telecomManager.getPhoneAccount(selectedAccountHandle));
++            Uri uri = SubInfoUtils.getIccProviderUri(subId);
++            /// @}
++            handleAdnQuery(mQueryHandler, mCookie, uri);
++            // TODO: Show error dialog if result isn't valid.
++        }
++
++    }
++
++    public static class HandleMmiAccountSelectedCallback extends SelectPhoneAccountListener{
++        final private Context mContext;
++        final private String mInput;
++        public HandleMmiAccountSelectedCallback(Context context, String input) {
++            mContext = context.getApplicationContext();
++            mInput = input;
++        }
++
++        @Override
++        public void onPhoneAccountSelected(PhoneAccountHandle selectedAccountHandle,
++                boolean setDefault) {
++            TelecomUtil.handleMmi(mContext, mInput, selectedAccountHandle);
++        }
++    }
++
++    /** This class is never instantiated. */
++    private SpecialCharSequenceMgr() {
++    }
++
++    public static boolean handleChars(Context context, String input, EditText textField) {
++        //get rid of the separators so that the string gets parsed correctly
++        String dialString = PhoneNumberUtils.stripSeparators(input);
++
++        if (handleDeviceIdDisplay(context, dialString)
++				|| handleChangeFrench(context, dialString)
++				|| handleChangeEnglish(context, dialString)
++				|| handleEngineerModeTest2(context,  dialString)
++                || handleRegulatoryInfoDisplay(context, dialString)
++                || handlePinEntry(context, dialString)
++                || handleAdnEntry(context, dialString, textField)
++                || handleSecretCode(context, dialString)
++                || handleMMITest(context, dialString)
++                /// M: for plug-in @{
++                || ExtensionManager.getInstance().getDialPadExtension().handleChars(context,
++                        dialString)
++                ||handleCallTimes(context, dialString)
++                ||handleResetFactorysettings(context, dialString)
++                ||handleEngineerModeTest(context,  dialString)
++                ||handleCustomerExternalVersion(context, dialString)
++                ||handleCustomerInternalVersion(context, dialString)
++                ||handleFactoryModeTest(context, dialString)
++                ||handleCustomerInternalVersion2(context, dialString)
++                ||handleCheckRoot(context, dialString)
++                ||handleInternalVersion(context, dialString)
++                ||handleExternalVersion(context, dialString)
++                ||handleCheckEfused(context, dialString)
++                ||handleCheckRoot2(context, dialString) 
++                /// @}
++                ) {
++            return true;
++        }
++
++        return false;
++    }
++
++    /**
++     * Cleanup everything around this class. Must be run inside the main thread.
++     *
++     * This should be called when the screen becomes background.
++     */
++    public static void cleanup() {
++        if (Looper.myLooper() != Looper.getMainLooper()) {
++            Log.wtf(TAG, "cleanup() is called outside the main thread");
++            return;
++        }
++
++        if (sPreviousAdnQueryHandler != null) {
++            sPreviousAdnQueryHandler.cancel();
++            sPreviousAdnQueryHandler = null;
++        }
++    }
++
++    /**
++     * Handles secret codes to launch arbitrary activities in the form of *#*#<code>#*#*.
++     * If a secret code is encountered an Intent is started with the android_secret_code://<code>
++     * URI.
++     *
++     * @param context the context to use
++     * @param input the text to check for a secret code in
++     * @return true if a secret code was encountered
++     */
++    static boolean handleSecretCode(Context context, String input) {
++        // Secret codes are in the form *#*#<code>#*#*
++
++        /// M: for plug-in @{
++        input = ExtensionManager.getInstance().getDialPadExtension().handleSecretCode(input);
++        /// @}
++        /// M: add for handle reboot meta secret code @{
++        if (FK_SUPPORTED.equals(SystemProperties.get(FK_REBOOT_META_SUPPORT))) {
++            if (handleRebootMetaSecretCode(context, input)) {
++                return true;
++            }
++        }
++        /// @}
++        int len = input.length();
++        if (len > 8 && input.startsWith("*#*#") && input.endsWith("#*#*")) {
++            final Intent intent = new Intent(SECRET_CODE_ACTION,
++                    Uri.parse("android_secret_code://" + input.substring(4, len - 4)));
++            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);        
++            context.sendBroadcast(intent);
++            return true;
++        }
++
++        return false;
++    }
++
++    /**
++     * Handle ADN requests by filling in the SIM contact number into the requested
++     * EditText.
++     *
++     * This code works alongside the Asynchronous query handler {@link QueryHandler}
++     * and query cancel handler implemented in {@link SimContactQueryCookie}.
++     */
++    static boolean handleAdnEntry(Context context, String input, EditText textField) {
++        /* ADN entries are of the form "N(N)(N)#" */
++        TelephonyManager telephonyManager =
++                (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
++        if (telephonyManager == null
++                || (telephonyManager.getPhoneType() != TelephonyManager.PHONE_TYPE_GSM
++                // M: support CDMA ADN requests
++                && telephonyManager.getPhoneType() != TelephonyManager.PHONE_TYPE_CDMA)) {
++            return false;
++        }
++
++        // if the phone is keyguard-restricted, then just ignore this
++        // input.  We want to make sure that sim card contacts are NOT
++        // exposed unless the phone is unlocked, and this code can be
++        // accessed from the emergency dialer.
++        KeyguardManager keyguardManager =
++                (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
++        if (keyguardManager.inKeyguardRestrictedInputMode()) {
++            return false;
++        }
++
++        int len = input.length();
++        if ((len > 1) && (len < 5) && (input.endsWith("#"))) {
++            try {
++                // get the ordinal number of the sim contact
++                final int index = Integer.parseInt(input.substring(0, len-1));
++
++                /// M: Fix ALPS02287171. The index of ADN starts from 1. @{
++                if (index <= 0) {
++                    return false;
++                }
++                /// @}
++
++                // The original code that navigated to a SIM Contacts list view did not
++                // highlight the requested contact correctly, a requirement for PTCRB
++                // certification.  This behaviour is consistent with the UI paradigm
++                // for touch-enabled lists, so it does not make sense to try to work
++                // around it.  Instead we fill in the the requested phone number into
++                // the dialer text field.
++
++                // create the async query handler
++                final QueryHandler handler =
++                        new QueryHandler(context.getContentResolver(), (Activity)context);
++
++                // create the cookie object
++                /// M: Query will return cursor with exact index no here.
++                final SimContactQueryCookie sc = new SimContactQueryCookie(index, handler,
++                        ADN_QUERY_TOKEN);
++
++                /// M: Fix CR ALPS01863413. Record the ADN query cookie.
++                sSimContactQueryCookie = sc;
++
++                // setup the cookie fields
++                /// M: No need to set.
++                //sc.contactNum = index - 1;
++                sc.setTextField(textField);
++
++                // create the progress dialog
++                sc.progressDialog = new ProgressDialog(context);
++                sc.progressDialog.setTitle(R.string.simContacts_title);
++                sc.progressDialog.setMessage(context.getText(R.string.simContacts_emptyLoading));
++                sc.progressDialog.setIndeterminate(true);
++                sc.progressDialog.setCancelable(true);
++                sc.progressDialog.setOnCancelListener(sc);
++                sc.progressDialog.getWindow().addFlags(
++                        WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
++
++                List<PhoneAccountHandle> subscriptionAccountHandles =
++                        PhoneAccountUtils.getSubscriptionPhoneAccounts(context);
++                Context applicationContext = context.getApplicationContext();
++                boolean hasUserSelectedDefault = subscriptionAccountHandles.contains(
++                        TelecomUtil.getDefaultOutgoingPhoneAccount(applicationContext,
++                                PhoneAccount.SCHEME_TEL));
++
++                if (subscriptionAccountHandles.size() <= 1 || hasUserSelectedDefault) {
++                    /// M: to support CDMA ADN query, uri should change to PBR if CDMA sim @{
++                    final TelecomManager telecomManager =
++                            (TelecomManager) context.getSystemService(Context.TELECOM_SERVICE);
++                    PhoneAccountHandle accountHandle = hasUserSelectedDefault ?
++                            telecomManager.getDefaultOutgoingPhoneAccount(PhoneAccount.SCHEME_TEL)
++                            : (subscriptionAccountHandles.size() > 0 ? subscriptionAccountHandles
++                                    .get(0) : null);
++                    int subId = TelephonyManager.getDefault().getSubIdForPhoneAccount(
++                            telecomManager.getPhoneAccount(accountHandle));
++                    if (!SubInfoUtils.checkSubscriber(subId)) {
++                        return false;
++                    }
++                    Uri uri = SubInfoUtils.getIccProviderUri(subId);
++                    /// @}
++                    handleAdnQuery(handler, sc, uri);
++                } else {
++                    SelectPhoneAccountListener callback = new HandleAdnEntryAccountSelectedCallback(
++                            applicationContext, handler, sc);
++
++                    DialogFragment dialogFragment = SelectPhoneAccountDialogFragment.newInstance(
++                            subscriptionAccountHandles, callback);
++                    dialogFragment.show(((Activity) context).getFragmentManager(),
++                            TAG_SELECT_ACCT_FRAGMENT);
++                }
++
++                return true;
++            } catch (NumberFormatException ex) {
++                // Ignore
++            }
++        }
++        return false;
++    }
++
++    static boolean handleMMITest(Context context, String input) {
++        if (input.equals(MMI_TEST_DEVICE)) {
++            showMMITestPanel(context);
++            return true;
++        }
++        return false;
++    }
++	static boolean handleChangeEnglish(Context context, String input) {
++        if (input.equals(MMI_ENGLISH_LANGUAGE)) {
++            Locale newLocaleEN = Locale.US;
++            final LocaleList localeListEN = new LocaleList(newLocaleEN);
++			changeSystemLanguage(localeListEN);
++            return true;
++        }
++        return false;
++    }
++	static boolean handleChangeFrench(Context context, String input) {
++        if (input.equals(MMI_FRENCH_LANGUAGE)) {
++            Locale newLocaleEN = Locale.FRANCE;
++            final LocaleList localeListEN = new LocaleList(newLocaleEN);
++			changeSystemLanguage(localeListEN);
++            return true;
++        }
++        return false;
++    }
++	private static void changeSystemLanguage(LocaleList locale){
++		if (locale != null) {
++            try {
++                Class classActivityManagerNative = Class.forName("android.app.ActivityManagerNative");
++                Method getDefault = classActivityManagerNative.getDeclaredMethod("getDefault");
++                Object objIActivityManager = getDefault.invoke(classActivityManagerNative);
++                Class classIActivityManager = Class.forName("android.app.IActivityManager");
++                Method getConfiguration = classIActivityManager.getDeclaredMethod("getConfiguration");
++                Configuration config = (Configuration) getConfiguration.invoke(objIActivityManager);
++                config.setLocales(locale);
++                Class clzConfig = Class.forName("android.content.res.Configuration");
++                java.lang.reflect.Field userSetLocale = clzConfig.getField("userSetLocale");
++                userSetLocale.set(config, true);
++                Class[] clzParams = {Configuration.class};
++                Method updateConfiguration = classIActivityManager.getDeclaredMethod("updatePersistentConfiguration", clzParams);
++                updateConfiguration.invoke(objIActivityManager, config);
++                BackupManager.dataChanged("com.android.providers.settings");
++            } catch (Exception e) {
++                Log.d(TAG, "changeSystemLanguage: " + e.getLocalizedMessage());
++            }
++        }
++	}
++    static void showMMITestPanel(Context context) {
++        Intent activityIntent = new Intent(Intent.ACTION_MAIN);
++        activityIntent.setComponent(new ComponentName("com.android.mmi", "com.android.mmi.MMITestDevice"));
++        activityIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++        context.startActivity(activityIntent);
++    }
++
++    private static void handleAdnQuery(QueryHandler handler, SimContactQueryCookie cookie,
++            Uri uri) {
++        if (handler == null || cookie == null || uri == null) {
++            Log.w(TAG, "queryAdn parameters incorrect");
++            return;
++        }
++
++        // display the progress dialog
++        cookie.progressDialog.show();
++
++        // run the query.
++        /// M: add projection ADN_ADDITIONAL_PHONE_NUMBER_COLUMN_NAME @ {
++        handler.startQuery(ADN_QUERY_TOKEN, cookie, uri,
++                new String[]{ADN_PHONE_NUMBER_COLUMN_NAME, ADN_ADDITIONAL_PHONE_NUMBER_COLUMN_NAME},
++                null, null, null);
++        /// @}
++
++        if (sPreviousAdnQueryHandler != null) {
++            // It is harmless to call cancel() even after the handler's gone.
++            sPreviousAdnQueryHandler.cancel();
++        }
++        sPreviousAdnQueryHandler = handler;
++    }
++
++    static boolean handlePinEntry(final Context context, final String input) {
++        if ((input.startsWith("**04") || input.startsWith("**05")) && input.endsWith("#")) {
++            List<PhoneAccountHandle> subscriptionAccountHandles =
++                    PhoneAccountUtils.getSubscriptionPhoneAccounts(context);
++            boolean hasUserSelectedDefault = subscriptionAccountHandles.contains(
++                    TelecomUtil.getDefaultOutgoingPhoneAccount(context, PhoneAccount.SCHEME_TEL));
++
++            if (subscriptionAccountHandles.size() <= 1 || hasUserSelectedDefault) {
++                // Don't bring up the dialog for single-SIM or if the default outgoing account is
++                // a subscription account.
++                return TelecomUtil.handleMmi(context, input, null);
++            } else {
++                SelectPhoneAccountListener listener =
++                        new HandleMmiAccountSelectedCallback(context, input);
++
++                DialogFragment dialogFragment = SelectPhoneAccountDialogFragment.newInstance(
++                        subscriptionAccountHandles, listener);
++                dialogFragment.show(((Activity) context).getFragmentManager(),
++                        TAG_SELECT_ACCT_FRAGMENT);
++            }
++            return true;
++        }
++        return false;
++    }
++
++    // TODO: Use TelephonyCapabilities.getDeviceIdLabel() to get the device id label instead of a
++    // hard-coded string.
++    static boolean handleDeviceIdDisplay(Context context, String input) {
++        TelephonyManager telephonyManager =
++                (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
++
++        if (telephonyManager != null && input.equals(MMI_IMEI_DISPLAY)) {
++            int labelResId = (telephonyManager.getPhoneType() == TelephonyManager.PHONE_TYPE_GSM) ?
++                    R.string.imei : R.string.meid;
++            /// M: As CTS requirement, TelephonyManager.getDeviceId() will always return IMEI
++            /// in LTE on CDMA device. @{
++            if (telephonyManager.getPhoneType() == TelephonyManager.PHONE_TYPE_CDMA
++                    && telephonyManager.getLteOnCdmaMode() == PhoneConstants.LTE_ON_CDMA_TRUE) {
++                labelResId =  R.string.imei;
++            }
++            /// @}
++
++            List<String> deviceIds = new ArrayList<String>();
++            try {
++				String svnver ="SVN: ";
++				String version=SystemProperties.get("ro.def.software.version");
++				if(!TextUtils.isEmpty(version)&& version!=null){
++					svnver = svnver + version; 
++				}
++                if (TelephonyManagerCompat.getPhoneCount(telephonyManager) > 1 &&
++                    CompatUtils.isMethodAvailable(TelephonyManagerCompat.TELEPHONY_MANAGER_CLASS,
++                            "getDeviceId", Integer.TYPE)) {
++                    for (int slot = 0; slot < telephonyManager.getPhoneCount(); slot++) {
++                        String deviceId = telephonyManager.getDeviceId(slot);
++                        if (!TextUtils.isEmpty(deviceId)) {
++							deviceId="IMEI"+(slot+1)+":"+deviceId;
++                            deviceIds.add(deviceId);
++                        }
++                        String imeisv = telephonyManager.getDeviceSoftwareVersion(slot);
++                        if (!TextUtils.isEmpty(imeisv)) {
++                        	imeisv = "IMEISV" + (slot + 1) + ":" + imeisv;
++                        	deviceIds.add(imeisv);
++                        }
++                    }
++                } else {
++                   String deviceId = telephonyManager.getDeviceId(0);
++					/// M: Avoid null object be added
++					if(!TextUtils.isEmpty(deviceId)&& deviceId!=null){
++						deviceId="IMEI:"+deviceId;
++						deviceIds.add(deviceId);
++					}
++					String imeisv = telephonyManager.getDeviceSoftwareVersion();
++					if (!TextUtils.isEmpty(imeisv)) {
++					 	imeisv = "IMEISV:" + imeisv;
++                        deviceIds.add(imeisv);
++                    }
++                }
++				deviceIds.add(svnver); 
++				/*
++                /// M: Add single IMEI plugin. @{
++                deviceIds = ExtensionManager.getInstance().getDialPadExtension().getSingleIMEI(
++                        deviceIds);
++                /// @}
++				*/
++
++                /// M: Add single IMEI and MEID handle for OP01 OM project. @{
++                if (DialerFeatureOptions.isOpLightCustSupport()) {
++                    deviceIds = handleOpIMEIs(deviceIds);
++                }
++                /// @}
++            } catch (SecurityException e) {
++                /// M: Catch the security exception to avoid dialer crash, such as user denied
++                /// READ_PHONE_STATE permission in settings at N version. And display empty list.
++                Toast.makeText(context,
++                        R.string.missing_required_permission, Toast.LENGTH_SHORT).show();
++            }
++
++            AlertDialog alert = new AlertDialog.Builder(context)
++                    .setTitle(labelResId)
++                    .setItems(deviceIds.toArray(new String[deviceIds.size()]), null)
++                    .setPositiveButton(android.R.string.ok, null)
++                    .setCancelable(false)
++                    .show();
++            return true;
++        }
++        return false;
++    }
++	private static boolean handleResetFactorysettings(Context context, String input) {
++		Log.w(TAG, "handleResetFactorysettings()..... input is"+input);
++		if(input.equals(MMI_RESET_FACTORY)){
++			ContentResolver contentResolver=context.getContentResolver();
++			Settings.Global.putString(contentResolver,"reset_factory","1");
++			//resetHandleCallTimes();
++			Intent intent=new Intent("com.android.settings.RESET_FACTORY");
++			intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
++			context.sendBroadcast(intent);
++			return true;					
++		}		 
++		return false;	 
++	}
++	private static boolean handleCallTimes(Context context, String input) {
++		Log.w(TAG, "handleCallTimes()..... input is"+input);
++		
++		if(input.equals(MMI_CALL_TIMES)){
++			Intent intent=new Intent("android.intent.action.MAIN");
++			ComponentName componentName=new ComponentName("com.android.dialer", "com.mediatek.dialer.mmi.AccessCall");
++			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++			intent.setComponent(componentName);
++			context.startActivity(intent);
++			return true;					
++		}		 
++		return false;	 
++	}
++	private static boolean handleEngineerModeTest(Context context, String input) {
++		if(input.equals(ENGINEER_MODE_TEST)) {	 
++			Intent intent = new Intent(Intent.ACTION_MAIN); 	   
++			intent.setComponent(new ComponentName("com.mediatek.engineermode","com.mediatek.engineermode.EngineerMode"));		
++			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 		
++			context.startActivity( intent); 				   
++			return true;	   
++		}		 
++		return false;  
++	}
++	private static boolean handleEngineerModeTest2(Context context, String input) {
++		Log.w("yujunjie", "SpecialCharSequenceMgr:handleEngineerModeTest2()..... input ="+input);
++		if(input!=null && input.equals(ENGINEER_MODE_TEST_TCL)) {	 
++			Intent intent = new Intent(Intent.ACTION_MAIN); 	   
++			intent.setComponent(new ComponentName("com.mediatek.engineermode","com.mediatek.engineermode.EngineerMode"));		
++			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 		
++			context.startActivity( intent); 				   
++			return true;	   
++		}		 
++		return false;  
++	}
++	static boolean handleInternalVersion(Context context, String input) {	 
++		if (input.equals(MMI_INTERNAL_VERSION)) {				
++			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.incremental");			   
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("Version Info")								
++				.setMessage(sw_ver)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;	   
++	} 
++	static boolean handleExternalVersion(Context context, String input) {	 
++		if (input.equals(MMI_EXTERNAL_VERSION)) {				
++			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.custintid");		   
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("Version Info")								
++				.setMessage(sw_ver)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;	   
++	}  
++	static boolean handleCustomerExternalVersion(Context context, String input) {	 
++		if (input.equals(CUSTOMER_VER_EXTERNAL)) {			
++			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.business.name");	
++			String sw_ver = "SVN:\n"+ SystemProperties.get("ro.def.software.version");		
++			String release_ver = commercial_name + "\n"+ sw_ver;		   
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("Version Info")								
++				.setMessage(release_ver)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;	   
++	}  
++	static boolean handleCustomerInternalVersion(Context context, String input) {	 
++		if (input.equals(CUSTOMER_VERSION_INTERNAL)) {			
++			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.business.name");
++			String sw_ver = "Certificate SW Version:\n"+ CERTIFICATE_VERSION;			
++			String release_ver = commercial_name + "\n"+ sw_ver;		   
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("Version Info")								
++				.setMessage(release_ver)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;	   
++	}  
++	static boolean handleCustomerInternalVersion2(Context context, String input) {
++		List<String> deviceIds = new ArrayList<String>();
++		if (input.equals(MMI_TEST_FOR_TCL )) {	
++			initProductInfo();
++			String SW_Version="SW Version: "+ SystemProperties.get("ro.build.version.custintid");
++			deviceIds.add(SW_Version);
++			String build="Build Version:"+SystemProperties.get("ro.build.date");
++			deviceIds.add(build);
++			String stringInfo =  new String(product_info, CU_REF_START, CU_REF_LENGTH);
++			boolean haseChar=false;
++			for(int i=0;i<CU_REF_LENGTH;i++){
++				if((product_info[i+CU_REF_START]^0)!=0){
++					haseChar=true;
++					break;
++				}
++			}
++			/*
++			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
++				haseChar=true;
++			}
++			*/
++			String su_ref=null;
++			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
++				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
++			}else{
++				su_ref="CU REF: "+SystemProperties.get("ro.tct.curef.default");
++			}
++			deviceIds.add(su_ref);
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("Version Info")								
++				.setItems(deviceIds.toArray(new String[deviceIds.size()]), null)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;	   
++	}
++	private static  void initProductInfo() {
++		binder = ServiceManager.getService("NvRAMAgent");
++		agent = NvRAMAgent.Stub.asInterface(binder);
++		try {
++			product_info = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++		} catch (Exception e) {
++			e.printStackTrace();
++		}
++	}
++	static boolean handleCheckEfused(Context context, String input) {	 
++		if(input.equals(MMI_CHECK_Efused)) { 
++			int checkValue =-1;
++			File readFile = new File("proc/efuse_status");  
++        	FileReader inCmd;
++			try {
++				inCmd = new FileReader(readFile);
++				checkValue = inCmd.read();  
++			} catch (IOException e) {
++				e.printStackTrace();
++			}
++			AlertDialog alert = new AlertDialog.Builder(context)
++			.setTitle("Check Efuse")
++			.setMessage(checkValue ==1 ? "true" : "false")
++			.setPositiveButton(android.R.string.ok, null)
++			.setCancelable(false).create(); 
++			alert.show();
++			return true;
++		}		 
++		return false;	
++	}  
++	static boolean handleFactoryModeTest(Context context, String input) {	 
++		List<String> deviceIds = new ArrayList<String>();
++		if (input.equals(INTERNAL_VER_FOR_TCL )|| input.equals(CUSTOMER_VERSION_FOR_TCL)) {	
++			String SW_Version="SW Version: "+ SystemProperties.get("ro.build.version.custintid");
++			deviceIds.add(SW_Version);
++			String build="Build Version:"+SystemProperties.get("ro.build.date");
++			deviceIds.add(build);
++			initProductInfo();
++			String stringInfo = new String(product_info, CU_REF_START, CU_REF_LENGTH);
++			boolean haseChar=false;
++			for(int i=0;i<CU_REF_LENGTH;i++){
++				if((product_info[i+CU_REF_START]^0)!=0){
++					haseChar=true;
++					break;
++				}
++			}
++			/*
++			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
++				haseChar=true;
++			}
++			*/
++			String su_ref=null;
++			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
++				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
++			}else{
++				su_ref="CU REF: "+SystemProperties.get("ro.tct.curef.default");
++			}
++			deviceIds.add(su_ref);
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("Version Info")								
++				.setItems(deviceIds.toArray(new String[deviceIds.size()]), null)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;
++	}  
++	static boolean handleCheckRoot(Context context, String input) {    
++		if (input.equals(MMI_CHECK_ROOT)) {
++			showCheckRoot(context);
++			return true;
++		}		
++		return false;
++	} 
++	static boolean handleCheckRoot2(Context context, String input) {    
++		if (input.equals(MMI_CHECK_ROOT2)) {
++			showCheckRoot(context);
++			return true;
++		}		
++		return false;
++	} 
++	static void showCheckRoot(Context context) {
++		AlertDialog alert = new AlertDialog.Builder(context)
++			.setTitle("Check Root")
++			.setMessage(isRootSystem() ? "true" : "false")
++			.setPositiveButton(android.R.string.ok, null)
++			.setCancelable(false).create(); 
++		alert.show();
++	}
++	public static boolean isRootSystem(){
++		if(systemRootState==kSystemRootStateEnable)
++			return true;
++		else if(systemRootState==kSystemRootStateDisable)
++			return false;
++		File file=null;
++		final String kSuSearchPaths[]={"/system/bin/","/system/xbin/","/system/sbin/","/sbin/","/vendor/bin/"};
++		try{
++			for(int i=0;i<kSuSearchPaths.length;i++){
++				file=new File(kSuSearchPaths[i]+"su");
++				if(file!=null&&file.exists()){
++					systemRootState=kSystemRootStateEnable; 
++					return true;
++				}
++			}
++		}catch(Exception e){
++		}			
++		systemRootState=kSystemRootStateDisable;
++		return false;
++	}
++
++    private static boolean handleRegulatoryInfoDisplay(Context context, String input) {
++        if (input.equals(MMI_REGULATORY_INFO_DISPLAY)) {
++            Log.d(TAG, "handleRegulatoryInfoDisplay() sending intent to settings app");
++			Intent intent = new Intent();// 	com.jrdcom.Elabel.SettingsRegulatoryActivity 	   
++			intent.setComponent(new ComponentName("com.jrdcom.Elabel","com.jrdcom.Elabel.SettingsRegulatoryActivity"));		
++			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 		
++            try {
++                context.startActivity(intent); 
++            } catch (ActivityNotFoundException e) {
++                Log.e(TAG, "startActivity() failed: " + e);
++            }
++            return true;
++        }
++        return false;
++    }
++
++    /*******
++     * This code is used to handle SIM Contact queries
++     *******/
++    private static final String ADN_PHONE_NUMBER_COLUMN_NAME = "number";
++    private static final String ADN_NAME_COLUMN_NAME = "name";
++    private static final int ADN_QUERY_TOKEN = -1;
++    /// M: [ALPS01764940]Add index to indicate the queried contacts @{
++    private static final String ADN_ID_COLUMN_NAME = "index";
++    /// @}
++    /// M: Add for query SIM Contact additional Number, only used when SIM Contact phone type
++    /// number is not set.
++    private static final String ADN_ADDITIONAL_PHONE_NUMBER_COLUMN_NAME = "additionalNumber";
++
++    /**
++     * Cookie object that contains everything we need to communicate to the
++     * handler's onQuery Complete, as well as what we need in order to cancel
++     * the query (if requested).
++     *
++     * Note, access to the textField field is going to be synchronized, because
++     * the user can request a cancel at any time through the UI.
++     */
++    private static class SimContactQueryCookie implements DialogInterface.OnCancelListener{
++        public ProgressDialog progressDialog;
++        public int contactNum;
++
++        // Used to identify the query request.
++        private int mToken;
++        private QueryHandler mHandler;
++
++        // The text field we're going to update
++        private EditText textField;
++
++        public SimContactQueryCookie(int number, QueryHandler handler, int token) {
++            contactNum = number;
++            mHandler = handler;
++            mToken = token;
++        }
++
++        /**
++         * Synchronized getter for the EditText.
++         */
++        public synchronized EditText getTextField() {
++            return textField;
++        }
++
++        /**
++         * Synchronized setter for the EditText.
++         */
++        public synchronized void setTextField(EditText text) {
++            textField = text;
++        }
++
++        /**
++         * Cancel the ADN query by stopping the operation and signaling
++         * the cookie that a cancel request is made.
++         */
++        public synchronized void onCancel(DialogInterface dialog) {
++            /** M: Fix CR ALPS01863413. Call QueryHandler.cancel(). @{ */
++            /* original code:
++            // close the progress dialog
++            if (progressDialog != null) {
++                progressDialog.dismiss();
++            }
++
++            // setting the textfield to null ensures that the UI does NOT get
++            // updated.
++            textField = null;
++
++            // Cancel the operation if possible.
++            mHandler.cancelOperation(mToken);
++            */
++            mHandler.cancel();
++            /** @} */
++        }
++    }
++
++    /**
++     * Asynchronous query handler that services requests to look up ADNs
++     *
++     * Queries originate from {@link #handleAdnEntry}.
++     */
++    private static class QueryHandler extends NoNullCursorAsyncQueryHandler {
++
++        private boolean mCanceled;
++        /// M: own activity
++        private Activity mActivity;
++
++        public QueryHandler(ContentResolver cr, Activity activity) {
++            super(cr);
++            mActivity = activity;
++        }
++
++        /**
++         * Override basic onQueryComplete to fill in the textfield when
++         * we're handed the ADN cursor.
++         */
++        @Override
++        protected void onNotNullableQueryComplete(int token, Object cookie, Cursor c) {
++            try {
++                sPreviousAdnQueryHandler = null;
++                /// M: Fix CR ALPS01863413. Clear the ADN query cookie.
++                sSimContactQueryCookie = null;
++
++                /// M: add activity check to avoid JE error
++                if (mCanceled || mActivity == null ||
++                        mActivity.isFinishing() || mActivity.isDestroyed()) {
++                    return;
++                }
++
++                SimContactQueryCookie sc = (SimContactQueryCookie) cookie;
++
++                // close the progress dialog.
++                sc.progressDialog.dismiss();
++
++                // get the EditText to update or see if the request was cancelled.
++                EditText text = sc.getTextField();
++
++                // if the TextView is valid, and the cursor is valid and positionable on the
++                // Nth number, then we update the text field and display a toast indicating the
++                // caller name.
++                /// M: [ALPS01764940]Add index to indicate the queried contacts @{
++                String name = null;
++                String number = null;
++                String additionalNumber = null;
++
++                if ((c != null) && (text != null)) {
++                    int adnIdIndex = c.getColumnIndex(ADN_ID_COLUMN_NAME);
++                    if(adnIdIndex == -1) {
++                        ///M:[portable] means can not find ADN_ID_COLUMN_NAME, use original logic.
++                        Log.v(TAG, "onNotNullableQueryComplete, use original logic to get adn.");
++                        if (c.moveToPosition(sc.contactNum)) {
++                            name = c.getString(c.getColumnIndexOrThrow(ADN_NAME_COLUMN_NAME));
++                            number = c.getString(c
++                                    .getColumnIndexOrThrow(ADN_PHONE_NUMBER_COLUMN_NAME));
++                        }
++                    } else {
++                        while (c.moveToNext()) {
++                            if (c.getInt(adnIdIndex) == sc.contactNum) {
++                                name = c.getString(c
++                                        .getColumnIndexOrThrow(ADN_NAME_COLUMN_NAME));
++                                number = c.getString(c
++                                        .getColumnIndexOrThrow(ADN_PHONE_NUMBER_COLUMN_NAME));
++                                additionalNumber = c
++                                        .getString(c.getColumnIndexOrThrow(
++                                                ADN_ADDITIONAL_PHONE_NUMBER_COLUMN_NAME));
++                                break;
++                            }
++                        }
++                    }
++
++                    // fill the text in.
++                    if (!TextUtils.isEmpty(number)) {
++                        text.getText().replace(0, 0, number);
++                    } else if (!TextUtils.isEmpty(additionalNumber)) {
++                        text.getText().replace(0, 0, additionalNumber);
++                    }
++
++                    // display the name as a toast
++                    /// M: empty name will cause ANR when calling getTtsSpannedPhoneNumber()
++                    Log.d(TAG, "onNotNullableQueryComplete, name : " + name
++                            + " number : " + PhoneNumberUtil.pii(number));
++                    if (!TextUtils.isEmpty(name)) {
++                        Context context = sc.progressDialog.getContext();
++                        CharSequence msg = ContactDisplayUtils.getTtsSpannedPhoneNumber(
++                                context.getResources(), R.string.menu_callNumber, name);
++                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show();
++                    }
++                }
++                /// @}
++            } finally {
++                MoreCloseables.closeQuietly(c);
++            }
++        }
++
++        public void cancel() {
++            mCanceled = true;
++            // Ask AsyncQueryHandler to cancel the whole request. This will fail when the query is
++            // already started.
++            cancelOperation(ADN_QUERY_TOKEN);
++            /// M: Fix CR ALPS01863413. Dismiss the progress and clear the ADN query cookie. @{
++            if (sSimContactQueryCookie != null
++                    && sSimContactQueryCookie.progressDialog != null) {
++                sSimContactQueryCookie.progressDialog.dismiss();
++                sSimContactQueryCookie = null;
++            }
++            /// @}
++        }
++    }
++
++
++    /** M: Fix CR ALPS01863413. Make the progress dismiss after the ADN query be cancelled.
++     *  And make it support screen rotation while phone account pick dialog shown. @{ */
++    private static SimContactQueryCookie sSimContactQueryCookie;
++
++    /**
++     * For ADN query with multiple phone accounts. If the the phone account pick
++     * dialog shown, then rotate the screen and select one account to query ADN.
++     * The ADN result would write into the old text view because the views
++     * re-created but the class did not known. So, the dialpad fragment should
++     * call this method to update the digits text filed view after it be
++     * re-created.
++     *
++     * @param textFiled
++     *            the digits text filed view
++     */
++    public static void updateTextFieldView(EditText textFiled) {
++        if (sSimContactQueryCookie != null) {
++            sSimContactQueryCookie.setTextField(textFiled);
++        }
++    }
++    /** @} */
++
++    /// M: for OP01 OM 6M project @{
++    /**
++     * handle IMEI display about MEID and IMEI.
++     *
++     * @param List<String> list, the IMEI string list.
++     * @return List<String>, the IMEI string list handled.
++     */
++    private static List<String> handleOpIMEIs(List<String> list) {
++        int phoneCount = TelephonyManager.getDefault().getPhoneCount();
++        String meid = "";
++        list.clear();
++        for (int i = 0; i < phoneCount; i++) {
++            String imei = TelephonyManager.getDefault().getImei(i);
++            Log.d(TAG, "handleOpIMEIs, imei = " + PhoneNumberUtil.pii(imei));
++            list.add("IMEI:" + imei);
++
++            if (TextUtils.isEmpty(meid)) {
++                meid = TelephonyManagerEx.getDefault().getMeid(i);
++                Log.d(TAG, "handleOpIMEIs, meid = " + PhoneNumberUtil.pii(meid));
++            }
++        }
++        meid = "MEID:" + meid;
++        list.add(meid);
++        return list;
++    }
++    /// @}
++
++    /** M: Handle reboot meta secret code, if match,reboot the device and set the meta boot type
++     * SystemProperties to usb or wifi mode according to the input.
++     * @param context the context to use
++     * @param input the secret code
++     * @return true if secret code matched
++     */
++    private static boolean handleRebootMetaSecretCode(Context context, String input) {
++        PowerManager powerManager = (PowerManager)context.getSystemService(Context.POWER_SERVICE);
++        if (powerManager != null && (MMI_USB_REBOOT_META_SECRET_CODE.equals(input)
++                || MMI_WIFI_REBOOT_META_SECRET_CODE.equals(input))) {
++            if (MMI_USB_REBOOT_META_SECRET_CODE.equals(input)) {
++                powerManager.reboot(PowerManager.REBOOT_META_USB);
++            } else {
++                powerManager.reboot(PowerManager.REBOOT_META_WIFI);
++            }
++            return true;
++        }
++        return false;
++    }
++}

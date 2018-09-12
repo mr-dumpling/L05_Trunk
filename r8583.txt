@@ -1,0 +1,192 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 8582)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 8583)
+@@ -36,6 +36,8 @@
+ 
+ 
+ import java.util.Objects;
++import android.util.Log;
++import java.util.Locale;
+ 
+ public class NavigationBarInflaterView extends FrameLayout implements TunerService.Tunable {
+ 
+@@ -104,6 +106,12 @@
+             createInflaters();
+             inflateChildren();
+             clearViews();
++			//Add feature by javen for NavigationBarView show from Right to Left: FR_ARABIC_RTOL
++			boolean bFrRtoL = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_ARABIC_RTOL);
++			if(bFrRtoL){
++				mCurrentLayout = getDefaultLayout();
++			}
++			//End of feature: FR_ARABIC_RTOL
+             inflateLayout(mCurrentLayout);
+         }
+     }
+@@ -231,6 +239,18 @@
+         String[] start = sets[0].split(BUTTON_SEPARATOR);
+         String[] center = sets[1].split(BUTTON_SEPARATOR);
+         String[] end = sets[2].split(BUTTON_SEPARATOR);
++		
++		//Add feature by javen for NavigationBarView show from Right to Left: FR_ARABIC_RTOL
++		boolean bFrRtoL = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_ARABIC_RTOL);
++		if(bFrRtoL){
++			String language = Locale.getDefault().getLanguage();
++			if(language.equals("ar")|| language.equals("fa")){
++				start = sets[2].split(BUTTON_SEPARATOR);
++				end = sets[0].split(BUTTON_SEPARATOR);
++			}
++		}
++		//End of feature: FR_ARABIC_RTOL
++		
+         // Inflate these in start to end order or accessibility traversal will be messed up.
+         inflateButtons(start, (ViewGroup) mRot0.findViewById(R.id.ends_group), false);
+         inflateButtons(start, (ViewGroup) mRot90.findViewById(R.id.ends_group), true);
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 8582)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 8583)
+@@ -2818,6 +2818,7 @@
+   <java-symbol type="bool" name="FR_EMC_CALL_ALWAYS_ON_SECRITY" />
+   <java-symbol type="bool" name="FR_EMC_CALL_INFO_IN_INDIA" />
+   <java-symbol type="bool" name="FR_FINGER_PRINT_ERROR_5TIMES_SCREEN_ON" />
++  <java-symbol type="bool" name="FR_ARABIC_RTOL" />
+   <java-symbol type="bool" name="FR_OTHER_TEST" />
+   <!-- feature techain end -->
+ 
+Index: frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- frameworks/base/core/res/res/values/features.xml	(revision 8582)
++++ frameworks/base/core/res/res/values/features.xml	(revision 8583)
+@@ -32,7 +32,10 @@
+ 	<!-- feature for finger print 5 times wrong and wake the screen on, bug: 119982 -->
+ 	<bool name="FR_FINGER_PRINT_ERROR_5TIMES_SCREEN_ON">false</bool>
+ 	
++	<!-- feature for arabic language etc right to left display -->
++	<bool name="FR_ARABIC_RTOL">false</bool>
++	
+ 	<!-- feature for other -->
+-	<bool name="FR_OTHER_TEST">false</bool>
++	<bool name="FR_OTHER_TEST">true</bool>
+     
+ </resources>
+Index: vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-ar/config.xml
+===================================================================
+--- vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-ar/config.xml	(revision 8582)
++++ vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-ar/config.xml	(revision 8583)
+@@ -23,4 +23,10 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="doze_pickup_subtype_performs_proximity_check" msgid="533127617385956583"></string>
++	
++	<!--<string name="config_navBarLayout" translatable="false">menu_ime,recent;home;back,nail</string>
++    <string name="config_navBarLayout_1" translatable="false">menu_ime,back;home;recent,nail</string>-->
++	
++	<string name="config_navBarLayout" translatable="false">recent,menu_ime;home;nail,back</string>
++    <string name="config_navBarLayout_1" translatable="false">back,menu_ime;home;nail,recent</string>
+ </resources>
+Index: vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-fa/config.xml
+===================================================================
+--- vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-fa/config.xml	(revision 8582)
++++ vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-fa/config.xml	(revision 8583)
+@@ -23,4 +23,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="doze_pickup_subtype_performs_proximity_check" msgid="533127617385956583"></string>
++	
++	<string name="config_navBarLayout" translatable="false">recent,menu_ime;home;nail,back</string>
++    <string name="config_navBarLayout_1" translatable="false">back,menu_ime;home;nail,recent</string>
+ </resources>
+Index: vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-ar-rEG/config.xml
+===================================================================
+--- vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-ar-rEG/config.xml	(revision 0)
++++ vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-ar-rEG/config.xml	(revision 8583)
+@@ -0,0 +1,34 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++/*
++** Copyright 2009, The Android Open Source Project
++**
++** Licensed under the Apache License, Version 2.0 (the "License");
++** you may not use this file except in compliance with the License.
++** You may obtain a copy of the License at
++**
++**     http://www.apache.org/licenses/LICENSE-2.0
++**
++** Unless required by applicable law or agreed to in writing, software
++** distributed under the License is distributed on an "AS IS" BASIS,
++** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++** See the License for the specific language governing permissions and
++** limitations under the License.
++*/
++-->
++
++<!-- These resources are around just to allow their values to be customized
++     for different hardware and product builds. -->
++<resources>
++    
++    <!-- Nav bar button default ordering/layout -->
++    <!-- CHG-S By Justin.Shen for Hide/Show navigation-bar -->
++    <!--
++    <string name="config_navBarLayout" translatable="false">space,back;home;recent,menu_ime</string>
++    -->
++	
++	<string name="config_navBarLayout" translatable="false">recent,menu_ime;home;nail,back</string>
++    <string name="config_navBarLayout_1" translatable="false">back,menu_ime;home;nail,recent</string>
++    <!-- CHG-E By Justin.Shen for Hide/Show navigation-bar -->
++
++</resources>
+
+Property changes on: vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-ar-rEG/config.xml
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-fa-rIR/config.xml
+===================================================================
+--- vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-fa-rIR/config.xml	(revision 0)
++++ vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-fa-rIR/config.xml	(revision 8583)
+@@ -0,0 +1,34 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++/*
++** Copyright 2009, The Android Open Source Project
++**
++** Licensed under the Apache License, Version 2.0 (the "License");
++** you may not use this file except in compliance with the License.
++** You may obtain a copy of the License at
++**
++**     http://www.apache.org/licenses/LICENSE-2.0
++**
++** Unless required by applicable law or agreed to in writing, software
++** distributed under the License is distributed on an "AS IS" BASIS,
++** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++** See the License for the specific language governing permissions and
++** limitations under the License.
++*/
++-->
++
++<!-- These resources are around just to allow their values to be customized
++     for different hardware and product builds. -->
++<resources>
++    
++    <!-- Nav bar button default ordering/layout -->
++    <!-- CHG-S By Justin.Shen for Hide/Show navigation-bar -->
++    <!--
++    <string name="config_navBarLayout" translatable="false">space,back;home;recent,menu_ime</string>
++    -->
++	
++	<string name="config_navBarLayout" translatable="false">recent,menu_ime;home;nail,back</string>
++    <string name="config_navBarLayout_1" translatable="false">back,menu_ime;home;nail,recent</string>
++    <!-- CHG-E By Justin.Shen for Hide/Show navigation-bar -->
++
++</resources>
+
+Property changes on: vendor/branch/5058I_ALAE1/frameworks/base/packages/SystemUI/res/values-fa-rIR/config.xml
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

@@ -1,0 +1,58 @@
+Index: packages/apps/Settings/src/com/android/settings/notification/ZenModeScheduleRuleSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/ZenModeScheduleRuleSettings.java	(revision 2036)
++++ packages/apps/Settings/src/com/android/settings/notification/ZenModeScheduleRuleSettings.java	(revision 2037)
+@@ -43,7 +43,9 @@
+ import java.text.SimpleDateFormat;
+ import java.util.Arrays;
+ import java.util.Calendar;
++import android.content.DialogInterface.OnClickListener;
+ 
++
+ public class ZenModeScheduleRuleSettings extends ZenModeRuleSettingsBase {
+     private static final String KEY_DAYS = "days";
+     private static final String KEY_START_TIME = "start_time";
+@@ -61,7 +63,8 @@
+     private SwitchPreference mExitAtAlarm;
+ 
+     private ScheduleInfo mSchedule;
+-
++	private boolean isDoneClick = false;
++	private int[] mDaysList;
+     @Override
+     protected boolean setRule(AutomaticZenRule rule) {
+         mSchedule = rule != null ? ZenModeConfig.tryParseScheduleConditionId(rule.getConditionId())
+@@ -211,18 +214,28 @@
+                           if (mDisableListeners) return;
+                           if (Arrays.equals(days, mSchedule.days)) return;
+                           if (DEBUG) Log.d(TAG, "days.onChanged days=" + Arrays.asList(days));
+-                          mSchedule.days = days;
+-                          updateRule(ZenModeConfig.toScheduleConditionId(mSchedule));
++                          mDaysList = days;
+                       }
+                 })
+                 .setOnDismissListener(new OnDismissListener() {
+                     @Override
+                     public void onDismiss(DialogInterface dialog) {
+-                        updateDays();
++                    	if(isDoneClick){
++							mSchedule.days = mDaysList;
++                            updateRule(ZenModeConfig.toScheduleConditionId(mSchedule));
++                        	updateDays();
++							isDoneClick = false;
++                    	}
+                     }
+                 })
+-                .setPositiveButton(R.string.done_button, null)
+-                .show();
++                .setPositiveButton(R.string.done_button,new OnClickListener() {	
++					@Override
++					public void onClick(DialogInterface arg0, int arg1) {
++					// TODO Auto-generated method stub
++					isDoneClick = true;
++					}	
++				})
++				.show();
+     }
+ 
+     private static class TimePickerPreference extends Preference {

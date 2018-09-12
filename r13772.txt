@@ -1,0 +1,95 @@
+Index: vendor/branch/5058Y_ALGB/vendor/customer/custom.mk
+===================================================================
+--- vendor/branch/5058Y_ALGB/vendor/customer/custom.mk	(revision 13771)
++++ vendor/branch/5058Y_ALGB/vendor/customer/custom.mk	(revision 13772)
+@@ -35,7 +35,8 @@
+                     facebook-services \
+                     Gboard \
+                     Toolkit \
+-					FingerprintEneoll_7.0
++					FingerprintEneoll_7.0 \
++					TctGdpr_EU
+ 
+ # Overrides
+ PRODUCT_PROPERTY_OVERRIDES +=
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/DeviceInfoSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/DeviceInfoSettings.java	(revision 13771)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/DeviceInfoSettings.java	(revision 13772)
+@@ -44,6 +44,8 @@
+ import com.android.settings.search.Indexable;
+ import com.android.settingslib.DeviceInfoUtils;
+ import com.android.settingslib.RestrictedLockUtils;
++import android.content.pm.ApplicationInfo;
++import android.content.pm.PackageManager;
+ 
+ import com.mediatek.settings.deviceinfo.DeviceInfoSettingsExts;
+ 
+@@ -64,6 +66,7 @@
+ 
+     private static final String KEY_MANUAL = "manual";
+     private static final String KEY_REGULATORY_INFO = "regulatory_info";
++    private static final String KEY_PRIVACY_POLICY = "privacy_policy";
+     private static final String KEY_SYSTEM_UPDATE_SETTINGS = "system_update_settings";
+     private static final String PROPERTY_URL_SAFETYLEGAL = "ro.url.safetylegal";
+     private static final String PROPERTY_SELINUX_STATUS = "ro.build.selinux";
+@@ -205,7 +208,23 @@
+         ///M:
+         mExts = new DeviceInfoSettingsExts(getActivity(), this);
+         mExts.initMTKCustomization(getPreferenceScreen());
++        if(!checkPackageExist(getActivity(), "com.tct.gdpr")){
++            Preference pref = findPreference(KEY_PRIVACY_POLICY);
++            if (pref != null) {
++                getPreferenceScreen().removePreference(pref);
++            }
++        }
+     }
++    private  boolean checkPackageExist(Context context, String pkg) {
++        final PackageManager packageManager = context.getPackageManager();
++        try {
++            ApplicationInfo applicationInfo = packageManager.getApplicationInfo(pkg, 0);
++            return true;
++        } catch (Exception e) {
++            e.printStackTrace();
++            return false;
++        }
++    }
+ 	
+     //lance add for diagnostic @{
+     public boolean shouldShowInformedConsent() {
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/res/xml/device_info_settings.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/res/xml/device_info_settings.xml	(revision 13771)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/res/xml/device_info_settings.xml	(revision 13772)
+@@ -89,6 +89,11 @@
+                 android:title="@string/device_feedback">
+         </PreferenceScreen>
+ 
++         <PreferenceScreen
++                android:key="privacy_policy"
++                android:title="@string/policy">
++            <intent android:action="com.tct.gdpr.PRIVACYPOLICY"/>
++        </PreferenceScreen>
+         <!-- Device hardware model -->
+         <com.android.settings.DividerPreference
+                 android:key="device_model"
+@@ -111,8 +116,8 @@
+         <PreferenceScreen android:key="security_patch"
+                 android:title="@string/security_patch"
+                 android:summary="@string/device_info_default">
+-                <intent android:action="android.intent.action.VIEW"
+-                        android:data="https://source.android.com/security/bulletin/" />
++                <!--<intent android:action="android.intent.action.VIEW"
++                        android:data="https://source.android.com/security/bulletin/" />-->
+         </PreferenceScreen>
+ 
+         <!-- Device FCC equipment id -->
+@@ -175,7 +180,7 @@
+         <!-- ///M: Custom build version -->
+         <Preference android:key="custom_build_version"
+                 style="?android:preferenceInformationStyle"
+-                android:title="@string/custom_build_version_branch_y"
++                android:title="@string/custom_build_version"
+                 android:summary="@string/device_info_default" />
+ 
+ </PreferenceScreen>

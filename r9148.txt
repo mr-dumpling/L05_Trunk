@@ -1,0 +1,110 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/values/mtk_arrays.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/values/mtk_arrays.xml	(revision 9147)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/values/mtk_arrays.xml	(revision 9148)
+@@ -1,4 +1,4 @@
+-<?xml version="1.0" encoding="utf-8" standalone="no"?>
++<?xml version="1.0" encoding="utf-8" standalone="no"?>
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ <string-array name="default_quick_texts">
+       <item>Where are you?</item>
+@@ -34,9 +34,21 @@
+         <item>200</item>
+         <item>300</item>
+     </string-array>  
+-	<string-array name="pref_mms_size_limit_choices_alru" translatable="false">
++    <string-array name="pref_mms_size_limit_choices_telefonicaperu" translatable="false">
+         <item>100K</item>
+         <item>200K</item>
++        <item>300K</item>
++        <item>600K</item>
++    </string-array>
++    <string-array name="pref_mms_size_limit_values_telefonicaperu" translatable="false">
++        <item>100</item>
++        <item>200</item>
++        <item>300</item>
++        <item>600</item>
++    </string-array>
++	  <string-array name="pref_mms_size_limit_choices_alru" translatable="false">
++        <item>100K</item>
++        <item>200K</item>
+         <item>1024K</item>
+     </string-array>
+     <string-array name="pref_mms_size_limit_values_alru" translatable="false">
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 9147)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 9148)
+@@ -14,7 +14,7 @@
+     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <bool name="isTablet">false</bool>
+     <bool name="isWVGAScreen">false</bool>
+-	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
+-	<bool name="config_cellBroadcastAppLinks_cmas">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">true</bool>
++	<bool name="config_cellBroadcastAppLinks_cmas">true</bool>
+ 	<bool name="def_cb_russia_req">false</bool>
+ </resources>
+Index: vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 9147)
++++ vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 9148)
+@@ -70,7 +70,7 @@
+      */
+     private static boolean mTransIdEnabled = false;
+     private static int mMmsEnabled = 1;                         // default to true
+-    private static int mMaxMessageSize = 300 * 1024;            // default to 300k max size
++    private static int mMaxMessageSize = 600 * 1024;            // default to 300k max size
+     private static String mUserAgent = DEFAULT_USER_AGENT;
+     private static String mUaProfTagName = DEFAULT_HTTP_KEY_X_WAP_PROFILE;
+     private static String mUaProfUrl = null;
+@@ -127,7 +127,7 @@
+     private static final int RECIPIENTS_LIMIT = 50;
+ 
+     /// M: Mms size limit, default 300K.
+-    private static int mUserSetMmsSizeLimit = 300;
++    private static int mUserSetMmsSizeLimit = 600;
+     /// M: Receive Mms size limit for 2G network
+     private static int mReceiveMmsSizeLimitFor2G = 200;
+     /// M: Receive Mms size limit for TD network
+Index: vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/MmsPreferenceActivity.java
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/MmsPreferenceActivity.java	(revision 9147)
++++ vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/MmsPreferenceActivity.java	(revision 9148)
+@@ -186,8 +186,8 @@
+         // For mMmsSizeLimit
+         stored = sp.getString(MMS_SIZE_LIMIT, SIZE_LIMIT_300);
+         mMmsSizeLimit.setSummary(MessageUtils.getVisualTextName(this,
+-                stored, R.array.pref_mms_size_limit_choices_ ,
+-                R.array.pref_mms_size_limit_values_ ));
++                stored, R.array.pref_mms_size_limit_choices_telefonicaperu,
++                R.array.pref_mms_size_limit_values_telefonicaperu));
+     }
+ 
+     @Override
+@@ -452,8 +452,8 @@
+                     R.array.pref_key_mms_priority_values));
+         } else if (MMS_SIZE_LIMIT.equals(key)) {
+             mMmsSizeLimit.setSummary(MessageUtils.getVisualTextName(this,
+-                    stored, R.array.pref_mms_size_limit_choices_ ,
+-                    R.array.pref_mms_size_limit_values_ ));
++                    stored, R.array.pref_mms_size_limit_choices_telefonicaperu,
++                    R.array.pref_mms_size_limit_values_telefonicaperu));
+             MmsConfig.setUserSetMmsSizeLimit(Integer.valueOf(stored));
+         } else if (CREATION_MODE.equals(key)) {
+             mMmsCreationMode.setSummary(MessageUtils.getVisualTextName(this,
+Index: vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/mmspreferences.xml
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/mmspreferences.xml	(revision 9147)
++++ vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/mmspreferences.xml	(revision 9148)
+@@ -45,8 +45,8 @@
+             android:title="@string/pref_title_mms_size_limit"
+             android:dialogTitle="@string/pref_title_mms_size_limit"
+             android:summary="@string/pref_summary_mms_size_limit"
+-            android:defaultValue="300" android:entries="@array/pref_mms_size_limit_choices"
+-            android:entryValues="@array/pref_mms_size_limit_values" />
++            android:defaultValue="600" android:entries="@array/pref_mms_size_limit_choices_telefonicaperu"
++            android:entryValues="@array/pref_mms_size_limit_values_telefonicaperu" />
+         <ListPreference android:key="pref_key_mms_priority"
+             android:title="@string/mms_priority_label" android:dialogTitle="@string/mms_priority_label"
+             android:summary="@string/mms_priority_label" android:defaultValue="Normal"

@@ -1,0 +1,66 @@
+Index: frameworks/base/media/java/android/media/RingtoneManager.java
+===================================================================
+--- frameworks/base/media/java/android/media/RingtoneManager.java	(revision 4024)
++++ frameworks/base/media/java/android/media/RingtoneManager.java	(revision 4025)
+@@ -51,7 +51,7 @@
+ import java.io.OutputStream;
+ import java.util.ArrayList;
+ import java.util.List;
+-
++import android.os.SystemProperties;
+ /**
+  * RingtoneManager provides access to ringtones, notification, and other types
+  * of sounds. It manages querying the different media providers and combines the
+@@ -816,10 +816,50 @@
+         if (setting == null) return null;
+         final String uriString = Settings.System.getStringForUser(context.getContentResolver(),
+                 setting, context.getUserId());
+-        Log.i(TAG, "Get actual default ringtone uri= " + uriString);
+-        return uriString != null ? Uri.parse(uriString) : null;
++		Uri uri =  null;
++         if(uriString != null){
++           boolean isExist = isRingtoneExist(context,Uri.parse(uriString));
++           if(!isExist){
++			   String ringtone = getDefaultUriForType(type);
++			   Cursor cursor = context.getContentResolver().query(MediaStore.Audio.Media.INTERNAL_CONTENT_URI, INTERNAL_COLUMNS, null,
++						null, MediaStore.Audio.Media.DEFAULT_SORT_ORDER);
++				if(cursor.moveToFirst()){
++					while(cursor != null){
++						 if(cursor.getString(1).startsWith(ringtone))
++						 {
++							 uri = Uri.parse(cursor.getString(2)+"/"+cursor.getString(0));
++							 break;
++						 }
++						 if(!cursor.moveToNext()) break;
++					}
++				}
++							 
++               setActualDefaultRingtoneUri(context, type, uri);
++           }else{
++			   uri = Uri.parse(uriString);
++		   }
++        }
++
++        Log.i(TAG, "Get actual default ringtone uri= " + uri);
++        return uri;
+     }
+     
++	private static String getDefaultUriForType(int type){
++		String[] mRing = SystemProperties.get("ro.config.ringtone").split("\\.");
++		String[] mNotification = SystemProperties.get("ro.config.notification_sound").split("\\.");
++		String[] mAlarm = SystemProperties.get("ro.config.alarm_alert").split("\\.");
++		String DEFAULT_RING = mRing[0];
++		String DEFAULT_NOTIFICATION = mNotification[0];
++		String DEFAULT_ALARM = mAlarm[0];
++		 if(type == TYPE_RINGTONE){
++			 return DEFAULT_RING;
++		 }else if(type == TYPE_NOTIFICATION){
++			 return DEFAULT_NOTIFICATION;
++		 }else if(type == TYPE_ALARM){
++			 return DEFAULT_ALARM;
++		 }	
++         return null;		 
++	 }
+     /**
+      * Sets the {@link Uri} of the default sound for a given sound type.
+      * 

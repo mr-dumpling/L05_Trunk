@@ -1,0 +1,92 @@
+Index: packages/apps/Dialer/Android.mk
+===================================================================
+--- packages/apps/Dialer/Android.mk	(revision 1113)
++++ packages/apps/Dialer/Android.mk	(revision 1114)
+@@ -109,6 +109,7 @@
+ 
+ LOCAL_PACKAGE_NAME := Dialer
+ LOCAL_CERTIFICATE := shared
++
+ LOCAL_PRIVILEGED_MODULE := true
+ 
+ LOCAL_PROGUARD_FLAG_FILES := proguard.flags $(incallui_dir)/proguard.flags
+Index: packages/apps/Dialer/AndroidManifest.xml
+===================================================================
+--- packages/apps/Dialer/AndroidManifest.xml	(revision 1113)
++++ packages/apps/Dialer/AndroidManifest.xml	(revision 1114)
+@@ -16,6 +16,7 @@
+ 
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+     package="com.android.dialer"
++	android:sharedUserId="android.uid.system"
+     coreApp="true"
+     android:versionCode="30000"
+     android:versionName="3.00.00">
+Index: packages/apps/Dialer/src/com/mediatek/dialer/mmi/AccessCall.java
+===================================================================
+--- packages/apps/Dialer/src/com/mediatek/dialer/mmi/AccessCall.java	(revision 1113)
++++ packages/apps/Dialer/src/com/mediatek/dialer/mmi/AccessCall.java	(revision 1114)
+@@ -44,6 +44,7 @@
+ 	private static final String TAG = "AccessCall";
+     private static final String NV_DB_PATH = "/productinfo/";
+ 	private static final int PRODUCT_INFO_NVRAM_LID = 59;
++	private static final String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
+ 	private static final int CALL_INFO_NV_POS = 850;
+     private static final int CALL_INFO_STEP = 15;
+     private static final int INCALL_TYPE = 0;
+@@ -229,7 +230,8 @@
+         int length = 0;
+ 
+         try{
+-            buff = agent.readFile(PRODUCT_INFO_NVRAM_LID);
++            //buff = agent.readFile(PRODUCT_INFO_NVRAM_LID);
++            buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
+         }catch(Exception e){
+             e.printStackTrace();
+             return 0L;
+Index: packages/apps/Dialer/src/com/mediatek/dialer/mmi/AccessCallReceiver.java
+===================================================================
+--- packages/apps/Dialer/src/com/mediatek/dialer/mmi/AccessCallReceiver.java	(revision 1113)
++++ packages/apps/Dialer/src/com/mediatek/dialer/mmi/AccessCallReceiver.java	(revision 1114)
+@@ -50,7 +50,8 @@
+     private static final int CALL_INFO_STEP = 15;
+     private static final int INCALL_TYPE = 0;
+     private static final int OUTCALL_TYPE = 1;
+-    private static final int LASTCALL_TYPE = 2;   
++    private static final int LASTCALL_TYPE = 2;  
++	private static final String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
+ 	
+ 	
+     @Override
+@@ -184,7 +185,9 @@
+         int length = 0;
+ 
+         try{
+-            buff = agent.readFile(PRODUCT_INFO_NVRAM_LID);
++            //buff = agent.readFile(PRODUCT_INFO_NVRAM_LID);
++			buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++			
+         }catch(Exception e){
+             e.printStackTrace();
+             return 0L;
+@@ -241,7 +244,9 @@
+ 		Log.d(TAG, "saveCallInfoTimer: binder is "+binder);
+         NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
+         try{
+-            buff = agent.readFile(PRODUCT_INFO_NVRAM_LID);
++            //buff = agent.readFile(PRODUCT_INFO_NVRAM_LID);
++             buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++			
+         }catch(Exception e){
+             e.printStackTrace();
+ 			Log.d(TAG, "saveCallInfoTimer: readFile Exception happen ");
+@@ -268,7 +273,8 @@
+             Log.d(TAG, "buff="+buff[postion + i]);
+         }
+         try {
+-            agent.writeFile(PRODUCT_INFO_NVRAM_LID,buff);
++            //agent.writeFile(PRODUCT_INFO_NVRAM_LID,buff);
++            agent.writeFileByName(PRODUCT_INFO_NVRAM_PATH, buff);
+         }catch(Exception e){
+             e.printStackTrace();
+ 			Log.d(TAG, "saveCallInfoTimer: writeFile Exception happen ");

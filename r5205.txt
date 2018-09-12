@@ -1,0 +1,108 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/GlobalActions.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/GlobalActions.java	(revision 5204)
++++ frameworks/base/services/core/java/com/android/server/policy/GlobalActions.java	(revision 5205)
+@@ -769,7 +769,7 @@
+ 
+         public View getView(int position, View convertView, ViewGroup parent) {
+             Action action = getItem(position);
+-            return action.create(mContext, convertView, parent, LayoutInflater.from(mContext));
++            return action.create(mContext, convertView, parent, LayoutInflater.from(mContext), position);
+         }
+     }
+ 
+@@ -789,7 +789,8 @@
+          */
+         CharSequence getLabelForAccessibility(Context context);
+ 
+-        View create(Context context, View convertView, ViewGroup parent, LayoutInflater inflater);
++        //View create(Context context, View convertView, ViewGroup parent, LayoutInflater inflater);
++        View create(Context context, View convertView, ViewGroup parent, LayoutInflater inflater, int position);
+ 
+         void onPress();
+ 
+@@ -858,7 +859,7 @@
+         }
+ 
+         public View create(
+-                Context context, View convertView, ViewGroup parent, LayoutInflater inflater) {
++                Context context, View convertView, ViewGroup parent, LayoutInflater inflater, int position) {
+             View v = inflater.inflate(R.layout.global_actions_item, parent, false);
+ 
+             ImageView icon = (ImageView) v.findViewById(R.id.icon);
+@@ -883,6 +884,11 @@
+                 messageView.setText(mMessageResId);
+             }
+ 
++            if (2 == position) {
++                View line = (View)v.findViewById(R.id.line);
++                line.setVisibility(View.GONE);
++            }
++
+             return v;
+         }
+     }
+@@ -952,7 +958,7 @@
+         }
+ 
+         public View create(Context context, View convertView, ViewGroup parent,
+-                LayoutInflater inflater) {
++                LayoutInflater inflater, int position) {
+             willCreate();
+ 
+             View v = inflater.inflate(R
+@@ -982,6 +988,10 @@
+             }
+             v.setEnabled(enabled);
+ 
++            if (2 == position) {
++                View line = (View)v.findViewById(R.id.line);
++                line.setVisibility(View.GONE);
++            }
+             return v;
+         }
+ 
+@@ -1073,7 +1083,7 @@
+         }
+ 
+         public View create(Context context, View convertView, ViewGroup parent,
+-                LayoutInflater inflater) {
++                LayoutInflater inflater, int position) {
+             View v = inflater.inflate(R.layout.global_actions_silent_mode, parent, false);
+ 
+             int selectedIndex = ringerModeToIndex(mAudioManager.getRingerMode());
+Index: frameworks/base/core/res/res/layout/global_actions_item.xml
+===================================================================
+--- frameworks/base/core/res/res/layout/global_actions_item.xml	(revision 5204)
++++ frameworks/base/core/res/res/layout/global_actions_item.xml	(revision 5205)
+@@ -29,7 +29,7 @@
+         android:layout_gravity="center_vertical">
+ 
+         <ImageView android:id="@+id/icon"
+-            android:layout_width="109dp"
++            android:layout_width="108dp"
+             android:layout_height="50dp"
+             android:layout_gravity="center"
+             android:scaleType="center"/>
+@@ -47,7 +47,7 @@
+                 android:textSize="15dp"
+                 />
+             <TextView android:id="@+id/status"
+-                android:layout_width="109dp"
++                android:layout_width="108dp"
+                 android:layout_height="wrap_content"
+                 android:gravity="bottom|center_horizontal"
+                 android:minHeight="26dp"
+Index: frameworks/base/core/res/res/values-zh-rCN/strings.xml
+===================================================================
+--- frameworks/base/core/res/res/values-zh-rCN/strings.xml	(revision 5204)
++++ frameworks/base/core/res/res/values-zh-rCN/strings.xml	(revision 5205)
+@@ -1681,7 +1681,7 @@
+ 	<string name="reboot">重新启动</string>
+ 	<string name="reboot_confirm">您的手机将会重新启动。</string>
+ 	<string name="battery_countdown">您的手机将在十五秒后关机。</string>
+-	<string name="global_action_enforce_restart">提示: 长按电源键8秒以上，可强制重启</string>
++	<string name="global_action_enforce_restart">提示: 长按电源键8秒以上，可强制重启。</string>
+     <!-- no translation found for suspended_widget_accessibility (6712143096475264190) -->
+     <skip />
+ 	<string name="fingerprint_acquired_duplicate_finger">重复手指。请更换手指</string>

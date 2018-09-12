@@ -1,0 +1,94 @@
+Index: packages/apps/Dialer/src/com/android/dialer/DialtactsActivity.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/DialtactsActivity.java	(revision 3893)
++++ packages/apps/Dialer/src/com/android/dialer/DialtactsActivity.java	(revision 3894)
+@@ -114,7 +114,17 @@
+ 
+ import java.util.ArrayList;
+ import java.util.List;
++import android.view.IWindowManager;
++import android.view.WindowManagerGlobal;
++import android.os.RemoteException;
++import android.util.DisplayMetrics;
++import android.widget.LinearLayout;
++import android.widget.FrameLayout;
++import android.view.ViewGroup;
++import android.widget.ImageView;
++import android.util.TypedValue;
+ 
++
+ /**
+  * M: Inherited from NeedTestActivity for easy mock testing
+  * The dialer tab's title is 'phone', a more common name (see strings.xml).
+@@ -640,6 +650,7 @@
+ 
+         setSearchBoxHint();
+ 
++		resetFontSize();
+         Trace.endSection();
+     }
+ 
+@@ -691,9 +702,62 @@
+         mActionBarController.saveInstanceState(outState);
+         mStateSaved = true;
+     }
+-
++	private void resetFontSize(){
++		final int[] mButtonIds = new int[] {R.id.zero, R.id.one, R.id.two, R.id.three,
++            R.id.four, R.id.five, R.id.six, R.id.seven, R.id.eight, R.id.nine, R.id.star,
++            R.id.pound};
++			
++		boolean bWin = this.isInMultiWindowMode();
++		if(bWin == true){
++			if(mDialpadFragment != null){
++				View parent = findViewById(R.id.dialpad_view);
++				View item = null;
++				TextView v1 = null;
++				TextView v2 = null;
++				int fs = 18;//getFontSize();
++				//Log.d(TAG, "javen resetFontSize parent = " + parent + ", fs = " + fs + ", bWin = " + bWin);
++				if(parent != null){
++					for (int i = 0; i < mButtonIds.length; i++) {
++						item = parent.findViewById(mButtonIds[i]);
++						v1 = ((TextView) item.findViewById(R.id.dialpad_key_number));
++						v1.setTextSize(TypedValue.COMPLEX_UNIT_SP, bWin ? fs : 30);
++						if(fs == 18){
++							LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) item.getLayoutParams();
++							//Log.d(TAG, "javen resetFontSize1 params = " + params + ", l=" + params.leftMargin + ",r=" + params.rightMargin + ",t=" +params.topMargin + ",b=" +params.bottomMargin + ", w = " + params.width + ", h = " + params.height);
++							if(params.leftMargin >= 0){
++								params.setMargins(-38, 0, 0, 0);
++							}
++						}
++						
++						v2 = ((TextView) item.findViewById(R.id.dialpad_key_letters));
++						if(v2 != null){
++							v2.setTextSize(TypedValue.COMPLEX_UNIT_SP, (fs == 18) ? 4 : 6);
++						}else{
++							ImageView i2 = ((ImageView) item.findViewById(R.id.dialpad_key_voicemail));
++							if(i2 != null){
++								i2.setImageResource(R.drawable.ic_dialpad_voicemail);
++							}
++						}
++					}
++					if(fs == 18){
++						View lv = parent.findViewById(R.id.dialpad);
++						
++						LinearLayout.LayoutParams params2 = (LinearLayout.LayoutParams) lv.getLayoutParams();
++						//Log.d(TAG, "javen resetFontSize2 params2 = " + params2 + ", l=" + params2.leftMargin + ",r=" + params2.rightMargin + ",t=" +params2.topMargin + ",b=" +params2.bottomMargin + ", w = " + params2.width + ", h = " + params2.height);
++						if(params2.leftMargin <=0){
++							params2.setMargins(23, 0, 0, 0);
++						}
++					}
++				}
++			}
++		}
++	}
++	
+     @Override
+     public void onAttachFragment(Fragment fragment) {
++		//Log.d(TAG, "javen onAttachFragment  resetFontSize");
++		resetFontSize();
++		
+         if (fragment instanceof DialpadFragment) {
+             mDialpadFragment = (DialpadFragment) fragment;
+             if (!mIsDialpadShown && !mShowDialpadOnResume) {

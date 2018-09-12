@@ -1,0 +1,124 @@
+Index: vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/WelcomeActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/WelcomeActivity.java	(revision 3145)
++++ vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/WelcomeActivity.java	(revision 3146)
+@@ -72,8 +72,15 @@
+     }
+ 	
+ 
+-	
+     @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        Intent intent = new Intent();
++        intent.setAction("com.gome.bootwizard.started");
++        sendBroadcast(intent);
++    }
++    
++    @Override
+     protected void initData(Bundle savedInstanceState) {
+ //        Settings.System.putString(getContentResolver(),"show_navigation_bar","false");
+ 
+@@ -317,6 +324,10 @@
+     }
+ 	
+     private void finishBootWizard() {
++        Intent intent = new Intent();
++        intent.setAction("com.gome.bootwizard.stoped");
++        sendBroadcast(intent);
++        
+         try {
+ 
+             PackageManager pm = getPackageManager();
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 3145)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 3146)
+@@ -1170,8 +1170,8 @@
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+         filter.addAction("android.intent.action.RESET_NAVIGATION_BAR");
+         filter.addAction("android.intent.action.NAVIGATION_BAR_TIPS_ANIMATION_FINISH");
+-        filter.addAction("bootwizardstart");
+-        filter.addAction("bootwizardstop");
++        filter.addAction("com.gome.bootwizard.started");
++        filter.addAction("com.gome.bootwizard.stoped");
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 		filter.addAction("battery_percentage_on_off");
+ 		//added by lei.shi for task927658 at 2015.11.22 begin
+@@ -3920,11 +3920,17 @@
+                     mNavigationBarView.updateNailIcon();
+                 }
+             }
+-            else if ("bootwizardstart".equals(action)) {
+-                setNavigationBarLayout(true, false);
++            else if ("com.gome.bootwizard.started".equals(action)) {
++                if(mNavigationBarView != null) {
++                    mNavigationBarView.setBootwizardState(true);
++                    mNavigationBarView.updateNailIcon();
++                }
+             }
+-            else if ("bootwizardstop".equals(action)) {
+-                setNavigationBarLayout(false, false);
++            else if ("com.gome.bootwizard.stoped".equals(action)) {
++                if(mNavigationBarView != null) {
++                    mNavigationBarView.setBootwizardState(false);
++                    mNavigationBarView.updateNailIcon();
++                }
+             }
+             //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 			//add by wqq start{
+@@ -5785,6 +5791,9 @@
+             boolean setup = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.DEVICE_PROVISIONED, 0) != 0;
+             Log.d(TAG, "mDeviceProvisionedObserver: setup = " + setup);
+             if(setup) {
++                if(mNavigationBarView != null) {
++                    mNavigationBarView.updateNailIcon();
++                }
+                 mHandler.postDelayed(new Runnable() {
+                     @Override
+                     public void run() {
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 3145)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 3146)
+@@ -920,6 +920,7 @@
+     //ADD-S By Justin.Shen for Hide/Show navigation-bar
+     protected int mCurrentUserId = 0;
+     private boolean mShowImeButton = false;
++    private boolean mIsBootWizard = false;
+     
+     public void updateNailIcon() {
+         boolean isTipsAnimation = Settings.Global.getInt(mContext.getContentResolver(), "navigation_bar_tips_animation", 0) == 1 ? true : false;
+@@ -950,6 +951,11 @@
+             getLeftNailButton().setVisibility(View.INVISIBLE);
+             getRightNailButton().setVisibility(View.INVISIBLE);
+         }
++        
++        if(isBootWizardMode()) {
++            getLeftNailButton().setVisibility(View.INVISIBLE);
++            getRightNailButton().setVisibility(View.INVISIBLE);
++        }
+     }
+     
+     public void setCurrentUserId(int currentUserId) {
+@@ -976,6 +982,20 @@
+         
+         return bRet;
+     }
++    
++    public void setBootwizardState(boolean isBootWizard) {
++        mIsBootWizard = isBootWizard;
++    }
++    
++    private boolean isBootWizardMode() {
++        boolean bRet = false;
++        boolean isBootWizard = Settings.Secure.getInt(mContext.getContentResolver(),Settings.Secure.DEVICE_PROVISIONED, 0) == 0;
++        
++        if(mIsBootWizard || isBootWizard) {
++            bRet = true;
++        }
++        return bRet;
++    }
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+ }

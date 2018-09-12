@@ -1,0 +1,152 @@
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/CallerInfo.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/CallerInfo.java	(revision 8164)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/CallerInfo.java	(revision 8165)
+@@ -420,8 +420,24 @@
+      * @param context To lookup the localized 'Emergency Number' string.
+      * @return this instance.
+      */
+-    /* package */ CallerInfo markAsEmergency(Context context) {
++    /* package */ CallerInfo markAsEmergency(Context context, String number) {
+         name = context.getString(R.string.emergency_call_dialog_number_for_display);
++        boolean bFrEmcIndia = context.getResources().getBoolean(com.android.internal.R.bool.FR_EMC_CALL_INFO_IN_INDIA);
++		if(bFrEmcIndia){
++			String arrEmc[][] = {
++				{"100","Police Emergency"},
++				{"101","Fire Emergency"},
++				{"102","Ambulance Emergency"},
++				//{"112","Emergency Number"},
++			};
++            for(int i = 0; i < arrEmc.length; i++){
++				if(arrEmc[i][0].equals(number)){
++					name = arrEmc[i][1];
++					break;
++				}
++			}
++		}
++
+         phoneNumber = null;
+ 
+         photoResource = R.drawable.img_phone;
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java	(revision 8164)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java	(revision 8165)
+@@ -914,7 +914,7 @@
+                 // query is still running, remove callbacks
+                 clearCallbacks(callId);
+             }
+-            CallerInfo callerInfo = new CallerInfo().markAsEmergency(mContext);
++            CallerInfo callerInfo = new CallerInfo().markAsEmergency(mContext, (call != null) ? call.getNumber() : "");
+             findInfoQueryComplete(call, callerInfo, call.getState() == Call.State.INCOMING, false);
+             // make EntryCache complete into mInCfoMap, notify CallCardPresenter to get it again.
+             for (ContactInfoUpdatedListener listener : mContactInfoUpdatedListener) {
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/CallerInfoAsyncQuery.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/CallerInfoAsyncQuery.java	(revision 8164)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/CallerInfoAsyncQuery.java	(revision 8165)
+@@ -271,7 +271,7 @@
+                     if (cw.event == EVENT_EMERGENCY_NUMBER) {
+                         // Note we're setting the phone number here (refer to javadoc
+                         // comments at the top of CallerInfo class).
+-                        mCallerInfo = new CallerInfo().markAsEmergency(mQueryContext);
++                        mCallerInfo = new CallerInfo().markAsEmergency(mQueryContext, cw.number);
+                         /// M: add for OP09/Clib plug in. @{
+                         mCallerInfo.phoneNumber =
+                             ExtensionManager.getEmergencyCallCardExt().
+Index: vendor/branch/5058A_BRIGHTSTAR_Ecuador/frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- vendor/branch/5058A_BRIGHTSTAR_Ecuador/frameworks/base/core/res/res/values/features.xml	(revision 8164)
++++ vendor/branch/5058A_BRIGHTSTAR_Ecuador/frameworks/base/core/res/res/values/features.xml	(revision 8165)
+@@ -26,6 +26,9 @@
+ 	<!-- feature for emc call button on even on screen on secrity -->
+ 	<bool name="FR_EMC_CALL_ALWAYS_ON_SECRITY">false</bool>
+ 	
++	<!-- feature for emc call will show Police,Fire,Ambulance Fr -->
++	<bool name="FR_EMC_CALL_INFO_IN_INDIA">false</bool>
++	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">false</bool>
+     
+Index: vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/features.xml	(revision 8164)
++++ vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/features.xml	(revision 8165)
+@@ -25,6 +25,9 @@
+ 	<!-- feature for emc call button on even on screen on secrity -->
+ 	<bool name="FR_EMC_CALL_ALWAYS_ON_SECRITY">false</bool>
+ 	
++	<!-- feature for emc call will show Police,Fire,Ambulance Fr -->
++	<bool name="FR_EMC_CALL_INFO_IN_INDIA">false</bool>
++	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">false</bool>
+ </resources>
+Index: vendor/branch/5058J_Brazil_OpenMarket/frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- vendor/branch/5058J_Brazil_OpenMarket/frameworks/base/core/res/res/values/features.xml	(revision 8164)
++++ vendor/branch/5058J_Brazil_OpenMarket/frameworks/base/core/res/res/values/features.xml	(revision 8165)
+@@ -26,6 +26,9 @@
+ 	<!-- feature for emc call button on even on screen on secrity -->
+ 	<bool name="FR_EMC_CALL_ALWAYS_ON_SECRITY">false</bool>
+ 	
++	<!-- feature for emc call will show Police,Fire,Ambulance Fr -->
++	<bool name="FR_EMC_CALL_INFO_IN_INDIA">false</bool>
++	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">false</bool>
+     
+Index: vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/values/features.xml	(revision 8164)
++++ vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/values/features.xml	(revision 8165)
+@@ -26,6 +26,9 @@
+ 	<!-- feature for emc call button on even on screen on secrity -->
+ 	<bool name="FR_EMC_CALL_ALWAYS_ON_SECRITY">true</bool>
+ 	
++	<!-- feature for emc call will show Police,Fire,Ambulance Fr -->
++	<bool name="FR_EMC_CALL_INFO_IN_INDIA">false</bool>
++	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">true</bool>
+     
+Index: vendor/branch/5058I_ALWE/frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/base/core/res/res/values/features.xml	(revision 8164)
++++ vendor/branch/5058I_ALWE/frameworks/base/core/res/res/values/features.xml	(revision 8165)
+@@ -26,6 +26,9 @@
+ 	<!-- feature for emc call button on even on screen on secrity -->
+ 	<bool name="FR_EMC_CALL_ALWAYS_ON_SECRITY">false</bool>
+ 	
++	<!-- feature for emc call will show Police,Fire,Ambulance Fr -->
++	<bool name="FR_EMC_CALL_INFO_IN_INDIA">false</bool>
++	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">false</bool>
+     
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 8164)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 8165)
+@@ -2815,6 +2815,7 @@
+   <java-symbol type="bool" name="FR_EMAIL_SAME_SIGNATURE_BUG" />
+   <java-symbol type="bool" name="FR_GPS_AIRPLANE_OFF_BUG" />
+   <java-symbol type="bool" name="FR_EMC_CALL_ALWAYS_ON_SECRITY" />
++  <java-symbol type="bool" name="FR_EMC_CALL_INFO_IN_INDIA" />
+   <java-symbol type="bool" name="FR_OTHER_TEST" />
+   <!-- feature techain end -->
+ 
+Index: frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- frameworks/base/core/res/res/values/features.xml	(revision 8164)
++++ frameworks/base/core/res/res/values/features.xml	(revision 8165)
+@@ -26,6 +26,9 @@
+ 	<!-- feature for emc call button on even on screen on secrity -->
+ 	<bool name="FR_EMC_CALL_ALWAYS_ON_SECRITY">false</bool>
+ 	
++	<!-- feature for emc call will show Police,Fire,Ambulance Fr -->
++	<bool name="FR_EMC_CALL_INFO_IN_INDIA">false</bool>
++	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">false</bool>
+     

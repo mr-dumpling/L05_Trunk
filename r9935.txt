@@ -1,0 +1,47 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java	(revision 9934)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java	(revision 9935)
+@@ -94,13 +94,13 @@
+ 			int[] subid = SubscriptionManager.getSubId(0);
+ 			if(subscriptionManager.isActiveSubId(subid[0]) && (SubscriptionManager.getDefaultDataSubscriptionId() != subid[0])){
+ 				subscriptionManager.setDefaultDataSubId(subid[0]);
+-				tm.setDataEnabled(subid[0], false);
++				//tm.setDataEnabled(subid[0], false);
+ 			}
+ 		}else if(tm.hasIccCard(1) && !tm.hasIccCard(0)){
+ 			int[] subid = SubscriptionManager.getSubId(1);
+ 			if(subscriptionManager.isActiveSubId(subid[0]) && (SubscriptionManager.getDefaultDataSubscriptionId() != subid[0])){
+ 				subscriptionManager.setDefaultDataSubId(subid[0]);
+-				tm.setDataEnabled(subid[0], false);
++				//tm.setDataEnabled(subid[0], false);
+ 			}
+ 		}
+ 	}
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 9934)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 9935)
+@@ -169,9 +169,10 @@
+ 
+    	private void initSwitch(){
+ 		mDataSwitchPreference=(SwitchPreference)findPreference(KEY_DATA);
+-		isDataOpen = tm.getDataEnabled();		
+-		
+-			mDataSwitchPreference.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
++		tm.setDataEnabled(false);
++		isDataOpen = false;
++		mDataSwitchPreference.setChecked(isDataOpen);
++		mDataSwitchPreference.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
+                 @Override
+                 public boolean onPreferenceChange(Preference preference, Object newValue) {
+ 					boolean val = (Boolean) newValue;
+@@ -246,7 +247,7 @@
+     }
+ 
+     private void updateActivitesCategory() {
+-	    if(Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0 && isCompleted){
++	    if(Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0 ){
+             tm.setDataEnabled(isDataOpen);
+ 			mDataSwitchPreference.setEnabled(SubscriptionManager.getDefaultDataSubscriptionId() != -1);
+ 	    }

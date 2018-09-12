@@ -1,0 +1,53 @@
+Index: packages/apps/Settings/src/com/android/settings/RingtonePreference.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/RingtonePreference.java	(revision 6561)
++++ packages/apps/Settings/src/com/android/settings/RingtonePreference.java	(revision 6562)
+@@ -140,12 +140,15 @@
+      * @param ringtonePickerIntent The ringtone picker intent that can be
+      *            modified by putting extras.
+      */
+-    public void onPrepareRingtonePickerIntent(Intent ringtonePickerIntent) {
++    public void onPrepareRingtonePickerIntent(Intent ringtonePickerIntent,boolean isAlarm) {
+ 
+         ringtonePickerIntent.putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                 onRestoreRingtone());
+ 
+         ringtonePickerIntent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, mShowDefault);
++		
++		ringtonePickerIntent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_MORE_RINGTONES, isAlarm);
++		
+         if (mShowDefault) {
+             ringtonePickerIntent.putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI,
+                     RingtoneManager.getDefaultUri(getRingtoneType()));
+Index: packages/apps/Settings/src/com/android/settings/DefaultRingtonePreference.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DefaultRingtonePreference.java	(revision 6561)
++++ packages/apps/Settings/src/com/android/settings/DefaultRingtonePreference.java	(revision 6562)
+@@ -31,8 +31,8 @@
+     }
+ 
+     @Override
+-    public void onPrepareRingtonePickerIntent(Intent ringtonePickerIntent) {
+-        super.onPrepareRingtonePickerIntent(ringtonePickerIntent);
++    public void onPrepareRingtonePickerIntent(Intent ringtonePickerIntent,boolean isAlarm) {
++        super.onPrepareRingtonePickerIntent(ringtonePickerIntent,isAlarm);
+         
+         /*
+          * Since this preference is for choosing the default ringtone, it
+Index: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 6561)
++++ packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 6562)
+@@ -282,7 +282,11 @@
+     public boolean onPreferenceTreeClick(Preference preference) {
+         if (preference instanceof RingtonePreference) {
+             mRequestPreference = (RingtonePreference) preference;
+-            mRequestPreference.onPrepareRingtonePickerIntent(mRequestPreference.getIntent());
++			if(preference == mAlarmRingtonePreference) {
++				mRequestPreference.onPrepareRingtonePickerIntent(mRequestPreference.getIntent(),false);
++			} else {
++				mRequestPreference.onPrepareRingtonePickerIntent(mRequestPreference.getIntent(),true);
++			}		
+             startActivityForResult(preference.getIntent(), REQUEST_CODE);
+             return true;
+         }

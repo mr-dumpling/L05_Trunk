@@ -1,0 +1,273 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 5133)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 5134)
+@@ -114,10 +114,6 @@
+                 <action android:name="android.settings.SETTINGS" />
+                 <category android:name="android.intent.category.DEFAULT" />
+             </intent-filter>
+-			<intent-filter android:exported="true">
+-			  <category android:name="android.intent.category.DEFAULT" />
+-				<action  android:name="com.android.settings.SYSTEMUI_NIGHTMODE" />
+-				 </intent-filter>
+             <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                 android:value="true" />
+         </activity>
+@@ -1018,7 +1014,7 @@
+                 android:value="com.android.settings.DisplaySettings" />
+         </activity-alias>
+ 
+-        <activity android:name="Settings$NightDisplaySettingsActivity"
++        <!--activity android:name="Settings$NightDisplaySettingsActivity"
+                 android:label="@string/night_display_title"
+                 android:enabled="@*android:bool/config_nightDisplayAvailable"
+                 android:icon="@drawable/ic_settings_night_display"
+@@ -1036,8 +1032,27 @@
+                 android:value="com.android.settings.display.NightDisplaySettings" />
+             <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                 android:value="true" />
++        </activity-->
++
++        <activity android:name="Settings$NightModeTypeSettingsActivity"
++                android:label="@string/night_mode_title"
++                android:icon="@drawable/ic_settings_night_display"
++                android:taskAffinity="">
++            <intent-filter android:priority="1">
++                <action android:name="android.settings.NIGHT_DISPLAY_SETTINGS" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="com.android.settings.SHORTCUT" />
++            </intent-filter>
++            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
++                android:value="com.android.settings.NightModeTypeSettings" />
++            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
++                android:value="true" />
+         </activity>
+-
++        
+         <activity android:name="Settings$DeviceInfoSettingsActivity"
+                 android:theme="@style/Theme.SubSettingsDialogWhenLarge"
+                 android:label="@string/device_info_settings"
+Index: packages/apps/Settings/src/com/android/settings/SettingsActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 5133)
++++ packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 5134)
+@@ -86,7 +86,8 @@
+ import com.android.settings.deviceinfo.SimStatus;
+ import com.android.settings.deviceinfo.Status;
+ import com.android.settings.deviceinfo.StorageSettings;
+-import com.android.settings.display.NightDisplaySettings;
++//import com.android.settings.display.NightDisplaySettings;
++import com.android.settings.NightModeTypeSettings;
+ import com.android.settings.fuelgauge.BatterySaverSettings;
+ import com.android.settings.fuelgauge.PowerUsageDetail;
+ import com.android.settings.fuelgauge.PowerUsageSummary;
+@@ -167,7 +168,6 @@
+     private static final String LOG_TAG = "Settings";
+ 
+     private static final int LOADER_ID_INDEXABLE_CONTENT_MONITOR = 1;
+-	private final String SYSTEMUI_NIGHTMODE="com.android.settings.SYSTEMUI_NIGHTMODE";
+     // Constants for state save/restore
+     private static final String SAVE_KEY_CATEGORIES = ":settings:categories";
+     private static final String SAVE_KEY_SEARCH_MENU_EXPANDED = ":settings:search_menu_expanded";
+@@ -391,7 +391,8 @@
+             WifiAPITest.class.getName(),
+             WifiInfo.class.getName(),
+             MasterClear.class.getName(),
+-            NightDisplaySettings.class.getName(),
++            //NightDisplaySettings.class.getName(),
++            NightModeTypeSettings.class.getName(),
+             ManageDomainUrls.class.getName(),
+             AutomaticStorageManagerSettings.class.getName(),
+             /// M: WFD sink surface fragment
+@@ -703,26 +704,17 @@
+                 switchToFragment(initialFragmentName, initialArguments, true, false,
+                         mInitialTitleResId, mInitialTitle, false);
+             } else {
+-                String action =intent.getAction();
+-				Log.e("action",action+"");
+-        		if(SYSTEMUI_NIGHTMODE.equals(action)){
+-					Fragment f=new NightModeTypeSettings();
+-					FragmentTransaction transaction = getFragmentManager().beginTransaction();
+-					transaction.add(R.id.main_content, f);
+-					transaction.commit();    
+-				}else{
+-               		 // No UP affordance if we are displaying the main Dashboard
+-               		 mDisplayHomeAsUpEnabled = false;
+-               		 // Show Search affordance
+-               		 mDisplaySearch = true;
+-                	 mInitialTitleResId = R.string.dashboard_title;
+-					 final Bundle args = new Bundle();
+-					 final String extraName = DashboardContainerFragment.EXTRA_SELECT_SETTINGS_TAB;
+-					 args.putString(extraName, intent.getStringExtra(extraName));
+-                	 switchToFragment(DashboardContainerFragment.class.getName(), args, false, false,
+-                     mInitialTitleResId, mInitialTitle, false);
+-					}
+-            	}
++                // No UP affordance if we are displaying the main Dashboard
++               	mDisplayHomeAsUpEnabled = false;
++               	// Show Search affordance
++               	mDisplaySearch = true;
++                mInitialTitleResId = R.string.dashboard_title;
++				final Bundle args = new Bundle();
++				final String extraName = DashboardContainerFragment.EXTRA_SELECT_SETTINGS_TAB;
++				args.putString(extraName, intent.getStringExtra(extraName));
++                switchToFragment(DashboardContainerFragment.class.getName(), args, false, false,
++                mInitialTitleResId, mInitialTitle, false);
++            }
+         }
+ 
+         mActionBar = getActionBar();
+Index: packages/apps/Settings/src/com/android/settings/Settings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/Settings.java	(revision 5133)
++++ packages/apps/Settings/src/com/android/settings/Settings.java	(revision 5134)
+@@ -51,7 +51,8 @@
+     public static class UserDictionarySettingsActivity extends SettingsActivity { /* empty */ }
+     public static class HomeSettingsActivity extends SettingsActivity { /* empty */ }
+     public static class DisplaySettingsActivity extends SettingsActivity { /* empty */ }
+-    public static class NightDisplaySettingsActivity extends SettingsActivity { /* empty */ }
++    //public static class NightDisplaySettingsActivity extends SettingsActivity { /* empty */ }
++    public static class NightModeTypeSettingsActivity extends SettingsActivity { /* empty */ }
+     public static class DeviceInfoSettingsActivity extends SettingsActivity { /* empty */ }
+     public static class ApplicationSettingsActivity extends SettingsActivity { /* empty */ }
+     public static class ManageApplicationsActivity extends SettingsActivity { /* empty */ }
+Index: vendor/branch/980CN1/packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- vendor/branch/980CN1/packages/apps/Settings/AndroidManifest.xml	(revision 5133)
++++ vendor/branch/980CN1/packages/apps/Settings/AndroidManifest.xml	(revision 5134)
+@@ -1011,7 +1011,7 @@
+                 android:value="com.android.settings.DisplaySettings" />
+         </activity-alias>
+ 
+-        <activity android:name="Settings$NightDisplaySettingsActivity"
++        <!--activity android:name="Settings$NightDisplaySettingsActivity"
+                 android:label="@string/night_display_title"
+                 android:enabled="@*android:bool/config_nightDisplayAvailable"
+                 android:icon="@drawable/ic_settings_night_display"
+@@ -1029,6 +1029,25 @@
+                 android:value="com.android.settings.display.NightDisplaySettings" />
+             <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                 android:value="true" />
++        </activity-->
++        
++        <activity android:name="Settings$NightModeTypeSettingsActivity"
++                android:label="@string/night_mode_title"
++                android:icon="@drawable/ic_settings_night_display"
++                android:taskAffinity="">
++            <intent-filter android:priority="1">
++                <action android:name="android.settings.NIGHT_DISPLAY_SETTINGS" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="com.android.settings.SHORTCUT" />
++            </intent-filter>
++            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
++                android:value="com.android.settings.NightModeTypeSettings" />
++            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
++                android:value="true" />
+         </activity>
+ 
+         <activity android:name="Settings$DeviceInfoSettingsActivity"
+Index: vendor/branch/5058Y/packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/AndroidManifest.xml	(revision 5133)
++++ vendor/branch/5058Y/packages/apps/Settings/AndroidManifest.xml	(revision 5134)
+@@ -1010,7 +1010,7 @@
+                 android:value="com.android.settings.DisplaySettings" />
+         </activity-alias>
+ 
+-        <activity android:name="Settings$NightDisplaySettingsActivity"
++        <!--activity android:name="Settings$NightDisplaySettingsActivity"
+                 android:label="@string/night_display_title"
+                 android:enabled="@*android:bool/config_nightDisplayAvailable"
+                 android:icon="@drawable/ic_settings_night_display"
+@@ -1028,6 +1028,25 @@
+                 android:value="com.android.settings.display.NightDisplaySettings" />
+             <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                 android:value="true" />
++        </activity-->
++        
++        <activity android:name="Settings$NightModeTypeSettingsActivity"
++                android:label="@string/night_mode_title"
++                android:icon="@drawable/ic_settings_night_display"
++                android:taskAffinity="">
++            <intent-filter android:priority="1">
++                <action android:name="android.settings.NIGHT_DISPLAY_SETTINGS" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="com.android.settings.SHORTCUT" />
++            </intent-filter>
++            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
++                android:value="com.android.settings.NightModeTypeSettings" />
++            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
++                android:value="true" />
+         </activity>
+ 
+         <activity android:name="Settings$DeviceInfoSettingsActivity"
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml	(revision 5133)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml	(revision 5134)
+@@ -1018,7 +1018,7 @@
+                 android:value="com.android.settings.DisplaySettings" />
+         </activity-alias>
+ 
+-        <activity android:name="Settings$NightDisplaySettingsActivity"
++        <!--activity android:name="Settings$NightDisplaySettingsActivity"
+                 android:label="@string/night_display_title"
+                 android:enabled="@*android:bool/config_nightDisplayAvailable"
+                 android:icon="@drawable/ic_settings_night_display"
+@@ -1036,6 +1036,25 @@
+                 android:value="com.android.settings.display.NightDisplaySettings" />
+             <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                 android:value="true" />
++        </activity-->
++        
++        <activity android:name="Settings$NightModeTypeSettingsActivity"
++                android:label="@string/night_mode_title"
++                android:icon="@drawable/ic_settings_night_display"
++                android:taskAffinity="">
++            <intent-filter android:priority="1">
++                <action android:name="android.settings.NIGHT_DISPLAY_SETTINGS" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="com.android.settings.SHORTCUT" />
++            </intent-filter>
++            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
++                android:value="com.android.settings.NightModeTypeSettings" />
++            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
++                android:value="true" />
+         </activity>
+ 
+         <activity android:name="Settings$DeviceInfoSettingsActivity"
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java	(revision 5133)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java	(revision 5134)
+@@ -129,13 +129,7 @@
+ 
+     @Override
+     public Intent getLongClickIntent() {
+-        //return new Intent(Settings.ACTION_NIGHT_DISPLAY_SETTINGS);
+-		Intent intent = new Intent();  
+-		 ComponentName cn=new ComponentName(PACKAGE_NAME, ACTIVITY_PATH);    
+-		 intent.setComponent(cn); 
+-		 intent.setAction(SYSTEMUI_NIGHTMODE);
+-		
+-         return intent;
++        return new Intent(Settings.ACTION_NIGHT_DISPLAY_SETTINGS);
+ 	}
+ 
+     @Override

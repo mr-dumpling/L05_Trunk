@@ -1,0 +1,42 @@
+Index: packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 5992)
++++ packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 5993)
+@@ -63,6 +63,7 @@
+ 	private static final String THREE_FINGER_SHOTSCREEN ="three_finger_shotscreen";
+ 	private static final String FILP_TO_MUTE ="mute_incoming";
+ 	private static final String FILP_TO_SNOOZE ="alarm_soonz_mode";
++	private static final String FILP_TO_SNOOZE_CATEGORY ="alarm_soonz";
+ 	private static final String DOUBLE_TAP_SCREEN="double_tap_screen";
+ 	//add by wqq end}
+     private List<GesturePreference> mPreferences;
+@@ -123,11 +124,15 @@
+ 		int filpToMuteEnabled = Secure.getInt(
+                     getContentResolver(), Secure.FILP_TO_MUTE_ENABLED, 0);
+ 		addPreference(FILP_TO_MUTE,filpToMuteEnabled != 0);
+-		
+-		int filpToSnoozeEnabled = Secure.getInt(
++
++		boolean supportSnooze = mContext.getResources().getBoolean(R.bool.config_remove_snooze_enabled);
++		if(supportSnooze){
++			int filpToSnoozeEnabled = Secure.getInt(
+                     getContentResolver(), Secure.FILP_TO_SNOOZE_ENABLED, 0);
+-		addPreference(FILP_TO_SNOOZE,filpToSnoozeEnabled != 0);
+-
++		    addPreference(FILP_TO_SNOOZE,filpToSnoozeEnabled != 0);
++		}else{
++			removePreference(FILP_TO_SNOOZE_CATEGORY);
++		}
+ 		
+ 		int gloveModeEnabled = Secure.getInt(
+                     getContentResolver(), Secure.GLOVE_MODE_ENABLE, 0);
+Index: packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- packages/apps/Settings/res/values/bools.xml	(revision 5992)
++++ packages/apps/Settings/res/values/bools.xml	(revision 5993)
+@@ -53,4 +53,5 @@
+ 	<bool name="config_remove_wifi_calling">true</bool>
+ 	
+ 	<bool name="guest_cannot_open_hotspot">false</bool>
++	<bool name="config_remove_snooze_enabled">false</bool>
+ </resources>

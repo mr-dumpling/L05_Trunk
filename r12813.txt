@@ -1,0 +1,65 @@
+Index: packages/apps/Settings/src/com/android/settings/IccLockSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/IccLockSettings.java	(revision 12812)
++++ packages/apps/Settings/src/com/android/settings/IccLockSettings.java	(revision 12813)
+@@ -54,6 +54,10 @@
+ import com.mediatek.settings.sim.TelephonyUtils;
+ import com.mediatek.settings.sim.SimHotSwapHandler.OnSimHotSwapListener;
+ import com.android.internal.telephony.PhoneConstants;
++import java.util.List;
++import android.telecom.PhoneAccountHandle;
++import android.telecom.TelecomManager;
++
+ /**
+  * Implements the preference screen to enable/disable ICC lock and
+  * also the dialogs to change the ICC PIN. In the former case, enabling/disabling
+@@ -252,7 +256,12 @@
+         final TelephonyManager tm =
+                 (TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE);
+         final int numSims = tm.getSimCount();
+-        if (numSims > 1) {
++
++        TelecomManager telecomManager = TelecomManager.from(getContext());
++        List<PhoneAccountHandle> allPhoneAccounts =
++                telecomManager.getCallCapablePhoneAccounts();
++
++        if (allPhoneAccounts.size() > 1) {
+             View view = inflater.inflate(R.layout.icc_lock_tabs, container, false);
+             final ViewGroup prefs_container = (ViewGroup) view.findViewById(R.id.prefs_container);
+             Utils.prepareCustomPreferencesList(container, view, prefs_container, false);
+@@ -268,16 +277,16 @@
+             mTabHost.clearAllTabs();
+ 
+             SubscriptionManager sm = SubscriptionManager.from(getContext());
+-            for (int i = 0; i < numSims; ++i) {
+-                final SubscriptionInfo subInfo = sm.getActiveSubscriptionInfoForSimSlotIndex(i);						
+-				if(subInfo != null) {	
+-					if(tm.getSimState(PhoneConstants.SIM_ID_1) != TelephonyManager.SIM_STATE_ABSENT) {
+-						mTabHost.addTab(buildTabSpec(String.valueOf(i),String.valueOf(subInfo.getDisplayName())));	
+-					} else {
+-						mTabHost.addTab(buildTabSpec(String.valueOf(0),String.valueOf(subInfo.getDisplayName())));	
+-					}								
+-				}
+-				
++            for (int i = 0; i < allPhoneAccounts.size(); ++i) {
++                final SubscriptionInfo subInfo = sm.getActiveSubscriptionInfoForSimSlotIndex(i);
++                if(subInfo != null) {
++                    if(tm.getSimState(PhoneConstants.SIM_ID_1) != TelephonyManager.SIM_STATE_ABSENT) {
++                        mTabHost.addTab(buildTabSpec(String.valueOf(i),String.valueOf(subInfo.getDisplayName())));
++                    } else {
++                        mTabHost.addTab(buildTabSpec(String.valueOf(0),String.valueOf(subInfo.getDisplayName())));
++                    }
++                }
++
+                 /*mTabHost.addTab(buildTabSpec(String.valueOf(i),
+                         String.valueOf(subInfo == null
+                             ? getContext().getString(R.string.sim_editor_title, i + 1)
+Index: .
+===================================================================
+--- .	(revision 12812)
++++ .	(revision 12813)
+
+Property changes on: .
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/CMCC_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE:r5310

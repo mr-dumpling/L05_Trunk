@@ -1,0 +1,811 @@
+Index: external/boringssl/src/crypto/bn/convert.c
+===================================================================
+--- external/boringssl/src/crypto/bn/convert.c	(revision 13917)
++++ external/boringssl/src/crypto/bn/convert.c	(revision 13918)
+@@ -372,71 +372,73 @@
+ }
+ 
+ char *BN_bn2dec(const BIGNUM *a) {
+-  /* It is easier to print strings little-endian, so we assemble it in reverse
+-   * and fix at the end. */
+-  BIGNUM *copy = NULL;
+-  CBB cbb;
+-  if (!CBB_init(&cbb, 16) ||
+-      !CBB_add_u8(&cbb, 0 /* trailing NUL */)) {
+-    goto cbb_err;
++  int i = 0, num, ok = 0;
++  char *buf = NULL;
++  char *p;
++  BIGNUM *t = NULL;
++  BN_ULONG *bn_data = NULL, *lp;
++
++  /* get an upper bound for the length of the decimal integer
++   * num <= (BN_num_bits(a) + 1) * log(2)
++   *     <= 3 * BN_num_bits(a) * 0.1001 + log(2) + 1     (rounding error)
++   *     <= BN_num_bits(a)/10 + BN_num_bits/1000 + 1 + 1
++   */
++  i = BN_num_bits(a) * 3;
++  num = i / 10 + i / 1000 + 1 + 1;
++  bn_data =
++      (BN_ULONG *)OPENSSL_malloc((num / BN_DEC_NUM + 1) * sizeof(BN_ULONG));
++  buf = (char *)OPENSSL_malloc(num + 3);
++  if ((buf == NULL) || (bn_data == NULL)) {
++    OPENSSL_PUT_ERROR(BN, ERR_R_MALLOC_FAILURE);
++    goto err;
+   }
++  t = BN_dup(a);
++  if (t == NULL) {
++    goto err;
++  }
+ 
+-  if (BN_is_zero(a)) {
+-    if (!CBB_add_u8(&cbb, '0')) {
+-      goto cbb_err;
+-    }
++#define BUF_REMAIN (num + 3 - (size_t)(p - buf))
++  p = buf;
++  lp = bn_data;
++  if (BN_is_zero(t)) {
++    *(p++) = '0';
++    *(p++) = '\0';
+   } else {
+-    copy = BN_dup(a);
+-    if (copy == NULL) {
+-      goto err;
++    if (BN_is_negative(t)) {
++      *p++ = '-';
+     }
+ 
+-    while (!BN_is_zero(copy)) {
+-      BN_ULONG word = BN_div_word(copy, BN_DEC_CONV);
+-      if (word == (BN_ULONG)-1) {
+-        goto err;
++    while (!BN_is_zero(t)) {
++      *lp = BN_div_word(t, BN_DEC_CONV);
++      lp++;
++    }
++    lp--;
++    /* We now have a series of blocks, BN_DEC_NUM chars
++     * in length, where the last one needs truncation.
++     * The blocks need to be reversed in order. */
++    BIO_snprintf(p, BUF_REMAIN, BN_DEC_FMT1, *lp);
++    while (*p) {
++      p++;
++    }
++    while (lp != bn_data) {
++      lp--;
++      BIO_snprintf(p, BUF_REMAIN, BN_DEC_FMT2, *lp);
++      while (*p) {
++        p++;
+       }
+-
+-      const int add_leading_zeros = !BN_is_zero(copy);
+-      int i;
+-      for (i = 0; i < BN_DEC_NUM && (add_leading_zeros || word != 0); i++) {
+-        if (!CBB_add_u8(&cbb, '0' + word % 10)) {
+-          goto cbb_err;
+-        }
+-        word /= 10;
+-      }
+-      assert(word == 0);
+     }
+   }
++  ok = 1;
+ 
+-  if (BN_is_negative(a) &&
+-      !CBB_add_u8(&cbb, '-')) {
+-    goto cbb_err;
++err:
++  OPENSSL_free(bn_data);
++  BN_free(t);
++  if (!ok) {
++    OPENSSL_free(buf);
++    buf = NULL;
+   }
+ 
+-  uint8_t *data;
+-  size_t len;
+-  if (!CBB_finish(&cbb, &data, &len)) {
+-    goto cbb_err;
+-  }
+-
+-  /* Reverse the buffer. */
+-  size_t i;
+-  for (i = 0; i < len/2; i++) {
+-    uint8_t tmp = data[i];
+-    data[i] = data[len - 1 - i];
+-    data[len - 1 - i] = tmp;
+-  }
+-
+-  BN_free(copy);
+-  return (char *)data;
+-
+-cbb_err:
+-  OPENSSL_PUT_ERROR(BN, ERR_R_MALLOC_FAILURE);
+-err:
+-  BN_free(copy);
+-  CBB_cleanup(&cbb);
+-  return NULL;
++  return buf;
+ }
+ 
+ int BN_dec2bn(BIGNUM **outp, const char *in) {
+Index: external/boringssl/src/crypto/bn/bn_test.cc
+===================================================================
+--- external/boringssl/src/crypto/bn/bn_test.cc	(revision 13917)
++++ external/boringssl/src/crypto/bn/bn_test.cc	(revision 13918)
+@@ -127,7 +127,6 @@
+ static bool test_mpi();
+ static bool test_rand();
+ static bool test_asn1();
+-static bool TestBN2Dec();
+ 
+ static const uint8_t kSample[] =
+     "\xC6\x4F\x43\x04\x2A\xEA\xCA\x6E\x58\x36\x80\x5B\xE8\xC9"
+@@ -327,12 +326,6 @@
+     return 1;
+   }
+ 
+-  message(bc_file.get(), "BN_bn2dec");
+-  if (!TestBN2Dec()) {
+-    return 1;
+-  }
+-  flush_fp(bc_file.get());
+-
+   printf("PASS\n");
+   return 0;
+ }
+@@ -1942,38 +1935,3 @@
+ 
+   return true;
+ }
+-
+-static bool TestBN2Dec() {
+-  static const char *kBN2DecTests[] = {
+-      "0",
+-      "1",
+-      "-1",
+-      "100",
+-      "-100",
+-      "123456789012345678901234567890",
+-      "-123456789012345678901234567890",
+-      "123456789012345678901234567890123456789012345678901234567890",
+-      "-123456789012345678901234567890123456789012345678901234567890",
+-  };
+-
+-  for (const char *test : kBN2DecTests) {
+-    ScopedBIGNUM bn;
+-    int ret = DecimalToBIGNUM(&bn, test);
+-    if (ret == 0) {
+-      return false;
+-    }
+-
+-    ScopedOpenSSLString dec(BN_bn2dec(bn.get()));
+-    if (!dec) {
+-      fprintf(stderr, "BN_bn2dec failed on %s.\n", test);
+-      return false;
+-    }
+-
+-    if (strcmp(dec.get(), test) != 0) {
+-      fprintf(stderr, "BN_bn2dec gave %s, wanted %s.\n", dec.get(), test);
+-      return false;
+-    }
+-  }
+-
+-  return true;
+-}
+Index: kernel-4.4/drivers/misc/mediatek/connectivity/wlan/gen2/os/linux/gl_wext_priv.c
+===================================================================
+--- kernel-4.4/drivers/misc/mediatek/connectivity/wlan/gen2/os/linux/gl_wext_priv.c	(revision 13917)
++++ kernel-4.4/drivers/misc/mediatek/connectivity/wlan/gen2/os/linux/gl_wext_priv.c	(revision 13918)
+@@ -2841,6 +2841,10 @@
+ 	      IN struct iw_request_info *prIwReqInfo, IN union iwreq_data *prIwReqData, IN char *pcExtra)
+ {
+ 	UINT_32 u4SubCmd, u4BufLen, u4CmdLen;
++#if !(CFG_SUPPORT_TX_POWER_BACK_OFF)
++	UINT_16 i = 0;
++	INT_32  setting[4] = {0};
++#endif
+ 	P_GLUE_INFO_T prGlueInfo;
+ 	int status = 0;
+ 	WLAN_STATUS rStatus = WLAN_STATUS_SUCCESS;
+@@ -2860,15 +2864,12 @@
+ 
+ 	switch (u4SubCmd) {
+ 	case PRIV_CMD_SET_TX_POWER:
++#if !(CFG_SUPPORT_TX_POWER_BACK_OFF)
+ 	{
+-		UINT_16 i, j;
+-		INT_32  setting[4] = {0};
+-
+ 		if (u4CmdLen > 4)
+ 			return -EINVAL;
+ 		if (copy_from_user(setting, prIwReqData->data.pointer, u4CmdLen))
+ 			return -EFAULT;
+-#if !(CFG_SUPPORT_TX_POWER_BACK_OFF)
+ 		prTxpwr = &prGlueInfo->rTxPwr;
+ 		if (setting[0] == 0 && prIwReqData->data.length == 4 /* argc num */) {
+ 			/* 0 (All networks), 1 (legacy STA), 2 (Hotspot AP), 3 (P2P), 4 (BT over Wi-Fi) */
+@@ -2919,7 +2920,11 @@
+ 					   sizeof(SET_TXPWR_CTRL_T), TRUE, FALSE, FALSE, FALSE, &u4BufLen);
+ 		} else
+ 			return -EFAULT;
++	}
+ #else
++	{
++		INT_32 *setting = prIwReqData->data.pointer;
++		UINT_16 i, j;
+ 
+ #if 0
+ 		DBGLOG(REQ, INFO, "Tx power num = %d\n", prIwReqData->data.length);
+@@ -3014,8 +3019,8 @@
+ 			} while (j < 40);
+ 		} else
+ 			return -EFAULT;
++	}
+ #endif
+-	}
+ 
+ 	return status;
+ 	default:
+Index: kernel-4.4/drivers/misc/mediatek/connectivity/wlan/gen2/os/linux/gl_vendor.c
+===================================================================
+--- kernel-4.4/drivers/misc/mediatek/connectivity/wlan/gen2/os/linux/gl_vendor.c	(revision 13917)
++++ kernel-4.4/drivers/misc/mediatek/connectivity/wlan/gen2/os/linux/gl_vendor.c	(revision 13918)
+@@ -294,7 +294,6 @@
+ 	struct nlattr *pbucket, *pchannel;
+ 	UINT_32 len_basic, len_bucket, len_channel;
+ 	int i, j, k;
+-	UINT_32 u4ArySize;
+ 
+ 	ASSERT(wiphy);
+ 	ASSERT(wdev);
+@@ -322,10 +321,7 @@
+ 				len_basic += NLA_ALIGN(attr[k]->nla_len);
+ 				break;
+ 			case GSCAN_ATTRIBUTE_NUM_BUCKETS:
+-				u4ArySize = nla_get_u32(attr[k]);
+-				prWifiScanCmd->num_buckets =
+-					(u4ArySize <= GSCAN_MAX_BUCKETS)
+-					? u4ArySize : GSCAN_MAX_BUCKETS;
++				prWifiScanCmd->num_buckets = nla_get_u32(attr[k]);
+ 				len_basic += NLA_ALIGN(attr[k]->nla_len);
+ 				DBGLOG(REQ, TRACE, "attr=0x%x, num_buckets=%d nla_len=%d,\r\n",
+ 				       *(UINT_32 *) attr[k], prWifiScanCmd->num_buckets, attr[k]->nla_len);
+@@ -1527,8 +1523,8 @@
+ 	rRSSIEvt.version = 1; /* RSSI_MONITOR_EVT_VERSION = 1 */
+ 	if (rssi > PARAM_WHQL_RSSI_MAX_DBM)
+ 		rssi = PARAM_WHQL_RSSI_MAX_DBM;
+-	else if (rssi < -127)
+-		rssi = -127;
++	else if (rssi < -120)
++		rssi = -120;
+ 	rRSSIEvt.rssi = (INT_8)rssi;
+ 	DBGLOG(REQ, INFO, "RSSI Event: version=%d, rssi=%d, BSSID=" MACSTR "\r\n",
+ 		rRSSIEvt.version, rRSSIEvt.rssi, MAC2STR(rRSSIEvt.BSSID));
+Index: kernel-4.4/drivers/misc/mediatek/connectivity/wlan/gen2/os/linux/gl_proc.c
+===================================================================
+--- kernel-4.4/drivers/misc/mediatek/connectivity/wlan/gen2/os/linux/gl_proc.c	(revision 13917)
++++ kernel-4.4/drivers/misc/mediatek/connectivity/wlan/gen2/os/linux/gl_proc.c	(revision 13918)
+@@ -900,54 +900,76 @@
+ 	return 0;
+ }
+ 
+-static ssize_t procfile_write(struct file *filp, const char __user *buffer,
+-			      size_t count, loff_t *f_pos)
++static ssize_t procfile_write(struct file *filp, const char __user *buffer, size_t count, loff_t *f_pos)
+ {
+ 	char buf[256];
+ 	char *pBuf;
+ 	ULONG len = count;
+-	unsigned int x = 0;
++	INT32 x = 0, y = 0, z = 0;
+ 	char *pToken = NULL;
+ 	char *pDelimiter = " \t";
+-	INT32 i4Ret = -1;
++	INT32 i4Ret = 0;
+ 
+ 	DBGLOG(INIT, TRACE, "write parameter len = %d\n\r", (INT32) len);
+ 	if (len >= sizeof(buf)) {
+ 		DBGLOG(INIT, ERROR, "input handling fail!\n");
++		len = sizeof(buf) - 1;
+ 		return -1;
+ 	}
+ 
+ 	if (copy_from_user(buf, buffer, len))
+ 		return -EFAULT;
+-
+ 	buf[len] = '\0';
+ 	DBGLOG(INIT, TRACE, "write parameter data = %s\n\r", buf);
++
+ 	pBuf = buf;
+ 	pToken = strsep(&pBuf, pDelimiter);
+-	if (pToken) {
+-		i4Ret = kalkStrtou32(pToken, 16, &x);
++
++	if (pToken) /* x = NULL != pToken ? simple_strtol(pToken, NULL, 16) : 0; */
++		i4Ret = kalkStrtos32(pToken, 16, &x);
++	if (!i4Ret)
++		DBGLOG(INIT, TRACE, "x = 0x%x\n", x);
++
++	pToken = strsep(&pBuf, "\t\n ");
++	if (pToken != NULL) {
++		i4Ret = kalkStrtos32(pToken, 16, &y); /* y = simple_strtol(pToken, NULL, 16); */
+ 		if (!i4Ret)
+-			DBGLOG(INIT, TRACE, " x(0x%08x)\n\r", x);
++			DBGLOG(INIT, TRACE, "y = 0x%08x\n\r", y);
++	} else {
++		y = 3000;
++		/*efuse, register read write default value */
++		if (0x11 == x || 0x12 == x || 0x13 == x)
++			y = 0x80000000;
+ 	}
+ 
+-	if ((!i4Ret) && (ARRAY_SIZE(wlan_dev_dbg_func) > x) &&
+-	    (wlan_dev_dbg_func[x] != NULL))
++	pToken = strsep(&pBuf, "\t\n ");
++	if (pToken != NULL) {
++		i4Ret = kalkStrtos32(pToken, 16, &z); /* z = simple_strtol(pToken, NULL, 16); */
++		if (!i4Ret)
++			DBGLOG(INIT, TRACE, "z = 0x%08x\n\r", z);
++	} else {
++		z = 10;
++		/*efuse, register read write default value */
++		if (0x11 == x || 0x12 == x || 0x13 == x)
++			z = 0xffffffff;
++	}
++
++	DBGLOG(INIT, TRACE, " x(0x%08x), y(0x%08x), z(0x%08x)\n\r", x, y, z);
++
++	if ((ARRAY_SIZE(wlan_dev_dbg_func) > x) && NULL != wlan_dev_dbg_func[x])
+ 		(*wlan_dev_dbg_func[x]) ();
+ 	else
+-		DBGLOG(INIT, ERROR,
+-		       "no handler defined for command id(0x%08x), pToken=%p, i4Ret=%d\n\r",
+-		       x, pToken, i4Ret);
++		DBGLOG(INIT, ERROR, "no handler defined for command id(0x%08x)\n\r", x);
+ 
++	/* len = gCoexBuf1.availSize; */
+ 	return len;
+ }
+-
+-static const struct file_operations proc_fops = {
+-	.owner = THIS_MODULE,
+-	.read = procfile_read,
+-	.write = procfile_write,
+-};
++	static const struct file_operations proc_fops = {
++		.owner = THIS_MODULE,
++		.read = procfile_read,
++		.write = procfile_write,
++	};
+ #endif
+-
+ #if CFG_SUPPORT_SET_CAM_BY_PROC
+ static ssize_t procSetCamCfgWrite(struct file *file, const char *buffer, size_t count, loff_t *data)
+ {
+@@ -1239,8 +1261,10 @@
+ 	UINT_8 token_num = 1;
+ 
+ 	kalMemSet(aucCfgBuf, '\0', u4CopySize);
+-	u4CopySize = (count < u4CopySize) ? count : (u4CopySize - 1);
+ 
++	if (u4CopySize >= (count + 1))
++		u4CopySize = count;
++
+ 	if (copy_from_user(aucCfgBuf, buf, u4CopySize)) {
+ 		DBGLOG(INIT, ERROR, "copy from user failed\n");
+ 		return -EFAULT;
+Index: vendor/ausshine/libs/libwvdrmengine/arm/libwvdrmengine.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/mediatek/proprietary/bootable/bootloader/preloader/platform/mt6739/src/drivers/msdc.c
+===================================================================
+--- vendor/mediatek/proprietary/bootable/bootloader/preloader/platform/mt6739/src/drivers/msdc.c	(revision 13917)
++++ vendor/mediatek/proprietary/bootable/bootloader/preloader/platform/mt6739/src/drivers/msdc.c	(revision 13918)
+@@ -2422,6 +2422,7 @@
+ }
+ #endif
+ 
++#if defined(MMC_MSDC_DRV_CTP) || defined(MMC_MSDC_DRV_LK)
+ void msdc_emmc_hard_reset(struct mmc_host *host)
+ {
+ 	u32 base = host->base;
+@@ -2432,6 +2433,7 @@
+ 	MSDC_CLR_BIT32(EMMC_IOCON, EMMC_IOCON_BOOTRST);
+ 	//mt_set_gpio_out(PAD_MSDC0_RSTB,GPIO_OUT_ONE);
+ }
++#endif
+ 
+ #ifdef FEATURE_MMC_BOOT_MODE
+ int msdc_emmc_boot_start(struct mmc_host *host, u32 hz, int ddr, int mode, int ackdis, u8 hostbuswidth, u64 size)
+Index: build/core/version_defaults.mk
+===================================================================
+--- build/core/version_defaults.mk	(revision 13917)
++++ build/core/version_defaults.mk	(revision 13918)
+@@ -114,7 +114,7 @@
+     #  It must be of the form "YYYY-MM-DD" on production devices.
+     #  It must match one of the Android Security Patch Level strings of the Public Security Bulletins.
+     #  If there is no $PLATFORM_SECURITY_PATCH set, keep it empty.
+-    PLATFORM_SECURITY_PATCH := 2018-05-05
++    PLATFORM_SECURITY_PATCH := 2018-04-05
+ endif
+ 
+ ifeq "" "$(PLATFORM_BASE_OS)"
+Index: frameworks/av/media/libstagefright/codecs/on2/enc/SoftVPXEncoder.cpp
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/on2/enc/SoftVPXEncoder.cpp	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/on2/enc/SoftVPXEncoder.cpp	(revision 13918)
+@@ -792,9 +792,7 @@
+         if (inputBufferHeader->nTimeStamp > mLastTimestamp) {
+             frameDuration = (uint32_t)(inputBufferHeader->nTimeStamp - mLastTimestamp);
+         } else {
+-            // Use default of 30 fps in case of 0 frame rate.
+-            uint32_t framerate = mFramerate ?: (30 << 16);
+-            frameDuration = (uint32_t)(((uint64_t)1000000 << 16) / framerate);
++            frameDuration = (uint32_t)(((uint64_t)1000000 << 16) / mFramerate);
+         }
+         mLastTimestamp = inputBufferHeader->nTimeStamp;
+         codec_return = vpx_codec_encode(
+@@ -848,11 +846,6 @@
+     }
+ }
+ 
+-void SoftVPXEncoder::onReset() {
+-    releaseEncoder();
+-    mLastTimestamp = 0x7FFFFFFFFFFFFFFFLL;
+-}
+-
+ }  // namespace android
+ 
+ 
+Index: frameworks/av/media/libstagefright/codecs/on2/enc/SoftVPXEncoder.h
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/on2/enc/SoftVPXEncoder.h	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/on2/enc/SoftVPXEncoder.h	(revision 13918)
+@@ -87,8 +87,6 @@
+     // encoding of the frame
+     virtual void onQueueFilled(OMX_U32 portIndex);
+ 
+-    virtual void onReset();
+-
+ private:
+     enum TemporalReferences {
+         // For 1 layer case: reference all (last, golden, and alt ref), but only
+Index: frameworks/av/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.cpp
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.cpp	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.cpp	(revision 13918)
+@@ -99,7 +99,6 @@
+ 
+ SoftMPEG4Encoder::~SoftMPEG4Encoder() {
+     ALOGV("Destruct SoftMPEG4Encoder");
+-    onReset();
+     releaseEncoder();
+     List<BufferInfo *> &outQueue = getPortQueue(1);
+     List<BufferInfo *> &inQueue = getPortQueue(0);
+@@ -202,16 +201,23 @@
+ }
+ 
+ OMX_ERRORTYPE SoftMPEG4Encoder::releaseEncoder() {
+-    if (mEncParams) {
+-        delete mEncParams;
+-        mEncParams = NULL;
++    if (!mStarted) {
++        return OMX_ErrorNone;
+     }
+ 
+-    if (mHandle) {
+-        delete mHandle;
+-        mHandle = NULL;
+-    }
++    PVCleanUpVideoEncoder(mHandle);
+ 
++    free(mInputFrameData);
++    mInputFrameData = NULL;
++
++    delete mEncParams;
++    mEncParams = NULL;
++
++    delete mHandle;
++    mHandle = NULL;
++
++    mStarted = false;
++
+     return OMX_ErrorNone;
+ }
+ 
+@@ -516,19 +522,6 @@
+     }
+ }
+ 
+-void SoftMPEG4Encoder::onReset() {
+-    if (!mStarted) {
+-        return;
+-    }
+-
+-    PVCleanUpVideoEncoder(mHandle);
+-
+-    free(mInputFrameData);
+-    mInputFrameData = NULL;
+-
+-    mStarted = false;
+-}
+-
+ }  // namespace android
+ 
+ android::SoftOMXComponent *createSoftOMXComponent(
+Index: frameworks/av/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.h
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.h	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.h	(revision 13918)
+@@ -48,8 +48,6 @@
+ 
+     virtual void onQueueFilled(OMX_U32 portIndex);
+ 
+-    virtual void onReset();
+-
+ protected:
+     virtual ~SoftMPEG4Encoder();
+ 
+Index: frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder.cpp
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder.cpp	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder.cpp	(revision 13918)
+@@ -62,7 +62,8 @@
+ }
+ 
+ SoftAACEncoder::~SoftAACEncoder() {
+-    onReset();
++    delete[] mInputFrame;
++    mInputFrame = NULL;
+ 
+     if (mEncoderHandle) {
+         CHECK_EQ(VO_ERR_NONE, mApiHandle->Uninit(mEncoderHandle));
+@@ -578,17 +579,6 @@
+     }
+ }
+ 
+-void SoftAACEncoder::onReset() {
+-    delete[] mInputFrame;
+-    mInputFrame = NULL;
+-    mInputSize = 0;
+-
+-    mSentCodecSpecificData = false;
+-    mInputTimeUs = -1ll;
+-    mSawInputEOS = false;
+-    mSignalledError = false;
+-}
+-
+ }  // namespace android
+ 
+ android::SoftOMXComponent *createSoftOMXComponent(
+Index: frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder2.cpp
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder2.cpp	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder2.cpp	(revision 13918)
+@@ -82,7 +82,8 @@
+ SoftAACEncoder2::~SoftAACEncoder2() {
+     aacEncClose(&mAACEncoder);
+ 
+-    onReset();
++    delete[] mInputFrame;
++    mInputFrame = NULL;
+ }
+ 
+ void SoftAACEncoder2::initPorts() {
+@@ -742,17 +743,6 @@
+     }
+ }
+ 
+-void SoftAACEncoder2::onReset() {
+-    delete[] mInputFrame;
+-    mInputFrame = NULL;
+-    mInputSize = 0;
+-
+-    mSentCodecSpecificData = false;
+-    mInputTimeUs = -1ll;
+-    mSawInputEOS = false;
+-    mSignalledError = false;
+-}
+-
+ }  // namespace android
+ 
+ android::SoftOMXComponent *createSoftOMXComponent(
+Index: frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder.h
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder.h	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder.h	(revision 13918)
+@@ -43,8 +43,6 @@
+ 
+     virtual void onQueueFilled(OMX_U32 portIndex);
+ 
+-    virtual void onReset();
+-
+ private:
+     enum {
+         kNumBuffers             = 4,
+Index: frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder2.h
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder2.h	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/aacenc/SoftAACEncoder2.h	(revision 13918)
+@@ -47,8 +47,6 @@
+ 
+     virtual void onQueueFilled(OMX_U32 portIndex);
+ 
+-    virtual void onReset();
+-
+ private:
+     enum {
+         kNumBuffers             = 4,
+Index: frameworks/av/media/libstagefright/codecs/mp3dec/src/pvmp3_dct_9.cpp
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/mp3dec/src/pvmp3_dct_9.cpp	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/mp3dec/src/pvmp3_dct_9.cpp	(revision 13918)
+@@ -117,7 +117,6 @@
+ ; FUNCTION CODE
+ ----------------------------------------------------------------------------*/
+ 
+-__attribute__((no_sanitize("integer")))
+ void pvmp3_dct_9(int32 vec[])
+ {
+ 
+Index: frameworks/av/media/libstagefright/codecs/mp3dec/src/pvmp3_dct_16.cpp
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/mp3dec/src/pvmp3_dct_16.cpp	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/mp3dec/src/pvmp3_dct_16.cpp	(revision 13918)
+@@ -149,7 +149,6 @@
+ ; FUNCTION CODE
+ ----------------------------------------------------------------------------*/
+ 
+-__attribute__((no_sanitize("integer")))
+ void pvmp3_dct_16(int32 vec[], int32 flag)
+ {
+     int32 tmp0;
+@@ -309,7 +308,6 @@
+ /*----------------------------------------------------------------------------
+ ; FUNCTION CODE
+ ----------------------------------------------------------------------------*/
+-__attribute__((no_sanitize("integer")))
+ void pvmp3_merge_in_place_N32(int32 vec[])
+ {
+ 
+@@ -368,7 +366,6 @@
+ 
+ 
+ 
+-__attribute__((no_sanitize("integer")))
+ void pvmp3_split(int32 *vect)
+ {
+ 
+Index: frameworks/av/media/libstagefright/codecs/mp3dec/src/pv_mp3dec_fxd_op_c_equivalent.h
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/mp3dec/src/pv_mp3dec_fxd_op_c_equivalent.h	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/mp3dec/src/pv_mp3dec_fxd_op_c_equivalent.h	(revision 13918)
+@@ -50,7 +50,6 @@
+ 
+ 
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline int32 pv_abs(int32 a)
+     {
+         int32 b = (a < 0) ? -a : a;
+@@ -60,19 +59,16 @@
+ 
+ 
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline Int32 fxp_mul32_Q30(const Int32 a, const Int32 b)
+     {
+         return (Int32)(((int64)(a) * b) >> 30);
+     }
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline Int32 fxp_mac32_Q30(const Int32 a, const Int32 b, Int32 L_add)
+     {
+         return (L_add + (Int32)(((int64)(a) * b) >> 30));
+     }
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline Int32 fxp_mul32_Q32(const Int32 a, const Int32 b)
+     {
+         return (Int32)(((int64)(a) * b) >> 32);
+@@ -79,19 +75,16 @@
+     }
+ 
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline Int32 fxp_mul32_Q28(const Int32 a, const Int32 b)
+     {
+         return (Int32)(((int64)(a) * b) >> 28);
+     }
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline Int32 fxp_mul32_Q27(const Int32 a, const Int32 b)
+     {
+         return (Int32)(((int64)(a) * b) >> 27);
+     }
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline Int32 fxp_mul32_Q26(const Int32 a, const Int32 b)
+     {
+         return (Int32)(((int64)(a) * b) >> 26);
+@@ -98,13 +91,11 @@
+     }
+ 
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline Int32 fxp_mac32_Q32(Int32 L_add, const Int32 a, const Int32 b)
+     {
+         return (L_add + (Int32)(((int64)(a) * b) >> 32));
+     }
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline Int32 fxp_msb32_Q32(Int32 L_sub, const Int32 a, const Int32 b)
+     {
+         return (L_sub - ((Int32)(((int64)(a) * b) >> 32)));
+@@ -111,7 +102,6 @@
+     }
+ 
+ 
+-    __attribute__((no_sanitize("integer")))
+     __inline Int32 fxp_mul32_Q29(const Int32 a, const Int32 b)
+     {
+         return (Int32)(((int64)(a) * b) >> 29);
+Index: frameworks/av/media/libstagefright/codecs/mp3dec/src/pvmp3_mdct_18.cpp
+===================================================================
+--- frameworks/av/media/libstagefright/codecs/mp3dec/src/pvmp3_mdct_18.cpp	(revision 13917)
++++ frameworks/av/media/libstagefright/codecs/mp3dec/src/pvmp3_mdct_18.cpp	(revision 13918)
+@@ -129,7 +129,6 @@
+ 
+ 
+ 
+-__attribute__((no_sanitize("integer")))
+ void pvmp3_mdct_18(int32 vec[], int32 *history, const int32 *window)
+ {
+     int32 i;
+Index: device/ausshine/aus6739_36_n1/ProjectConfig.mk
+===================================================================
+--- device/ausshine/aus6739_36_n1/ProjectConfig.mk	(revision 13917)
++++ device/ausshine/aus6739_36_n1/ProjectConfig.mk	(revision 13918)
+@@ -223,7 +223,7 @@
+ MTK_BT_SUPPORT = yes
+ MTK_BT_WIFI_COEX_RADIO_MODIFY = no
+ MTK_BUFFER_COMPRESSION_SUPPORT = no
+-MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.36.n1_P81
++MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.36.n1_P80
+ MTK_BWC_SUPPORT = yes
+ MTK_C2K_LTE_MODE = 2
+ MTK_CACHE_MERGE_SUPPORT = no
+@@ -676,7 +676,7 @@
+ MTK_WAPI_SUPPORT = yes
+ MTK_WAPPUSH_SUPPORT = yes
+ MTK_WB_SPEECH_SUPPORT = yes
+-MTK_WEEK_NO = W18.17
++MTK_WEEK_NO = W18.15
+ MTK_WFC_SUPPORT = yes
+ MTK_WFD_HDCP_RX_SVP_SUPPORT = no
+ MTK_WFD_HDCP_TX_SUPPORT = no
+Index: device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 13917)
++++ device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 13918)
+@@ -224,7 +224,7 @@
+ MTK_BT_SUPPORT = yes
+ MTK_BT_WIFI_COEX_RADIO_MODIFY = no
+ MTK_BUFFER_COMPRESSION_SUPPORT = no
+-MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P81
++MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P80
+ MTK_BWC_SUPPORT = yes
+ MTK_C2K_LTE_MODE = 2
+ MTK_CACHE_MERGE_SUPPORT = no
+@@ -677,7 +677,7 @@
+ MTK_WAPI_SUPPORT = yes
+ MTK_WAPPUSH_SUPPORT = yes
+ MTK_WB_SPEECH_SUPPORT = yes
+-MTK_WEEK_NO = W18.17
++MTK_WEEK_NO = W18.15
+ MTK_WFC_SUPPORT = no
+ MTK_WFD_HDCP_RX_SVP_SUPPORT = no
+ MTK_WFD_HDCP_TX_SUPPORT = no

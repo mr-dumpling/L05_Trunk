@@ -1,0 +1,51 @@
+Index: packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1609)
++++ packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1610)
+@@ -93,7 +93,7 @@
+ 	private final static int kSystemRootStateEnable=1;
+ 	private final static String CERTIFICATE_VERSION="V1.0";
+ 	private static int systemRootState=kSystemRootStateUnknow;
+-	private static final int CU_REF = 166;
++	private static final int CU_REF_START = 166;
+ 	private static final int CU_REF_LENGTH = 20;
+ 	private static IBinder binder;
+ 	private static NvRAMAgent agent; 
+@@ -634,6 +634,7 @@
+ 	static boolean handleCustomerInternalVersion2(Context context, String input) {
+ 		List<String> deviceIds = new ArrayList<String>();
+ 		if (input.equals(MMI_TEST_FOR_TCL )) {	
++			initProductInfo();
+ 			String SW_Version="SW Version: "+ SystemProperties.get("ro.build.version.custintid");
+ 			deviceIds.add(SW_Version);
+ 			String[] directory = SW_Version.split("_");
+@@ -640,7 +641,12 @@
+ 			String sw_ver = "Build Version:20"+ directory[3];
+ 			//String Build_Version="Build Version:"+ SystemProperties.get("ro.build.date");
+ 		    deviceIds.add(sw_ver);
+-			String su_ref="CU REF: "+SystemProperties.get("ro.tct.curef");
++			String stringBuffer =  new String(product_info, CU_REF_START, CU_REF_LENGTH);
++			//String su_ref="CU REF: "+SystemProperties.get("ro.tct.curef");
++			if(stringBuffer ==null ||stringBuffer.equals("")){
++				stringBuffer="0000";
++			}
++			String su_ref="CU REF: "+stringBuffer.toString().toUpperCase();
+ 			deviceIds.add(su_ref);
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+ 				.setTitle("Version Info")								
+@@ -653,6 +659,15 @@
+ 		}				 
+ 		return false;	   
+ 	}
++	private static  void initProductInfo() {
++		binder = ServiceManager.getService("NvRAMAgent");
++		agent = NvRAMAgent.Stub.asInterface(binder);
++		try {
++			product_info = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++		} catch (Exception e) {
++			e.printStackTrace();
++		}
++	}
+ 	static boolean handleCheckEfused(Context context, String input) {	 
+ 		if(input.equals(MMI_CHECK_Efused)) { 
+ 			int checkValue =-1;

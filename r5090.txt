@@ -1,0 +1,40 @@
+Index: vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/src/com/android/settings/datausage/CellDataPreference.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/src/com/android/settings/datausage/CellDataPreference.java	(revision 5089)
++++ vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/src/com/android/settings/datausage/CellDataPreference.java	(revision 5090)
+@@ -54,9 +54,6 @@
+ import com.mediatek.settings.sim.TelephonyUtils;
+ 
+ import java.util.List;
+-import com.android.internal.telephony.Phone;
+-import com.android.internal.telephony.PhoneFactory;
+-import android.telephony.ServiceState;
+ 
+ public class CellDataPreference extends CustomDialogPreference implements TemplatePreference {
+ 
+@@ -173,6 +170,7 @@
+ 				// TODO Auto-generated method stub
+ 				mTelephonyManager.setDataEnabled(mSubId, enabled);
+                 setChecked(enabled);
++                Global.putInt(getContext().getContentResolver(), Global.DATA_ROAMING, 1);
+ 			}
+ 		});
+ 		builder.setNegativeButton(R.string.cacel, new DialogInterface.OnClickListener() {
+@@ -250,12 +248,11 @@
+         if (DataUsageSummary.LOGD) log("setMobileDataEnabled(" + enabled + ","
+                 + mSubId + ")");
+         
+-        PhoneFactory.makeDefaultPhone(getContext());
+-        Phone mPhone = PhoneFactory.getPhone(SubscriptionManager.getPhoneId(mSubId));
+-        ServiceState serviceState = mPhone.getServiceState();
+-        boolean isRoam = serviceState.getDataRoaming();//if roaming status
+-        boolean switchsState = mPhone.getDataRoamingEnabled();//if data roaming switch open
+-        if (isRoam && !switchsState && enabled) {
++        boolean isRoam = mTelephonyManager.isNetworkRoaming();        
++        boolean isDataRoamingEnabled = Global.getInt(getContext().getContentResolver(), Global.DATA_ROAMING, 0) == 1;//if data roaming switch open
++
++        log("xiawei isRoam = " + isRoam + ",isDataRoamingEnabled = "+ isDataRoamingEnabled);
++        if (isRoam && !isDataRoamingEnabled && enabled) {
+             createRoamingDialog(true);
+         } else {
+             mTelephonyManager.setDataEnabled(mSubId, enabled);

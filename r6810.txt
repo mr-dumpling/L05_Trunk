@@ -1,0 +1,48 @@
+Index: diff_branch.sh
+===================================================================
+--- diff_branch.sh	(revision 6809)
++++ diff_branch.sh	(revision 6810)
+@@ -6,8 +6,17 @@
+ #
+ 
+ if(@ARGV < 1){
+-	print "PLEASE INPUT BRANCH NAME like 5058I_ALAV1\n";
+-	print "Useage: diff_branch.pl [branch_name] [-ov] [-cmp branch_name] [-no_modem] [-no_apn]\n";
++	print "-" x 50;print "\n";
++	print "Diff branch compare function, BRANCH NAME like 5058I_ALAV1\n";
++	print "Useage: 
++	diff_branch.pl [branch] [-cmp other_br] [-no_modem] [-no_apn] [-ov] 
++	-- branch is branch name which must input
++	-- -cmp other_br option for compare with other branch
++	-- -no_modem option for not include modem files
++	-- -no_apn option for not include apns-conf.xml files
++	-- -ov option for overwrite the old diff.txt
++	\n";
++	print "-" x 50;print "\n";
+ 	#print "Command: diff_branch.pl [branch_name] [-ov -add -no_modem] [save_file]\n";
+ 	exit;
+ }
+@@ -112,18 +121,18 @@
+ if(-f $my_path && getCmdParam("-ov")<0){
+ 	$cmd = "diff $my_path $save_f";
+ 	$ret = `$cmd`;
+-	#print "$cmd\n";
++	#print "    --cmd: $cmd\n";
+ 	if($ret eq ""){
+ 		$ret = "SUCCESSFULLY";
+ 	}else{
+-		if(length($ret) > 200){
++		if(length($ret) > 600){
+ 			open(FH_LOG, ">diff_diff.log") or die $!;
+ 			print FH_LOG $ret."\n";
+ 			close(FH_LOG);
+-			$ret = substr($ret,0,200);
+-			$ret = $ret."\n---More detail see diff_diff.log---\n";
++			$ret = substr($ret,0,600);
++			$ret2 = "-- More detail please see diff.txt or compare [$my_path] and [$save_f] ---\n";
+ 		}
+-		print "DIFF [ $ARGV[0] ] [$my_path] RESULT: \n---[ ".$ret." ]---\n";
++		print "DIFF [ $ARGV[0] ] [$my_path] RESULT: \n-- [ ".$ret." ] --\n--------------------------------------------------\n$ret2";
+ 	}
+ }else{
+ 	$cmd = "cp $save_f $my_path";

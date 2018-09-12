@@ -1,0 +1,42 @@
+Index: packages/apps/Settings/res/values/config.xml
+===================================================================
+--- packages/apps/Settings/res/values/config.xml	(revision 1129)
++++ packages/apps/Settings/res/values/config.xml	(revision 1130)
+@@ -57,5 +57,8 @@
+ 
+     <!-- If the Storage Manager settings are enabled. -->
+     <bool name="config_storage_manager_settings_enabled">false</bool>
+-
++	
++    <!-- if Ram show customer size -->
++    <bool name="config_ram_storage_customer_size">true</bool>
++    <string name="ram_storage_customer_size" translatable="false">3.0 GB</string>
+ </resources>
+Index: packages/apps/Settings/src/com/android/settings/applications/ProcessStatsSummary.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/applications/ProcessStatsSummary.java	(revision 1129)
++++ packages/apps/Settings/src/com/android/settings/applications/ProcessStatsSummary.java	(revision 1130)
+@@ -74,7 +74,12 @@
+                 Formatter.FLAG_SHORTER);
+         String totalString = Formatter.formatShortFileSize(context, (long) totalRam);
+         String freeString = Formatter.formatShortFileSize(context, (long) freeRam);
+-        CharSequence memString;
++		
++		if (context.getResources().getBoolean(R.bool.config_ram_storage_customer_size)) {
++			totalString = context.getResources().getString(R.string.ram_storage_customer_size);
++		}
++		
++		CharSequence memString;
+         CharSequence[] memStatesStr = getResources().getTextArray(R.array.ram_states);
+         int memState = mStatsManager.getMemState();
+         if (memState >= 0 && memState < memStatesStr.length - 1) {
+@@ -136,6 +141,9 @@
+                         (long) memInfo.realUsedRam);
+                 String totalResult = Formatter.formatShortFileSize(mContext,
+                         (long) memInfo.realTotalRam);
++				if (mContext.getResources().getBoolean(R.bool.config_ram_storage_customer_size)) {
++					totalResult = mContext.getResources().getString(R.string.ram_storage_customer_size);
++				}
+                 mSummaryLoader.setSummary(this, mContext.getString(R.string.memory_summary,
+                         usedResult, totalResult));
+             }

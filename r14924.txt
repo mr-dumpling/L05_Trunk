@@ -1,0 +1,65 @@
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 14923)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 14924)
+@@ -729,20 +729,25 @@
+         mAccountName.setSummary(senderName);
+         mAccountName.setText(senderName);
+         mAccountName.setOnPreferenceChangeListener(this);
+-        //String accountSignature = mAccount.getSignature();
+-        String defaultSignature;
++        String accountSignature = mAccount.getSignature();
++		/*
++		String defaultSignature;
+         if (null == mAccount.getSignature() || mAccount.getSignature().isEmpty() ) {
+-            defaultSignature = mContext.getResources().getString(R.string.preferences_signature_content_reference);
++            defaultSignature = mContext.getResources().getString(R.string.preferences_signature_content);
+         } else {
+             defaultSignature = mAccount.getSignature();
+         }
+         String accountSignature = defaultSignature;
+-        
++        */
++		boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
+         mAccountSignature = (EditTextPreference) findPreference(PREFERENCE_SIGNATURE);
+-        if(accountSignature==null || TextUtils.isEmpty(accountSignature)){
+-            accountSignature=mContext.getResources().getString(R.string.preferences_signature_content);
+-        }
+-
++		if(accountSignature==null || TextUtils.isEmpty(accountSignature)){
++			if(bFrBug119814){
++				accountSignature=mContext.getResources().getString(R.string.preferences_signature_content_default);
++			}else{
++				accountSignature=SystemProperties.get("ro.business.name");;
++			}
++		}
+         mAccountSignature.setText(accountSignature);
+         mAccountSignature.setOnPreferenceChangeListener(this);
+         SettingsUtils.updatePreferenceSummary(mAccountSignature, accountSignature,
+Index: vendor/branch/5058A_Bitel_Peru/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 14923)
++++ vendor/branch/5058A_Bitel_Peru/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 14924)
+@@ -729,18 +729,18 @@
+         mAccountName.setSummary(senderName);
+         mAccountName.setText(senderName);
+         mAccountName.setOnPreferenceChangeListener(this);
+-        //String accountSignature = mAccount.getSignature();
+-        String defaultSignature;
++        String accountSignature = mAccount.getSignature();
++        /*String defaultSignature;
+         if (null == mAccount.getSignature() || mAccount.getSignature().isEmpty() ) {
+             defaultSignature = mContext.getResources().getString(R.string.preferences_signature_content_reference);
+         } else {
+             defaultSignature = mAccount.getSignature();
+         }
+-        String accountSignature = defaultSignature;
++        String accountSignature = defaultSignature;*/
+         
+         mAccountSignature = (EditTextPreference) findPreference(PREFERENCE_SIGNATURE);
+         if(accountSignature==null || TextUtils.isEmpty(accountSignature)){
+-            accountSignature=mContext.getResources().getString(R.string.preferences_signature_content);
++            accountSignature=mContext.getResources().getString(R.string.preferences_signature_content_bitel_peru);
+         }
+ 
+         mAccountSignature.setText(accountSignature);

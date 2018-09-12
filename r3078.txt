@@ -1,0 +1,46 @@
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 3077)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 3078)
+@@ -21957,6 +21957,32 @@
+     //ADD-S By Justin.Shen for Hide/Show navigation-bar
+     private String mLastStatus = null;
+     private String mLastPkgName = null;
++    
++    private static final String[] MY_PACAKAGE_LIST = new String[] {
++        "com.mediatek.hz.camera"
++    };
++    
++    private boolean needHideNail(String packageName) {
++        boolean bRet = false;
++        boolean isFull = true;
++        
++        for(int i = 0; i < MY_PACAKAGE_LIST.length; i++) {
++            if(MY_PACAKAGE_LIST[i].equals(packageName)) {
++                bRet = true;
++                break;
++            }
++        }
++        
++        if(!bRet) {
++            isFull = mWindowManager.getFullscreenMode(packageName);
++        }
++        
++        if(!isFull) {
++            bRet = true;
++        }
++        
++        return bRet;
++    }
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     
+     private final ActivityRecord resumedAppLocked() {
+@@ -21988,7 +22014,7 @@
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+         if(act != null) {
+             if(!pkg.equals("com.google.android.packageinstaller")) {
+-                String str = (pkg.equals("com.mediatek.hz.camera") ? 1 : 0) + ";" + (act.mActivityType==ActivityRecord.HOME_ACTIVITY_TYPE ? 1 : 0);
++                String str = (needHideNail(pkg) ? 1 : 0) + ";" + (act.mActivityType==ActivityRecord.HOME_ACTIVITY_TYPE ? 1 : 0);
+                 if(mLastStatus == null || !str.equals(mLastStatus)) {
+                     Settings.System.putString(mContext.getContentResolver(),"tct_top_package_name", str);
+                     mLastStatus = str;

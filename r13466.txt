@@ -1,0 +1,74 @@
+Index: vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/NetworkSetting.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 13465)
++++ vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 13466)
+@@ -111,7 +111,7 @@
+ 
+     /** message for network selection */
+     String mNetworkSelectMsg;
+-
++    boolean handled = false;
+     //preference objects
+     private PreferenceGroup mNetworkList;
+     private Preference mSearchButton;
+@@ -216,8 +216,8 @@
+ 
+     @Override
+     public boolean onPreferenceTreeClick(PreferenceScreen preferenceScreen, Preference preference) {
+-        boolean handled = false;
+ 
++
+         /// M: Add for ALPS02416707 When CDMA in roaming to out of roaming,
+         /// we should don't give the user choices to search network. @{
+         if (TelephonyUtilsEx.isCDMAPhone(PhoneFactory.getPhone(mPhoneId))) {
+@@ -236,11 +236,41 @@
+         /// @}
+ 
+         if (preference == mSearchButton) {
++            new AlertDialog.Builder(NetworkSetting.this)
++                    .setIconAttribute(android.R.attr.alertDialogIcon)
++                    .setTitle(R.string.dialog_alert_title)
++                    .setMessage(R.string.sum_search_available_networks)
++                    .setPositiveButton(R.string.attention_dialog_ok, new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialogInterface, int i) {
+             loadNetworksList();
+             handled = true;
++                        }
++                    })
++                    .setNegativeButton(R.string.attention_dialog_cancel, new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialogInterface, int i) {
++                        }
++                    })
++                    .create().show();
+         } else if (preference == mAutoSelect) {
++            new AlertDialog.Builder(NetworkSetting.this)
++                    .setIconAttribute(android.R.attr.alertDialogIcon)
++                    .setTitle(R.string.dialog_alert_title)
++                    .setMessage(R.string.sum_search_available_networks)
++                    .setPositiveButton(R.string.attention_dialog_ok, new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialogInterface, int i) {
+             selectNetworkAutomatic();
+             handled = true;
++                        }
++                    })
++                    .setNegativeButton(R.string.attention_dialog_cancel, new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialogInterface, int i) {
++                        }
++                    })
++                    .create().show();
+             /// M: For CSG feature @{
+         } else if (preference == mManuSelectFemtocell) {
+             selectFemtocellManually();
+@@ -646,7 +676,7 @@
+                 for (OperatorInfo ni : result) {
+                     String forbidden = "";
+                     if (ni.getState() == OperatorInfo.State.FORBIDDEN) {
+-                        forbidden = "(" + getResources().getString(
++                        forbidden = " (" + getResources().getString(
+                                 R.string.network_forbidden) + ")";
+                         forbiddenCount++;
+                     }

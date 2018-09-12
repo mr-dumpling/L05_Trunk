@@ -1,0 +1,28 @@
+Index: frameworks/base/services/core/java/com/android/server/BatteryService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/BatteryService.java	(revision 4957)
++++ frameworks/base/services/core/java/com/android/server/BatteryService.java	(revision 4958)
+@@ -172,6 +172,8 @@
+     // True if boot completed occurred.  We keep the battery status update hold until this happens.
+     private boolean mBootCompleted = false;
+ 	private static AlertDialog sConfirmDialog;
++	private static final String KEY_CHARGE = "battery_charge";
++	private static final String KEY_BATTERY = "battery_low";
+ 
+     public BatteryService(Context context) {
+         super(context);
+@@ -1027,6 +1029,14 @@
+             }
+             if (SystemProperties.getInt("persist.sys.battery_led", 1) != 0) {
+                 if (level < mLowBatteryWarningLevel) {
++					if(!isPoweredLocked(BatteryManager.BATTERY_PLUGGED_ANY)){
++						ContentResolver contentResolver=mContext.getContentResolver();
++						int batteryValue=Settings.Global.getInt(contentResolver,KEY_BATTERY,1);
++						if(batteryValue==0){
++							mBatteryLight.turnOff();
++							return;
++						}
++					}
+                     if (status == BatteryManager.BATTERY_STATUS_CHARGING) {
+                         updateLedStatus();
+                         // Solid red when battery is charging

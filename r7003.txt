@@ -1,0 +1,118 @@
+Index: vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java
+===================================================================
+--- vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 7002)
++++ vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 7003)
+@@ -978,8 +978,13 @@
+         int encodingType = SmsMessage.ENCODING_UNKNOWN;
+ 
+         encodingType = mOpComposeExt.getSmsEncodingType(encodingType, ComposeMessageActivity.this);
+-
+-        params = SmsMessage.calculateLength(text, false, encodingType);
++        MmsLog.d(TAG, "updateCounter getSmsEncodingType encodingType = " + encodingType ); // Add this log
++        
++        if(encodingType == SmsMessage.ENCODING_7BIT){
++            params = SmsMessage.calculateLength(text, true, encodingType);
++        } else {
++            params = SmsMessage.calculateLength(text, false, encodingType);
++        }
+             /* SmsMessage.calculateLength returns an int[4] with:
+              *   int[0] being the number of SMS's required,
+              *   int[1] the number of code units used,
+Index: vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java
+===================================================================
+--- vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java	(revision 7002)
++++ vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java	(revision 7003)
+@@ -268,7 +268,8 @@
+                     = (PreferenceCategory) findPreference("pref_key_sms_settings");
+             mSmsInputMode = (ListPreference) findPreference(SMS_INPUT_MODE);
+             if (mSmsInputMode != null) {
+-                smsCategory.removePreference(mSmsInputMode);
++                //smsCategory.removePreference(mSmsInputMode);
++                mSmsInputMode.setOnPreferenceChangeListener(this);
+             }
+         }
+     }
+@@ -562,6 +563,7 @@
+         MmsConfig.setInitQuickText(true);
+ 
+         mOpSmsPreferenceActivityExt.restoreDefaultPreferences(this, editor);
++        editor.putString(SMS_INPUT_MODE, "GSM alphabet"); // Add this
+         editor.apply();
+         setPreferenceScreen(null);
+         setMessagePreferences();
+@@ -575,7 +577,10 @@
+         }
+ 
+         final String key = preference.getKey();
+-        if (preference == mSmsLocation && !(SimStateMonitor.getInstance().getSubCount() > 1)) {
++        if (SMS_INPUT_MODE.equals(key)) {
++            MmsLog.d(TAG, "Input Mode Changed");
++            mSmsInputMode.setValue((String) arg1);
++        } else if (preference == mSmsLocation && !(SimStateMonitor.getInstance().getSubCount() > 1)) {
+             if (!getResources().getBoolean(R.bool.isTablet)) {
+                 mSmsLocation.setSummary(MessageUtils.getVisualTextName(this, (String) arg1,
+                         R.array.pref_sms_save_location_choices,
+Index: vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java
+===================================================================
+--- vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java	(revision 7002)
++++ vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java	(revision 7003)
+@@ -72,8 +72,12 @@
+ 
+ import java.util.ArrayList;
+ import java.util.List;
++import android.content.SharedPreferences;
++import android.preference.PreferenceManager;
+ 
++import android.telephony.SmsMessage;
+ 
++
+ public class DefaultOpComposeExt extends ContextWrapper implements IOpComposeExt {
+     private static final String TAG = "Mms/MmsComposeImpl";
+ 
+@@ -363,8 +367,32 @@
+ 
+     @Override
+     public int getSmsEncodingType(int encodingType, Context context) {
+-        return encodingType;
++    	int type = SmsMessage.ENCODING_UNKNOWN;
++    	SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++    	String encodingTypeStr = null;
++    	encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++    	if ("Unicode".equals(encodingTypeStr)) {
++            type = SmsMessage.ENCODING_16BIT;
++    	} else if ("GSM alphabet".equals(encodingTypeStr)) {
++            type = SmsMessage.ENCODING_7BIT;
++    	}
++    	return type;
++        //return encodingType;
+     }
++    
++    public static int getSmsEncodingTypes(int encodingType, Context context) {
++    	int type = SmsMessage.ENCODING_UNKNOWN;
++    	SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++    	String encodingTypeStr = null;
++    	encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++    	if ("Unicode".equals(encodingTypeStr)) {
++            type = SmsMessage.ENCODING_16BIT;
++    	} else if ("GSM alphabet".equals(encodingTypeStr)) {
++            type = SmsMessage.ENCODING_7BIT;
++    	}
++    	return type;
++        //return encodingType;
++    }
+ 
+     @Override
+     public boolean checkConditionsAndSendMessage(boolean isMms, final boolean bcheckMode) {
+Index: vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpSmsSingleRecipientSenderExt.java
+===================================================================
+--- vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpSmsSingleRecipientSenderExt.java	(revision 7002)
++++ vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpSmsSingleRecipientSenderExt.java	(revision 7003)
+@@ -23,6 +23,7 @@
+ 
+     @Override
+     public int sendMessagePrepare(Context context, int codingType) {
+-        return codingType;
++    	return DefaultOpComposeExt.getSmsEncodingTypes(codingType, context); // Add this
++        //return codingType;
+     }
+ }

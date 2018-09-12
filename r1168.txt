@@ -1,0 +1,291 @@
+Index: frameworks/base/services
+===================================================================
+--- frameworks/base/services	(revision 1167)
++++ frameworks/base/services	(revision 1168)
+
+Property changes on: frameworks/base/services
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/services:r707,825
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 1167)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 1168)
+@@ -6784,6 +6784,11 @@
+ 	*/
+ 		public static final String FILP_TO_MUTE_ENABLED =
+                 "filp_to_mute_enabled";
++	/**
++	*add for alarm  filp to snooze
++	*/
++		public static final String FILP_TO_SNOOZE_ENABLED =
++                "filp_to_snooze_enabled";
+         /**
+          * Control whether Night display is currently activated.
+          * @hide
+@@ -7029,7 +7034,8 @@
+             DOZE_PULSE_ON_PICK_UP,
+             DOZE_PULSE_ON_DOUBLE_TAP,
+             THREE_FINGER_SHOTSCREEN_ENABLED,
+-            FILP_TO_MUTE_ENABLED
++            FILP_TO_MUTE_ENABLED,
++            FILP_TO_SNOOZE_ENABLED
+         };
+ 
+         /**
+Index: frameworks/base/core
+===================================================================
+--- frameworks/base/core	(revision 1167)
++++ frameworks/base/core	(revision 1168)
+
+Property changes on: frameworks/base/core
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/core:r650,707,717,825,849,926
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1167)
++++ frameworks/base/api/test-current.txt	(revision 1168)
+@@ -32636,6 +32636,7 @@
+     field public static final java.lang.String ENABLED_INPUT_METHODS = "enabled_input_methods";
+     field public static final java.lang.String ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES = "enabled_notification_policy_access_packages";
+     field public static final java.lang.String FILP_TO_MUTE_ENABLED = "filp_to_mute_enabled";
++    field public static final java.lang.String FILP_TO_SNOOZE_ENABLED = "filp_to_snooze_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final java.lang.String INPUT_METHOD_SELECTOR_VISIBILITY = "input_method_selector_visibility";
+     field public static final java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1167)
++++ frameworks/base/api/current.txt	(revision 1168)
+@@ -32557,6 +32557,7 @@
+     field public static final java.lang.String ENABLED_ACCESSIBILITY_SERVICES = "enabled_accessibility_services";
+     field public static final java.lang.String ENABLED_INPUT_METHODS = "enabled_input_methods";
+     field public static final java.lang.String FILP_TO_MUTE_ENABLED = "filp_to_mute_enabled";
++    field public static final java.lang.String FILP_TO_SNOOZE_ENABLED = "filp_to_snooze_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final java.lang.String INPUT_METHOD_SELECTOR_VISIBILITY = "input_method_selector_visibility";
+     field public static final java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1167)
++++ frameworks/base/api/system-current.txt	(revision 1168)
+@@ -35316,6 +35316,7 @@
+     field public static final java.lang.String ENABLED_ACCESSIBILITY_SERVICES = "enabled_accessibility_services";
+     field public static final java.lang.String ENABLED_INPUT_METHODS = "enabled_input_methods";
+     field public static final java.lang.String FILP_TO_MUTE_ENABLED = "filp_to_mute_enabled";
++    field public static final java.lang.String FILP_TO_SNOOZE_ENABLED = "filp_to_snooze_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final java.lang.String INPUT_METHOD_SELECTOR_VISIBILITY = "input_method_selector_visibility";
+     field public static final java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: frameworks/base/api
+===================================================================
+--- frameworks/base/api	(revision 1167)
++++ frameworks/base/api	(revision 1168)
+
+Property changes on: frameworks/base/api
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/api:r650,825,849,926
+Index: frameworks/base/packages/SystemUI
+===================================================================
+--- frameworks/base/packages/SystemUI	(revision 1167)
++++ frameworks/base/packages/SystemUI	(revision 1168)
+
+Property changes on: frameworks/base/packages/SystemUI
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages/SystemUI:r849
+Index: frameworks/base/packages
+===================================================================
+--- frameworks/base/packages	(revision 1167)
++++ frameworks/base/packages	(revision 1168)
+
+Property changes on: frameworks/base/packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages:r849
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1167)
++++ frameworks/base	(revision 1168)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r650,707,717,825,849,926
+Index: packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 1167)
++++ packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 1168)
+@@ -59,6 +59,7 @@
+ 	//add by wqq start{
+ 	private static final String THREE_FINGER_SHOTSCREEN ="three_finger_shotscreen";
+ 	private static final String FILP_TO_MUTE ="mute_incoming";
++	private static final String FILP_TO_SNOOZE ="alarm_soonz_mode";
+ 	//add by wqq end}
+     private List<GesturePreference> mPreferences;
+ 
+@@ -118,6 +119,10 @@
+ 		int filpToMuteEnabled = Secure.getInt(
+                     getContentResolver(), Secure.FILP_TO_MUTE_ENABLED, 0);
+ 		addPreference(FILP_TO_MUTE,filpToMuteEnabled != 0);
++		
++		int filpToSnoozeEnabled = Secure.getInt(
++                    getContentResolver(), Secure.FILP_TO_SNOOZE_ENABLED, 0);
++		addPreference(FILP_TO_SNOOZE,filpToSnoozeEnabled != 0);
+ 		//add by wqq end}
+     }
+ 
+@@ -188,6 +193,9 @@
+ 		}else if(FILP_TO_MUTE.equals(key)){
+ 			Secure.putInt(getContentResolver(),
+                     Secure.FILP_TO_MUTE_ENABLED, enabled ? 1 : 0);
++		}else if(FILP_TO_SNOOZE.equals(key)){
++			Secure.putInt(getContentResolver(),
++                    Secure.FILP_TO_SNOOZE_ENABLED, enabled ? 1 : 0);
+ 		}
+ 		//add by wqq end
+         return true;
+Index: packages/apps/DeskClock/AndroidManifest.xml
+===================================================================
+--- packages/apps/DeskClock/AndroidManifest.xml	(revision 1167)
++++ packages/apps/DeskClock/AndroidManifest.xml	(revision 1168)
+@@ -385,5 +385,10 @@
+                 android:exported="false"
+                 android:description="@string/stopwatch_service_desc">
+         </service>
++		<!--add for turn to snooze-->
++		<service android:name=".alarms.SensorFunctionServiceAlarm"
++                 android:exported="true"
++                 android:directBootAware="false">
++        </service>
+     </application>
+ </manifest>
+Index: packages/apps/DeskClock/src/com/android/deskclock/alarms/AlarmService.java
+===================================================================
+--- packages/apps/DeskClock/src/com/android/deskclock/alarms/AlarmService.java	(revision 1167)
++++ packages/apps/DeskClock/src/com/android/deskclock/alarms/AlarmService.java	(revision 1168)
+@@ -33,6 +33,7 @@
+ import com.android.deskclock.R;
+ import com.android.deskclock.events.Events;
+ import com.android.deskclock.provider.AlarmInstance;
++import android.provider.Settings.Secure;
+ 
+ /**
+  * This service is in charge of starting/stopping the alarm. It will bring up and manage the
+@@ -293,6 +294,10 @@
+         if (!isAlarmBoot) {
+             instanceId = AlarmInstance.getId(intent.getData());
+         }
++		//add by wqq for trun to snooze start{
++		Intent intentAlarm = new Intent(mContext, SensorFunctionServiceAlarm.class);
++		intentAlarm.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++		//add by wqq for trun to snooze}
+         switch (intent.getAction()) {
+             case AlarmStateManager.CHANGE_STATE_ACTION:
+             case POWER_OFF_ALARM_START_ACITION:
+@@ -311,6 +316,15 @@
+                 if (alarmState == AlarmInstance.FIRED_STATE) {
+                     final ContentResolver cr = this.getContentResolver();
+                     mInstance = AlarmInstance.getInstance(cr, instanceId);
++					
++					//add by wqq for trun to snooze start{
++					LogUtils.v("wqq-->", intentAlarm);
++                    boolean bFlipSnoozeEnabled = Secure.getInt(mContext.getContentResolver(),Secure.FILP_TO_SNOOZE_ENABLED, 0)==1;
++					if(bFlipSnoozeEnabled){
++						mContext.startService(intentAlarm);
++					}
++					
++					//add by wqq for trun to snooze start end}
+                }
+             }
+             LogUtils.v("AlarmService instance[%s]", mInstance);
+@@ -342,6 +356,8 @@
+                 }
+                 stopCurrentAlarm();
+                 stopSelf();
++				//add by wqq for trun to snooze
++				mContext.stopService(intentAlarm);
+         }
+ 
+         return Service.START_NOT_STICKY;
+Index: packages/apps/DeskClock/src/com/android/deskclock/alarms/SensorFunctionServiceAlarm.java
+===================================================================
+--- packages/apps/DeskClock/src/com/android/deskclock/alarms/SensorFunctionServiceAlarm.java	(revision 0)
++++ packages/apps/DeskClock/src/com/android/deskclock/alarms/SensorFunctionServiceAlarm.java	(revision 1168)
+@@ -0,0 +1,73 @@
++package com.android.deskclock.alarms;  
++  
++import android.app.Service;  
++import android.content.Context;  
++import android.content.Intent;  
++import android.hardware.Sensor;  
++import android.hardware.SensorEvent;  
++import android.hardware.SensorEventListener;  
++import android.hardware.SensorManager;  
++import android.os.IBinder;  
++import android.os.PowerManager;    
++import android.util.Log;  
++import android.content.BroadcastReceiver;  
++  
++public class SensorFunctionServiceAlarm extends Service {  
++  
++    private static final String TAG = "SensorFunctionServiceAlarm";  
++    private static final float CRITICAL_DOWN_ANGLE = -5.0f;  
++    private static final float CRITICAL_UP_ANGLE = 5.0f;  
++    private static final int Z_ORATIATION = 2;  
++   
++    private SensorManager mSensorManager;  
++    private Sensor mGsensor;  
++    private SensorEventListener mGsensorListener;  
++    private int mReverseDownFlg = -1;   
++    private boolean mActFlag = false;  
++	private Context mContext=null;
++    @Override  
++    public void onCreate() {  
++        super.onCreate();  
++		mContext = this;
++        mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);  
++        mGsensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);  
++        mGsensorListener = new SensorEventListener() {  
++            @Override  
++            public void onAccuracyChanged(Sensor sensor, int accuracy) {  
++            }  
++  
++            @Override  
++            public void onSensorChanged(SensorEvent event) {  
++                Log.d(TAG,"onSensorChanged()---event.values[SensorManager.DATA_Z] = " + event.values[SensorManager.DATA_Z]);  
++                if (event.values[SensorManager.DATA_Z] >= CRITICAL_UP_ANGLE) { // screen up   
++                    mReverseDownFlg = 0;  
++                } else if (event.values[SensorManager.DATA_Z] <= CRITICAL_DOWN_ANGLE  
++                            && mReverseDownFlg == 0) { // screen down   
++                    mReverseDownFlg = 1;  
++                }  
++                Log.d(TAG,"onSensorChanged()---mReverseDownFlg = " + mReverseDownFlg);  
++                if (mReverseDownFlg == 1) {  
++					Intent intent=new Intent("com.android.deskclock.ALARM_SNOOZE");
++					mContext.sendBroadcast(intent);
++                }  
++            }  
++        };  
++  
++        if(mGsensorListener != null && mGsensor != null){  
++            mSensorManager.registerListener(mGsensorListener, mGsensor, SensorManager.SENSOR_DELAY_GAME);  
++        }  
++    }  
++  
++    @Override  
++    public IBinder onBind(Intent arg0) {  
++        return null;  
++    }  
++  
++    @Override  
++    public void onDestroy() {  
++        if(mGsensorListener != null && mGsensor != null){  
++            mSensorManager.unregisterListener(mGsensorListener, mGsensor);  
++        }  
++    }  
++  
++}  
+\ No newline at end of file

@@ -1,0 +1,134 @@
+Index: frameworks/base/services/usb/java/com/android/server/usb/UsbService.java
+===================================================================
+--- frameworks/base/services/usb/java/com/android/server/usb/UsbService.java	(revision 2961)
++++ frameworks/base/services/usb/java/com/android/server/usb/UsbService.java	(revision 2962)
+@@ -126,6 +126,9 @@
+         filter.addAction(Intent.ACTION_USER_SWITCHED);
+         filter.addAction(Intent.ACTION_USER_STOPPED);
+         filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
++		filter.addAction(Intent.ACTION_USER_PRESENT);
++        filter.addAction(Intent.ACTION_SCREEN_OFF);
++        filter.addAction(Intent.ACTION_SCREEN_ON);
+         mContext.registerReceiver(mReceiver, filter, null, null);
+     }
+ 
+@@ -146,6 +149,20 @@
+                     mDeviceManager.updateUserRestrictions();
+                 }
+             }
++			else if (Intent.ACTION_USER_PRESENT.equals(action)) {
++                if (mDeviceManager != null) {
++                    mDeviceManager.setUsbDataUnlocked(true);
++                    mDeviceManager.setUserPresent();
++                }
++            } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
++                if (mDeviceManager != null) {
++                    mDeviceManager.updateScreentSate(true);
++                }
++            } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
++              if (mDeviceManager != null) {
++                    mDeviceManager.updateScreentSate(false);
++                }
++            }
+         }
+     };
+ 
+Index: frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java
+===================================================================
+--- frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java	(revision 2961)
++++ frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java	(revision 2962)
+@@ -191,7 +191,9 @@
+     /* MD Direct Tethering */
+     private INetworkManagementService mNwService;
+     /* MD Direct Tethering */
+-
++	private boolean mUserPresent = false;
++    private boolean screenOff = false;
++	private boolean changeByUser = false;
+     private class AdbSettingsObserver extends ContentObserver {
+         public AdbSettingsObserver() {
+             super(null);
+@@ -827,10 +829,14 @@
+                 connected = 0;
+                 configured = 0;
+                 mHwDisconnected = true;
++				changeByUser = false;
+             } else if ("DISCONNECTED".equals(state)) {
+                 connected = 0;
+                 configured = 0;
+                 mHwDisconnected = false;
++				if(screenOff){
++                    mUserPresent = false;
++                 }
+             } else if ("CONNECTED".equals(state)) {
+                 connected = 1;
+                 configured = 0;
+@@ -898,6 +904,7 @@
+ 
+         private void setUsbDataUnlocked(boolean enable) {
+             if (DEBUG) Slog.d(TAG, "setUsbDataUnlocked: " + enable);
++			changeByUser  = false;
+             mUsbDataUnlocked = enable;
+             /*No need to update the USB notification and broadcast USB state
+               at this moment. After calling setEnabledFunctions(), the device
+@@ -1368,6 +1375,9 @@
+                     mConnected = (msg.arg1 == 1);
+                     mConfigured = (msg.arg2 == 1);
+                     mUsbConfigured = mConfigured;
++					if (mUserPresent &&!changeByUser) { 
++                        mUsbDataUnlocked = true;
++                    }	
+                     if (!mConnected) {
+                         // When a disconnect occurs, relock access to sensitive user data
+                         mUsbDataUnlocked = false;
+@@ -1434,6 +1444,7 @@
+                     setEnabledFunctions(mCurrentFunctions, false);
+                     break;
+                 case MSG_SET_USB_DATA_UNLOCKED:
++					if(!changeByUser && mUsbDataUnlocked) return;
+                     setUsbDataUnlocked(msg.arg1 == 1);
+                     break;
+                 case MSG_SYSTEM_READY:
+@@ -1485,6 +1496,11 @@
+                 // C2K-BYPASS-END
+             }
+         }
++		private void updateUsbMode(){
++            if(!mConnected && screenOff){
++                 mUserPresent = false;
++            }
++        }
+ 
+         public UsbAccessory getCurrentAccessory() {
+             return mCurrentAccessory;
+@@ -1685,6 +1701,7 @@
+ 
+     public void setCurrentFunctions(String functions) {
+         if (DEBUG) Slog.d(TAG, "setCurrentFunctions(" + functions + ")");
++		changeByUser = true;
+         mHandler.sendMessage(MSG_SET_CURRENT_FUNCTIONS, functions);
+     }
+ 
+@@ -1700,6 +1717,22 @@
+         mHandler.sendMessage(MSG_SET_USB_DATA_UNLOCKED, unlocked);
+     }
+ 
++	 public void usbDataUnlocked(){
++        changeByUser  = false;
++        mHandler.sendMessage(MSG_SET_USB_DATA_UNLOCKED, true);
++    }
++	public void setUserPresent(){
++        mUserPresent = true;
++    }
++    public void updateScreentSate(boolean state){
++        screenOff = state;
++        if(!screenOff) {
++             mUserPresent = false;
++        }
++        if(mHandler != null){
++            mHandler.updateUsbMode();
++        }
++    }
+     private void readOemUsbOverrideConfig() {
+         String[] configList = mContext.getResources().getStringArray(
+             com.android.internal.R.array.config_oemUsbModeOverride);

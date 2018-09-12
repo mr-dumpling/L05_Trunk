@@ -1,0 +1,522 @@
+Index: bootable/recovery/etc/init.rc
+===================================================================
+--- bootable/recovery/etc/init.rc	(revision 2191)
++++ bootable/recovery/etc/init.rc	(revision 2192)
+@@ -22,10 +22,6 @@
+     mknod /dev/sec c 182 0
+     chmod 0660 /dev/sec
+     mkdir /sideload
+-    mkdir /persist
+-    mkdir /tctpersist
+-    mkdir /dsp
+-    mkdir /FIRMWARE
+     mount tmpfs tmpfs /tmp
+ 
+     chown root shell /tmp
+Index: bootable/recovery/recovery.cpp
+===================================================================
+--- bootable/recovery/recovery.cpp	(revision 2191)
++++ bootable/recovery/recovery.cpp	(revision 2192)
+@@ -77,12 +77,6 @@
+ 
+ #include "mt_recovery.h"
+ #include "mt_partition.h"
+-//For AID_SYSTEM, AID_
+-#include "private/android_filesystem_config.h"
+-#ifdef FEATURE_TCTNB_FOTA
+-#include <iostream>
+-#include <map>
+-#endif
+ 
+ struct selabel_handle *sehandle;
+ 
+@@ -122,20 +116,12 @@
+ static const char *CONVERT_FBE_DIR = "/tmp/convert_fbe";
+ static const char *CONVERT_FBE_FILE = "/tmp/convert_fbe/convert_fbe";
+ static const char *CACHE_ROOT = "/cache";
+-
+ static const char *DATA_ROOT = "/data";
+-#ifndef FEATURE_TCTNB_FULL_UPDATE
+ static const char *SDCARD_ROOT = "/sdcard";
+-#else
+-static const char *SDCARD_ROOT = "/storage/sdcard1";
+-#endif /* FEATURE_TCTNB_FULL_UPDATE */
+ static const char *TEMPORARY_LOG_FILE = "/tmp/recovery.log";
+ static const char *TEMPORARY_INSTALL_FILE = "/tmp/last_install";
+ static const char *LAST_KMSG_FILE = "/cache/recovery/last_kmsg";
+ static const char *LAST_LOG_FILE = "/cache/recovery/last_log";
+-#ifdef FEATURE_TCTNB_FOTA
+-static const char *FOTA_STATUS_FILE = "/cache/recovery/last_fota.status";
+-#endif
+ static const int KEEP_LOG_COUNT = 10;
+ // We will try to apply the update package 5 times at most in case of an I/O error.
+ static const int EIO_RETRY_COUNT = 4;
+@@ -146,7 +132,6 @@
+ static const int BATTERY_OK_PERCENTAGE = 20;
+ static const int BATTERY_WITH_CHARGER_OK_PERCENTAGE = 15;
+ constexpr const char* RECOVERY_WIPE = "/etc/recovery.wipe";
+-static const char *JRD_FOTA_RESULT_FILE = "/cache/recovery/last_fota.status"; //TCL FOTA
+ 
+ RecoveryUI* ui = NULL;
+ static const char* locale = "en_US";
+@@ -217,162 +202,6 @@
+ static const int MAX_ARG_LENGTH = 4096;
+ static const int MAX_ARGS = 100;
+ 
+-
+-#include "minzip/SysUtil.h"
+-#include "minzip/Zip.h"
+-
+-#define SCRIPT_NAME "META-INF/com/google/android/updater-script"
+-
+-static char *fota_incr_comment = "# ---- start making changes here ----";
+-
+-enum
+-{
+-    FOTA_UN,
+-    FOTA_INCR,
+-    FOTA_FULL,
+-};
+-
+-static int kind_of_update = FOTA_UN;
+-void get_update_kind(const char *update_package)
+-{
+-    int k = FOTA_UN;
+-    ZipArchive za;
+-    int err;
+-
+-    MemMapping map;
+-    if (sysMapFile(update_package, &map) != 0) {
+-	    LOGE("failed to map file %s\n", update_package);
+-	    return;
+-    }
+-
+-//    err = mzOpenZipArchive(update_package, &za);
+-    err = mzOpenZipArchive(map.addr,map.length,&za);
+-    if (err != 0) {
+-//        fprintf(stderr, "Can't open %s\n(%s)\n", update_package, err != -1 ? strerror(err) : "bad");
+-        fprintf(stderr, "Can't open %s\n(%s)\n",map.addr, err != -1 ? strerror(err) : "bad");
+-        return;
+-    }
+-
+-    const ZipEntry* script_entry = mzFindZipEntry(&za, SCRIPT_NAME);
+-    if (script_entry == NULL) {
+-        fprintf(stderr, "Can't find %s\n", SCRIPT_NAME);
+-        return;
+-    }
+-
+-    char* script = (char *)malloc(script_entry->uncompLen+1);
+-    if (!mzReadZipEntry(&za, script_entry, script, script_entry->uncompLen)) {
+-        fprintf(stderr, "Can't read %s\n", SCRIPT_NAME);
+-        return;
+-    }
+-    script[script_entry->uncompLen] = '\0';
+-
+-    char* p;
+-    for (p = script; *p != '\0'; p++) {
+-        if (*p == '#') {
+-            if (strcmp(p, fota_incr_comment) >= 0) {
+-                k = FOTA_INCR;
+-                break;
+-            }
+-        }
+-    }
+-
+-    // not find incremental ota comment, it's full ota
+-    if (*p == '\0')
+-        k = FOTA_FULL;
+-
+-    free(script);
+-    mzCloseZipArchive(&za);
+-
+-    kind_of_update = k;
+-}
+-
+-static void write_file(const char *file_name, char *result)
+-{
+-    char  dir_name[256];
+-
+-    ensure_path_mounted(file_name);
+-
+-    strcpy(dir_name, file_name);
+-    char *p = strrchr(dir_name, '/');
+-    *p = 0;
+-
+-    fprintf(stdout, "dir_name = %s\n", dir_name);
+-    mode_t proc_mask = umask(0);
+-
+-    if (opendir(dir_name) == NULL)  {
+-        fprintf(stdout, "dir_name = '%s' does not exist, create it.\n", dir_name);
+-        if (mkdir(dir_name, 0775))  {
+-            fprintf(stdout, "can not create '%s' : %s\n", dir_name, strerror(errno));
+-            umask(proc_mask);
+-            return;
+-        }
+-        chown(dir_name, AID_SYSTEM, AID_SYSTEM);
+-    }
+-
+-    int result_fd = open(file_name, O_RDWR | O_CREAT, 0666);
+-    fchown(result_fd, AID_SYSTEM, AID_SYSTEM);
+-
+-    if (result_fd < 0) {
+-        fprintf(stdout, "cannot open '%s' for output : %s\n", file_name, strerror(errno));
+-        umask(proc_mask);
+-        return;
+-    }
+-
+-    //LOG_INFO("[%s] %s %d\n", __func__, file_name, result);
+-
+-    char buf[256];
+-    strcpy(buf, "package install result:");
+-    strcat(buf, result);
+-    if (kind_of_update == FOTA_FULL) {
+-        strcat(buf, "package install kind:full package\n");
+-    }
+-    write(result_fd, buf, strlen(buf));
+-    close(result_fd);
+-    umask(proc_mask);
+-}
+-
+-static char *install_result = NULL;
+-static void set_install_result(char *s)
+-{
+-    install_result = s;
+-}
+-
+-static void write_result(int reason)
+-{
+-    switch (reason) {
+-    case INSTALL_NO_SDCARD:
+-        set_install_result("No SD-Card.\n");
+-        break;
+-    case INSTALL_NO_UPDATE_PACKAGE:
+-        set_install_result("Can not find update.zip.\n");
+-        break;
+-    case INSTALL_NO_KEY:
+-        set_install_result("Failed to load keys\n");
+-        break;
+-    case INSTALL_SIGNATURE_ERROR:
+-        set_install_result("Signature verification failed\n");
+-        break;
+-    case INSTALL_CORRUPT:
+-        set_install_result("The update.zip is corrupted\n");
+-        break;
+-    case INSTALL_FILE_SYSTEM_ERROR:
+-        set_install_result("Can't create/copy file\n");
+-        break;
+-    case INSTALL_ERROR:
+-        set_install_result("Update.zip is not correct\n");
+-        break;
+-    }
+-
+-    if (reason == INSTALL_SUCCESS) {
+-        set_install_result("INSTALL SUCCESS\n");
+-    }
+-
+-    fprintf(stdout, "[TCL]package install result:%s", install_result);
+-
+-    write_file(JRD_FOTA_RESULT_FILE, install_result);
+-}
+-// TCL end
+-
+ // open a given path, mounting partitions as necessary
+ FILE* fopen_path(const char *path, const char *mode) {
+     if (ensure_path_mounted(path) != 0) {
+@@ -760,9 +589,6 @@
+     }
+ 
+     copy_logs();
+-    #ifdef FEATURE_TCTNB_FOTA
+-    chmod(FOTA_STATUS_FILE, 0644);
+-    #endif
+ 
+     // Reset to normal system boot so recovery won't cycle indefinitely.
+     bootloader_message boot = {};
+@@ -1009,9 +835,6 @@
+         int name_len = strlen(de->d_name);
+ 
+         if (de->d_type == DT_DIR) {
+-        	#ifdef FEATURE_TCTNB_FULL_UPDATE
+-            continue; // do not allow subdir search for tct full update
+-          #endif /* FEATURE_TCTNB_FULL_UPDATE */
+             // skip "." and ".." entries
+             if (name_len == 1 && de->d_name[0] == '.') continue;
+             if (name_len == 2 && de->d_name[0] == '.' &&
+@@ -1028,11 +851,7 @@
+             ++d_size;
+         } else if (de->d_type == DT_REG &&
+                    name_len >= 4 &&
+-                   
+                    strncasecmp(de->d_name + (name_len-4), ".zip", 4) == 0) {
+-                   #ifdef FEATURE_TCTNB_FULL_UPDATE
+-                    if (strncasecmp(de->d_name, "jsu", 3)) continue;
+-                   #endif /* FEATURE_TCTNB_FULL_UPDATE */	
+             if (z_size >= z_alloc) {
+                 z_alloc *= 2;
+                 zips = (char**)realloc(zips, z_alloc * sizeof(char*));
+@@ -1405,8 +1224,7 @@
+ 
+     ui->Print("\n-- Install %s ...\n", path);
+     set_sdcard_update_bootloader_message();
+-    
+-    #ifndef FEATURE_TCTNB_FULL_UPDATE
++
+     // We used to use fuse in a thread as opposed to a process. Since accessing
+     // through fuse involves going from kernel to userspace to kernel, it leads
+     // to deadlock when a page fault occurs. (Bug: 26313124)
+@@ -1459,187 +1277,11 @@
+     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+         LOGE("Error exit from the fuse process: %d\n", WEXITSTATUS(status));
+     }
+-    #else
+-    int result = install_package(path, wipe_cache,TEMPORARY_INSTALL_FILE, true, 0);
+-    #endif /* FEATURE_TCTNB_FULL_UPDATE */
+-    ensure_path_unmounted(SDCARD_ROOT);    
++
++    ensure_path_unmounted(SDCARD_ROOT);
+     return result;
+ }
+ 
+-
+-#ifdef FEATURE_TCTNB_FOTA
+-#define ERROR_CODE_LEN	4	// For example, take "3005" from "E30005"
+-#include "private/android_filesystem_config.h"
+-
+-enum
+-{
+-    FOTA_UN,
+-    FOTA_INCR,
+-    FOTA_FULL,
+-};
+-static int kind_of_update = FOTA_UN;
+-
+-static bool full_update(char const *name) {
+-    const char* key = "JSU";
+-    int k = FOTA_UN;
+-    if(strstr(name, key)) {
+-       kind_of_update = FOTA_FULL;
+-       return true;
+-    }
+-    return false;
+-}
+-
+-/* description of error code, refer below file for details:
+- * bootable/recovery/error_code.h
+- * build/tools/releasetools/common.py
+- * -------------------------------------
+- * 3020	| LowBattery
+- * 3021	| ZipVerification Failure
+- * 3022 | ZipOpenFailure
+- * 3100 | SYSTEM_VERIFICATION_FAILURE
+- * 3101 | SYSTEM_UPDATE_FAILURE
+- * 3102 | SYSTEM_UNEXPECTED_CONTENTS
+- * 3103 | SYSTEM_NONZERO_CONTENTS
+- * 3104 | SYSTEM_RECOVER_FAILURE
+- * 3200 | VENDOR_VERIFICATION_FAILURE
+- * 3201 | VENDOR_UPDATE_FAILURE
+- * 3202 | VENDOR_UNEXPECTED_CONTENTS
+- * 3203 | VENDOR_NONZERO_CONTENTS
+- * 3204 | VENDOR_RECOVER_FAILURE
+- * 3300 | OEM_PROP_MISMATCH
+- * 3301 | FINGERPRINT_MISMATCH
+- * 3302 | THUMBPRINT_MISMATCH
+- * 3303 | OLDER_BUILD
+- * 3304 | DEVICE_MISMATCH
+- * 3305 | BAD_PATCH_FILE
+- * 3306 | INSUFFICIENT_CACHE_SPACE
+- * 3307 | TUNE_PARTITION_FAILURE
+- * 3308 | APPLY_PATCH_FAILURE
+- * -------------------------------------
+- * */
+-#define FOTA_UPDATE_SUCCESS_CODE "999"
+-
+-static std::map<std::string, std::string> error_code_map = {
+-										{"20", "3020"},
+-										{"21", "3021"},
+-										{"22", "3022"},
+-										{"1000", "3100"},
+-										{"1001", "3101"},
+-										{"1002", "3102"},
+-										{"1003", "3103"},
+-										{"1004", "3104"},
+-										{"2000", "3200"},
+-										{"2001", "3201"},
+-										{"2002", "3202"},
+-										{"2003", "3203"},
+-										{"2004", "3204"},
+-										{"3000", "3300"},
+-										{"3001", "3301"},
+-										{"3002", "3302"},
+-										{"3003", "3303"},
+-										{"3004", "3304"},
+-										{"3005", "3305"},
+-										{"3006", "3306"},
+-										{"3007", "3307"},
+-										{"3008", "3308"}};
+-
+-const char* getErrorCode(const char* last_file) {
+-	char *line = NULL;
+-	size_t line_len;
+-	int s_read = 0;
+-	char errorCode[ERROR_CODE_LEN + 1];
+-	memset(errorCode, 0, sizeof(errorCode));
+-	FILE *log = fopen(last_file, "r");
+-	if(!log)
+-	{
+-		ui->Print("Failed to open for error %s\n", strerror(errno));
+-		return "";
+-	}
+-
+-	while(s_read = getline(&line, &line_len, log) > 0) {
+-		char *p = strstr(line, "error: ");
+-		if(p) {
+-			strncpy(errorCode, line + strlen("error: "), ERROR_CODE_LEN);
+-			return error_code_map[errorCode].c_str();
+-		}
+-	}
+-	return FOTA_UPDATE_SUCCESS_CODE;
+-}
+-
+-static void write_file(const char *file_name, int reason, char *result) {
+-    char dir_name[256];
+-
+-    strcpy(dir_name, file_name);
+-    char *p = strrchr(dir_name, '/');
+-    *p = 0;
+-
+-    fprintf(stdout, "dir_name = %s\n", dir_name);
+-    mode_t proc_mask = umask(0);
+-
+-    if (opendir(dir_name) == NULL) {
+-        fprintf(stdout, "dir_name = '%s' does not exist, create it.\n", dir_name);
+-        if (mkdir(dir_name, 0775))  {
+-            fprintf(stdout, "can not create '%s' : %s\n", dir_name, strerror(errno));
+-            umask(proc_mask);
+-            return;
+-        }
+-        chown(dir_name, AID_SYSTEM, AID_SYSTEM);
+-    }
+-
+-    int result_fd = open(file_name, O_RDWR | O_CREAT, 0666);
+-    fchown(result_fd, AID_SYSTEM, AID_SYSTEM);
+-
+-    if (result_fd < 0) {
+-        fprintf(stdout, "cannot open '%s' for output : %s\n", file_name, strerror(errno));
+-        umask(proc_mask);
+-        return;
+-    }
+-
+-    //LOG_INFO("[%s] %s %d\n", __func__, file_name, result);
+-
+-    char buf[256];
+-    strcpy(buf, "package install result:");
+-    strcat(buf, result);
+-
+-    if (kind_of_update == FOTA_FULL) {
+-        strcat(buf, "package install kind:full package\n");
+-    }
+-    write(result_fd, buf, strlen(buf));
+-    close(result_fd);
+-    umask(proc_mask);
+-}
+-
+-static char install_result[50];
+-static void set_install_result(const char *s) {
+-    sprintf(install_result, "%s", s);
+-}
+-
+-static void write_result(int reason) {
+-    if (reason == INSTALL_SUCCESS) {
+-        set_install_result(FOTA_UPDATE_SUCCESS_CODE);
+-    } else {
+-		set_install_result(getErrorCode(TEMPORARY_INSTALL_FILE));
+-	}
+-
+-    fprintf(stdout, "package install result:%s", install_result);
+-    write_file(FOTA_STATUS_FILE, reason, install_result);
+-}
+-
+-static void fota_reset_status(void) {
+-    if(unlink(FOTA_STATUS_FILE)) {
+-        LOGE("erasing fota.status failed errno=%d\n", errno);
+-    }
+-    sync();
+-}
+-
+-static void clear_update_package(const char* package) {
+-    if(unlink(package)) {
+-        LOGE("erasing upade package failed errno=%d\n", errno);
+-    }
+-    sync();
+-}
+-#endif
+-
+ // Return REBOOT, SHUTDOWN, or REBOOT_BOOTLOADER.  Returning NO_ACTION
+ // means to take the default, which is to reboot or shutdown depending
+ // on if the --shutdown_after flag was passed to recovery.
+@@ -1713,10 +1355,6 @@
+                     } else {
+                         ui->Print("\nInstall from %s complete.\n", adb ? "ADB" : "SD card");
+                     }
+-                    #ifdef FEATURE_TCTNB_FOTA
+-                    fota_reset_status();
+-                    write_result(status);
+-                    #endif
+                 }
+                 break;
+ 
+@@ -2135,9 +1773,6 @@
+     int status = INSTALL_SUCCESS;
+ 
+     if (update_package != NULL) {
+-    	#ifdef FEATURE_TCTNB_FOTA
+-    	  fota_reset_status();
+-    	#endif
+         // It's not entirely true that we will modify the flash. But we want
+         // to log the update attempt since update_package is non-NULL.
+         modified_flash = true;
+@@ -2191,13 +1826,6 @@
+                     ui->ShowText(true);
+                 }
+             }
+-            #ifdef FEATURE_TCTNB_FOTA
+-            else
+-            {
+-                ui->Print("Installation success.\n");
+-            }
+-            write_result(status);
+-            #endif
+         }
+     } else if (should_wipe_data) {
+         if (!wipe_data(false, device)) {
+@@ -2242,10 +1870,6 @@
+             ui->ShowText(true);
+         }
+     }
+-    //TCL
+-        get_update_kind(update_package);
+-        write_result(status);
+-//TCL end
+ 
+     mt_main_write_result(status, update_package);
+     if (!sideload_auto_reboot && (status == INSTALL_ERROR || status == INSTALL_CORRUPT)) {
+Index: bootable/recovery/Android.mk
+===================================================================
+--- bootable/recovery/Android.mk	(revision 2191)
++++ bootable/recovery/Android.mk	(revision 2192)
+@@ -46,15 +46,6 @@
+ 
+ LOCAL_MODULE := recovery
+ 
+-ifeq ($(TARGET_TCT_FOTA_ENABLE), true)
+-LOCAL_CFLAGS += -DFEATURE_TCTNB_FOTA
+-endif
+-
+-ifeq ($(TARGET_USES_SDCARD_UPGRADE), true)
+-LOCAL_CFLAGS += -DFEATURE_TCTNB_FULL_UPDATE
+-endif
+-
+-
+ LOCAL_FORCE_STATIC_EXECUTABLE := true
+ 
+ ifeq ($(TARGET_USERIMAGES_USE_F2FS),true)

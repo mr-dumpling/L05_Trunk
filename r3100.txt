@@ -1,0 +1,987 @@
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 3099)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 3100)
+@@ -83,6 +83,11 @@
+ import com.android.settingslib.RestrictedPreference;
+ import android.content.SharedPreferences.Editor;
+ import android.provider.Settings;
++import android.content.ComponentName;
++import android.content.res.Resources;
++import java.util.List;
++import android.content.pm.PackageManager;
++import android.content.pm.PackageManager.NameNotFoundException;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+ 
+@@ -170,6 +175,10 @@
+ 
+         private static final int ADD_FINGERPRINT_REQUEST = 10;
+ 
++		private static final int ADD_SHORTCUT_REQUEST = 103;
++		private static final int ADD_SHORTCUT_RESULT = 104;
++		private static final String FINGER_GEAR="finger_gear";
++
+         protected static final boolean DEBUG = true;
+ 
+         private FingerprintManager mFingerprintManager;
+@@ -183,10 +192,20 @@
+ 		private PreferenceGroup mFunctionsCategory;
+ 		public static SwitchPreference mUnclockPreference;
+ 		public static SwitchPreference mFunctionShortcut;
++		private static final int CLOSE_UNLOCK_AND_FUNC_TYPE=0;
++		private static final int CLOSE_FUNCTION_TYPE=1;
++		private String mDialogTitle;
++		private String mDialogMessage;
++		private String mDialogPositive;
++
+ 		static SharedPreferences mFuncPreference ;
+     	Editor mEditor;
+-		// add by dongdongli for 112587	20171114 start
+-		private Context mContext;
++		private FingerprintPreference mCurrentFingprintPreference;
++		public static int MODE = Context.MODE_APPEND;
++		public static String ADD_APP_PACKAGE="add.app.package";
++		public static String CLEAR_APP_PACKAGE="clear.app.package";
++		// add by dongdongli for 112587	20171114 start 
++		private static Context mContext;
+ 		// add by dongdongli for 112587	 20171114 end
+ 		
+         private AuthenticationCallback mAuthCallback = new AuthenticationCallback() {
+@@ -326,6 +345,8 @@
+                 mLaunchedConfirm = true;
+                 launchChooseOrConfirmLock();
+             }
++			mFuncPreference= activity.getSharedPreferences("FingerprintFunction",MODE);            
++			mEditor = mFuncPreference.edit();
+         }
+ 
+         @Override
+@@ -367,8 +388,17 @@
+                 root.removeAll();
+             }
+             addPreferencesFromResource(R.xml.security_settings_fingerprint);
+-            root = getPreferenceScreen();
+-
++			root = getPreferenceScreen();
++			// add by dongdongli for 112587 20171114 start {
++			mContext = root.getContext();
++			// add by dongdongli for 112587 20171114 end }
++			mFunctionsCategory=(PreferenceGroup)root.findPreference(KEY_FINGERPRINTS_FUNCTIONS_CATEGORY);
++			mUnclockPreference=(SwitchPreference)mFunctionsCategory.findPreference(KEY_FINGERPRINTS_UNCLOCK_DEVICE);
++			mUnclockPreference.setChecked((Settings.System.getInt(mContext.getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 1) != 0));
++			mUnclockPreference.setOnPreferenceChangeListener(this);
++			mFunctionShortcut=(SwitchPreference)mFunctionsCategory.findPreference(KEY_FINGERPRINTS_LAUNCHER_SHORTCUTS);
++			mFunctionShortcut.setChecked((Settings.System.getInt(mContext.getContentResolver(),Settings.System.FINGERPRINTS_FUNCTION_SETTING, 1) != 0));
++			mFunctionShortcut.setOnPreferenceChangeListener(this);
+ 			mFingerprintsCategory = (PreferenceGroup)root.findPreference(KEY_FINGERPRINTS_ITEM_CATEGORY);
+ 			mFingerprintsCategory.setTitle(reNameFingerprintsCategory());
+             addFingerprintItemPreferences(mFingerprintsCategory);
+@@ -396,13 +426,16 @@
+                 final Fingerprint item = items.get(i);
+                 FingerprintPreference pref = new FingerprintPreference(root.getContext());
+                 pref.setKey(genKey(item.getFingerId()));
+-				pref.setSummary(getContext().getString(R.string.fingerprint_summary_text));
++				//pref.setSummary(getContext().getString(R.string.fingerprint_summary_text));
+                 pref.setTitle(item.getName());
+                 pref.setFingerprint(item);
+                 pref.setPersistent(false);
+                 pref.setIcon(R.drawable.ic_fingerprint_24dp);
+                 root.addPreference(pref);
++				updateFingerprintPreferenceSummary(pref);
+                 pref.setOnPreferenceChangeListener(this);
++				pref.setOnGearClickListener(this);
++				
+             }
+             Preference addPreference = new Preference(root.getContext());
+             addPreference.setKey(KEY_FINGERPRINT_ADD);
+@@ -419,13 +452,12 @@
+ 			for(int i=0;i<fingerprintCount;i++){
+ 				final Fingerprint item = items.get(i);
+ 				FingerprintPreference pref=(FingerprintPreference)category.findPreference(genKey(item.getFingerId()));
++				updateFingerprintPreferenceSummary(pref);
+ 				if (pref.getView() != null) {
+ 					ImageView view=(ImageView)pref.getView().findViewById(R.id.settings_button);
+ 					view.setEnabled(flag);
+ 				}
+ 			}
+-			mEditor.putBoolean("mState", flag);
+-			mEditor.commit();
+ 		}
+ 
+ 		
+@@ -453,18 +485,9 @@
+             updatePreferences();
+ 			
+ 			PreferenceScreen root = getPreferenceScreen();
+-			mFuncPreference= root.getContext().getSharedPreferences("FunctionSwitch", 0);            
+-			mEditor = mFuncPreference.edit();
+-			mFunctionsCategory=(PreferenceGroup)root.findPreference(KEY_FINGERPRINTS_FUNCTIONS_CATEGORY);
+-			mUnclockPreference=(SwitchPreference)mFunctionsCategory.findPreference(KEY_FINGERPRINTS_UNCLOCK_DEVICE);
+-			mUnclockPreference.setChecked((Settings.System.getInt(root.getContext().getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 1) != 0));
+-			mUnclockPreference.setOnPreferenceChangeListener(this);
+-			mFunctionShortcut=(SwitchPreference)mFunctionsCategory.findPreference(KEY_FINGERPRINTS_LAUNCHER_SHORTCUTS);
+-			mFunctionShortcut.setChecked(mFuncPreference.getBoolean("mState", false));
+-			mFunctionShortcut.setOnPreferenceChangeListener(this);
+-			// add by dongdongli for 112587 20171114 start {
+-			mContext = root.getContext();
+-			// add by dongdongli for 112587 20171114 end }
++			
++			
++			
+         }
+ 
+         private void updatePreferences() {
+@@ -520,12 +543,25 @@
+             if (KEY_FINGERPRINT_ENABLE_KEYGUARD_TOGGLE.equals(key)) {
+                 // TODO
+             }else if(preference == mUnclockPreference){
+-				int onOrOff = (Boolean) value ? 1 : 0;
+-            	Settings.System.putInt(preference.getContext().getContentResolver(),
+-                        Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, onOrOff);
++				boolean onOrOff = (Boolean) value ;
++				if(!onOrOff){
++					//show dialog
++					//mUnclockPreference.setChecked(!onOrOff);
++					showDialog(preference,onOrOff,CLOSE_UNLOCK_AND_FUNC_TYPE);
++				}else{
++					updateVaule(onOrOff,CLOSE_UNLOCK_AND_FUNC_TYPE);
++				}
++            	
+ 			}else if(preference == mFunctionShortcut){
+-				boolean auto = (Boolean) value;
+-				updateGearButton(mFingerprintsCategory,auto);
++				boolean auto = (Boolean) value ;
++				if(!auto){
++					//mFunctionShortcut.setChecked(!auto);
++					showDialog(preference,auto,CLOSE_FUNCTION_TYPE);
++				}else{
++					updateVaule(auto,CLOSE_FUNCTION_TYPE);
++					updateVaule(auto,CLOSE_UNLOCK_AND_FUNC_TYPE);
++					mUnclockPreference.setChecked(auto);
++				}
+ 			}else {
+                 Log.v(TAG, "Unknown key:" + key);
+             }
+@@ -532,6 +568,97 @@
+             return result;
+         }
+ 
++		private void updateVaule(boolean onOrOff,int type){
++			if(type==CLOSE_UNLOCK_AND_FUNC_TYPE){
++				Settings.System.putInt(mContext.getContentResolver(),
++                        Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, onOrOff ? 1 : 0);
++			}else{
++				updateGearButton(mFingerprintsCategory,onOrOff);
++				Settings.System.putInt(mContext.getContentResolver(),
++                        Settings.System.FINGERPRINTS_FUNCTION_SETTING, onOrOff ? 1 : 0);
++	
++			}
++		}
++
++		private void setDialogMessage(int type){
++			Resources res = getActivity().getResources();
++			switch(type){
++				case CLOSE_UNLOCK_AND_FUNC_TYPE:
++					mDialogTitle=res.getString(R.string.fingerprint_unlock_and_function_colse_dialog_title);
++					mDialogMessage=res.getString(R.string.fingerprint_unlock_and_function_colse_dialog_message);
++					mDialogPositive=res.getString(R.string.fingerprint_unclock_dialog_ok_button);
++					break;
++				case CLOSE_FUNCTION_TYPE:
++					mDialogTitle=res.getString(R.string.fingerprint_function_close_dialog_title);
++					mDialogMessage=res.getString(R.string.fingerprint_function_close_dialog_message);
++					mDialogPositive=res.getString(R.string.fingerprint_function_dialog_ok_button);
++					break;
++
++			}
++		}
++
++		
++		private void showDialog(Preference preference,boolean off,int type){
++			AlertDialog ad=new AlertDialog.Builder(getActivity()).create(); 
++			setDialogMessage(type);
++			ad.setTitle(mDialogTitle);
++            ad.setMessage(mDialogMessage);  
++         	ad.setButton(mDialogPositive, new DialogInterface.OnClickListener() {
++               @Override  
++               public void onClick(DialogInterface dialog, int which) {  
++               		if(type==CLOSE_UNLOCK_AND_FUNC_TYPE){
++						cleanAppPackage(preference,off);
++						mEditor.clear();
++            			mEditor.commit(); 
++						updateVaule(off,CLOSE_UNLOCK_AND_FUNC_TYPE);
++						updateVaule(off,CLOSE_FUNCTION_TYPE);
++						mFunctionShortcut.setChecked(off);
++						mUnclockPreference.setChecked(off);
++						
++               		}else{
++						cleanAppPackage(preference,off);
++						mEditor.clear();
++            			mEditor.commit();
++						updateVaule(off,CLOSE_FUNCTION_TYPE);
++						mFunctionShortcut.setChecked(off);
++						
++					}
++                }  
++          	});  
++         	ad.setButton2(getActivity().getResources().getString(R.string.fingerprint_dialog_cancle_button), new DialogInterface.OnClickListener() {       
++               	@Override  
++                  	public void onClick(DialogInterface dialog, int which) {           
++                       if(type==CLOSE_UNLOCK_AND_FUNC_TYPE){
++					   		updateVaule(!off,CLOSE_UNLOCK_AND_FUNC_TYPE);
++							//mUnclockPreference.setChecked(!off);
++                       	}else{
++							updateVaule(!off,CLOSE_FUNCTION_TYPE);
++							//mFunctionShortcut.setChecked(!off);
++						}
++                 	}  
++        	 });  
++        	ad.show(); 
++		}
++		
++		private void cleanAppPackage( Preference preference,boolean off){
++			Intent cleanIntent=new Intent(CLEAR_APP_PACKAGE);
++			mContext.sendBroadcast(cleanIntent);
++		}
++
++		private void updateFingerprintPreferenceSummary(FingerprintPreference preference){
++			//if(){
++				String triggerName=mFuncPreference.getString(String.valueOf(preference.getFingerprint().getFingerId()),"");
++			//}
++			
++			if(!mUnclockPreference.isChecked()){
++				preference.setSummary(getContext().getString(R.string.fingerprint_summary_text));
++			}else if(mUnclockPreference.isChecked()&& !mFunctionShortcut.isChecked()){
++				preference.setSummary(getContext().getString(R.string.fingerprint_preference_unclock_summary));
++			}else if(mUnclockPreference.isChecked() && mFunctionShortcut.isChecked()&& !triggerName.isEmpty()){
++				preference.setSummary(getContext().getString(R.string.fingerprint_preference_trigger_summary)+triggerName);
++			}
++		}
++		
+         @Override
+         protected int getHelpResource() {
+             return R.string.help_url_fingerprint;
+@@ -555,7 +682,18 @@
+                     activity.setResult(RESULT_TIMEOUT);
+                     activity.finish();
+                 }
+-            }
++            }else if (requestCode==ADD_SHORTCUT_REQUEST && resultCode==ADD_SHORTCUT_RESULT ){
++				String packageName=data.getExtras().getString("packageName");
++				int fingerId=mCurrentFingprintPreference.getFingerprint().getFingerId();
++				mEditor.putString(String.valueOf(fingerId),getProgramNameByPackageName(mContext,packageName));
++				mEditor.commit();
++				Intent intent=new Intent(ADD_APP_PACKAGE);
++				intent.putExtra("id",String.valueOf(fingerId));
++				intent.putExtra("package",packageName);
++				mContext.sendBroadcast(intent);
++				updateFingerprintPreferenceSummary(mCurrentFingprintPreference);
++				
++			}
+ 
+             if (mToken == null) {
+                 // Didn't get an authentication, finishing
+@@ -563,6 +701,18 @@
+             }
+         }
+ 
++		public static String getProgramNameByPackageName(Context context, String packageName) {
++      		PackageManager pm = context.getPackageManager();
++      		String name = null;
++      		try {
++        	 	name = pm.getApplicationLabel(
++                pm.getApplicationInfo(packageName, PackageManager.GET_META_DATA)).toString();
++      		} catch (NameNotFoundException e) {
++         		e.printStackTrace();
++      		}
++     			 return name;
++   		}
++		
+         @Override
+         public void onDestroy() {
+             super.onDestroy();
+@@ -800,9 +950,11 @@
+ 
+ 		@Override
+     	public void onGearClick(FingerprintPreference p) {
+-        	/*if (KEY_UNLOCK_SET_OR_CHANGE.equals(p.getKey())) {
+-            			startFragment(this, SecuritySubSettings.class.getName(), 0, 0, null);
+-        		}*/
++       		mCurrentFingprintPreference=p;
++        	Intent intent=new Intent();
++            intent.setComponent(new ComponentName("com.android.systemui","com.android.systemui.funcsetting.AddAppShortcutActivity"));
++			intent.putExtra(FINGER_GEAR,ADD_SHORTCUT_REQUEST);
++			startActivityForResult(intent,ADD_SHORTCUT_REQUEST);
+     	}
+ 		private void updateFingerprintGear(FingerprintPreference pref){
+ 		 View gear=pref.getView().findViewById(R.id.settings_button);
+@@ -853,8 +1005,8 @@
+         	super.onBindViewHolder(view);
+         	final View gear = view.findViewById(R.id.settings_button);
+ 			gear.setOnClickListener(this);
+-			FingerprintSettings.FingerprintSettingsFragment fingerprint=new FingerprintSettings.FingerprintSettingsFragment();
+-			gear.setEnabled(fingerprint.mFuncPreference.getBoolean("mState", false));
++			
++			gear.setEnabled(Settings.System.getInt(FingerprintSettingsFragment.mContext.getContentResolver(),Settings.System.FINGERPRINTS_FUNCTION_SETTING, 1) != 0);
+             mView = view.itemView;
+         }
+ 
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 3099)
++++ packages/apps/Settings/res/values/strings.xml	(revision 3100)
+@@ -8099,5 +8099,13 @@
+     <!-- ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+     <string name="full_screen_mode">Full screen mode</string>
+     <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+-
++    <string name="fingerprint_unlock_and_function_colse_dialog_title">Remove all fingerprint functions?</string>
++	<string name="fingerprint_unlock_and_function_colse_dialog_message">By turning off Unclock device,all fingerprint functions will be removed.</string>
++	<string name="fingerprint_function_close_dialog_title">Reset all fingerprint functions?</string>
++	<string name="fingerprint_function_close_dialog_message">By turning off Quick launch Func shortcuts,all fingerprint functions will be reset to be Unlock device.</string>
++	<string name="fingerprint_dialog_cancle_button">CANCLE</string>
++	<string name="fingerprint_unclock_dialog_ok_button">REMOVE</string>
++	<string name="fingerprint_function_dialog_ok_button">RESET</string>
++	<string name="fingerprint_preference_unclock_summary">Unclock device</string>
++	<string name="fingerprint_preference_trigger_summary">Trigger </string>
+ </resources>
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 3099)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 3100)
+@@ -3357,4 +3357,14 @@
+     <!-- ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+     <string name="full_screen_mode">全屏模式</string>
+     <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++    <!--add for quick func-->
++	<string name="fingerprint_unlock_and_function_colse_dialog_title">删除所有指纹功能？</string>
++	<string name="fingerprint_unlock_and_function_colse_dialog_message">通过关闭解锁设备，所有的指纹功能将被删除。</string>
++	<string name="fingerprint_function_close_dialog_title">重置所有指纹功能？</string>
++	<string name="fingerprint_function_close_dialog_message">通过关闭快速启动功能快捷键，所有指纹功能将被重置为解锁设备。</string>
++	<string name="fingerprint_dialog_cancle_button">取消</string>
++	<string name="fingerprint_unclock_dialog_ok_button">移除</string>
++	<string name="fingerprint_function_dialog_ok_button">重置</string>
++	<string name="fingerprint_preference_unclock_summary">解锁设备</string>
++	<string name="fingerprint_preference_trigger_summary">触发 </string>
+ </resources>
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 3099)
++++ frameworks/base/api/current.txt	(revision 3100)
+@@ -32678,6 +32678,7 @@
+     field public static final java.lang.String DTMF_TONE_TYPE_WHEN_DIALING = "dtmf_tone_type";
+     field public static final java.lang.String DTMF_TONE_WHEN_DIALING = "dtmf_tone";
+     field public static final java.lang.String END_BUTTON_BEHAVIOR = "end_button_behavior";
++    field public static final java.lang.String FINGERPRINTS_FUNCTION_SETTING = "fingerprint_function_setting";
+     field public static final java.lang.String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
+     field public static final java.lang.String FP_CAMERA = "tct_private_fingerprint_take_photo";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 3099)
++++ frameworks/base/api/system-current.txt	(revision 3100)
+@@ -35437,6 +35437,7 @@
+     field public static final java.lang.String DTMF_TONE_TYPE_WHEN_DIALING = "dtmf_tone_type";
+     field public static final java.lang.String DTMF_TONE_WHEN_DIALING = "dtmf_tone";
+     field public static final java.lang.String END_BUTTON_BEHAVIOR = "end_button_behavior";
++    field public static final java.lang.String FINGERPRINTS_FUNCTION_SETTING = "fingerprint_function_setting";
+     field public static final java.lang.String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
+     field public static final java.lang.String FP_CAMERA = "tct_private_fingerprint_take_photo";
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 3099)
++++ frameworks/base/api/test-current.txt	(revision 3100)
+@@ -32758,6 +32758,7 @@
+     field public static final java.lang.String DTMF_TONE_TYPE_WHEN_DIALING = "dtmf_tone_type";
+     field public static final java.lang.String DTMF_TONE_WHEN_DIALING = "dtmf_tone";
+     field public static final java.lang.String END_BUTTON_BEHAVIOR = "end_button_behavior";
++    field public static final java.lang.String FINGERPRINTS_FUNCTION_SETTING = "fingerprint_function_setting";
+     field public static final java.lang.String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
+     field public static final java.lang.String FP_CAMERA = "tct_private_fingerprint_take_photo";
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 3099)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 3100)
+@@ -3897,6 +3897,11 @@
+ 		*
+ 		*/
+ 		public static final String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
++		/*
++		*add for function by fingerprint sensor
++		*
++		*/
++		public static final String FINGERPRINTS_FUNCTION_SETTING = "fingerprint_function_setting";
+ 	   
+         /**
+          * Enable fast boot? true = yes false = no
+Index: frameworks/base/packages/SystemUI/AndroidManifest.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 3099)
++++ frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 3100)
+@@ -561,7 +561,8 @@
+                   <action android:name="android.intent.action.MAIN" />
+               </intent-filter>
+          </activity>
+-			
++	<activity android:name=".funcsetting.AddAppShortcutActivity" 
++			android:theme="@style/FuncTheme"/>		
+ 
+ 		<receiver android:name=".funcsetting.ContactsReceiver">
+ 			<intent-filter >
+@@ -569,7 +570,12 @@
+ 				<action android:name="com.android.music.playlist_id"/>
+ 			</intent-filter>
+        </receiver>
+-
++	<receiver android:name=".funcsetting.AddAppPackageReceiver">
++			<intent-filter >
++				<action android:name="add.app.package"/>
++				<action android:name="clear.app.package"/>
++			</intent-filter>
++       </receiver>
+ 	
+ 		<!-- added by zengjie for joy lockscreen feature task 5429900 20170927 begin-->
+          <activity android:name="com.tcl.mie.launcher.lscreen.stub.activity.ActivityProxy"
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AddAppPackageReceiver.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AddAppPackageReceiver.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AddAppPackageReceiver.java	(revision 3100)
+@@ -0,0 +1,41 @@
++package com.android.systemui.funcsetting;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++
++import android.content.Intent;
++
++import android.os.Bundle;
++import android.provider.Settings;
++import android.content.SharedPreferences;
++import android.content.SharedPreferences.Editor;
++import android.util.Log;
++
++/**
++ * Created by Administrator on 2017/12/09.
++ */
++
++public class AddAppPackageReceiver extends BroadcastReceiver {
++	private SharedPreferences mFuncPreference ;
++    private Editor mEditor;
++
++    @Override
++    public void onReceive(Context context, Intent intent) {
++		mFuncPreference= context.getSharedPreferences("FunctionSettings",Context.MODE_APPEND);            
++		mEditor = mFuncPreference.edit();
++        if ("add.app.package".equals(intent.getAction()))
++        {
++        	String id= intent.getStringExtra("id");
++			String packageName=intent.getStringExtra("package");
++			Log.d("AddAppPackageReceiver","packageName== "+packageName+" id== "+id);
++			mEditor.putString(id,packageName);
++			mEditor.commit();
++        }
++		if ("clear.app.package".equals(intent.getAction()))
++        {
++			Log.d("AddAppPackageReceiver","clear.app.package== ");
++        	mEditor.clear();  
++            mEditor.commit();
++        }
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 3099)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 3100)
+@@ -20,6 +20,7 @@
+ import com.android.systemui.statusbar.phone.ActivityStarter;
+ import android.content.ComponentName;
+ import android.content.Intent;
++import com.android.systemui.db.AppDB;
+ 
+ import java.util.ArrayList;
+ import java.util.HashSet;
+@@ -27,7 +28,7 @@
+ import java.util.Set;
+ import java.util.Timer;
+ import java.util.TimerTask;
+-
++import com.android.systemui.db.DBManager;
+ /**
+  * Created by Administrator on 2017/9/1.
+  */
+@@ -48,6 +49,11 @@
+     public static final int APPS_LIST = 5;
+ 	public static final int FUNC_NOTICE = 6;
+     public final static String FUNC_TO_MUSIC="func_to_music";
++	private static final String DEFAULT_TABLE = "appinfo_default_list";
++    private static final String TABLE = "appinfo_list";
++    private static int defaultNum=0;
++    private static List<AppInfo> list;
++    public static AppDB db;
+     public static void startMusicApp(Context mContext){     
+         String packagerName="com.android.music";
+         String activityPath="com.android.music.MusicBrowserActivity";
+@@ -263,4 +269,51 @@
+         }
+         return intent;
+     }
++	public static List<AppInfo> getData(Context context){
++		list = new ArrayList<>();
++        DBManager manager = new DBManager(context);
++        manager.openDatabase();
++		db = AppDB.getInstance();
++        list.clear();
++        list.add(getDefaultAppInfoTitle(context));
++        List<AppInfo> defaultApps = db.getDefaultApp(DEFAULT_TABLE);
++		for(AppInfo appinfo:defaultApps){
++			if(isAppInstalled(context,appinfo.getPackerName())){
++				list.add(appinfo);
++			}
++		}
++        defaultNum= list.size()-1;
++        list.add(getAppInfoTitle(context));
++        List<AppInfo> availableApps = db.getApp(TABLE);
++		for(AppInfo appinfo:availableApps){
++			if(isAppInstalled(context,appinfo.getPackerName())){
++				list.add(appinfo);
++			}
++		}
++			
++        list.add(getFooterView(context.getResources().getString(R.string.func_add_app)));
++		for(AppInfo info:list){
++			if(info.getPackerName().equals("com.alcatel.music5")){
++				info.setPackerName("com.google.android.music");
++			}
++		}
++        list =getAppInfo(context, list);
++        return list;
++    }
++
++	private static boolean isAppInstalled(Context context, String packageName) {  
++        final PackageManager packageManager = context.getPackageManager();  
++        List<PackageInfo> pinfo = packageManager.getInstalledPackages(0);  
++        List<String> pName = new ArrayList<String>();
++        if (packageName.equals(AppUtils.TORCH)) {
++        	return true;
++        }
++        if (pinfo != null) {  
++            for (int i = 0; i < pinfo.size(); i++) {  
++                String pn = pinfo.get(i).packageName;  
++                pName.add(pn);  
++            }  
++        }  
++        return pName.contains(packageName);  
++    }
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AddAppShortcutActivity.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AddAppShortcutActivity.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AddAppShortcutActivity.java	(revision 3100)
+@@ -0,0 +1,196 @@
++package com.android.systemui.funcsetting;
++
++
++import android.app.ProgressDialog;
++import android.os.Handler;
++import android.os.Message;
++
++
++import android.support.v7.app.AppCompatActivity;
++import android.support.v7.widget.Toolbar;
++
++import android.os.Bundle;
++import android.support.v7.widget.LinearLayoutManager;
++import android.support.v7.widget.RecyclerView;
++import android.widget.SearchView;
++
++import android.util.Log;
++import android.view.MenuInflater;
++import android.view.Menu;
++import android.view.MenuItem;
++import android.widget.Toast;
++import android.text.Editable;
++import android.text.TextWatcher;
++
++import java.util.ArrayList;
++import java.util.List;
++import com.android.systemui.R;
++import android.content.Intent;
++import com.android.systemui.funcsetting.AddAppShortcutAdapter.OnItemClickListener;
++import android.view.View;
++import android.content.Context;
++
++public class AddAppShortcutActivity extends AppCompatActivity {
++	
++    private String searchContent="";
++    private final int APP_LIST_RESULT = 100;
++    private RecyclerView mAppsRecycler;
++    private AppsData appsData;
++    private List<AppInfo> list;
++    private List<AppInfo> searchList;
++    private AddAppShortcutAdapter adapter;
++	//add for fingerprint settings start
++	public static final int ADD_SHORTCUT_REQUEST = 103;
++	public static final int ADD_SHORTCUT_RESULT = 104;
++	private static final String FINGER_SETTING="finger_gear";
++	private Intent mIntent;
++	//add for fingerprint settings end
++    private Handler handler = new Handler() {
++        @Override
++        public void handleMessage(Message msg) {
++            super.handleMessage(msg);
++            if (msg.what == APP_LIST_RESULT) {
++                list = (List<AppInfo>) msg.obj;
++                dialog.dismiss();
++                adapter = new AddAppShortcutAdapter(AddAppShortcutActivity.this, list);
++                mAppsRecycler.setAdapter(adapter);
++				//if(mIntent.getIntExtra(FINGER_SETTING,0)==ADD_SHORTCUT_REQUEST){
++					initListener();
++				//}
++            }
++        }
++    };
++    private ProgressDialog dialog;
++
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setTitle("Func shortcuts");
++
++        setContentView(R.layout.activity_app_list);
++       	Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
++        String title=getString(R.string.add_func_title);
++        toolbar.setTitle(title);
++        setSupportActionBar(toolbar);
++        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
++        toolbar.setNavigationOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                finish();
++            }
++        });
++		mIntent=getIntent();
++        //appsData = (AppsData) getIntent().getExtras().getSerializable("app");
++		if(appsData==null){
++			appsData=new AppsData();
++			List<String> list=new ArrayList<String>();
++        	for (AppInfo info:AppUtils.getData(this/*getApplication()*/)) {
++           		list.add(info.getPackerName());
++         	}
++        	appsData.setList(list);
++		}
++        initView();
++        initData();
++    }
++
++
++    private void initView() {
++        mAppsRecycler = (RecyclerView) findViewById(R.id.apps_recycler);
++        mAppsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
++    }
++	private void initListener() {
++		adapter.setOnItemClickListener(new OnItemClickListener(){
++            @Override    
++     		public void onItemClick(View view , int position){
++          		 String packName=list.get(position).getPackerName();
++		  	 	Log.d("AppListActivity","packName== "+packName);
++		   		Intent intent=new Intent();
++		   		intent.putExtra("packageName", packName);
++		   		setResult(ADD_SHORTCUT_RESULT, intent);
++		   		finish();
++      		}
++        });
++	 }
++
++	   public void searchData(){
++		   if (list != null && list.size() > 0) {
++			   if (searchList == null) {
++				   searchList = new ArrayList<AppInfo>();
++			   }
++			   if (searchList.size() > 0) {
++				   searchList.clear();
++			   }
++			   for (AppInfo info : list) {
++				   if (info.getPackerName().contains(searchContent) ||
++						   info.getAppName().contains(searchContent)
++						   || info.getIntroduction().contains(searchContent)) {
++					   searchList.add(info);
++				   }
++	
++			   }
++			   if (searchList.size() > 0 && adapter != null) {
++				   adapter.updateData(searchList);
++			   }else{
++				   //Toast.makeText(AppListActivity.this,"no search",0).show();
++			   }
++		   }
++	   }
++
++    private void initData() {
++        dialog = new ProgressDialog(this);
++        dialog.setCancelable(false);
++        dialog.show();
++        AppUtils.getAppListData(this, appsData, handler, APP_LIST_RESULT);
++    }
++
++   
++	
++	@Override
++    public boolean onCreateOptionsMenu(Menu menu) {
++         MenuInflater inflater = getMenuInflater();
++         inflater.inflate(R.menu.func_search_item, menu);
++		 MenuItem searchMenuItem = menu.findItem(R.id.search);
++         SearchView searchView = (SearchView) searchMenuItem.getActionView();
++		 if (searchMenuItem == null || searchView == null) {
++            return false;
++         }
++         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
++            @Override
++            public boolean onQueryTextSubmit(String query) {
++                Log.i("onQueryTextSubmit", query);
++                return false;
++            }
++
++            @Override
++            public boolean onQueryTextChange(String newText) {
++                if (list != null && list.size() > 0) {
++                    if (searchList == null) {
++                        searchList = new ArrayList<AppInfo>();
++                    }
++                    if (searchList.size() > 0) {
++                        searchList.clear();
++                    }
++                    for (AppInfo info : list) {
++                        if (info.getPackerName().contains(newText) ||
++                                info.getAppName().contains(newText)
++                                || info.getIntroduction().contains(newText)) {
++                            searchList.add(info);
++                        }
++
++                    }
++                    if (searchList.size() > 0 && adapter != null) {
++                        adapter.updateData(searchList);
++                    } else {
++                       // Toast.makeText(AppListActivity.this, "no result", 0).show();
++                    }
++                }
++
++                return false;
++            }
++        });
++			
++        return true;
++		
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AddAppShortcutAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AddAppShortcutAdapter.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AddAppShortcutAdapter.java	(revision 3100)
+@@ -0,0 +1,126 @@
++package com.android.systemui.funcsetting;
++
++
++import android.content.Context;
++import android.graphics.Color;
++import android.support.v7.widget.RecyclerView;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.ImageView;
++import android.widget.RelativeLayout;
++import android.widget.TextView;
++import com.android.systemui.R;
++import android.util.Log;
++import com.android.systemui.db.AppDB;
++import android.content.Intent;
++
++import java.util.List;
++
++/**
++ * Created by Administrator on 2017/9/4.
++ */
++public class AddAppShortcutAdapter extends RecyclerView.Adapter<AddAppShortcutAdapter.AppInfoHodler> implements View.OnClickListener{
++    private List<AppInfo> data;
++    private Context mContext;
++	private AppDB db;
++	//add start
++	private OnItemClickListener mOnItemClickListener = null;
++    public static interface OnItemClickListener {
++        void onItemClick(View view , int position);
++    }
++	//add end
++    public AddAppShortcutAdapter(Context context, List<AppInfo> data) {
++        this.data = data;
++        mContext = context;
++		db = AppDB.getInstance();
++    }
++
++    @Override
++    public AddAppShortcutAdapter.AppInfoHodler onCreateViewHolder(ViewGroup parent, int viewType) {
++        View view = LayoutInflater.from(mContext).inflate(R.layout.func_app_item, parent, false);
++		AppInfoHodler holder=new AppInfoHodler(view, viewType);
++		view.setOnClickListener(this);//add
++		Log.d("AppListAdapter","view.setOnClickListener...");
++        return holder;
++    }
++
++    @Override
++    public void onBindViewHolder(AddAppShortcutAdapter.AppInfoHodler holder, int position) {
++        final AppInfo info = data.get(position);
++        holder.app_name.setText(info.getAppName());
++        holder.app_icon.setImageDrawable(info.getDrawable());
++       // holder.right_icon.setImageResource(R.mipmap.add);
++		holder.item.setOnClickListener(this);
++		holder.itemView.setTag(position);//add
++		Log.d("AppListAdapter","holder.itemView.setTag...");
++        if(info.isContanin()){
++            holder.app_name.setTextColor(Color.GRAY);
++			holder.right_icon.setVisibility(View.GONE);
++        }else{
++            holder.app_name.setTextColor(Color.BLACK);
++			holder.right_icon.setVisibility(View.VISIBLE);
++        }
++		/*holder.item.setOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                Log.i("content",info.getPackerName());
++            }
++        });
++		holder.right_icon.setOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                if(!info.isContanin()){
++						
++        			info.setIndex(AppUtils.APPS);
++					db.add( info);
++					info.setContanin(true);
++					holder.right_icon.setVisibility(View.GONE);
++					holder.app_name.setTextColor(Color.GRAY);
++                }
++            }
++        });*/
++	}
++    
++	
++	/**add finger****/
++	@Override
++    public void onClick(View v) {
++        if (mOnItemClickListener != null) {
++            mOnItemClickListener.onItemClick(v,(int)v.getTag());
++			Log.d("AppListAdapter","onClick...");
++        }
++    }
++ 
++    public void setOnItemClickListener(OnItemClickListener listener) {
++        this.mOnItemClickListener = listener;
++		Log.d("AppListAdapter","setOnItemClickListener...");
++    }
++	
++    @Override
++    public int getItemCount() {
++        return data.size();
++    }
++    public void updateData(List<AppInfo> list){
++        data= list;
++        notifyDataSetChanged();
++    }
++    public class AppInfoHodler extends RecyclerView.ViewHolder {
++        public TextView title;
++        public TextView app_name;
++        public ImageView app_icon;
++        public ImageView right_icon;
++        public RelativeLayout item;
++
++        public AppInfoHodler(View itemView, int viewType) {
++            super(itemView);
++
++            app_name = (TextView) itemView.findViewById(R.id.app_name);
++            right_icon = (ImageView) itemView.findViewById(R.id.right_icon);
++            app_icon = (ImageView) itemView.findViewById(R.id.app_icon);
++            item = (RelativeLayout) itemView.findViewById(R.id.item);
++
++
++        }
++    }
++}
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 3099)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 3100)
+@@ -95,6 +95,11 @@
+ import com.android.internal.telephony.ITelephony; 
+ import android.telephony.ServiceState; 
+ //added by lei.shi for task927658 at 2015.11.22 end
++import android.os.AsyncTask;
++import android.hardware.fingerprint.Fingerprint;
++import android.content.SharedPreferences;
++import android.os.SystemProperties;
++import android.content.pm.PackageManager.NameNotFoundException;
+ 
+ /**
+  * Watches for updates that may be interesting to the keyguard, and provides
+@@ -246,7 +251,8 @@
+     private TrustManager mTrustManager;
+     private UserManager mUserManager;
+     private int mFingerprintRunningState = FINGERPRINT_STATE_STOPPED;
+-
++	private SharedPreferences mPref;
++	public static int MODE = Context.MODE_APPEND ;
+     // M: modify for mock
+     @VisibleForTesting
+     final Handler mHandler = new Handler() {
+@@ -1008,7 +1014,32 @@
+             }
+         }
+     };
++	//add for fingersettings start
++	private void fingerprintFunction() {
++          int fingerId=SystemProperties.getInt("persist.sys.fingerprint.id", 0);
++		   if(mPref != null && fingerId != 0){
++				String packageName=mPref.getString(""+fingerId,"");
++				Log.d(TAG,"fingerId== "+fingerId+" packageName== "+packageName);
++				if(!packageName.isEmpty()){
++					startApp(packageName);
++				}
++		   }
++    }
+ 
++	public void startApp(String packageName){
++		PackageManager packageManager = mContext.getPackageManager();   
++        Intent  intent;
++		intent =packageManager.getLaunchIntentForPackage(packageName);   
++        AsyncTask.execute(new Runnable() {
++            @Override
++            public void run() {
++				if(intent!=null){  
++            		mContext.startActivity(intent); 
++       			} 
++            }
++        });
++    }
++	//add for fingersetting end
+     private final BroadcastReceiver mStrongAuthTimeoutReceiver = new BroadcastReceiver() {
+         @Override
+         public void onReceive(Context context, Intent intent) {
+@@ -1043,6 +1074,7 @@
+             Trace.beginSection("KeyguardUpdateMonitor#onAuthenticationSucceeded");
+ 			if (Settings.System.getInt(mContext.getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 1) != 0) {
+ 				handleFingerprintAuthenticated(result.getUserId());
++				fingerprintFunction();
+ 			}
+             Trace.endSection();
+         }
+@@ -1493,6 +1525,10 @@
+         }
+ 
+         mUserManager = context.getSystemService(UserManager.class);
++		//add for fingerprintsettings
++		mPref = mContext.getSharedPreferences("FunctionSettings",MODE);
++	
++		
+     }
+ 
+     private void updateFingerprintListeningState() {

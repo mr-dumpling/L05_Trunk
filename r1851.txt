@@ -1,0 +1,106 @@
+Index: packages/apps/Settings/src/com/android/settings/LockScreenSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/LockScreenSettings.java	(revision 1850)
++++ packages/apps/Settings/src/com/android/settings/LockScreenSettings.java	(revision 1851)
+@@ -34,12 +34,18 @@
+ import android.support.v7.preference.PreferenceGroup;
+ import android.support.v7.preference.PreferenceScreen;
+ import android.provider.Settings;
++import com.android.settings.search.BaseSearchIndexProvider;
++import com.android.settings.search.Indexable;
++import android.provider.SearchIndexableResource;
++import com.android.settings.search.SearchIndexableRaw;
++import android.util.Log;
++
+ /**
+  * Top level fragment for gesture settings.
+  * This will create individual switch preference for each gesture and handle updates when each
+  * preference is updated
+  */
+-public class LockScreenSettings extends SettingsPreferenceFragment{
++public class LockScreenSettings extends SettingsPreferenceFragment implements Indexable {
+ 
+     private static final String TAG = "LockScreenSettings";
+     private static final String PREF_KEY_FUNCTION_SETTINGS = "fun_setting";
+@@ -90,5 +96,19 @@
+ 		}
+ 		
+ 	}
++	//add for search
++	 public static final SearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
++            new BaseSearchIndexProvider() {
++                @Override
++                public List<SearchIndexableResource> getXmlResourcesToIndex(Context context,
++                        boolean enabled) {
++                    ArrayList<SearchIndexableResource> result =
++                            new ArrayList<SearchIndexableResource>();
++                    SearchIndexableResource sir = new SearchIndexableResource(context);
++                    sir.xmlResId = R.xml.lock_screen_settings;
++                    result.add(sir);
++                    return result;
++                }
++     };
+ 
+ }
+Index: packages/apps/Settings/src/com/android/settings/search/Ranking.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/search/Ranking.java	(revision 1850)
++++ packages/apps/Settings/src/com/android/settings/search/Ranking.java	(revision 1851)
+@@ -55,7 +55,7 @@
+ import com.android.settings.wifi.AdvancedWifiSettings;
+ import com.android.settings.wifi.SavedAccessPointsWifiSettings;
+ import com.android.settings.wifi.WifiSettings;
+-
++import com.android.settings.LockScreenSettings;
+ import java.util.HashMap;
+ 
+ /**
+@@ -87,7 +87,8 @@
+     public static final int RANK_DEVELOPEMENT = 22;
+     public static final int RANK_DEVICE_INFO = 23;
+     public static final int RANK_GESTURE = 24;
+-
++	public static final int RANK_FUNC= 25;
++	
+     public static final int RANK_UNDEFINED = -1;
+     public static final int RANK_OTHERS = 1024;
+     public static final int BASE_RANK_DEFAULT = 2048;
+@@ -150,7 +151,10 @@
+ 
+         // Gestures
+         sRankMap.put(GestureSettings.class.getName(), RANK_GESTURE);
+-
++		
++		//LockScreenSettings
++		sRankMap.put(LockScreenSettings.class.getName(), RANK_FUNC);
++		
+         // Location
+         sRankMap.put(LocationSettings.class.getName(), RANK_LOCATION);
+         sRankMap.put(ScanningSettings.class.getName(), RANK_LOCATION);
+Index: packages/apps/Settings/src/com/android/settings/search/SearchIndexableResources.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/search/SearchIndexableResources.java	(revision 1850)
++++ packages/apps/Settings/src/com/android/settings/search/SearchIndexableResources.java	(revision 1851)
+@@ -60,7 +60,7 @@
+ import com.mediatek.nfc.NfcSettings;
+ import com.mediatek.search.SearchExt;
+ import com.mediatek.settings.hotknot.HotKnotSettings;
+-
++import com.android.settings.LockScreenSettings;
+ import java.util.Collection;
+ import java.util.HashMap;
+ 
+@@ -241,7 +241,12 @@
+                         NO_DATA_RES_ID,
+                         GestureSettings.class.getName(),
+                         R.drawable.ic_settings_gestures));
+-
++		sResMap.put(LockScreenSettings.class.getName(),
++                new SearchIndexableResource(
++                        Ranking.getRankForClassName(LockScreenSettings.class.getName()),
++                        R.xml.lock_screen_settings,
++                        LockScreenSettings.class.getName(),
++                        R.drawable.ic_sysbar_quicksettings));
+         sResMap.put(LocationSettings.class.getName(),
+                 new SearchIndexableResource(
+                         Ranking.getRankForClassName(LocationSettings.class.getName()),

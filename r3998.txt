@@ -1,0 +1,131 @@
+Index: device/mediatek/common/sepolicy/basic/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/basic/system_app.te	(revision 3997)
++++ device/mediatek/common/sepolicy/basic/system_app.te	(revision 3998)
+@@ -56,3 +56,4 @@
+ allow system_app media_rw_data_file:dir { read open getattr };
+ allow system_app cache_recovery_file:file { read open setattr };
+ allow system_app shell_data_file:dir { read open getattr };
++allow system_app media_rw_data_file:file append;
+Index: device/mediatek/common/sepolicy/full/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/full/system_app.te	(revision 3997)
++++ device/mediatek/common/sepolicy/full/system_app.te	(revision 3998)
+@@ -165,3 +165,4 @@
+ allow system_app media_rw_data_file:dir { read open getattr };
+ allow system_app cache_recovery_file:file { read open setattr };
+ allow system_app shell_data_file:dir { read open getattr };
++allow system_app media_rw_data_file:file append;
+\ No newline at end of file
+Index: device/mediatek/common/sepolicy/bsp/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/bsp/system_app.te	(revision 3997)
++++ device/mediatek/common/sepolicy/bsp/system_app.te	(revision 3998)
+@@ -133,3 +133,4 @@
+ allow system_app media_rw_data_file:dir { read open getattr };
+ allow system_app cache_recovery_file:file { read open setattr };
+ allow system_app shell_data_file:dir { read open getattr };
++allow system_app media_rw_data_file:file append;
+\ No newline at end of file
+Index: device/mediatek/mt6739/init.mt6739.rc
+===================================================================
+--- device/mediatek/mt6739/init.mt6739.rc	(revision 3997)
++++ device/mediatek/mt6739/init.mt6739.rc	(revision 3998)
+@@ -1014,6 +1014,8 @@
+ start atci_service
+ start atcid-daemon-u
+ 
++on property:persist.sys.curef=*
++    setprop ro.tct.curef $persist.sys.curef
+ # monitor property gesture flag status start
+ on property:persist.sys.double.flags=*
+     write /dev/tp_gesture ${persist.sys.double.flags}
+Index: vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/version/Version.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/version/Version.java	(revision 3997)
++++ vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/version/Version.java	(revision 3998)
+@@ -53,7 +53,7 @@
+ 	private static final String ANDROID_VER = "ro.build.version.release";
+ 	private static final String BUILD_NUMBER = "ro.build.display.id";
+ 	private static final String TP_FIRMWARE_VER = "/proc/tp_ver";
+-	
++	private static final String DEF_CUREF_INFO = "ro.tct.curef.default";
+ 	private static final int EVENT_MODEM_VERSION = 1;
+ 	
+ 	private TextView mAndroidVersion;
+Index: vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootCompleteServer.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootCompleteServer.java	(revision 3997)
++++ vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootCompleteServer.java	(revision 3998)
+@@ -25,7 +25,11 @@
+     private final static String TAG = "FactoryModeBootCompleteServer";
+     private static final String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
+ 	//private static final int PRODUCT_INFO_NVRAM_LID = 59;
+-	private static final int SWR_INFO_NV_POS = 600; 
++	  private static final int SWR_INFO_NV_POS = 600; 
++	  private static final int CU_REF_NVRAM_POS = 166;
++    private static final int CU_REF_LENGTH = 20;
++    private static final String CU_REF_PROP = "persist.sys.curef";
++
+     private String SWR_INFO_STRING = "ro.build.swr.id"; 
+     //private static final int BT_NVRAM_ID = 1;
+     //private static final int WIFI_NVRAM_ID = 53;
+@@ -55,6 +59,7 @@
+     public int onStartCommand(Intent intent, int flags, int startId) {
+         Log.d(TAG, "---BootCompleteServer onStartCommand---");
+         readProductInfo();
++        setCuRefProperty();
+         //setSWRInfoToNV();
+         readBTAddrFromNvram();
+         readWifiMACFromNvram();
+@@ -188,5 +193,50 @@
+         
+     }
+     */
++    
++    private void setCuRefProperty() {
++        String cuRef = SystemProperties.get(CU_REF_PROP, "");
++        Log.d(TAG, "setCuRefProperty: cuRef----- = " + cuRef);
++        if(cuRef == null || cuRef.length() < 1) {
++            cuRef = getCufFromNV();
++            Log.d(TAG, "curef = " + cuRef);
++            if(cuRef != null && cuRef.length() > 0){
++                SystemProperties.set(CU_REF_PROP, cuRef);
++            }
++        }
++    }
+ 
++    private String getCufFromNV(){
++        byte[] cuRef = new byte[CU_REF_LENGTH];
++        boolean isCuRefNull = true;
++        int relLength = 0;
++        
++        for(int i=0 ; i < CU_REF_LENGTH; i++)
++        {
++            if(mProductInfoBuff[CU_REF_NVRAM_POS+i] == (byte)0) {
++                continue;
++            }
++            
++            cuRef[i] = mProductInfoBuff[CU_REF_NVRAM_POS+i];
++            relLength++;
++            Log.d(TAG, "getCufFromNV: curef = " + cuRef[i]);
++            if(cuRef[i] != (byte)0 && isCuRefNull){
++                isCuRefNull = false;
++            }
++        }
++
++        String cuRefString = null;
++
++        if(isCuRefNull){
++            cuRefString = "";
++        }else{
++            cuRefString = new String(cuRef, 0, relLength);
++        }
++        
++        Log.d(TAG, "getCufFromNV: cuRefString = " + cuRefString);
++
++        return cuRefString;
++    }
++
++
+ }

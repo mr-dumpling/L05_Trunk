@@ -1,0 +1,1640 @@
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPasswordView.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPasswordView.java	(revision 0)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPasswordView.java	(revision 7761)
+@@ -0,0 +1,374 @@
++/*
++ * Copyright (C) 2012 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.keyguard;
++
++import android.content.Context;
++import android.graphics.Rect;
++import android.text.Editable;
++import android.text.InputType;
++import android.text.TextUtils;
++import android.text.TextWatcher;
++import android.text.method.TextKeyListener;
++import android.util.AttributeSet;
++import android.util.Log ;
++import android.view.KeyEvent;
++import android.view.View;
++import android.view.animation.AnimationUtils;
++import android.view.animation.Interpolator;
++import android.view.inputmethod.EditorInfo;
++import android.view.inputmethod.InputMethodInfo;
++import android.view.inputmethod.InputMethodManager;
++import android.view.inputmethod.InputMethodSubtype;
++import android.widget.TextView;
++import android.widget.TextView.OnEditorActionListener;
++
++import com.android.internal.widget.TextViewInputDisabler;
++
++import java.util.List;
++/**
++ * Displays an alphanumeric (latin-1) key entry for the user to enter
++ * an unlock password
++ */
++public class KeyguardPasswordView extends KeyguardAbsKeyInputView
++        implements KeyguardSecurityView, OnEditorActionListener, TextWatcher {
++
++    private static final String TAG = "KeyguardPasswordView";
++    private static final boolean DEBUG = true ;
++
++    private final boolean mShowImeAtScreenOn;
++    private final int mDisappearYTranslation;
++
++    // A delay constant to be used in a workaround for the situation where InputMethodManagerService
++    // is not switched to the new user yet.
++    // TODO: Remove this by ensuring such a race condition never happens.
++    private static final int DELAY_MILLIS_TO_REEVALUATE_IME_SWITCH_ICON = 500;  // 500ms
++
++    InputMethodManager mImm;
++    private TextView mPasswordEntry;
++    private TextViewInputDisabler mPasswordEntryDisabler;
++    private View mSwitchImeButton;
++
++    private Interpolator mLinearOutSlowInInterpolator;
++    private Interpolator mFastOutLinearInInterpolator;
++
++    public KeyguardPasswordView(Context context) {
++        this(context, null);
++    }
++
++    public KeyguardPasswordView(Context context, AttributeSet attrs) {
++        super(context, attrs);
++        mShowImeAtScreenOn = context.getResources().
++                getBoolean(R.bool.kg_show_ime_at_screen_on);
++        mDisappearYTranslation = getResources().getDimensionPixelSize(
++                R.dimen.disappear_y_translation);
++        mLinearOutSlowInInterpolator = AnimationUtils.loadInterpolator(
++                context, android.R.interpolator.linear_out_slow_in);
++        mFastOutLinearInInterpolator = AnimationUtils.loadInterpolator(
++                context, android.R.interpolator.fast_out_linear_in);
++    }
++
++    @Override
++    protected void resetState() {
++        /// M: [ALPS00594552] Indicate the user to input password.
++        mSecurityMessageDisplay.setMessage(R.string.kg_password_instructions, true);
++        final boolean wasDisabled = mPasswordEntry.isEnabled();
++        setPasswordEntryEnabled(true);
++        setPasswordEntryInputEnabled(true);
++        if (wasDisabled) {
++            mImm.showSoftInput(mPasswordEntry, InputMethodManager.SHOW_IMPLICIT);
++        }
++    }
++
++    @Override
++    protected int getPasswordTextViewId() {
++        return R.id.passwordEntry;
++    }
++
++    @Override
++    public boolean needsInput() {
++        Log.d(TAG, "needsInput() - returns true.");
++        return true;
++    }
++
++    @Override
++    public void onResume(final int reason) {
++        super.onResume(reason);
++
++        // Wait a bit to focus the field so the focusable flag on the window is already set then.
++        post(new Runnable() {
++            @Override
++            public void run() {
++                if (isShown() && mPasswordEntry.isEnabled()) {
++                    mPasswordEntry.requestFocus();
++                    Log.d(TAG, "reason = " + reason +
++                        ", mShowImeAtScreenOn = " + mShowImeAtScreenOn);
++                    if (reason != KeyguardSecurityView.SCREEN_ON || mShowImeAtScreenOn) {
++                        Log.d(TAG, "onResume() - call showSoftInput()");
++                        mImm.showSoftInput(mPasswordEntry, InputMethodManager.SHOW_IMPLICIT);
++                    }
++                }
++            }
++        });
++    }
++
++    @Override
++    protected int getPromtReasonStringRes(int reason) {
++        switch (reason) {
++            case PROMPT_REASON_RESTART:
++                return R.string.kg_prompt_reason_restart_password;
++            case PROMPT_REASON_TIMEOUT:
++                return R.string.kg_prompt_reason_timeout_password;
++            case PROMPT_REASON_DEVICE_ADMIN:
++                return R.string.kg_prompt_reason_device_admin;
++            case PROMPT_REASON_USER_REQUEST:
++                return R.string.kg_prompt_reason_user_request;
++            case PROMPT_REASON_NONE:
++                return 0;
++            default:
++                return R.string.kg_prompt_reason_timeout_password;
++        }
++    }
++
++    @Override
++    public void onPause() {
++        super.onPause();
++        mImm.hideSoftInputFromWindow(getWindowToken(), 0);
++    }
++
++    @Override
++    public void reset() {
++        super.reset();
++        mPasswordEntry.requestFocus();
++    }
++
++    private void updateSwitchImeButton() {
++        // If there's more than one IME, enable the IME switcher button
++        final boolean wasVisible = mSwitchImeButton.getVisibility() == View.VISIBLE;
++        final boolean shouldBeVisible = hasMultipleEnabledIMEsOrSubtypes(mImm, false);
++        if (wasVisible != shouldBeVisible) {
++            mSwitchImeButton.setVisibility(shouldBeVisible ? View.VISIBLE : View.GONE);
++        }
++
++        // TODO: Check if we still need this hack.
++        // If no icon is visible, reset the start margin on the password field so the text is
++        // still centered.
++        if (mSwitchImeButton.getVisibility() != View.VISIBLE) {
++            android.view.ViewGroup.LayoutParams params = mPasswordEntry.getLayoutParams();
++            if (params instanceof MarginLayoutParams) {
++                final MarginLayoutParams mlp = (MarginLayoutParams) params;
++                mlp.setMarginStart(0);
++                mPasswordEntry.setLayoutParams(params);
++            }
++        }
++    }
++
++    @Override
++    protected void onFinishInflate() {
++        super.onFinishInflate();
++
++        mImm = (InputMethodManager) getContext().getSystemService(
++                Context.INPUT_METHOD_SERVICE);
++
++        mPasswordEntry = (TextView) findViewById(getPasswordTextViewId());
++        mPasswordEntryDisabler = new TextViewInputDisabler(mPasswordEntry);
++        mPasswordEntry.setKeyListener(TextKeyListener.getInstance());
++        mPasswordEntry.setInputType(InputType.TYPE_CLASS_TEXT
++                | InputType.TYPE_TEXT_VARIATION_PASSWORD);
++        mPasswordEntry.setOnEditorActionListener(this);
++        mPasswordEntry.addTextChangedListener(this);
++
++        // Poke the wakelock any time the text is selected or modified
++        mPasswordEntry.setOnClickListener(new OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                mCallback.userActivity();
++            }
++        });
++
++        // Set selected property on so the view can send accessibility events.
++        mPasswordEntry.setSelected(true);
++
++        mPasswordEntry.requestFocus();
++
++        mSwitchImeButton = findViewById(R.id.switch_ime_button);
++        mSwitchImeButton.setOnClickListener(new OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                mCallback.userActivity(); // Leave the screen on a bit longer
++                // Do not show auxiliary subtypes in password lock screen.
++                mImm.showInputMethodPicker(false /* showAuxiliarySubtypes */);
++            }
++        });
++
++        // If there's more than one IME, enable the IME switcher button
++        updateSwitchImeButton();
++
++        // When we the current user is switching, InputMethodManagerService sometimes has not
++        // switched internal state yet here. As a quick workaround, we check the keyboard state
++        // again.
++        // TODO: Remove this workaround by ensuring such a race condition never happens.
++        postDelayed(new Runnable() {
++            @Override
++            public void run() {
++                updateSwitchImeButton();
++            }
++        }, DELAY_MILLIS_TO_REEVALUATE_IME_SWITCH_ICON);
++    }
++
++    @Override
++    protected boolean onRequestFocusInDescendants(int direction, Rect previouslyFocusedRect) {
++        // send focus to the password field
++        return mPasswordEntry.requestFocus(direction, previouslyFocusedRect);
++    }
++
++    @Override
++    protected void resetPasswordText(boolean animate, boolean announce) {
++        mPasswordEntry.setText("");
++    }
++
++    @Override
++    protected String getPasswordText() {
++        return mPasswordEntry.getText().toString();
++    }
++
++    @Override
++    protected void setPasswordEntryEnabled(boolean enabled) {
++        mPasswordEntry.setEnabled(enabled);
++    }
++
++    @Override
++    protected void setPasswordEntryInputEnabled(boolean enabled) {
++        mPasswordEntryDisabler.setInputEnabled(enabled);
++    }
++
++    /**
++     * Method adapted from com.android.inputmethod.latin.Utils
++     *
++     * @param imm The input method manager
++     * @param shouldIncludeAuxiliarySubtypes
++     * @return true if we have multiple IMEs to choose from
++     */
++    private boolean hasMultipleEnabledIMEsOrSubtypes(InputMethodManager imm,
++            final boolean shouldIncludeAuxiliarySubtypes) {
++        final List<InputMethodInfo> enabledImis = imm.getEnabledInputMethodList();
++
++        // Number of the filtered IMEs
++        int filteredImisCount = 0;
++
++        for (InputMethodInfo imi : enabledImis) {
++            // We can return true immediately after we find two or more filtered IMEs.
++            if (filteredImisCount > 1) return true;
++            final List<InputMethodSubtype> subtypes =
++                    imm.getEnabledInputMethodSubtypeList(imi, true);
++            // IMEs that have no subtypes should be counted.
++            if (subtypes.isEmpty()) {
++                ++filteredImisCount;
++                continue;
++            }
++
++            int auxCount = 0;
++            for (InputMethodSubtype subtype : subtypes) {
++                if (subtype.isAuxiliary()) {
++                    ++auxCount;
++                }
++            }
++            final int nonAuxCount = subtypes.size() - auxCount;
++
++            // IMEs that have one or more non-auxiliary subtypes should be counted.
++            // If shouldIncludeAuxiliarySubtypes is true, IMEs that have two or more auxiliary
++            // subtypes should be counted as well.
++            if (nonAuxCount > 0 || (shouldIncludeAuxiliarySubtypes && auxCount > 1)) {
++                ++filteredImisCount;
++                continue;
++            }
++        }
++
++        return filteredImisCount > 1
++        // imm.getEnabledInputMethodSubtypeList(null, false) will return the current IME's enabled
++        // input method subtype (The current IME should be LatinIME.)
++                || imm.getEnabledInputMethodSubtypeList(null, false).size() > 1;
++    }
++
++    @Override
++    public void showUsabilityHint() {
++    }
++
++    @Override
++    public int getWrongPasswordStringId() {
++        return R.string.kg_wrong_password;
++    }
++
++    @Override
++    public void startAppearAnimation() {
++        setAlpha(0f);
++        setTranslationY(0f);
++        animate()
++                .alpha(1)
++                .withLayer()
++                .setDuration(300)
++                .setInterpolator(mLinearOutSlowInInterpolator);
++    }
++
++    @Override
++    public boolean startDisappearAnimation(Runnable finishRunnable) {
++        animate()
++                .alpha(0f)
++                .translationY(mDisappearYTranslation)
++                .setInterpolator(mFastOutLinearInInterpolator)
++                .setDuration(100)
++                .withEndAction(finishRunnable);
++        return true;
++    }
++
++    @Override
++    public void beforeTextChanged(CharSequence s, int start, int count, int after) {
++        if (mCallback != null) {
++            mCallback.userActivity();
++        }
++    }
++
++    @Override
++    public void onTextChanged(CharSequence s, int start, int before, int count) {
++        verifyPasswordAndUnlockWithTextWatcher();
++    }
++
++    @Override
++    public void afterTextChanged(Editable s) {
++        // Poor man's user edit detection, assuming empty text is programmatic and everything else
++        // is from the user.
++        if (!TextUtils.isEmpty(s)) {
++            onUserInput();
++        }
++    }
++
++    @Override
++    public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
++        // Check if this was the result of hitting the enter key
++        final boolean isSoftImeEvent = event == null
++                && (actionId == EditorInfo.IME_NULL
++                || actionId == EditorInfo.IME_ACTION_DONE
++                || actionId == EditorInfo.IME_ACTION_NEXT);
++        final boolean isKeyboardEnterKey = event != null
++                && KeyEvent.isConfirmKey(event.getKeyCode())
++                && event.getAction() == KeyEvent.ACTION_DOWN;
++        if (isSoftImeEvent || isKeyboardEnterKey) {
++            verifyPasswordAndUnlock();
++            return true;
++        }
++        return false;
++    }
++}
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPINView.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPINView.java	(revision 0)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPINView.java	(revision 7761)
+@@ -0,0 +1,203 @@
++/*
++ * Copyright (C) 2012 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.keyguard;
++
++import android.content.Context;
++import android.media.AudioSystem;
++import android.util.AttributeSet;
++import android.view.View;
++import android.view.ViewGroup;
++import android.view.animation.AnimationUtils;
++
++import com.android.settingslib.animation.AppearAnimationUtils;
++import com.android.settingslib.animation.DisappearAnimationUtils;
++
++/**
++ * Displays a PIN pad for unlocking.
++ */
++public class KeyguardPINView extends KeyguardPinBasedInputView {
++
++    private final AppearAnimationUtils mAppearAnimationUtils;
++    private final DisappearAnimationUtils mDisappearAnimationUtils;
++    private final DisappearAnimationUtils mDisappearAnimationUtilsLocked;
++    private ViewGroup mContainer;
++    private ViewGroup mRow0;
++    private ViewGroup mRow1;
++    private ViewGroup mRow2;
++    private ViewGroup mRow3;
++    private View mDivider;
++    private int mDisappearYTranslation;
++    private View[][] mViews;
++    private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
++
++    public KeyguardPINView(Context context) {
++        this(context, null);
++    }
++
++    public KeyguardPINView(Context context, AttributeSet attrs) {
++        super(context, attrs);
++        mAppearAnimationUtils = new AppearAnimationUtils(context);
++        mDisappearAnimationUtils = new DisappearAnimationUtils(context,
++                125, 0.6f /* translationScale */,
++                0.45f /* delayScale */, AnimationUtils.loadInterpolator(
++                        mContext, android.R.interpolator.fast_out_linear_in));
++        mDisappearAnimationUtilsLocked = new DisappearAnimationUtils(context,
++                (long) (125 * KeyguardPatternView.DISAPPEAR_MULTIPLIER_LOCKED),
++                0.6f /* translationScale */,
++                0.45f /* delayScale */, AnimationUtils.loadInterpolator(
++                        mContext, android.R.interpolator.fast_out_linear_in));
++        mDisappearYTranslation = getResources().getDimensionPixelSize(
++                R.dimen.disappear_y_translation);
++        mKeyguardUpdateMonitor = KeyguardUpdateMonitor.getInstance(context);
++    }
++
++    @Override
++    protected void resetState() {
++        super.resetState();
++
++        if (KeyguardUpdateMonitor.getInstance(mContext).getMaxBiometricUnlockAttemptsReached()) {
++            ///M: use different prompt message in face unlock or voice unlock
++            if (mLockPatternUtils.usingVoiceWeak()) {
++                mSecurityMessageDisplay.setMessage(R.string.voiceunlock_multiple_failures, true);
++            }
++        } else {
++            /// M: [ALPS00581890] Indicate the user to input pin.
++            mSecurityMessageDisplay.setMessage(R.string.kg_pin_instructions, true);
++        }
++    }
++
++    @Override
++    protected int getPasswordTextViewId() {
++        return R.id.pinEntry;
++    }
++
++    @Override
++    protected void onFinishInflate() {
++        super.onFinishInflate();
++
++        mContainer = (ViewGroup) findViewById(R.id.container);
++        mRow0 = (ViewGroup) findViewById(R.id.row0);
++        mRow1 = (ViewGroup) findViewById(R.id.row1);
++        mRow2 = (ViewGroup) findViewById(R.id.row2);
++        mRow3 = (ViewGroup) findViewById(R.id.row3);
++        mDivider = findViewById(R.id.divider);
++        mViews = new View[][]{
++                new View[]{
++                        mRow0, null, null
++                },
++                new View[]{
++                        findViewById(R.id.key1), findViewById(R.id.key2),
++                        findViewById(R.id.key3)
++                },
++                new View[]{
++                        findViewById(R.id.key4), findViewById(R.id.key5),
++                        findViewById(R.id.key6)
++                },
++                new View[]{
++                        findViewById(R.id.key7), findViewById(R.id.key8),
++                        findViewById(R.id.key9)
++                },
++                new View[]{
++                        null, findViewById(R.id.key0), findViewById(R.id.key_enter)
++                },
++                new View[]{
++                        null, mEcaView, null
++                }};
++        mPasswordEntry.setOnTextChangedListener(new PasswordTextView.onTextChangedListener() {
++            public void onTextChanged() {
++                verifyPasswordAndUnlockWithTextWatcher();
++            }
++        });
++    }
++
++    @Override
++    public void showUsabilityHint() {
++    }
++
++    @Override
++    public int getWrongPasswordStringId() {
++        return R.string.kg_wrong_pin;
++    }
++
++    @Override
++    public void startAppearAnimation() {
++        enableClipping(false);
++        setAlpha(1f);
++        setTranslationY(mAppearAnimationUtils.getStartTranslation());
++        AppearAnimationUtils.startTranslationYAnimation(this, 0 /* delay */, 500 /* duration */,
++                0, mAppearAnimationUtils.getInterpolator());
++        mAppearAnimationUtils.startAnimation2d(mViews,
++                new Runnable() {
++                    @Override
++                    public void run() {
++                        enableClipping(true);
++                    }
++                });
++    }
++
++    @Override
++    public boolean startDisappearAnimation(final Runnable finishRunnable) {
++        enableClipping(false);
++        setTranslationY(0);
++        AppearAnimationUtils.startTranslationYAnimation(this, 0 /* delay */, 280 /* duration */,
++                mDisappearYTranslation, mDisappearAnimationUtils.getInterpolator());
++        DisappearAnimationUtils disappearAnimationUtils = mKeyguardUpdateMonitor
++                .needsSlowUnlockTransition()
++                        ? mDisappearAnimationUtilsLocked
++                        : mDisappearAnimationUtils;
++        disappearAnimationUtils.startAnimation2d(mViews,
++                new Runnable() {
++                    @Override
++                    public void run() {
++                        enableClipping(true);
++                        if (finishRunnable != null) {
++                            finishRunnable.run();
++                        }
++                    }
++                });
++        return true;
++    }
++
++    private void enableClipping(boolean enable) {
++        mContainer.setClipToPadding(enable);
++        mContainer.setClipChildren(enable);
++        mRow1.setClipToPadding(enable);
++        mRow2.setClipToPadding(enable);
++        mRow3.setClipToPadding(enable);
++        setClipChildren(enable);
++    }
++
++    @Override
++    public boolean hasOverlappingRendering() {
++        return false;
++    }
++
++    /**
++     * M: add for voice unlock
++     *    display prompt message when voice unlock is disabled because of
++     *    media is playing in background.
++    **/
++    @Override
++    public void onResume(int reason) {
++        super.onResume(reason);
++        final boolean mediaPlaying = AudioSystem.isStreamActive(AudioSystem.STREAM_MUSIC, 0) ;
++//                || AudioSystem.isStreamActive(AudioSystem.STREAM_FM, 0);
++        if (mLockPatternUtils.usingVoiceWeak() && mediaPlaying) {
++            mSecurityMessageDisplay.setMessage(R.string.voice_unlock_media_playing, true);
++        }
++    }
++}
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/PasswordTextView.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/PasswordTextView.java	(revision 0)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/PasswordTextView.java	(revision 7761)
+@@ -0,0 +1,720 @@
++/*
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License
++ */
++
++package com.android.keyguard;
++
++import android.animation.Animator;
++import android.animation.AnimatorListenerAdapter;
++import android.animation.AnimatorSet;
++import android.animation.ValueAnimator;
++import android.content.Context;
++import android.content.res.TypedArray;
++import android.graphics.Canvas;
++import android.graphics.Paint;
++import android.graphics.Rect;
++import android.graphics.Typeface;
++import android.os.PowerManager;
++import android.os.SystemClock;
++import android.os.UserHandle;
++import android.provider.Settings;
++import android.text.InputType;
++import android.text.TextUtils;
++import android.util.AttributeSet;
++import android.util.Log;
++
++import android.view.Gravity;
++import android.view.View;
++import android.view.accessibility.AccessibilityEvent;
++import android.view.accessibility.AccessibilityManager;
++import android.view.accessibility.AccessibilityNodeInfo;
++import android.view.animation.AnimationUtils;
++import android.view.animation.Interpolator;
++
++import java.util.ArrayList;
++import java.util.Stack;
++
++/**
++ * A View similar to a textView which contains password text and can animate when the text is
++ * changed
++ */
++public class PasswordTextView extends View {
++
++    private static final float DOT_OVERSHOOT_FACTOR = 1.5f;
++    private static final long DOT_APPEAR_DURATION_OVERSHOOT = 320;
++    private static final long APPEAR_DURATION = 160;
++    private static final long DISAPPEAR_DURATION = 160;
++    private static final long RESET_DELAY_PER_ELEMENT = 40;
++    private static final long RESET_MAX_DELAY = 200;
++
++    /**
++     * The overlap between the text disappearing and the dot appearing animation
++     */
++    private static final long DOT_APPEAR_TEXT_DISAPPEAR_OVERLAP_DURATION = 130;
++
++    /**
++     * The duration the text needs to stay there at least before it can morph into a dot
++     */
++    private static final long TEXT_REST_DURATION_AFTER_APPEAR = 100;
++
++    /**
++     * The duration the text should be visible, starting with the appear animation
++     */
++    private static final long TEXT_VISIBILITY_DURATION = 1300;
++
++    /**
++     * The position in time from [0,1] where the overshoot should be finished and the settle back
++     * animation of the dot should start
++     */
++    private static final float OVERSHOOT_TIME_POSITION = 0.5f;
++
++    /**
++     * The raw text size, will be multiplied by the scaled density when drawn
++     */
++    private final int mTextHeightRaw;
++    private final int mGravity;
++    private ArrayList<CharState> mTextChars = new ArrayList<>();
++    private String mText = "";
++    private Stack<CharState> mCharPool = new Stack<>();
++    private int mDotSize;
++    private PowerManager mPM;
++    private int mCharPadding;
++    private final Paint mDrawPaint = new Paint();
++    private Interpolator mAppearInterpolator;
++    private Interpolator mDisappearInterpolator;
++    private Interpolator mFastOutSlowInInterpolator;
++    private boolean mShowPassword;
++    private UserActivityListener mUserActivityListener;
++    private onTextChangedListener mTextChangedListener;
++
++    public interface UserActivityListener {
++        void onUserActivity();
++    }
++
++    public PasswordTextView(Context context) {
++        this(context, null);
++    }
++
++    public PasswordTextView(Context context, AttributeSet attrs) {
++        this(context, attrs, 0);
++    }
++
++    public PasswordTextView(Context context, AttributeSet attrs, int defStyleAttr) {
++        this(context, attrs, defStyleAttr, 0);
++    }
++
++    public PasswordTextView(Context context, AttributeSet attrs, int defStyleAttr,
++            int defStyleRes) {
++        super(context, attrs, defStyleAttr, defStyleRes);
++        setFocusableInTouchMode(true);
++        setFocusable(true);
++        TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.PasswordTextView);
++        try {
++            mTextHeightRaw = a.getInt(R.styleable.PasswordTextView_scaledTextSize, 0);
++            mGravity = a.getInt(R.styleable.PasswordTextView_android_gravity, Gravity.CENTER);
++            mDotSize = a.getDimensionPixelSize(R.styleable.PasswordTextView_dotSize,
++                    getContext().getResources().getDimensionPixelSize(R.dimen.password_dot_size));
++            mCharPadding = a.getDimensionPixelSize(R.styleable.PasswordTextView_charPadding,
++                    getContext().getResources().getDimensionPixelSize(
++                            R.dimen.password_char_padding));
++        } finally {
++            a.recycle();
++        }
++        mDrawPaint.setFlags(Paint.SUBPIXEL_TEXT_FLAG | Paint.ANTI_ALIAS_FLAG);
++        mDrawPaint.setTextAlign(Paint.Align.CENTER);
++        mDrawPaint.setColor(0xffffffff);
++        mDrawPaint.setTypeface(Typeface.create("sans-serif-light", 0));
++        mShowPassword = Settings.System.getInt(mContext.getContentResolver(),
++                Settings.System.TEXT_SHOW_PASSWORD, 1) == 1;
++        mAppearInterpolator = AnimationUtils.loadInterpolator(mContext,
++                android.R.interpolator.linear_out_slow_in);
++        mDisappearInterpolator = AnimationUtils.loadInterpolator(mContext,
++                android.R.interpolator.fast_out_linear_in);
++        mFastOutSlowInInterpolator = AnimationUtils.loadInterpolator(mContext,
++                android.R.interpolator.fast_out_slow_in);
++        mPM = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
++    }
++
++    @Override
++    protected void onDraw(Canvas canvas) {
++        float totalDrawingWidth = getDrawingWidth();
++        float currentDrawPosition;
++        if ((mGravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.LEFT) {
++            if ((mGravity & Gravity.RELATIVE_LAYOUT_DIRECTION) != 0
++                    && getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
++                currentDrawPosition = getWidth() - getPaddingRight() - totalDrawingWidth;
++            } else {
++                currentDrawPosition = getPaddingLeft();
++            }
++        } else {
++            currentDrawPosition = getWidth() / 2 - totalDrawingWidth / 2;
++        }
++        int length = mTextChars.size();
++        Rect bounds = getCharBounds();
++        int charHeight = (bounds.bottom - bounds.top);
++        float yPosition =
++                (getHeight() - getPaddingBottom() - getPaddingTop()) / 2 + getPaddingTop();
++        canvas.clipRect(getPaddingLeft(), getPaddingTop(),
++                getWidth() - getPaddingRight(), getHeight() - getPaddingBottom());
++        float charLength = bounds.right - bounds.left;
++        for (int i = 0; i < length; i++) {
++            CharState charState = mTextChars.get(i);
++            float charWidth = charState.draw(canvas, currentDrawPosition, charHeight, yPosition,
++                    charLength);
++            currentDrawPosition += charWidth;
++        }
++    }
++
++    @Override
++    public boolean hasOverlappingRendering() {
++        return false;
++    }
++
++    private Rect getCharBounds() {
++        float textHeight = mTextHeightRaw * getResources().getDisplayMetrics().scaledDensity;
++        mDrawPaint.setTextSize(textHeight);
++        Rect bounds = new Rect();
++        mDrawPaint.getTextBounds("0", 0, 1, bounds);
++        return bounds;
++    }
++
++    private float getDrawingWidth() {
++        int width = 0;
++        int length = mTextChars.size();
++        Rect bounds = getCharBounds();
++        int charLength = bounds.right - bounds.left;
++        for (int i = 0; i < length; i++) {
++            CharState charState = mTextChars.get(i);
++            if (i != 0) {
++                width += mCharPadding * charState.currentWidthFactor;
++            }
++            width += charLength * charState.currentWidthFactor;
++        }
++        return width;
++    }
++
++
++    public void append(char c) {
++        int visibleChars = mTextChars.size();
++        String textbefore = mText;
++        mText = mText + c;
++        if (mTextChangedListener != null) {
++            mTextChangedListener.onTextChanged();
++        }
++        int newLength = mText.length();
++        CharState charState;
++        if (newLength > visibleChars) {
++            charState = obtainCharState(c);
++            mTextChars.add(charState);
++        } else {
++            charState = mTextChars.get(newLength - 1);
++            charState.whichChar = c;
++        }
++        charState.startAppearAnimation();
++
++        // ensure that the previous element is being swapped
++        if (newLength > 1) {
++            CharState previousState = mTextChars.get(newLength - 2);
++            if (previousState.isDotSwapPending) {
++                previousState.swapToDotWhenAppearFinished();
++            }
++        }
++        userActivity();
++        sendAccessibilityEventTypeViewTextChanged(textbefore, textbefore.length(), 0, 1);
++    }
++
++    public void setUserActivityListener(UserActivityListener userActivitiListener) {
++        mUserActivityListener = userActivitiListener;
++    }
++
++    private void userActivity() {
++        mPM.userActivity(SystemClock.uptimeMillis(), false);
++        if (mUserActivityListener != null) {
++            mUserActivityListener.onUserActivity();
++        }
++    }
++
++    public void deleteLastChar() {
++        int length = mText.length();
++        String textbefore = mText;
++        if (length > 0) {
++            mText = mText.substring(0, length - 1);
++            CharState charState = mTextChars.get(length - 1);
++            charState.startRemoveAnimation(0, 0);
++        }
++        userActivity();
++        sendAccessibilityEventTypeViewTextChanged(textbefore, textbefore.length() - 1, 1, 0);
++    }
++
++    public String getText() {
++        return mText;
++    }
++
++    private CharState obtainCharState(char c) {
++        CharState charState;
++        if(mCharPool.isEmpty()) {
++            charState = new CharState();
++        } else {
++            charState = mCharPool.pop();
++            charState.reset();
++        }
++        charState.whichChar = c;
++        return charState;
++    }
++
++    public void reset(boolean animated, boolean announce) {
++        Log.d("PasswordTextView", "reset() is called, set PwEntry true.") ;
++
++        String textbefore = mText;
++        mText = "";
++        int length = mTextChars.size();
++        int middleIndex = (length - 1) / 2;
++        long delayPerElement = RESET_DELAY_PER_ELEMENT;
++        for (int i = 0; i < length; i++) {
++            CharState charState = mTextChars.get(i);
++            if (animated) {
++                int delayIndex;
++                if (i <= middleIndex) {
++                    delayIndex = i * 2;
++                } else {
++                    int distToMiddle = i - middleIndex;
++                    delayIndex = (length - 1) - (distToMiddle - 1) * 2;
++                }
++                long startDelay = delayIndex * delayPerElement;
++                startDelay = Math.min(startDelay, RESET_MAX_DELAY);
++                long maxDelay = delayPerElement * (length - 1);
++                maxDelay = Math.min(maxDelay, RESET_MAX_DELAY) + DISAPPEAR_DURATION;
++                charState.startRemoveAnimation(startDelay, maxDelay);
++                charState.removeDotSwapCallbacks();
++            } else {
++                mCharPool.push(charState);
++            }
++        }
++        if (!animated) {
++            mTextChars.clear();
++        }
++        if (announce) {
++            sendAccessibilityEventTypeViewTextChanged(textbefore, 0, textbefore.length(), 0);
++        }
++    }
++
++    void sendAccessibilityEventTypeViewTextChanged(String beforeText, int fromIndex,
++                                                   int removedCount, int addedCount) {
++        if (AccessibilityManager.getInstance(mContext).isEnabled() &&
++                (isFocused() || isSelected() && isShown())) {
++            if (!shouldSpeakPasswordsForAccessibility()) {
++                beforeText = null;
++            }
++            AccessibilityEvent event =
++                    AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED);
++            event.setFromIndex(fromIndex);
++            event.setRemovedCount(removedCount);
++            event.setAddedCount(addedCount);
++            event.setBeforeText(beforeText);
++            event.setPassword(true);
++            sendAccessibilityEventUnchecked(event);
++        }
++    }
++
++    @Override
++    public void onInitializeAccessibilityEvent(AccessibilityEvent event) {
++        super.onInitializeAccessibilityEvent(event);
++
++        event.setClassName(PasswordTextView.class.getName());
++        event.setPassword(true);
++    }
++
++    @Override
++    public void onPopulateAccessibilityEvent(AccessibilityEvent event) {
++        super.onPopulateAccessibilityEvent(event);
++
++        if (shouldSpeakPasswordsForAccessibility()) {
++            final CharSequence text = mText;
++            if (!TextUtils.isEmpty(text)) {
++                event.getText().add(text);
++            }
++        }
++    }
++
++    @Override
++    public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
++        super.onInitializeAccessibilityNodeInfo(info);
++
++        info.setClassName(PasswordTextView.class.getName());
++        info.setPassword(true);
++
++        if (shouldSpeakPasswordsForAccessibility()) {
++            info.setText(mText);
++        }
++
++        info.setEditable(true);
++
++        info.setInputType(InputType.TYPE_NUMBER_VARIATION_PASSWORD);
++    }
++
++    /**
++     * @return true if the user has explicitly allowed accessibility services
++     * to speak passwords.
++     */
++    private boolean shouldSpeakPasswordsForAccessibility() {
++        return (Settings.Secure.getIntForUser(mContext.getContentResolver(),
++                Settings.Secure.ACCESSIBILITY_SPEAK_PASSWORD, 0,
++                UserHandle.USER_CURRENT_OR_SELF) == 1);
++    }
++
++    private class CharState {
++        char whichChar;
++        ValueAnimator textAnimator;
++        boolean textAnimationIsGrowing;
++        Animator dotAnimator;
++        boolean dotAnimationIsGrowing;
++        ValueAnimator widthAnimator;
++        boolean widthAnimationIsGrowing;
++        float currentTextSizeFactor;
++        float currentDotSizeFactor;
++        float currentWidthFactor;
++        boolean isDotSwapPending;
++        float currentTextTranslationY = 1.0f;
++        ValueAnimator textTranslateAnimator;
++
++        Animator.AnimatorListener removeEndListener = new AnimatorListenerAdapter() {
++            private boolean mCancelled;
++            @Override
++            public void onAnimationCancel(Animator animation) {
++                mCancelled = true;
++            }
++
++            @Override
++            public void onAnimationEnd(Animator animation) {
++                if (!mCancelled) {
++                    mTextChars.remove(CharState.this);
++                    mCharPool.push(CharState.this);
++                    reset();
++                    cancelAnimator(textTranslateAnimator);
++                    textTranslateAnimator = null;
++                }
++            }
++
++            @Override
++            public void onAnimationStart(Animator animation) {
++                mCancelled = false;
++            }
++        };
++
++        Animator.AnimatorListener dotFinishListener = new AnimatorListenerAdapter() {
++            @Override
++            public void onAnimationEnd(Animator animation) {
++                dotAnimator = null;
++            }
++        };
++
++        Animator.AnimatorListener textFinishListener = new AnimatorListenerAdapter() {
++            @Override
++            public void onAnimationEnd(Animator animation) {
++                textAnimator = null;
++            }
++        };
++
++        Animator.AnimatorListener textTranslateFinishListener = new AnimatorListenerAdapter() {
++            @Override
++            public void onAnimationEnd(Animator animation) {
++                textTranslateAnimator = null;
++            }
++        };
++
++        Animator.AnimatorListener widthFinishListener = new AnimatorListenerAdapter() {
++            @Override
++            public void onAnimationEnd(Animator animation) {
++                widthAnimator = null;
++            }
++        };
++
++        private ValueAnimator.AnimatorUpdateListener dotSizeUpdater
++                = new ValueAnimator.AnimatorUpdateListener() {
++            @Override
++            public void onAnimationUpdate(ValueAnimator animation) {
++                currentDotSizeFactor = (float) animation.getAnimatedValue();
++                invalidate();
++            }
++        };
++
++        private ValueAnimator.AnimatorUpdateListener textSizeUpdater
++                = new ValueAnimator.AnimatorUpdateListener() {
++            @Override
++            public void onAnimationUpdate(ValueAnimator animation) {
++                currentTextSizeFactor = (float) animation.getAnimatedValue();
++                invalidate();
++            }
++        };
++
++        private ValueAnimator.AnimatorUpdateListener textTranslationUpdater
++                = new ValueAnimator.AnimatorUpdateListener() {
++            @Override
++            public void onAnimationUpdate(ValueAnimator animation) {
++                currentTextTranslationY = (float) animation.getAnimatedValue();
++                invalidate();
++            }
++        };
++
++        private ValueAnimator.AnimatorUpdateListener widthUpdater
++                = new ValueAnimator.AnimatorUpdateListener() {
++            @Override
++            public void onAnimationUpdate(ValueAnimator animation) {
++                currentWidthFactor = (float) animation.getAnimatedValue();
++                invalidate();
++            }
++        };
++
++        private Runnable dotSwapperRunnable = new Runnable() {
++            @Override
++            public void run() {
++                performSwap();
++                isDotSwapPending = false;
++            }
++        };
++
++        void reset() {
++            whichChar = 0;
++            currentTextSizeFactor = 0.0f;
++            currentDotSizeFactor = 0.0f;
++            currentWidthFactor = 0.0f;
++            cancelAnimator(textAnimator);
++            textAnimator = null;
++            cancelAnimator(dotAnimator);
++            dotAnimator = null;
++            cancelAnimator(widthAnimator);
++            widthAnimator = null;
++            currentTextTranslationY = 1.0f;
++            removeDotSwapCallbacks();
++        }
++
++        void startRemoveAnimation(long startDelay, long widthDelay) {
++            boolean dotNeedsAnimation = (currentDotSizeFactor > 0.0f && dotAnimator == null)
++                    || (dotAnimator != null && dotAnimationIsGrowing);
++            boolean textNeedsAnimation = (currentTextSizeFactor > 0.0f && textAnimator == null)
++                    || (textAnimator != null && textAnimationIsGrowing);
++            boolean widthNeedsAnimation = (currentWidthFactor > 0.0f && widthAnimator == null)
++                    || (widthAnimator != null && widthAnimationIsGrowing);
++            if (dotNeedsAnimation) {
++                startDotDisappearAnimation(startDelay);
++            }
++            if (textNeedsAnimation) {
++                startTextDisappearAnimation(startDelay);
++            }
++            if (widthNeedsAnimation) {
++                startWidthDisappearAnimation(widthDelay);
++            }
++        }
++
++        void startAppearAnimation() {
++            boolean dotNeedsAnimation = !mShowPassword
++                    && (dotAnimator == null || !dotAnimationIsGrowing);
++            boolean textNeedsAnimation = mShowPassword
++                    && (textAnimator == null || !textAnimationIsGrowing);
++            boolean widthNeedsAnimation = (widthAnimator == null || !widthAnimationIsGrowing);
++            if (dotNeedsAnimation) {
++                startDotAppearAnimation(0);
++            }
++            if (textNeedsAnimation) {
++                startTextAppearAnimation();
++            }
++            if (widthNeedsAnimation) {
++                startWidthAppearAnimation();
++            }
++            if (mShowPassword) {
++                postDotSwap(TEXT_VISIBILITY_DURATION);
++            }
++        }
++
++        /**
++         * Posts a runnable which ensures that the text will be replaced by a dot after {@link
++         * com.android.keyguard.PasswordTextView#TEXT_VISIBILITY_DURATION}.
++         */
++        private void postDotSwap(long delay) {
++            removeDotSwapCallbacks();
++            postDelayed(dotSwapperRunnable, delay);
++            isDotSwapPending = true;
++        }
++
++        private void removeDotSwapCallbacks() {
++            removeCallbacks(dotSwapperRunnable);
++            isDotSwapPending = false;
++        }
++
++        void swapToDotWhenAppearFinished() {
++            removeDotSwapCallbacks();
++            if (textAnimator != null) {
++                long remainingDuration = textAnimator.getDuration()
++                        - textAnimator.getCurrentPlayTime();
++                postDotSwap(remainingDuration + TEXT_REST_DURATION_AFTER_APPEAR);
++            } else {
++                performSwap();
++            }
++        }
++
++        private void performSwap() {
++            startTextDisappearAnimation(0);
++            startDotAppearAnimation(DISAPPEAR_DURATION
++                    - DOT_APPEAR_TEXT_DISAPPEAR_OVERLAP_DURATION);
++        }
++
++        private void startWidthDisappearAnimation(long widthDelay) {
++            cancelAnimator(widthAnimator);
++            widthAnimator = ValueAnimator.ofFloat(currentWidthFactor, 0.0f);
++            widthAnimator.addUpdateListener(widthUpdater);
++            widthAnimator.addListener(widthFinishListener);
++            widthAnimator.addListener(removeEndListener);
++            widthAnimator.setDuration((long) (DISAPPEAR_DURATION * currentWidthFactor));
++            widthAnimator.setStartDelay(widthDelay);
++            widthAnimator.start();
++            widthAnimationIsGrowing = false;
++        }
++
++        private void startTextDisappearAnimation(long startDelay) {
++            cancelAnimator(textAnimator);
++            textAnimator = ValueAnimator.ofFloat(currentTextSizeFactor, 0.0f);
++            textAnimator.addUpdateListener(textSizeUpdater);
++            textAnimator.addListener(textFinishListener);
++            textAnimator.setInterpolator(mDisappearInterpolator);
++            textAnimator.setDuration((long) (DISAPPEAR_DURATION * currentTextSizeFactor));
++            textAnimator.setStartDelay(startDelay);
++            textAnimator.start();
++            textAnimationIsGrowing = false;
++        }
++
++        private void startDotDisappearAnimation(long startDelay) {
++            cancelAnimator(dotAnimator);
++            ValueAnimator animator = ValueAnimator.ofFloat(currentDotSizeFactor, 0.0f);
++            animator.addUpdateListener(dotSizeUpdater);
++            animator.addListener(dotFinishListener);
++            animator.setInterpolator(mDisappearInterpolator);
++            long duration = (long) (DISAPPEAR_DURATION * Math.min(currentDotSizeFactor, 1.0f));
++            animator.setDuration(duration);
++            animator.setStartDelay(startDelay);
++            animator.start();
++            dotAnimator = animator;
++            dotAnimationIsGrowing = false;
++        }
++
++        private void startWidthAppearAnimation() {
++            cancelAnimator(widthAnimator);
++            widthAnimator = ValueAnimator.ofFloat(currentWidthFactor, 1.0f);
++            widthAnimator.addUpdateListener(widthUpdater);
++            widthAnimator.addListener(widthFinishListener);
++            widthAnimator.setDuration((long) (APPEAR_DURATION * (1f - currentWidthFactor)));
++            widthAnimator.start();
++            widthAnimationIsGrowing = true;
++        }
++
++        private void startTextAppearAnimation() {
++            cancelAnimator(textAnimator);
++            textAnimator = ValueAnimator.ofFloat(currentTextSizeFactor, 1.0f);
++            textAnimator.addUpdateListener(textSizeUpdater);
++            textAnimator.addListener(textFinishListener);
++            textAnimator.setInterpolator(mAppearInterpolator);
++            textAnimator.setDuration((long) (APPEAR_DURATION * (1f - currentTextSizeFactor)));
++            textAnimator.start();
++            textAnimationIsGrowing = true;
++
++            // handle translation
++            if (textTranslateAnimator == null) {
++                textTranslateAnimator = ValueAnimator.ofFloat(1.0f, 0.0f);
++                textTranslateAnimator.addUpdateListener(textTranslationUpdater);
++                textTranslateAnimator.addListener(textTranslateFinishListener);
++                textTranslateAnimator.setInterpolator(mAppearInterpolator);
++                textTranslateAnimator.setDuration(APPEAR_DURATION);
++                textTranslateAnimator.start();
++            }
++        }
++
++        private void startDotAppearAnimation(long delay) {
++            cancelAnimator(dotAnimator);
++            if (!mShowPassword) {
++                // We perform an overshoot animation
++                ValueAnimator overShootAnimator = ValueAnimator.ofFloat(currentDotSizeFactor,
++                        DOT_OVERSHOOT_FACTOR);
++                overShootAnimator.addUpdateListener(dotSizeUpdater);
++                overShootAnimator.setInterpolator(mAppearInterpolator);
++                long overShootDuration = (long) (DOT_APPEAR_DURATION_OVERSHOOT
++                        * OVERSHOOT_TIME_POSITION);
++                overShootAnimator.setDuration(overShootDuration);
++                ValueAnimator settleBackAnimator = ValueAnimator.ofFloat(DOT_OVERSHOOT_FACTOR,
++                        1.0f);
++                settleBackAnimator.addUpdateListener(dotSizeUpdater);
++                settleBackAnimator.setDuration(DOT_APPEAR_DURATION_OVERSHOOT - overShootDuration);
++                settleBackAnimator.addListener(dotFinishListener);
++                AnimatorSet animatorSet = new AnimatorSet();
++                animatorSet.playSequentially(overShootAnimator, settleBackAnimator);
++                animatorSet.setStartDelay(delay);
++                animatorSet.start();
++                dotAnimator = animatorSet;
++            } else {
++                ValueAnimator growAnimator = ValueAnimator.ofFloat(currentDotSizeFactor, 1.0f);
++                growAnimator.addUpdateListener(dotSizeUpdater);
++                growAnimator.setDuration((long) (APPEAR_DURATION * (1.0f - currentDotSizeFactor)));
++                growAnimator.addListener(dotFinishListener);
++                growAnimator.setStartDelay(delay);
++                growAnimator.start();
++                dotAnimator = growAnimator;
++            }
++            dotAnimationIsGrowing = true;
++        }
++
++        private void cancelAnimator(Animator animator) {
++            if (animator != null) {
++                animator.cancel();
++            }
++        }
++
++        /**
++         * Draw this char to the canvas.
++         *
++         * @return The width this character contributes, including padding.
++         */
++        public float draw(Canvas canvas, float currentDrawPosition, int charHeight, float yPosition,
++                float charLength) {
++            boolean textVisible = currentTextSizeFactor > 0;
++            boolean dotVisible = currentDotSizeFactor > 0;
++            float charWidth = charLength * currentWidthFactor;
++            if (textVisible) {
++                float currYPosition = yPosition + charHeight / 2.0f * currentTextSizeFactor
++                        + charHeight * currentTextTranslationY * 0.8f;
++                canvas.save();
++                float centerX = currentDrawPosition + charWidth / 2;
++                canvas.translate(centerX, currYPosition);
++                canvas.scale(currentTextSizeFactor, currentTextSizeFactor);
++                canvas.drawText(Character.toString(whichChar), 0, 0, mDrawPaint);
++                canvas.restore();
++            }
++            if (dotVisible) {
++                canvas.save();
++                float centerX = currentDrawPosition + charWidth / 2;
++                canvas.translate(centerX, yPosition);
++                canvas.drawCircle(0, 0, mDotSize / 2 * currentDotSizeFactor, mDrawPaint);
++                canvas.restore();
++            }
++            return charWidth + mCharPadding * currentWidthFactor;
++        }
++    }
++
++    public interface onTextChangedListener {
++        void onTextChanged();
++    }
++
++    public void setOnTextChangedListener(onTextChangedListener listener) {
++        mTextChangedListener = listener;
++    }
++
++}
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardAbsKeyInputView.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardAbsKeyInputView.java	(revision 0)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardAbsKeyInputView.java	(revision 7761)
+@@ -0,0 +1,323 @@
++/*
++ * Copyright (C) 2012 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.keyguard;
++
++import android.content.Context;
++import android.os.AsyncTask;
++import android.os.CountDownTimer;
++import android.os.SystemClock;
++import android.util.AttributeSet;
++import android.view.HapticFeedbackConstants;
++import android.view.KeyEvent;
++import android.view.View;
++import android.widget.LinearLayout;
++
++import com.android.internal.widget.LockPatternChecker;
++import com.android.internal.widget.LockPatternUtils;
++
++/**
++ * Base class for PIN and password unlock screens.
++ */
++public abstract class KeyguardAbsKeyInputView extends LinearLayout
++        implements KeyguardSecurityView, EmergencyButton.EmergencyButtonCallback {
++    protected KeyguardSecurityCallback mCallback;
++    protected LockPatternUtils mLockPatternUtils;
++    protected AsyncTask<?, ?, ?> mPendingLockCheck;
++    protected SecurityMessageDisplay mSecurityMessageDisplay;
++    protected View mEcaView;
++    protected boolean mEnableHaptics;
++    private boolean mDismissing;
++
++    // To avoid accidental lockout due to events while the device in in the pocket, ignore
++    // any passwords with length less than or equal to this length.
++    protected static final int MINIMUM_PASSWORD_LENGTH_BEFORE_REPORT = 3;
++
++    public KeyguardAbsKeyInputView(Context context) {
++        this(context, null);
++    }
++
++    public KeyguardAbsKeyInputView(Context context, AttributeSet attrs) {
++        super(context, attrs);
++    }
++
++    @Override
++    public void setKeyguardCallback(KeyguardSecurityCallback callback) {
++        mCallback = callback;
++    }
++
++    @Override
++    public void setLockPatternUtils(LockPatternUtils utils) {
++        mLockPatternUtils = utils;
++        mEnableHaptics = mLockPatternUtils.isTactileFeedbackEnabled();
++    }
++
++    @Override
++    public void reset() {
++        // start fresh
++        mDismissing = false;
++        resetPasswordText(false /* animate */, false /* announce */);
++        // if the user is currently locked out, enforce it.
++        long deadline = mLockPatternUtils.getLockoutAttemptDeadline(
++                KeyguardUpdateMonitor.getCurrentUser());
++        if (shouldLockout(deadline)) {
++            handleAttemptLockout(deadline);
++        } else {
++            resetState();
++        }
++    }
++
++    // Allow subclasses to override this behavior
++    protected boolean shouldLockout(long deadline) {
++        return deadline != 0;
++    }
++
++    protected abstract int getPasswordTextViewId();
++    protected abstract void resetState();
++
++    @Override
++    protected void onFinishInflate() {
++        mLockPatternUtils = new LockPatternUtils(mContext);
++        mSecurityMessageDisplay = KeyguardMessageArea.findSecurityMessageDisplay(this);
++        mEcaView = findViewById(R.id.keyguard_selector_fade_container);
++
++        EmergencyButton button = (EmergencyButton) findViewById(R.id.emergency_call_button);
++        if (button != null) {
++            button.setCallback(this);
++        }
++    }
++
++    @Override
++    public void onEmergencyButtonClickedWhenInCall() {
++        mCallback.reset();
++    }
++
++    /*
++     * Override this if you have a different string for "wrong password"
++     *
++     * Note that PIN/PUK have their own implementation of verifyPasswordAndUnlock and so don't need this
++     */
++    protected int getWrongPasswordStringId() {
++        return R.string.kg_wrong_password;
++    }
++
++    protected void verifyPasswordAndUnlock() {
++        if (mDismissing) return; // already verified but haven't been dismissed; don't do it again.
++
++        final String entry = getPasswordText();
++        setPasswordEntryInputEnabled(false);
++        if (mPendingLockCheck != null) {
++            mPendingLockCheck.cancel(false);
++        }
++
++        final int userId = KeyguardUpdateMonitor.getCurrentUser();
++        if (entry.length() <= MINIMUM_PASSWORD_LENGTH_BEFORE_REPORT) {
++            // to avoid accidental lockout, only count attempts that are long enough to be a
++            // real password. This may require some tweaking.
++            setPasswordEntryInputEnabled(true);
++            onPasswordChecked(userId, false /* matched */, 0, false /* not valid - too short */, true);
++            return;
++        }
++
++        mPendingLockCheck = LockPatternChecker.checkPassword(
++                mLockPatternUtils,
++                entry,
++                userId,
++                new LockPatternChecker.OnCheckCallback() {
++
++                    @Override
++                    public void onEarlyMatched() {
++                        onPasswordChecked(userId, true /* matched */, 0 /* timeoutMs */,
++                                true /* isValidPassword */, true);
++                    }
++
++                    @Override
++                    public void onChecked(boolean matched, int timeoutMs) {
++                        setPasswordEntryInputEnabled(true);
++                        mPendingLockCheck = null;
++                        if (!matched) {
++                            onPasswordChecked(userId, false /* matched */, timeoutMs,
++                                    true /* isValidPassword */, true);
++                        }
++                    }
++                });
++    }
++
++    protected void verifyPasswordAndUnlockWithTextWatcher() {
++        if (mDismissing) return; // already verified but haven't been dismissed; don't do it again.
++
++        final String entry = getPasswordText();
++        if (mPendingLockCheck != null) {
++            mPendingLockCheck.cancel(false);
++        }
++
++        final int userId = KeyguardUpdateMonitor.getCurrentUser();
++        if (entry.length() <= MINIMUM_PASSWORD_LENGTH_BEFORE_REPORT) {
++            // to avoid accidental lockout, only count attempts that are long enough to be a
++            // real password. This may require some tweaking.
++            setPasswordEntryInputEnabled(true);
++            onPasswordChecked(userId, false /* matched */, 0, false /* not valid - too short */, false);
++            return;
++        }
++
++        mPendingLockCheck = LockPatternChecker.checkPassword(
++                mLockPatternUtils,
++                entry,
++                userId,
++                new LockPatternChecker.OnCheckCallback() {
++
++                    @Override
++                    public void onEarlyMatched() {
++                        onPasswordChecked(userId, true /* matched */, 0 /* timeoutMs */,
++                                true /* isValidPassword */, false);
++                    }
++
++                    @Override
++                    public void onChecked(boolean matched, int timeoutMs) {
++                        setPasswordEntryInputEnabled(true);
++                        mPendingLockCheck = null;
++                        if (!matched) {
++                            onPasswordChecked(userId, false /* matched */, timeoutMs,
++                                    true /* isValidPassword */, false);
++                        }
++                    }
++                });
++    }
++
++    private void onPasswordChecked(int userId, boolean matched, int timeoutMs,
++            boolean isValidPassword, boolean isFromTextWatcher) {
++        boolean dismissKeyguard = KeyguardUpdateMonitor.getCurrentUser() == userId;
++        if (matched) {
++            mCallback.reportUnlockAttempt(userId, true, 0);
++            if (dismissKeyguard) {
++                mDismissing = true;
++                mCallback.dismiss(true);
++            }
++        } else {
++            if (isValidPassword && isFromTextWatcher) {
++                mCallback.reportUnlockAttempt(userId, false, timeoutMs);
++                if (timeoutMs > 0) {
++                    long deadline = mLockPatternUtils.setLockoutAttemptDeadline(
++                            userId, timeoutMs);
++                    handleAttemptLockout(deadline);
++                }
++            }
++            if (timeoutMs == 0 && isFromTextWatcher) {
++                mSecurityMessageDisplay.setMessage(getWrongPasswordStringId(), true);
++            }
++        }
++        if (isFromTextWatcher) {
++            resetPasswordText(true /* animate */, !matched /* announce deletion if no match */);
++        }
++    }
++
++    protected abstract void resetPasswordText(boolean animate, boolean announce);
++    protected abstract String getPasswordText();
++    protected abstract void setPasswordEntryEnabled(boolean enabled);
++    protected abstract void setPasswordEntryInputEnabled(boolean enabled);
++
++    // Prevent user from using the PIN/Password entry until scheduled deadline.
++    protected void handleAttemptLockout(long elapsedRealtimeDeadline) {
++        setPasswordEntryEnabled(false);
++        long elapsedRealtime = SystemClock.elapsedRealtime();
++        new CountDownTimer(elapsedRealtimeDeadline - elapsedRealtime, 1000) {
++
++            @Override
++            public void onTick(long millisUntilFinished) {
++                int secondsRemaining = (int) (millisUntilFinished / 1000);
++                mSecurityMessageDisplay.setMessage(
++//                        R.string.kg_too_many_failed_attempts_countdown, true, secondsRemaining);
++			              getContext().getResources().getQuantityString(R.plurals.keyguard_too_many_failed_attempts_countdown, secondsRemaining, secondsRemaining),true);
++            }
++
++            @Override
++            public void onFinish() {
++                mSecurityMessageDisplay.setMessage("", false);
++                resetState();
++            }
++        }.start();
++    }
++
++    protected void onUserInput() {
++        if (mCallback != null) {
++            mCallback.userActivity();
++        }
++        mSecurityMessageDisplay.setMessage("", false);
++    }
++
++    @Override
++    public boolean onKeyDown(int keyCode, KeyEvent event) {
++        onUserInput();
++        return false;
++    }
++
++    @Override
++    public boolean needsInput() {
++        return false;
++    }
++
++    @Override
++    public void onPause() {
++        if (mPendingLockCheck != null) {
++            mPendingLockCheck.cancel(false);
++            mPendingLockCheck = null;
++        }
++    }
++
++    @Override
++    public void onResume(int reason) {
++        reset();
++    }
++
++    @Override
++    public KeyguardSecurityCallback getCallback() {
++        return mCallback;
++    }
++
++    @Override
++    public void showPromptReason(int reason) {
++        if (reason != PROMPT_REASON_NONE) {
++            int promtReasonStringRes = getPromtReasonStringRes(reason);
++            if (promtReasonStringRes != 0) {
++                mSecurityMessageDisplay.setMessage(promtReasonStringRes,
++                        true /* important */);
++            }
++        }
++    }
++
++    @Override
++    public void showMessage(String message, int color) {
++        mSecurityMessageDisplay.setNextMessageColor(color);
++        mSecurityMessageDisplay.setMessage(message, true /* important */);
++    }
++
++    protected abstract int getPromtReasonStringRes(int reason);
++
++    // Cause a VIRTUAL_KEY vibration
++    public void doHapticKeyClick() {
++        if (mEnableHaptics) {
++            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY,
++                    HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
++                    | HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
++        }
++    }
++
++    @Override
++    public boolean startDisappearAnimation(Runnable finishRunnable) {
++        return false;
++    }
++}
++

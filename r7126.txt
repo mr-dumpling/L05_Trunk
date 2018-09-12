@@ -1,0 +1,99 @@
+Index: packages/apps/ContactsCommon/src/com/mediatek/contacts/model/AccountTypeManagerEx.java
+===================================================================
+--- packages/apps/ContactsCommon/src/com/mediatek/contacts/model/AccountTypeManagerEx.java	(revision 7125)
++++ packages/apps/ContactsCommon/src/com/mediatek/contacts/model/AccountTypeManagerEx.java	(revision 7126)
+@@ -52,6 +52,7 @@
+ import com.mediatek.contacts.util.Log;
+ 
+ import java.util.List;
++import com.android.contacts.common.R;
+ 
+ public class AccountTypeManagerEx {
+     private static final String TAG = "AccountTypeManagerEx";
+@@ -106,7 +107,7 @@
+         context.registerReceiver(broadcastReceiver, simFilter);
+     }
+ 
+-    public static void loadSimAndLocalAccounts(final List<AccountWithDataSet> allAccounts,
++    public static void loadSimAndLocalAccounts(Context context, final List<AccountWithDataSet> allAccounts,
+             final List<AccountWithDataSet> contactWritableAccounts,
+             final List<AccountWithDataSet> groupWritableAccounts) {
+         /// M: Not support SIM Contacts in guest mode.
+@@ -116,13 +117,13 @@
+             loadIccAccount(allAccounts, contactWritableAccounts, groupWritableAccounts);
+         }
+         /// add local account
+-        addLocalAccount(allAccounts, contactWritableAccounts, groupWritableAccounts);
++        addLocalAccount(context, allAccounts, contactWritableAccounts, groupWritableAccounts);
+     }
+ 
+     /**
+      * fix ALPS00258229. Add Phone Local Type. if it is tablet let accountName is tablet
+      */
+-    private static void addLocalAccount(List<AccountWithDataSet> allAccounts,
++    private static void addLocalAccount(Context context, List<AccountWithDataSet> allAccounts,
+             List<AccountWithDataSet> contactWritableAccounts,
+             List<AccountWithDataSet> groupWritableAccounts) {
+         final boolean isAddTabletAccount = GlobalEnv.isUsingTwoPanes();
+@@ -135,11 +136,11 @@
+             groupWritableAccounts.add(new AccountWithDataSet("Tablet",
+                     AccountTypeUtils.ACCOUNT_TYPE_LOCAL_PHONE, null));
+         } else {
+-            allAccounts.add(new AccountWithDataSet("Phone",
++            allAccounts.add(new AccountWithDataSet(context.getString(R.string.phone_account_title),
+                     AccountTypeUtils.ACCOUNT_TYPE_LOCAL_PHONE, null));
+-            contactWritableAccounts.add(new AccountWithDataSet("Phone",
++            contactWritableAccounts.add(new AccountWithDataSet(context.getString(R.string.phone_account_title),
+                     AccountTypeUtils.ACCOUNT_TYPE_LOCAL_PHONE, null));
+-            groupWritableAccounts.add(new AccountWithDataSet("Phone",
++            groupWritableAccounts.add(new AccountWithDataSet(context.getString(R.string.phone_account_title),
+                     AccountTypeUtils.ACCOUNT_TYPE_LOCAL_PHONE, null));
+         }
+     }
+Index: packages/apps/ContactsCommon/src/com/android/contacts/common/model/AccountTypeManager.java
+===================================================================
+--- packages/apps/ContactsCommon/src/com/android/contacts/common/model/AccountTypeManager.java	(revision 7125)
++++ packages/apps/ContactsCommon/src/com/android/contacts/common/model/AccountTypeManager.java	(revision 7126)
+@@ -575,7 +575,7 @@
+         Collections.sort(groupWritableAccounts, ACCOUNT_COMPARATOR);
+ 
+         /// M:load sim & local phone accounts
+-        AccountTypeManagerEx.loadSimAndLocalAccounts(allAccounts, contactWritableAccounts,
++        AccountTypeManagerEx.loadSimAndLocalAccounts(mContext, allAccounts, contactWritableAccounts,
+                 groupWritableAccounts);
+ 
+         timings.addSplit("Loaded accounts");
+Index: packages/apps/ContactsCommon/res/values/strings.xml
+===================================================================
+--- packages/apps/ContactsCommon/res/values/strings.xml	(revision 7125)
++++ packages/apps/ContactsCommon/res/values/strings.xml	(revision 7126)
+@@ -852,5 +852,5 @@
+     <string name="smart_dial_sort">Smart Dial sorting order</string>
+     <string name="smart_dial_sort_ellipsize">Smart Dial sorting order</string>
+     <!-- End, by mzj for smart_dial_sort-->
+-	
++    <string name="phone_account_title">Phone</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/ContactsCommon/res/values-es-rMX/strings.xml
+===================================================================
+--- packages/apps/ContactsCommon/res/values-es-rMX/strings.xml	(revision 7125)
++++ packages/apps/ContactsCommon/res/values-es-rMX/strings.xml	(revision 7126)
+@@ -852,5 +852,5 @@
+     
+     
+     <!-- End, by mzj for smart_dial_sort-->
+-	
++    <string name="phone_account_title">Teléfono</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/ContactsCommon/res/values-es-rUS/strings.xml
+===================================================================
+--- packages/apps/ContactsCommon/res/values-es-rUS/strings.xml	(revision 7125)
++++ packages/apps/ContactsCommon/res/values-es-rUS/strings.xml	(revision 7126)
+@@ -288,4 +288,5 @@
+     <string name="account_filter_view_not_checked" msgid="5652044086126815700">"<xliff:g id="ACCOUNT_INFO">%s</xliff:g> no está marcado"</string>
+     <string name="description_search_video_call" msgid="1699305143973045516">"Hacer una videollamada"</string>
+     <string name="import_from_vcf_file_confirmation_message" msgid="967723361108008345">"¿Importar los contactos desde una vCard?"</string>
++    <string name="phone_account_title">Teléfono</string>
+ </resources>

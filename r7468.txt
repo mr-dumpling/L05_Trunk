@@ -1,0 +1,115 @@
+Index: packages/apps/Settings/res/values-ru-rRU/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-ru-rRU/strings.xml	(revision 7467)
++++ packages/apps/Settings/res/values-ru-rRU/strings.xml	(revision 7468)
+@@ -7868,12 +7868,14 @@
+     
+     
+ 
+-    
+-    
+-    
+-    
+-    
+-    
+-     <!-- Title label of Sim Editor.  [CHAR LIMIT=40] -->
+-    
++    <string name="wifi_ipv4_address">IPv4 address</string>
++    <string name="wifi_ipv6_address">IPv6 address</string>
++	
++	<!--start:Modify for device storage -->
++	<string name="system_storage_title">Занято системой</string>
++	<string name="total_space_title">Всего места</string>
++	<!--end:Modify for device storage -->
++	
++	
++	
+ </resources>
+\ No newline at end of file
+Index: packages/apps/Settings/res/values-ru/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-ru/strings.xml	(revision 7467)
++++ packages/apps/Settings/res/values-ru/strings.xml	(revision 7468)
+@@ -3328,4 +3328,9 @@
+ 	<string name="screen_off_effect_face_out">Плавное затухание</string>
+ 	<string name="screen_off_effect_old_tv">Старый телевизор</string>
+ 	<!--end:Modify for screen off effect -->
++	
++	<!--start:Modify for device storage -->
++	<string name="system_storage_title">Занято системой</string>
++	<string name="total_space_title">Всего места</string>
++	<!--end:Modify for device storage -->
+ </resources>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 7467)
++++ packages/apps/Settings/res/values/strings.xml	(revision 7468)
+@@ -7927,5 +7927,10 @@
+ 	<string name="screen_off_effect_summary">Face out</string>
+ 	<string name="screen_off_effect_face_out">Face out</string>
+ 	<string name="screen_off_effect_old_tv">Old TV</string>
+-	<!--end:Modify for screen off effect -->
++	<!--end:Modify for screen off effect -->
++	
++	<!--start:Modify for device storage -->
++	<string name="system_storage_title">System Storage</string>
++	<string name="total_space_title">Total Space</string>
++	<!--end:Modify for device storage -->
+ </resources>
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/res/layout/storage_summary.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/res/layout/storage_summary.xml	(revision 7467)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/res/layout/storage_summary.xml	(revision 7468)
+@@ -34,7 +34,7 @@
+         android:textAlignment="viewStart"
+         android:textAppearance="@android:style/TextAppearance.Material.Subhead"
+         android:textColor="?android:attr/colorAccent"
+-        android:textSize="36sp"
++        android:textSize="16sp"
+         android:ellipsize="marquee"
+         android:fadingEdge="horizontal" />
+ 
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java	(revision 7467)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java	(revision 7468)
+@@ -128,6 +128,8 @@
+     private IStorageSettingsExt mExt;
+ 
+     private StorageSummaryPreference mSummary;
++	private StorageSummaryPreference mTotalSpaceSummary;
++	private StorageSummaryPreference mSystemStorageSummary;
+     private List<StorageItemPreference> mItemPreferencePool = Lists.newArrayList();
+     private List<PreferenceCategory> mHeaderPreferencePool = Lists.newArrayList();
+     private int mHeaderPoolIndex;
+@@ -195,6 +197,8 @@
+         getPreferenceScreen().setOrderingAsAdded(true);
+ 
+         mSummary = new StorageSummaryPreference(getPrefContext());
++		mTotalSpaceSummary = new StorageSummaryPreference(context);
++		mSystemStorageSummary = new StorageSummaryPreference(context);
+         mCurrentUser = mUserManager.getUserInfo(UserHandle.myUserId());
+ 
+         mExplore = buildAction(R.string.storage_menu_explore);
+@@ -230,6 +234,8 @@
+         if (getResources().getBoolean(R.bool.config_storage_manager_settings_enabled)) {
+             addPreference(screen, mAutomaticStorageManagement);
+         }
++		addPreference(screen, mTotalSpaceSummary);
++		addPreference(screen, mSystemStorageSummary);
+         addPreference(screen, mSummary);
+ 
+         List<UserInfo> allUsers = mUserManager.getUsers();
+@@ -281,6 +287,12 @@
+         mSummary.setSummary(getString(R.string.storage_volume_used,
+                 Formatter.formatFileSize(context, mTotalSize)));
+         mSummary.setPercent((int) ((usedBytes * 100) / mTotalSize));
++		
++		mTotalSpaceSummary.setTitle(getString(R.string.total_space_title));
++		mTotalSpaceSummary.setSummary(Formatter.formatFileSize(context, mTotalSize));
++		mSystemStorageSummary.setTitle(getString(R.string.system_storage_title));
++		mSystemStorageSummary.setSummary(Formatter.formatFileSize(context, mSystemSize));
++		
+         mExt.updateCustomizedPrivateSettingsPlugin(screen, mVolume);
+         mMeasure.forceMeasure();
+         mNeedsUpdate = false;

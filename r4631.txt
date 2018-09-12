@@ -1,0 +1,45 @@
+Index: frameworks/base/packages/SettingsLib/src/com/android/settingslib/location/RecentLocationApps.java
+===================================================================
+--- frameworks/base/packages/SettingsLib/src/com/android/settingslib/location/RecentLocationApps.java	(revision 4630)
++++ frameworks/base/packages/SettingsLib/src/com/android/settingslib/location/RecentLocationApps.java	(revision 4631)
+@@ -46,6 +46,12 @@
+             AppOpsManager.OP_MONITOR_HIGH_POWER_LOCATION,
+     };
+ 
++    //lance add for bug 116497 @{
++    private static final String[] NEED_HIDE_APPS = {
++        "com.android.mmi",
++    };
++    // @}
++
+     private final PackageManager mPackageManager;
+     private final Context mContext;
+ 
+@@ -80,7 +86,7 @@
+             int userId = UserHandle.getUserId(uid);
+             boolean isAndroidOs =
+                     (uid == Process.SYSTEM_UID) && ANDROID_SYSTEM_PACKAGE_NAME.equals(packageName);
+-            if (isAndroidOs || !profiles.contains(new UserHandle(userId))) {
++            if (isAndroidOs || !profiles.contains(new UserHandle(userId)) || isNeedHideApp(packageName)) { //lance add for bug 116497
+                 continue;
+             }
+             Request request = getRequestFromOps(now, ops);
+@@ -92,6 +98,18 @@
+         return requests;
+     }
+ 
++    //lance add for bug 116497 @{
++    private boolean isNeedHideApp(String pkgName) {
++        boolean isNeedHide = false;
++        for(int i = 0; i < NEED_HIDE_APPS.length; i++) {
++            if(NEED_HIDE_APPS[i].equals(pkgName)) {
++                isNeedHide = true;
++            }
++        }
++        return isNeedHide;
++    }
++    // @}
++
+     /**
+      * Creates a Request entry for the given PackageOps.
+      *

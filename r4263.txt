@@ -1,0 +1,255 @@
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java	(revision 4262)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java	(revision 4263)
+@@ -34,6 +34,7 @@
+ import android.graphics.drawable.GradientDrawable;
+ import android.os.Bundle;
+ import android.os.Handler;
++import android.os.Message;
+ import android.os.Looper;
+ import android.os.Trace;
+ import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
+@@ -79,7 +80,8 @@
+ 
+ import java.util.List;
+ import java.util.Locale;
+-
++import java.util.Timer;
++import java.util.TimerTask;
+ /**
+  * Fragment for call card.
+  */
+@@ -1849,11 +1851,33 @@
+ 
+     /// M: [Voice Record]recording indication icon @{
+     private ImageView mVoiceRecorderIcon;
++	private TextView mVoiceRecorderTimer;
+ 
++    private Timer mTimer = null;
++	public static long mStartTime = 0;
++    Handler mTimerHandler = new Handler() {
++        @Override
++        public void handleMessage(Message msg) {
++            switch (msg.what) {
++            case 1236:
++                synchronized (this) {
++                    updateVoiceRecorderTimer();
++                }
++                break;
++
++            default:
++                break;
++            }
++        }
++    };
++    private TimerTask mRecordeTrask = null;
+     private void initVoiceRecorderIcon(View view) {
+         mVoiceRecorderIcon = (ImageView) view.findViewById(R.id.voiceRecorderIcon);
+         mVoiceRecorderIcon.setImageResource(R.drawable.voice_record);
+         mVoiceRecorderIcon.setVisibility(View.INVISIBLE);
++		mVoiceRecorderTimer = (TextView) view.findViewById(R.id.voiceRecorderTime);
++		mVoiceRecorderTimer.setText("00:00");
++		mVoiceRecorderTimer.setVisibility(View.INVISIBLE);
+     }
+ 
+     @Override
+@@ -1867,12 +1891,69 @@
+                 ad.stop();
+             }
+         }
++		
++		mVoiceRecorderTimer.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
++		if (show && isManageConferenceVisible()) {
++            mVoiceRecorderTimer.setTextColor(0xff0000ff);
++        } else {
++            mVoiceRecorderTimer.setTextColor(0xffffffff);
++        }
++		if(show) {
++			if(mStartTime == 0) {
++				mStartTime = System.currentTimeMillis();
++				mVoiceRecorderTimer.setText("00:00");
++			} else {
++				updateVoiceRecorderTimer();
++			}
++			if(mTimer == null) {
++				mTimer = new Timer();
++			}
++			if(mRecordeTrask != null) {
++				mRecordeTrask.cancel();
++			}
++			mRecordeTrask = new TimerTask() {
++				@Override
++				public void run() {
++				    // TODO Auto-generated method stub
++				    Message message = mTimerHandler.obtainMessage(1236);
++				    mTimerHandler.sendMessage(message);
++				}
++			};
++			mTimer.schedule(mRecordeTrask, 500, 1000);
++		}
++		else{
++			mStartTime = 0;
++			if(mTimer != null ) {
++				mTimer.cancel();
++				mTimer = null;
++			}
++			if(mRecordeTrask != null) {
++				mRecordeTrask.cancel();
++				mRecordeTrask = null;
++			}
++		}
+         /// M:[RCS] plugin API @{
+         ExtensionManager.getRCSeCallCardExt().updateVoiceRecordIcon(show);
+         /// @}
+     }
+     /// @}
+-
++	private void updateVoiceRecorderTimer(){
++		long during = (System.currentTimeMillis()- mStartTime) / 1000;
++		long sec = during % 60;
++		long min = during / 60;
++		StringBuffer sb = new StringBuffer();
++		if(min < 10) {
++			sb.append("0");
++		}
++		sb.append(min+":");
++		if(sec < 10) {
++			sb.append("0");
++		}
++		sb.append(sec+"");
++		if(mVoiceRecorderTimer != null) {
++			mVoiceRecorderTimer.setText(sb.toString());
++		}
++    }
+     /**
+      * M: [CTA]CTA required that in Simplified Chinese, the text label of the secondary/tertiary
+      * call should be changed to another string rather than google default.
+Index: packages/apps/Dialer/InCallUI/res/layout/call_card_fragment.xml
+===================================================================
+--- packages/apps/Dialer/InCallUI/res/layout/call_card_fragment.xml	(revision 4262)
++++ packages/apps/Dialer/InCallUI/res/layout/call_card_fragment.xml	(revision 4263)
+@@ -134,14 +134,32 @@
+             <!-- M:[Voice Record]record icon -->
+             <!-- M:fix ALPS02297097,recording icon still at the right
+             side as Arabic,correct layout_gravity from right to end -->
+-            <ImageView android:id="@+id/voiceRecorderIcon"
+-                       android:layout_width="@dimen/incall_record_icon_size"
+-                       android:layout_height="@dimen/incall_record_icon_size"
+-                       android:layout_gravity="end"
+-                       android:layout_marginEnd="10dip"
+-                       android:layout_marginTop="10dip"
+-                       android:visibility="gone" />
++			
++            <LinearLayout android:id="@+id/voiceRecorder"
++				android:layout_width="wrap_content"
++				android:layout_height="wrap_content"
++				android:orientation="horizontal"
++				android:layout_marginEnd="10dip"
++				android:layout_marginTop="10dip"
++				android:layout_gravity="end">
+ 
++				<ImageView android:id="@+id/voiceRecorderIcon"
++					android:layout_gravity="center_vertical"
++					android:layout_width="@dimen/incall_record_icon_size"
++					android:layout_height="@dimen/incall_record_icon_size"
++					android:visibility="gone"
++					android:layout_marginEnd="10dip" />
++				<TextView android:id="@+id/voiceRecorderTime"
++					android:layout_width="wrap_content"
++					android:layout_height="wrap_content"
++					android:layout_gravity="center_vertical"
++					android:textAppearance="?android:attr/textAppearanceSmall"
++					android:textColor="@android:color/white"
++					android:textSize="16sp"
++					android:visibility="gone"
++					android:singleLine="true" />
++			</LinearLayout>
++			
+             <!-- Call context -->
+             <LinearLayout
+                 android:id="@+id/contact_context"
+Index: packages/apps/Dialer/InCallUI/res/layout-w500dp-land/call_card_fragment.xml
+===================================================================
+--- packages/apps/Dialer/InCallUI/res/layout-w500dp-land/call_card_fragment.xml	(revision 4262)
++++ packages/apps/Dialer/InCallUI/res/layout-w500dp-land/call_card_fragment.xml	(revision 4263)
+@@ -115,13 +115,30 @@
+             android:layout_height="wrap_content">
+             <!-- M:fix ALPS02297097,recording icon still at the right
+             side as Arabic,correct layout_gravity from right to end -->
+-            <ImageView android:id="@+id/voiceRecorderIcon"
+-                       android:layout_width="@dimen/incall_record_icon_size"
+-                       android:layout_height="@dimen/incall_record_icon_size"
+-                       android:layout_gravity="end"
+-                       android:layout_marginEnd="10dip"
+-                       android:layout_marginTop="10dip"
+-                       android:visibility="gone" />
++            <LinearLayout android:id="@+id/voiceRecorder"
++				android:layout_width="wrap_content"
++				android:layout_height="wrap_content"
++				android:orientation="horizontal"
++				android:layout_marginEnd="10dip"
++				android:layout_marginTop="10dip"
++				android:layout_gravity="end">
++
++				<ImageView android:id="@+id/voiceRecorderIcon"
++					android:layout_gravity="center_vertical"
++					android:layout_width="@dimen/incall_record_icon_size"
++					android:layout_height="@dimen/incall_record_icon_size"
++					android:visibility="gone"
++					android:layout_marginEnd="10dip" />
++				<TextView android:id="@+id/voiceRecorderTime"
++					android:layout_width="wrap_content"
++					android:layout_height="wrap_content"
++					android:layout_gravity="center_vertical"
++					android:textAppearance="?android:attr/textAppearanceSmall"
++					android:textColor="@android:color/white"
++					android:textSize="16sp"
++					android:visibility="gone"
++					android:singleLine="true" />
++			</LinearLayout>
+         </FrameLayout>
+ 
+         <fragment android:name="com.android.incallui.VideoCallFragment"
+Index: packages/apps/Dialer/InCallUI/res/layout-h400dp/call_card_fragment.xml
+===================================================================
+--- packages/apps/Dialer/InCallUI/res/layout-h400dp/call_card_fragment.xml	(revision 4262)
++++ packages/apps/Dialer/InCallUI/res/layout-h400dp/call_card_fragment.xml	(revision 4263)
+@@ -170,13 +170,30 @@
+                 android:layout_height="wrap_content">
+                 <!-- M:fix ALPS02297097,recording icon still at the right
+                 side as Arabic,correct layout_gravity from right to end -->
+-                <ImageView android:id="@+id/voiceRecorderIcon"
+-                           android:layout_width="@dimen/incall_record_icon_size"
+-                           android:layout_height="@dimen/incall_record_icon_size"
+-                           android:layout_gravity="end"
+-                           android:layout_marginEnd="10dip"
+-                           android:layout_marginTop="10dip"
+-                           android:visibility="gone" />
++                <LinearLayout android:id="@+id/voiceRecorder"
++				android:layout_width="wrap_content"
++				android:layout_height="wrap_content"
++				android:orientation="horizontal"
++				android:layout_marginEnd="10dip"
++				android:layout_marginTop="10dip"
++				android:layout_gravity="end">
++
++				<ImageView android:id="@+id/voiceRecorderIcon"
++					android:layout_gravity="center_vertical"
++					android:layout_width="@dimen/incall_record_icon_size"
++					android:layout_height="@dimen/incall_record_icon_size"
++					android:visibility="gone"
++					android:layout_marginEnd="10dip" />
++				<TextView android:id="@+id/voiceRecorderTime"
++					android:layout_width="wrap_content"
++					android:layout_height="wrap_content"
++					android:layout_gravity="center_vertical"
++					android:textAppearance="?android:attr/textAppearanceSmall"
++					android:textColor="@android:color/white"
++					android:textSize="16sp"
++					android:visibility="gone"
++					android:singleLine="true" />
++			</LinearLayout>
+             </FrameLayout>
+ 
+         </RelativeLayout>

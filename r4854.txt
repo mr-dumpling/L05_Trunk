@@ -1,0 +1,1014 @@
+Index: vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/Report.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/Report.java	(revision 0)
++++ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/Report.java	(revision 4854)
+@@ -0,0 +1,181 @@
++package com.mediatek.factorymode;
++
++import android.app.Activity;
++import android.os.Bundle;
++import android.widget.TextView;
++public class Report extends Activity{
++	
++	@Override
++	protected void onCreate(Bundle savedInstanceState) {
++		// TODO Auto-generated method stub
++		super.onCreate(savedInstanceState);
++		if(!FactoryMode.isAutoTest){
++			setTitle(R.string.SingleTestReport);
++		}else{
++			setTitle(R.string.AutoTestReport);
++		}
++		setContentView(R.layout.report);
++		TextView report_success = (TextView)this.findViewById(R.id.report_success);
++		TextView report_fail =(TextView)this.findViewById(R.id.report_failed);
++		TextView report_default =(TextView)this.findViewById(R.id.report_default);
++		String testsuccess = new String();
++		String testfail = new String();
++		String testdefault= new String();
++		int battery_test_pass_count = 0;
++		int battery_test_fail_count = 0;
++		for(int i = 0;i<FactoryMode.testitem.length;i++ ) {
++			String string = getStringbyitemid(FactoryMode.testitem[i]);
++			if((FactoryMode.isAutoTest ? FactoryMode.autotestResult[i]:FactoryMode.testResult[i])== FactoryMode.TEST_OK) {
++				if(i == getIndex(FactoryMode.TESTITEM_POWER) || i == getIndex(FactoryMode.TESTITEM_SMT)){
++					battery_test_pass_count ++;
++					if(battery_test_pass_count == 1){
++						testsuccess = testsuccess + "|" + getString(R.string.battery_name);
++					}
++				}else{
++					testsuccess = testsuccess + "|"+string;
++				}
++			}else if((FactoryMode.isAutoTest ? FactoryMode.autotestResult[i]:FactoryMode.testResult[i])== FactoryMode.TEST_FAIL) {
++				if(i == getIndex(FactoryMode.TESTITEM_POWER) || i == getIndex(FactoryMode.TESTITEM_SMT)){
++					battery_test_fail_count ++;
++					if(battery_test_fail_count > 1){
++						testfail = testfail + "|" + getString(R.string.battery_name);
++					}
++				}else{
++					testfail = testfail + "|" +string;
++				}
++			}else {
++				testdefault = testdefault + "|"+string;
++			}
++		}
++		report_success.setText(getString(R.string.report_ok)+testsuccess);
++		report_fail.setText(getString(R.string.report_failed)+testfail);
++		report_default.setText(getString(R.string.report_notest)+testdefault);
++		FactoryMode.isAutoTest = false;
++	}
++	private int getIndex(int testCode) {
++		int index = 0;
++		for(int i = 0;i < FactoryMode.testitem.length; i++) {
++			if(testCode == FactoryMode.testitem[i]){
++				index = i;
++				break;
++			}
++		}
++		return index;
++	}
++	private String getStringbyitemid(int item_id) {
++		String str = null;
++		switch (item_id) {
++		case FactoryMode.TESTITEM_VERSION:
++			str = getString(R.string.version_info);
++			break;
++		case FactoryMode.TESTITEM_TOUCH:
++			str = getString(R.string.touchscreen_name);
++			break;
++		case FactoryMode.TESTITEM_LCD:
++			str = getString(R.string.lcd_name);
++			break;
++		case FactoryMode.TESTITEM_GPS:
++			str = getString(R.string.gps_name);
++			break;
++		case FactoryMode.TESTITEM_POWER:
++			str = getString(R.string.battery_name);
++			break;
++		case FactoryMode.TESTITEM_KEY:
++			str = getString(R.string.KeyCode_name);
++			break;
++		case FactoryMode.TESTITEM_SPEAKER:
++			str = getString(R.string.speaker_name);
++			break;
++		case FactoryMode.TESTITEM_HEADSET:
++			str = getString(R.string.headset_name);
++			break;
++		case FactoryMode.TESTITEM_MIC:
++			str = getString(R.string.microphone_name);
++			break;
++		case FactoryMode.SUBTESTITEM_MIC:
++			str = getString(R.string.submicrophone_name);
++			break;
++		case FactoryMode.TESTITEM_LSENSORCALI:
++			str = getString(R.string.lsensor_cali_name);
++			break;
++		case FactoryMode.TESTITEM_RECEIVER:
++			str = getString(R.string.earphone_name);
++			break;
++		case FactoryMode.TESTITEM_WIFI:
++			str = getString(R.string.wifi_name);
++			break;
++		case FactoryMode.TESTITEM_BT:
++			str = getString(R.string.bluetooth_name);
++			break;
++		case FactoryMode.TESTITEM_SHAKE:
++			str = getString(R.string.vibrator_name);
++			break;
++		case FactoryMode.TESTITEM_CALL:
++			str = getString(R.string.telephone_name);
++			break;
++		case FactoryMode.TESTITEM_BL:
++			str = getString(R.string.backlight_name);
++			break;
++		case FactoryMode.TESTITEM_MEMORY:
++			str = getString(R.string.memory_name);
++			break;
++		case FactoryMode.TESTITEM_GSENSOR:
++			str = getString(R.string.gsensor_name);
++			break;
++		case FactoryMode.TESTITEM_MSENSOR:
++			str = getString(R.string.msensor_name);
++			break;
++		case FactoryMode.TESTITEM_LSENSOR:
++			str = getString(R.string.lsensor_name);
++			break;
++		case FactoryMode.TESTITEM_DSENSOR:
++			str = getString(R.string.psensor_name);
++			break;
++		case FactoryMode.TESTITEM_TCARD:
++			str = getString(R.string.sdcard_name);
++			break;
++		case FactoryMode.TESTITEM_BCAMERA:
++			str = getString(R.string.camera_name);
++			break;
++		case FactoryMode.TESTITEM_FCAMERA:
++			str = getString(R.string.subcamera_name);
++			break;
++	//	case FactoryMode.TESTITEM_IRIS:
++		//	str = getString(R.string.iris_name);
++			//break;
++		case FactoryMode.TESTITEM_FM:
++			str = getString(R.string.FMRadio);
++			break;
++		case FactoryMode.TESTITEM_SIM:
++			str = getString(R.string.SimCard);
++			break;
++		case FactoryMode.TESTITEM_LED:
++			str = getString(R.string.Led);
++			break;
++		case FactoryMode.TESTITEM_HALL:
++			str = getString(R.string.Hall);
++			break;
++	  case FactoryMode.TESTITEM_FINGER:
++			str = getString(R.string.finger);
++			break;
++		case FactoryMode.TESTITEM_FLASHLIGHT:
++			str = getString(R.string.flashlight);
++			break;
++		case FactoryMode.TESTITEM_OSENSOR:
++			str = getString(R.string.OSensor);
++			break;
++		case FactoryMode.TESTITEM_NFC:
++			str = getString(R.string.nfc_name);
++			break;
++		/*case FactoryMode.TESTITEM_GYRO:
++			str = getString(R.string.gyro);
++			break;*/
++		case FactoryMode.TESTITEM_SMT:
++			str = getString(R.string.smt_name);
++			break;	
++		default:
++			break;
++		}
++		return str;
++	}
++}
+Index: vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryMode.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryMode.java	(revision 0)
++++ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryMode.java	(revision 4854)
+@@ -0,0 +1,823 @@
++package com.mediatek.factorymode;
++
++import android.app.Activity;
++import android.content.BroadcastReceiver;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.graphics.Color;
++import android.net.Uri;
++import android.os.Bundle;
++import android.util.Log;
++import android.view.View;
++import android.view.Window;
++import android.view.WindowManager;
++import android.widget.AdapterView;
++import android.widget.AdapterView.OnItemClickListener;
++import android.widget.ArrayAdapter;
++import android.widget.Button;
++import android.widget.GridView;
++import android.widget.TextView;
++
++import com.mediatek.factorymode.backlight.BackLight;
++import com.mediatek.factorymode.bluetooth.Bluetooth;
++import com.mediatek.factorymode.camera.CameraTest;
++import com.mediatek.factorymode.camera.SubCamera;
++import com.mediatek.factorymode.earphone.Earphone;
++import com.mediatek.factorymode.fmradio.FMRadio;
++import com.mediatek.factorymode.gps.GPS;
++import com.mediatek.factorymode.headset.HeadSet;
++import com.mediatek.factorymode.lcd.LCD;
++import com.mediatek.factorymode.memory.Memory;
++import com.mediatek.factorymode.micophone.MicRecorder;
++import com.mediatek.factorymode.micophone.SubMicRecorder;
++import com.mediatek.factorymode.sdcard.SDCard;
++import com.mediatek.factorymode.sensor.GSensor;
++import com.mediatek.factorymode.sensor.LSensor;
++import com.mediatek.factorymode.sensor.MSensor;
++import com.mediatek.factorymode.sensor.PSensor;
++import com.mediatek.factorymode.sensor.OSensor;
++import com.mediatek.factorymode.sensor.Gyro;
++import com.mediatek.factorymode.signal.Signal;
++import com.mediatek.factorymode.simcard.SimCard;
++import com.mediatek.factorymode.touchscreen.BlockTest;
++import com.mediatek.factorymode.touchscreen.TouchScreenHandWriting;
++import com.mediatek.factorymode.vibratortest.Vibratortest;
++import com.mediatek.factorymode.version.Version;
++import com.mediatek.factorymode.wifi.WiFiTest;
++import com.mediatek.factorymode.finger.Finger;
++import com.mediatek.factorymode.led.Led;
++import com.mediatek.factorymode.nfc.Nfc;
++import com.mediatek.factorymode.sensor.LSensorCali;
++import com.mediatek.factorymode.hall.Hall;
++import com.mediatek.factorymode.smtbattery.SMTBattery;
++import com.mediatek.factorymode.flashlight.FlashLight;
++
++import java.io.File;
++import java.io.FileNotFoundException;
++import java.io.IOException;
++import java.io.PrintWriter;
++import java.io.BufferedReader;
++import java.io.BufferedWriter;
++import java.io.FileReader;
++import java.io.FileWriter;
++import java.lang.Integer;
++
++import android.os.IBinder;
++import android.os.ServiceManager;
++
++public class FactoryMode extends Activity {
++	public static final String TAG = "FactoryMode";
++	private static final int PRODUCT_INFO_NVRAM_LID = 50;
++	private static final String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
++	private static final int MMI_TEST_REPORT_NV_POS = 499;
++	private static final int TEST_REPORT_NV_POS = 500;
++	private static final int AUTO_TEST_REPORT_NV_POS = 550;
++	private static final int LASTEST_TEST_REPORT_NV_POS = 630;
++
++	public static final int TESTITEM_START = 0;
++	public static final int TESTITEM_VERSION = TESTITEM_START;
++	public static final int TESTITEM_TOUCH = 1;
++	public static final int TESTITEM_LCD = 2;
++	public static final int TESTITEM_GPS = 3;
++	public static final int TESTITEM_POWER = 4;
++	public static final int TESTITEM_KEY = 5;
++	public static final int TESTITEM_SPEAKER = 6;
++	public static final int TESTITEM_HEADSET = 7;
++	public static final int TESTITEM_MIC = 8;
++	public static final int TESTITEM_RECEIVER = 9;
++	public static final int TESTITEM_WIFI = 10;
++	public static final int TESTITEM_BT = 11;
++	public static final int TESTITEM_SHAKE = 12;
++	public static final int TESTITEM_CALL = 13;
++	public static final int TESTITEM_BL = 14;
++	public static final int TESTITEM_MEMORY = 15;
++	public static final int TESTITEM_GSENSOR = 16;
++	public static final int TESTITEM_MSENSOR = 17;
++	public static final int TESTITEM_LSENSOR = 18;
++	public static final int TESTITEM_DSENSOR = 19;
++	public static final int TESTITEM_TCARD = 20;
++	public static final int TESTITEM_FCAMERA = 21;
++	public static final int TESTITEM_BCAMERA = 22;
++	//public static final int TESTITEM_RCAMERA = 23;
++	//public static final int TESTITEM_IRIS=23;
++	public static final int TESTITEM_FM = 23;
++	public static final int TESTITEM_SIM = 24;
++	public static final int TESTITEM_LSENSORCALI = 25;
++	public static final int SUBTESTITEM_MIC = 26;
++	public static final int TESTITEM_HALL = 27;
++	public static final int TESTITEM_LED = 28;
++	public static final int TESTITEM_FLASHLIGHT = 29;
++	public static final int TESTITEM_OSENSOR = 30;
++	public static final int TESTITEM_FINGER = 31;
++	//public static final int TESTITEM_GYRO = 32;
++	public static final int TESTITEM_NFC = 33;
++	//public static final int TESTITEM_TATOL = 35;
++	public static final int TESTITEM_SMT = 35;
++	public static final int TESTITEM_TATOL = 36;
++	
++	public static int currenttestitem = TESTITEM_START;
++	public static boolean isAutoTest = false;
++	public static boolean isinit = true;
++	public static boolean shouldCharge = false;
++	public static boolean isCharging = false;
++	
++	public static int testResult[];
++	public static int autotestResult[];
++	public static int LTResult[];
++	
++	public static final int TEST_OK = 1;
++	public static final int TEST_FAIL = 2;
++	public static final int TEST_CANCEL = 3;
++	public static final int UNTESTED = 0;
++
++	private GridView gridview;
++	ArrayAdapter<String> adapter;
++	private Button autotestButton = null;
++	private Button reportButton = null;
++	private Button autoreportButton = null;
++	public int ATPC = 0;//Auto Test Passed Count
++	public int AutoTested = 0;//if AutoTest was tested,then set value 1
++
++	public static final int testitem[] = {
++		TESTITEM_VERSION,
++		TESTITEM_TOUCH,
++		TESTITEM_LCD,
++		TESTITEM_GPS,
++		TESTITEM_KEY,
++		TESTITEM_SPEAKER,
++		TESTITEM_HEADSET,
++		TESTITEM_FM,
++		TESTITEM_WIFI,
++		TESTITEM_BT,
++		TESTITEM_MEMORY,
++		TESTITEM_TCARD,
++		TESTITEM_SIM,
++		TESTITEM_SHAKE,
++		TESTITEM_FLASHLIGHT,
++		TESTITEM_POWER,
++		TESTITEM_SMT,
++		TESTITEM_BL,
++		TESTITEM_GSENSOR,
++		TESTITEM_MSENSOR,
++		TESTITEM_LSENSORCALI,
++		TESTITEM_LSENSOR,
++		TESTITEM_DSENSOR,
++		TESTITEM_FCAMERA,
++		TESTITEM_BCAMERA,
++		//TESTITEM_RCAMERA,
++		//TESTITEM_IRIS,
++		TESTITEM_CALL,
++		TESTITEM_MIC,
++		SUBTESTITEM_MIC,
++		//TESTITEM_HALL,
++		TESTITEM_LED,
++		TESTITEM_FINGER,
++		//TESTITEM_GYRO,
++		//TESTITEM_NFC
++	};
++
++	@Override
++	public void onCreate(Bundle savedInstanceState){
++		super.onCreate(savedInstanceState);
++		requestWindowFeature(Window.FEATURE_NO_TITLE);
++		getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
++		getWindow().requestFeature(Window.FEATURE_NO_TITLE);
++		getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_GESTURE_ISOLATED);
++		
++		setContentView(R.layout.main);
++		
++		gridview = (GridView) findViewById(R.id.main_grid);
++		adapter = new ArrayAdapter<String>(this, R.layout.main_grid);
++		gridview.setAdapter(adapter);
++		
++		testResult = new int[TESTITEM_TATOL];
++		autotestResult = new int[TESTITEM_TATOL];
++		LTResult = new int[TESTITEM_TATOL];
++		
++		Intent serviceintent = new Intent(this,BatteryLogService.class);
++		startService(serviceintent);
++		
++		getTestReport();
++		getAutoTestReport();
++		getLastestTestReport();
++		
++		autotestButton = (Button)this.findViewById(R.id.main_bt_autotest);
++		reportButton  = (Button)this.findViewById(R.id.main_bt_report);
++		autoreportButton = (Button)this.findViewById(R.id.main_auto_report);
++		
++		autoreportButton.setText(getReportText());
++		
++		autotestButton.setOnClickListener(new Button.OnClickListener(){
++			@Override
++			public void onClick(View v){
++				// TODO Auto-generated method stub
++				isAutoTest = true;
++				currenttestitem = 0;
++				TestSelectedItem(testitem[currenttestitem]);
++			}
++		});
++		reportButton.setOnClickListener(new Button.OnClickListener(){
++			@Override
++			public void onClick(View v){
++				getTestReport();
++				Intent intent2 = new Intent();
++				intent2.setClass(FactoryMode.this, Report.class);
++				startActivity(intent2);
++			}
++		});
++		autoreportButton.setOnClickListener(new Button.OnClickListener(){
++			@Override
++			public void onClick(View v){
++				getAutoTestReport();
++				isAutoTest = true;
++				Intent intent2 = new Intent();
++				intent2.setClass(FactoryMode.this, Report.class);
++				startActivity(intent2);
++			}
++		});
++		for (int i = TESTITEM_START; i < testitem.length; i++){
++			adapter.add(getStringbyitemid(testitem[i]));
++		}
++		gridview.setOnItemClickListener(new ItemClickListener());
++		isinit = true;
++	}
++	
++	protected void onResume(){
++		 super.onResume();
++		 Intent flashIntent = new Intent("techain_factory_flashlight");
++		 sendBroadcast(flashIntent);
++	}
++	
++	@Override
++	protected void onDestroy(){
++		Intent serviceintent = new Intent(this,BatteryLogService.class);
++		stopService(serviceintent);
++		shouldCharge = false;
++		super.onDestroy();
++	}
++	
++	@Override
++	public void onWindowFocusChanged(boolean hasFocus){
++		if(isinit){
++			initTestView();
++			isinit = false;
++		}
++		super.onWindowFocusChanged(hasFocus); 
++	}
++	
++	private void initTestView(){
++		for(int index = 0 ; index < testitem.length ; index++ ){
++			TextView tView = (TextView)gridview.getChildAt(index);
++			Log.v(TAG, "initTestView:tView = " + tView);
++			if(tView != null){
++				if(LTResult[index] == FactoryMode.TEST_OK){
++					tView.setTextColor(Color.BLUE);
++				}else if(LTResult[index] == FactoryMode.TEST_FAIL){
++					tView.setTextColor(Color.RED);
++				}else if(LTResult[index] == FactoryMode.UNTESTED){
++					tView.setTextColor(Color.BLACK);
++				}
++			}
++		}
++	}
++
++	class ItemClickListener implements OnItemClickListener {
++		public void onItemClick(AdapterView<?> arg0,// The AdapterView where the click happened
++				View arg1,// The view within the AdapterView that was clicked
++				int arg2,// The position of the view in the adapter
++				long arg3// The row id of the item that was clicked
++		){
++			isAutoTest = false;
++			TestSelectedItem(testitem[arg2]);
++		}
++	}
++	
++	private int getIndex(int testCode) {
++		int index = 0;
++		for(int i=0;i<testitem.length;i++) {
++			if(testCode == testitem[i]){
++				index = i;
++				break;
++			}
++		}
++		return index;
++	}
++	
++	public void onActivityResult(int requestCode, int resultCode, Intent intent){
++		Log.v("requestCode = " + requestCode,"resultCode = " + resultCode);
++		if(requestCode < 0 || requestCode >= TESTITEM_TATOL) {
++			return;
++		}
++		int index = getIndex(requestCode);
++		TextView tView = (TextView)gridview.getChildAt(index);
++		Log.v(TAG, "onActivityResult: tView = " + tView);
++		switch (resultCode) {
++			case TEST_OK:
++				if(tView != null){
++					tView.setTextColor(Color.BLUE);
++				}
++				if(isAutoTest){
++					autotestResult[index]= FactoryMode.TEST_OK;
++				}else{
++					testResult[index]= FactoryMode.TEST_OK;
++				}
++				LTResult[index]= FactoryMode.TEST_OK;
++				break;
++			case TEST_FAIL:
++				if(tView != null){
++					tView.setTextColor(Color.RED);
++				}
++				if(isAutoTest){
++					autotestResult[index]= FactoryMode.TEST_FAIL;
++				}else{
++					testResult[index]= FactoryMode.TEST_FAIL;
++				}
++				LTResult[index]= FactoryMode.TEST_FAIL;
++				break;
++			case TEST_CANCEL:
++				if(tView != null){
++					tView.setTextColor(Color.RED);
++				}
++				if(isAutoTest){
++					autotestResult[index]= FactoryMode.TEST_FAIL;
++					isAutoTest = false;
++					shouldCharge = false;
++				}else{
++					testResult[index]= FactoryMode.TEST_FAIL;
++				}
++				LTResult[index]= FactoryMode.TEST_FAIL;
++				break;
++		}
++		Log.v(TAG, "isAutoTest:" + isAutoTest);
++		
++		if(isAutoTest)
++		{
++			currenttestitem = currenttestitem + 1;
++			if(currenttestitem == testitem.length)
++			{
++				Intent intent2 = new Intent();
++				intent2.setClass(this, Report.class);
++				if(AutoTested == 0){
++					AutoTested = 1;
++				}
++				saveAutoTestReport();
++				saveLastestTestReport();
++				autoreportButton.setText(getReportText());
++				startActivity(intent2);
++			}
++			else {
++				TestSelectedItem(testitem[currenttestitem]);
++			}
++		}
++		if(!isAutoTest){
++			saveTestReport();
++			saveLastestTestReport();
++		}
++	}
++	
++	private String getReportText(){
++		String text = this.getString(R.string.AutoTestReport); 
++		int battery_test_fail_count = 0;
++		if(AutoTested == 0){
++			text = text + " : \n UNTESTED";
++			return text;
++		}
++		boolean pass = true;
++		for(int i = 0; i < testitem.length ; i++){
++			if(autotestResult[i] != FactoryMode.TEST_OK && i != getIndex(TESTITEM_POWER) && i != getIndex(TESTITEM_SMT)){
++				pass = false;
++				break;
++			}
++		if(autotestResult[i] != FactoryMode.TEST_OK && (i == getIndex(TESTITEM_POWER) || i == getIndex(TESTITEM_SMT))){
++				battery_test_fail_count ++;
++				if(battery_test_fail_count > 1){
++					pass = false;
++					break;
++				}
++			}
++		}
++		if(pass && ATPC > 0){
++			text = text + " : \n PASS :" + ATPC;
++		} else if(ATPC == 0 || !pass){
++			text = text + " : \n NOT PASS ";
++		}
++		return text;
++	}
++	
++	public void saveTestReport(){
++		byte[] buff = null;
++		IBinder binder = ServiceManager.getService("NvRAMAgent");
++		NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++		try{
++			buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++		}catch(Exception e){
++			e.printStackTrace();
++			return ;
++		}
++		boolean pass = true;
++		for(int i=0 ; i < testitem.length; i++){
++			buff[TEST_REPORT_NV_POS  + i] = (byte)testResult[i];
++			if(testResult[i] != FactoryMode.TEST_OK){
++				pass = false;
++			}
++		}
++		try{
++			agent.writeFileByName(PRODUCT_INFO_NVRAM_PATH,buff);
++		}catch(Exception e){
++			e.printStackTrace();
++			return ;
++		}
++	}
++	
++	public void saveAutoTestReport(){
++		byte[] buff = null;
++		int battery_test_fail_count = 0;
++		IBinder binder = ServiceManager.getService("NvRAMAgent");
++		NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++		try{
++			buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++		}catch(Exception e){
++			e.printStackTrace();
++			return ;
++		}
++		boolean pass = true;
++		for(int i=0 ; i < testitem.length; i++){
++			buff[AUTO_TEST_REPORT_NV_POS + 2 + i] = (byte)autotestResult[i];
++			if(autotestResult[i] != FactoryMode.TEST_OK && i != getIndex(TESTITEM_POWER) && i != getIndex(TESTITEM_SMT)){
++			pass = false;
++			//break;
++			}
++		if(autotestResult[i] != FactoryMode.TEST_OK && (i == getIndex(TESTITEM_POWER) || i == getIndex(TESTITEM_SMT))){
++				battery_test_fail_count ++;
++				if(battery_test_fail_count > 1){
++					pass = false;
++			//		break;
++				}
++			}	
++		}
++		if(pass){
++			ATPC++;
++			buff[AUTO_TEST_REPORT_NV_POS] =(byte) ATPC;
++			buff[MMI_TEST_REPORT_NV_POS] =(byte)1;
++		} else {
++			buff[MMI_TEST_REPORT_NV_POS] =(byte)0;
++		}
++		buff[AUTO_TEST_REPORT_NV_POS+1] =(byte) AutoTested;
++		try {
++			agent.writeFileByName(PRODUCT_INFO_NVRAM_PATH,buff);
++		}catch(Exception e){
++			e.printStackTrace();
++			return ;
++		}
++	}
++	
++	public void saveLastestTestReport(){
++		byte[] buff = null;
++		IBinder binder = ServiceManager.getService("NvRAMAgent");
++		NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++		try{
++			buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++		}catch(Exception e){
++			e.printStackTrace();
++			return ;
++		}
++		boolean pass = true;
++		for(int i=0 ; i < testitem.length; i++){
++			buff[LASTEST_TEST_REPORT_NV_POS  + i] = (byte)LTResult[i];
++			if(LTResult[i] != FactoryMode.TEST_OK){
++			pass = false;
++			}
++		}
++		try {
++			agent.writeFileByName(PRODUCT_INFO_NVRAM_PATH,buff);
++		}catch(Exception e){
++			e.printStackTrace();
++			return ;
++		}
++	}
++	
++	public void getTestReport(){
++		byte[] buff = null;
++		IBinder binder = ServiceManager.getService("NvRAMAgent");
++		NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++		
++		try{
++			buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++		}catch(Exception e){
++			e.printStackTrace();
++			return ;
++		}
++		for(int i=0 ; i < testitem.length; i++){
++			testResult[i] = buff[TEST_REPORT_NV_POS] < 0 ? 0:buff[TEST_REPORT_NV_POS + i];
++		}
++	}
++	
++	public void getAutoTestReport(){
++		byte[] buff = null;
++		IBinder binder = ServiceManager.getService("NvRAMAgent");
++		NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++		try{
++			buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++		}catch(Exception e){
++			e.printStackTrace();
++			return ;
++		}
++		ATPC = buff[AUTO_TEST_REPORT_NV_POS] < 0 ? 0:buff[AUTO_TEST_REPORT_NV_POS];
++		AutoTested = buff[AUTO_TEST_REPORT_NV_POS+1] < 0 ? 0:buff[AUTO_TEST_REPORT_NV_POS+1];
++		for(int i=0 ; i < testitem.length; i++){
++			autotestResult[i] = buff[AUTO_TEST_REPORT_NV_POS] < 0 ? 0:buff[AUTO_TEST_REPORT_NV_POS + 2 + i];
++		}
++	}
++	
++	public void getLastestTestReport(){
++		byte[] buff = null;
++		IBinder binder = ServiceManager.getService("NvRAMAgent");
++		NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++		try{
++			buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++		}catch(Exception e){
++			e.printStackTrace();
++			return ;
++		}
++		for(int i=0 ; i < testitem.length; i++){
++			LTResult[i] = buff[LASTEST_TEST_REPORT_NV_POS] < 0 ? 0:buff[LASTEST_TEST_REPORT_NV_POS + i];
++		}
++	}
++	
++	public void TestSelectedItem(int selectedItem) {
++		Intent intent = new Intent();
++		Log.d(TAG, "TestSelectedItem,selectedItem:" + selectedItem);
++		if(selectedItem >= TESTITEM_START && selectedItem < TESTITEM_TATOL) {
++			currenttestitem = getIndex(selectedItem);
++		}
++		switch (selectedItem) {
++		case TESTITEM_VERSION:
++			intent.setClass(this, Version.class);
++			startActivityForResult(intent,TESTITEM_VERSION); 
++			break;
++		case TESTITEM_TOUCH:
++			//intent.setClass(this, TouchScreenHandWriting.class);
++			intent.setClass(this, BlockTest.class);
++			startActivityForResult(intent,TESTITEM_TOUCH); 
++			break;
++		case TESTITEM_LCD:
++			intent.setClass(this, LCD.class);
++			startActivityForResult(intent,TESTITEM_LCD); 
++			break;
++		case TESTITEM_GPS:
++			intent.setClass(this, GPS.class);
++			startActivityForResult(intent,TESTITEM_GPS); 
++			break;
++		case TESTITEM_POWER:
++			intent.setClass(this, BatteryLog.class);
++			startActivityForResult(intent,TESTITEM_POWER); 
++			break;
++		case TESTITEM_KEY:
++			intent.setClass(this, KeyCode.class);
++			startActivityForResult(intent,TESTITEM_KEY); 
++			break;
++		case TESTITEM_SPEAKER:
++			intent.setClass(this, Speaker.class);
++			startActivityForResult(intent,TESTITEM_SPEAKER); 
++			break;
++		case TESTITEM_HEADSET:
++			intent.setClass(this, HeadSet.class);
++			startActivityForResult(intent,TESTITEM_HEADSET); 
++			break;
++		case TESTITEM_MIC:
++			intent.setClass(this,MicRecorder.class);
++			startActivityForResult(intent, TESTITEM_MIC);
++			break;
++		case SUBTESTITEM_MIC:
++			intent.setClass(this,SubMicRecorder.class);
++			startActivityForResult(intent, SUBTESTITEM_MIC);
++			break;
++		case TESTITEM_LSENSORCALI:
++			intent.setClass(this, LSensorCali.class);
++			startActivityForResult(intent, TESTITEM_LSENSORCALI);
++			break;
++		case TESTITEM_RECEIVER:
++			intent.setClass(this, Earphone.class);
++			startActivityForResult(intent, TESTITEM_RECEIVER);
++			break;
++
++		case TESTITEM_WIFI:
++			intent.setClass(this, WiFiTest.class);
++			startActivityForResult(intent, TESTITEM_WIFI);
++			break;
++		case TESTITEM_BT:
++			intent.setClass(this, Bluetooth.class);
++			startActivityForResult(intent, TESTITEM_BT);
++			break;
++		case TESTITEM_SHAKE:
++			intent.setClass(this, Vibratortest.class);
++			startActivityForResult(intent, TESTITEM_SHAKE);
++			break;
++		case TESTITEM_CALL:
++			intent.setClass(this, Signal.class);
++			startActivityForResult(intent, TESTITEM_CALL);
++			break;
++		case TESTITEM_BL:
++			intent.setClass(this, BackLight.class);
++			startActivityForResult(intent, TESTITEM_BL);
++			break;
++		case TESTITEM_MEMORY:
++			intent.setClass(this, Memory.class);
++			startActivityForResult(intent, TESTITEM_MEMORY);
++			break;
++		case TESTITEM_GSENSOR:
++			intent.setClass(this, GSensor.class);
++			startActivityForResult(intent, TESTITEM_GSENSOR);
++			break;
++		case TESTITEM_MSENSOR:
++			intent.setClass(this, MSensor.class);
++			startActivityForResult(intent, TESTITEM_MSENSOR);
++			break;
++		case TESTITEM_LSENSOR:
++			intent.setClass(this, LSensor.class);
++			startActivityForResult(intent, TESTITEM_LSENSOR);
++			break;
++		case TESTITEM_DSENSOR:
++			intent.setClass(this, PSensor.class);
++			startActivityForResult(intent, TESTITEM_DSENSOR);
++			break;
++		case TESTITEM_TCARD:
++			intent.setClass(this, SDCard.class);
++			startActivityForResult(intent, TESTITEM_TCARD);
++			break;
++		case TESTITEM_BCAMERA:
++			intent.setClass(this, CameraTest.class);
++			startActivityForResult(intent, TESTITEM_BCAMERA);
++			break;
++		case TESTITEM_FCAMERA:
++			intent.setClass(this, SubCamera.class);
++			startActivityForResult(intent, TESTITEM_FCAMERA);
++			break;
++      //   case TESTITEM_IRIS:
++		//	intent.setClass(this, Iris.class);
++			//startActivityForResult(intent, TESTITEM_IRIS);
++			//break;
++		case TESTITEM_FM:
++			//intent.setClassName("com.mediatek.FMRadio", "com.mediatek.FMRadio.FMRadiotest");
++			intent.setClass(this, FMRadio.class);
++			startActivityForResult(intent, TESTITEM_FM);
++			break;
++		case TESTITEM_SIM:
++			intent.setClass(this, SimCard.class);
++			startActivityForResult(intent, TESTITEM_SIM);
++			break;
++		case TESTITEM_HALL:
++			intent.setClass(this,Hall.class);
++			startActivityForResult(intent, TESTITEM_HALL);
++			break;
++		case TESTITEM_LED:
++			intent.setClass(this, Led.class);
++			startActivityForResult(intent, TESTITEM_LED);
++			break;
++		case TESTITEM_FLASHLIGHT:
++			intent.setClass(this, FlashLight.class);
++			startActivityForResult(intent, TESTITEM_FLASHLIGHT);
++			break;
++		case TESTITEM_OSENSOR:
++			intent.setClass(this, OSensor.class);
++			startActivityForResult(intent, TESTITEM_OSENSOR);
++      
++			break;
++	    case TESTITEM_FINGER:
++			intent.setClass(this,Finger.class);
++			startActivityForResult(intent, TESTITEM_FINGER);
++			break;
++		/*case TESTITEM_GYRO:
++			intent.setClass(this, Gyro.class);
++			startActivityForResult(intent, TESTITEM_GYRO);
++			break;*/
++	    case TESTITEM_NFC:
++                intent.setClass(this, Nfc.class);
++                startActivityForResult(intent, TESTITEM_NFC);
++                break;
++		case TESTITEM_SMT:
++			intent.setClass(this, SMTBattery.class);
++			startActivityForResult(intent,TESTITEM_SMT); 
++			break;		
++		default:
++			break;
++		}
++	}
++
++	public String getStringbyitemid(int item_id) {
++		String str = null;
++		switch (item_id) {
++		case TESTITEM_VERSION:
++			str = getString(R.string.version_info);
++			break;
++		case TESTITEM_TOUCH:
++			str = getString(R.string.touchscreen_name);
++			break;
++		case TESTITEM_LCD:
++			str = getString(R.string.lcd_name);
++			break;
++		case TESTITEM_GPS:
++			str = getString(R.string.gps_name);
++			break;
++		case TESTITEM_POWER:
++			str = getString(R.string.overall_unit_power_name);
++			break;
++		case TESTITEM_KEY:
++			str = getString(R.string.KeyCode_name);
++			break;
++		case TESTITEM_SPEAKER:
++			str = getString(R.string.speaker_name);
++			break;
++		case TESTITEM_HEADSET:
++			str = getString(R.string.headset_name);
++			break;
++		case TESTITEM_MIC:
++			str = getString(R.string.microphone_name);
++			break;
++		case SUBTESTITEM_MIC:
++			str = getString(R.string.submicrophone_name);
++			break;
++		case TESTITEM_LSENSORCALI:
++			str = getString(R.string.lsensor_cali_name);
++			break;
++		case TESTITEM_RECEIVER:
++			str = getString(R.string.earphone_name);
++			break;
++		case TESTITEM_WIFI:
++			str = getString(R.string.wifi_name);
++			break;
++		case TESTITEM_BT:
++			str = getString(R.string.bluetooth_name);
++			break;
++		case TESTITEM_SHAKE:
++			str = getString(R.string.vibrator_name);
++			break;
++		case TESTITEM_CALL:
++			str = getString(R.string.telephone_name);
++			break;
++		case TESTITEM_BL:
++			str = getString(R.string.backlight_name);
++			break;
++		case TESTITEM_MEMORY:
++			str = getString(R.string.memory_name);
++			break;
++		case TESTITEM_GSENSOR:
++			str = getString(R.string.gsensor_name);
++			break;
++		case TESTITEM_MSENSOR:
++			str = getString(R.string.msensor_name);
++			break;
++		case TESTITEM_LSENSOR:
++			str = getString(R.string.lsensor_name);
++			break;
++		case TESTITEM_DSENSOR:
++			str = getString(R.string.psensor_name);
++			break;
++		case TESTITEM_TCARD:
++			str = getString(R.string.sdcard_name);
++			break;
++		case TESTITEM_BCAMERA:
++			str = getString(R.string.camera_name);
++			break;
++		case TESTITEM_FCAMERA:
++			str = getString(R.string.subcamera_name);
++			break;
++	//	case TESTITEM_IRIS:
++		//	str = getString(R.string.iris);
++			//break;
++		case TESTITEM_FM:
++			str = getString(R.string.FMRadio);
++			break;
++		case TESTITEM_SIM:
++			str = getString(R.string.SimCard);
++			break;
++		case TESTITEM_HALL:
++			str = getString(R.string.Hall);
++			break;
++		case TESTITEM_LED:
++			str = getString(R.string.Led);
++			break;
++		case TESTITEM_FLASHLIGHT:
++			str = getString(R.string.flashlight);
++			break;
++		case TESTITEM_OSENSOR:
++			str = getString(R.string.OSensor);
++			break;
++        case TESTITEM_FINGER:
++			str = getString(R.string.finger);
++			break;
++		/*case TESTITEM_GYRO:
++			str = getString(R.string.gyro);
++			break;*/
++		case TESTITEM_NFC:
++             str = getString(R.string.nfc_name);
++             break;
++		case TESTITEM_SMT:
++			str = getString(R.string.smt_name);
++			break;	 
++		default:
++			break;
++		}
++		return str;
++	}
++}

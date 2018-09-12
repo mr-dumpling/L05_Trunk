@@ -1,0 +1,162 @@
+Index: packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java	(revision 1062)
++++ packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java	(revision 1063)
+@@ -166,6 +166,11 @@
+ 
+         final long sharedDataSize = mVolume.getPath().getTotalSpace();
+         mTotalSize = getArguments().getLong(EXTRA_VOLUME_SIZE, 0);
++		//add by wqq start{
++		if (VolumeInfo.ID_PRIVATE_INTERNAL.equals(mVolume.getId())) {
++            mTotalSize = Utils.getTotalRomSize();
++        }
++		//add by wqq end}
+         mSystemSize = mTotalSize - sharedDataSize;
+         if (LOGV) Log.v(TAG,
+                 "onCreate() mTotalSize: " + mTotalSize + " sharedDataSize: " + sharedDataSize);
+Index: packages/apps/Settings/src/com/android/settings/deviceinfo/StorageSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/deviceinfo/StorageSettings.java	(revision 1062)
++++ packages/apps/Settings/src/com/android/settings/deviceinfo/StorageSettings.java	(revision 1063)
+@@ -65,6 +65,13 @@
+ import java.util.Objects;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
++//add start
++import java.io.BufferedReader;
++import java.io.FileNotFoundException;
++import java.io.FileReader;
++import java.io.IOException;
++import java.io.InputStream;
++//add end
+ 
+ /**
+  * Panel showing both internal storage (both built-in storage and private
+@@ -196,8 +203,17 @@
+                         new StorageVolumePreference(context, vol, color, volumeTotalBytes));
+                 if (vol.isMountedReadable()) {
+                     final File path = vol.getPath();
+-                    privateUsedBytes += (volumeTotalBytes - path.getFreeSpace());
+-                    privateTotalBytes += volumeTotalBytes;
++                   /* privateUsedBytes += (volumeTotalBytes - path.getFreeSpace());
++                    privateTotalBytes += volumeTotalBytes;*/
++                    //add by wqq for storage display start{
++                    if (VolumeInfo.ID_PRIVATE_INTERNAL.equals(vol.getId())) {
++                        privateTotalBytes += Utils.getTotalRomSize();
++						privateUsedBytes += Utils.getTotalRomSize() - path.getFreeSpace();
++                    } else {
++                        privateTotalBytes += path.getTotalSpace();
++						privateUsedBytes += path.getTotalSpace() - path.getFreeSpace();                    
++                    }
++					//add by wqq for storage display end}
+                 }
+             } else if (vol.getType() == VolumeInfo.TYPE_PUBLIC) {
+                 mExternalCategory.addPreference(
+@@ -546,15 +562,23 @@
+             final List<VolumeInfo> volumes = storageManager.getVolumes();
+             long privateFreeBytes = 0;
+             long privateTotalBytes = 0;
++			long privateUsedBytes=0;//add
+             for (VolumeInfo info : volumes) {
+                 final File path = info.getPath();
+                 if (info.getType() != VolumeInfo.TYPE_PRIVATE || path == null) {
+                     continue;
+                 }
+-                privateTotalBytes += getTotalSize(info);
+-                privateFreeBytes += path.getFreeSpace();
++               /* privateTotalBytes += getTotalSize(info);
++                privateFreeBytes += path.getFreeSpace();*/
++                if (info.getType() == VolumeInfo.TYPE_PRIVATE && VolumeInfo.ID_PRIVATE_INTERNAL.equals(info.getId())) {
++                    privateTotalBytes += Utils.getTotalRomSize();
++					privateUsedBytes += Utils.getTotalRomSize() - path.getFreeSpace();
++                } else {
++                    privateTotalBytes += path.getTotalSpace();
++					privateUsedBytes += path.getTotalSpace() - path.getFreeSpace();
++                }
+             }
+-            long privateUsedBytes = privateTotalBytes - privateFreeBytes;
++            //long privateUsedBytes = privateTotalBytes - privateFreeBytes;
+             mLoader.setSummary(this, mContext.getString(R.string.storage_summary,
+                     Formatter.formatFileSize(mContext, privateUsedBytes),
+                     Formatter.formatFileSize(mContext, privateTotalBytes)));
+Index: packages/apps/Settings/src/com/android/settings/deviceinfo/StorageVolumePreference.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/deviceinfo/StorageVolumePreference.java	(revision 1062)
++++ packages/apps/Settings/src/com/android/settings/deviceinfo/StorageVolumePreference.java	(revision 1063)
+@@ -34,6 +34,7 @@
+ import com.android.settings.deviceinfo.StorageSettings.UnmountTask;
+ 
+ import java.io.File;
++import com.android.settings.Utils;
+ 
+ /**
+  * Preference line representing a single {@link VolumeInfo}, possibly including
+@@ -73,8 +74,12 @@
+                 totalBytes = path.getTotalSpace();
+             }
+             final long freeBytes = path.getFreeSpace();
+-            final long usedBytes = totalBytes - freeBytes;
+-
++			//add by wqq start{
++			if (volume.getType() == VolumeInfo.TYPE_PRIVATE && VolumeInfo.ID_PRIVATE_INTERNAL.equals(volume.getId())) {
++                totalBytes = Utils.getTotalRomSize();
++            } 
++			//add by wqq end}
++			final long usedBytes = totalBytes - freeBytes;
+             final String used = Formatter.formatFileSize(context, usedBytes);
+             final String total = Formatter.formatFileSize(context, totalBytes);
+             setSummary(context.getString(R.string.storage_volume_summary, used, total));
+Index: packages/apps/Settings/src/com/android/settings/Utils.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/Utils.java	(revision 1062)
++++ packages/apps/Settings/src/com/android/settings/Utils.java	(revision 1063)
+@@ -104,6 +104,12 @@
+ import static android.content.Intent.EXTRA_USER;
+ import static android.text.format.DateUtils.FORMAT_ABBREV_MONTH;
+ import static android.text.format.DateUtils.FORMAT_SHOW_DATE;
++//add start
++import java.io.BufferedReader;
++import java.io.FileNotFoundException;
++import java.io.FileReader;
++import java.io.InputStream;
++//add end
+ 
+ public final class Utils extends com.android.settingslib.Utils {
+ 
+@@ -1184,4 +1190,36 @@
+         }
+         return false;
+     }
++
++	//add by wqq 
++	public static  long getTotalRomSize() {
++        int i = 0;
++       long flashSize;
++        String filename = "/sys/block/mmcblk0/size";
++        try {
++           BufferedReader reader = new BufferedReader(new FileReader(filename));
++            String string = reader.readLine();
++			Log.d(TAG, "wqq flashSize= "+Long.parseLong(string));
++            flashSize = (Long.parseLong(string))*512l;
++        } catch (FileNotFoundException e) {
++        // TODO Auto-generated catch block
++            flashSize = 0l;
++            e.printStackTrace();
++        } catch (IOException e) {
++        // TODO Auto-generated catch block
++            flashSize = 0l;
++            e.printStackTrace();
++        }
++        if(flashSize > 0l){
++            //for example: 3.75G to 4G
++            long gb = (flashSize >> 30);
++            for(i = 0;(Math.pow(2,i)) < gb;i++){
++                if(i > 10) break; //if i > 10 force stop
++            }
++            flashSize = ((long)Math.pow(2,i) << 30);
++            Log.d(TAG, "flashSize="+flashSize);
++            return flashSize;
++        }
++        return 0l;
++   }
+ }

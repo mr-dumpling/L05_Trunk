@@ -1,0 +1,172 @@
+Index: vendor/branch/5058A_BRIGHTSTAR/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_BRIGHTSTAR/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 2713)
++++ vendor/branch/5058A_BRIGHTSTAR/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 2714)
+@@ -119,10 +119,11 @@
+ 	private static final String CUSTOMER_VER_EXTERNAL = "*#837837#";	
+ 	private static final String CUSTOMER_VERSION_INTERNAL= "*#168*#";	
+ 	private static final String MMI_TEST_FOR_TCL = "*#458#";	
+-	private static final String INTERNAL_VER_FOR_TCL = "*#208*#";
+-	private static final String CUSTOMER_VERSION_FOR_TCL = "*#837#";		
++	private static final String INTERNAL_VER_FOR_TCL = "*#208*#";	
+ 	private static final String MMI_CHECK_ROOT= "*#858#";
+ 	private static final String MMI_CHECK_Efused= "*#9463*5#";
++	private static final String MMI_CHECK_ROOT2="*#7668#";
++	private static final String CUSTOMER_VERSION_FOR_TCL = "*#837#";	
+     /// @}
+ 
+     /**
+@@ -473,8 +474,6 @@
+ 				String version=SystemProperties.get("ro.def.software.version");
+ 				if(!TextUtils.isEmpty(version)&& version!=null){
+ 					svnver = svnver + version; 
+-				}else{
+-					svnver = svnver + "00000";
+ 				}
+ 				int len=version.length();
+     			String vers=version.substring(len-2, len);
+@@ -498,21 +497,21 @@
+                    String deviceId = telephonyManager.getDeviceId(0);
+ 					/// M: Avoid null object be added
+ 					if(!TextUtils.isEmpty(deviceId)&& deviceId!=null){
++						deviceId="IMEI:"+deviceId;
+ 						deviceIds.add(deviceId);
+-					}else{
+-						deviceIds.add("00000000000");
+ 					}
+ 					if (!TextUtils.isEmpty(vers)) {
+-					 	vers="IMEISV"+vers;
++					 	vers="IMEISV:"+vers;
+                         deviceIds.add(vers);
+                     }
+                 }
+ 				deviceIds.add(svnver); 
+-
++				/*
+                 /// M: Add single IMEI plugin. @{
+                 deviceIds = ExtensionManager.getInstance().getDialPadExtension().getSingleIMEI(
+                         deviceIds);
+                 /// @}
++				*/
+ 
+                 /// M: Add single IMEI and MEID handle for OP01 OM project. @{
+                 if (DialerFeatureOptions.isOpLightCustSupport()) {
+@@ -580,7 +579,7 @@
+ 		if (input.equals(MMI_INTERNAL_VERSION)) {				
+ 			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.incremental");			   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("Android")								
++				.setTitle("Version Info")								
+ 				.setMessage(sw_ver)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+@@ -595,7 +594,7 @@
+ 		if (input.equals(MMI_EXTERNAL_VERSION)) {				
+ 			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.custintid");		   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("Android")								
++				.setTitle("Version Info")								
+ 				.setMessage(sw_ver)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+@@ -613,7 +612,7 @@
+ 			String hw_ver = "HW Version:\n" + SystemProperties.get("ro.def.hardware.version");
+ 			String release_ver = commercial_name + "\n"+ sw_ver + "\n" + hw_ver;
+ 			AlertDialog alert = new AlertDialog.Builder(context)
+-				.setTitle("Android")
++				.setTitle("Version Info")
+ 				.setMessage(release_ver)
+ 				.setPositiveButton(android.R.string.ok, null)
+ 				.setCancelable(false)
+@@ -626,11 +625,11 @@
+ 	
+ 	static boolean handleCustomerInternalVersion(Context context, String input) {	 
+ 		if (input.equals(CUSTOMER_VERSION_INTERNAL)) {			
+-			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.product.name");
++			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.business.name");
+ 			String sw_ver = "Certificate SW Version:\n"+ CERTIFICATE_VERSION;			
+ 			String release_ver = commercial_name + "\n"+ sw_ver;		   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("Android")								
++				.setTitle("Version Info")								
+ 				.setMessage(release_ver)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+@@ -647,16 +646,19 @@
+ 			initProductInfo();
+ 			String SW_Version="SW Version: "+ SystemProperties.get("ro.build.version.custintid");
+ 			deviceIds.add(SW_Version);
+-			String[] directory = SW_Version.split("_");
+-			String sw_ver = "Build Version:20"+ directory[3];
+-			//String Build_Version="Build Version:"+ SystemProperties.get("ro.build.date");
+-		    deviceIds.add(sw_ver);
+-			String stringBuffer =  new String(product_info, CU_REF_START, CU_REF_LENGTH);
+-			//String su_ref="CU REF: "+SystemProperties.get("ro.tct.curef");
+-			if(stringBuffer ==null ||stringBuffer.equals("")){
+-				stringBuffer="0000";
++			String build="Build Version:"+SystemProperties.get("ro.build.date");
++			deviceIds.add(build);
++			String stringInfo =  new String(product_info, CU_REF_START, CU_REF_LENGTH);
++			boolean haseChar=false;
++			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
++				haseChar=true;
+ 			}
+-			String su_ref="CU REF: "+stringBuffer.toString().toUpperCase();
++			String su_ref=null;
++			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
++				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
++			}else{
++				su_ref="CU REF: "+SystemProperties.get("ro.tct.curef.default");
++			}
+ 			deviceIds.add(su_ref);
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+ 				.setTitle("Version Info")								
+@@ -704,15 +706,26 @@
+ 	
+ 	static boolean handleFactoryModeTest(Context context, String input) {	 
+ 		List<String> deviceIds = new ArrayList<String>();
+-		if (input.equals(INTERNAL_VER_FOR_TCL ) || input.equals(CUSTOMER_VERSION_FOR_TCL)) {	
+-			String SW_Version="REL SW VERSION: "+ SystemProperties.get("ro.build.version.custintid");
++		if (input.equals(INTERNAL_VER_FOR_TCL )|| input.equals(CUSTOMER_VERSION_FOR_TCL)) {	
++			String SW_Version="SW Version: "+ SystemProperties.get("ro.build.version.custintid");
+ 			deviceIds.add(SW_Version);
+-			String[] directory = SW_Version.split("_");
+-			String sw_ver = "Build Version:20"+ directory[3];
+-			//String Build_Version="Build Version:"+ SystemProperties.get("ro.build.date");
+-		    deviceIds.add(sw_ver);
++			String build="Build Version:"+SystemProperties.get("ro.build.date");
++			deviceIds.add(build);
++			initProductInfo();
++			String stringInfo = new String(product_info, CU_REF_START, CU_REF_LENGTH);
++			boolean haseChar=false;
++			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
++				haseChar=true;
++			}
++			String su_ref=null;
++			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
++				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
++			}else{
++				su_ref="CU REF: "+SystemProperties.get("ro.tct.curef.default");
++			}
++			deviceIds.add(su_ref);
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("REL SW VERSION")								
++				.setTitle("Version Info")								
+ 				.setItems(deviceIds.toArray(new String[deviceIds.size()]), null)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+@@ -730,7 +743,13 @@
+ 		}		
+ 		return false;
+ 	} 
+-	
++	static boolean handleCheckRoot2(Context context, String input) {    
++		if (input.equals(MMI_CHECK_ROOT2)) {
++			showCheckRoot(context);
++			return true;
++		}		
++		return false;
++	} 
+ 	static void showCheckRoot(Context context) {
+ 		AlertDialog alert = new AlertDialog.Builder(context)
+ 			.setTitle("Check Root")

@@ -1,0 +1,258 @@
+Index: vendor/branch/5058Y/diff.txt
+===================================================================
+--- vendor/branch/5058Y/diff.txt	(revision 9238)
++++ vendor/branch/5058Y/diff.txt	(revision 9239)
+@@ -5,10 +5,9 @@
+ > echo "ro.build.version.incremental=LATAM_5058A_L030_S15A_180115"
+ > echo "ro.tct.sys.ver=O58AWE01"
+ > echo "ro.build.display.factoryid=Plat:5058A_LATAM_S15A_180115Outer:5058A_LATAM_V2.0_180111End"
++> echo "ro.build.date=`$DATE`"
+ > echo "ro.product.model=5058A"
+-> echo "ro.product.brand=TCL"
+ > echo "ro.product.name=5058A"
+-> echo "ro.product.device=A3A_PLUS"
+ > echo "ro.build.fingerprint=TCL/5058A/A3A_PLUS:7.1.1/N6F26Q/5058A_LATAM_V2.0_180110:user/release-keys"
+ > echo "# end build properties"
+ 
+@@ -18,6 +17,15 @@
+ > 	fcimini
+ > 
+ 
++vendor/branch/5058Y/vendor/mediatek/proprietary/custom/mt6739/hal/sendepfeature/s5k3l9_mipi_raw/config.ftbl.s5k3l9_mipi_raw.h:
++> 				"4096x2048",    "4096x2304",    /*"4096x3072",*/    "4160x2080",    "4160x3120"
++
++vendor/branch/5058Y/vendor/mediatek/proprietary/custom/mt6739/hal/sendepfeature/gc5025_mipi_raw/config.ftbl.gc5025_mipi_raw.h:
++>                 "1600x1200",    "1920x1088",    "1920x1920",     "2048x1536",    "2560x1280",   "2560x1440",     "2560x1920",    "2592x1952",
++
++vendor/branch/5058Y/vendor/mediatek/proprietary/custom/mt6739/hal/sendepfeature/s5k3l8_mipi_raw/config.ftbl.s5k3l8_mipi_raw.h:
++> 				"4096x2048",    "4096x2304",    /*"4096x3072",*/    "4160x2080",    "4160x3120"
++
+ vendor/branch/5058Y/vendor/mediatek/proprietary/bootable/bootloader/preloader/custom/aus6739_66_n1/inc/custom_MemoryDevice.h:
+ 
+ vendor/branch/5058Y/vendor/mediatek/proprietary/bootable/bootloader/preloader/custom/aus6739_66_n1/inc/cust_usb.h:
+@@ -57,6 +65,15 @@
+ > 		if (//FeatureOption.MTK_GEMINI_SUPPORT == 
+ > 				true) {
+ 
++vendor/branch/5058Y/vendor/mediatek/proprietary/packages/apps/CameraOverlay/res/values/isdm_Camera_defaults.xml:
++>     <string name="def_camera_rear_size">"4160x3120,4096x3072, 4096x2304,4096x2048,3264x2448,3072x1728,2560x1920"</string>
++
++vendor/branch/5058Y/vendor/mediatek/proprietary/packages/apps/ELabelOverlay/res/values/isdm_ElabelRes_defaults.xml:
++>     <string name="def_jrdelabel_ifetel">"México"</string>
++>     <string name="def_jrdelabel_sarfcc_headvalue">"0.41"</string>
++>     <string name="def_jrdelabel_sarfcc_bodyvalue">"0.90"</string>
++>     <string name="def_jrdelabel_sarfcc_distancevalue">"10"</string>
++
+ vendor/branch/5058Y/vendor/mediatek/proprietary/packages/apps/BrowserOverlay/res/values/isdm_BrowserRes_defaults.xml:
+ >     <string name="def_uaProfUrl_forBrowser">"http://www-ccpp.tcl-ta.com/files/5058a.xml"</string>
+ 
+@@ -64,6 +81,49 @@
+ >             if (len > 0) {
+ 
+ vendor/branch/5058Y/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java:
++> 	private int getNewMmsCount() { 
++> 		int result = 0; 
++> 		Cursor csr = getContentResolver().query(Uri.parse("content://mms/inbox"), null, "read = 0", null, null); 
++> 		if (csr != null) { 
++> 			result = csr.getCount(); 
++> 			csr.close(); 
++> 		} 
++> 		return result; 
++> 	} 
++> 	
++> 	private int getNewSmsCount() { 
++> 		int result = 0; 
++> 		Cursor csr = getContentResolver().query(Uri.parse("content://sms"), null, "type = 1 and read = 0", null, null); 
++> 		if (csr != null) { 
++> 			result = csr.getCount(); 
++> 			csr.close(); 
++> 		} 
++> 		return result; 
++> 	}
++> 	private void sendUnreadAction(){
++> 		int mNewSmsCount = getNewSmsCount() + getNewMmsCount(); 
++> 		Context mContext = ComposeMessageActivity.this;
++> 		Log.e(TAG, "sendUnreadAction mNewSmsCount="+mNewSmsCount); 
++> 		ComponentName component = new ComponentName("com.android.mms","com.android.mms.ui.ConversationList");
++> 		Intent mIntent = new Intent("com.intent.unread");
++> 		mIntent.putExtra("componentName",component);
++> 		mIntent.putExtra("unreadNum",mNewSmsCount);
++> 		mContext.sendBroadcast(mIntent);
++> 		return;
++> 	}
++>         MmsLog.d(TAG, "updateCounter getSmsEncodingType encodingType = " + encodingType ); // Add this log
++>         
++>         if(encodingType == SmsMessage.ENCODING_7BIT){
++>             params = SmsMessage.calculateLength(text, true, encodingType);
++>         } else {
++>             params = SmsMessage.calculateLength(text, false, encodingType);
++>         }
++> 
++>         if (mWorkingMessage != null && mWorkingMessage.getConversation().hasDraft()) {
++>             loadDraft();
++>         }
++> 		sendUnreadAction();
++> 		sendUnreadAction();
+ >                     mSendButtonSms.setImageResource(R.drawable.ic_send_sms_unsend);
+ >             }else {
+ >                 menu.add(0, MENU_ADD_SUBJECT, 0,
+@@ -107,7 +167,6 @@
+ >     <string name="userAgent">5058A-MMS/2.0</string>
+ 
+ vendor/branch/5058Y/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml:
+-> 	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">true</bool>
+ 
+ vendor/branch/5058Y/vendor/customer/custom.mk:
+ > PRODUCT_PACKAGES += ActivateLATAM \
+@@ -178,53 +237,11 @@
+ vendor/branch/5058Y/frameworks/native/data/etc/android.hardware.nfc.hcef.xml:
+ >    <!--  <feature name="android.hardware.nfc.hcef" /> -->
+ 
+-vendor/branch/5058Y/frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java:
+-> import android.telephony.TelephonyManager;
+-> 				//changeByUser = false;//wqq
+-> 				/*if(screenOff){//wqq s
+->                  }//wqq e*/
+-> 			//changeByUser  = false;//wqq
+-> 					/*if (mUserPresent &&!changeByUser) {//wqq s 
+->                     }	//wqq e*/
+->                         mUsbDataUnlocked = true/*false*/;
+->                         setEnabledFunctions(null, true);//wqq modify  false
+-> 					//if(!changeByUser && mUsbDataUnlocked) return;//wqq
+-> 		private boolean checkCmccCard(int simId) {
+->             boolean isCmccCard = false;
+-> 			Slog.d(TAG, "javen checkCmccCard simId = " + simId);
+-> 			TelephonyManager telMgr = (TelephonyManager)mContext.getSystemService(Context.TELEPHONY_SERVICE);
+-> 			int simState = telMgr.getSimState();
+-> 			boolean result = true;
+-> 			Slog.d(TAG, "javen checkCmccCard simState = " + simState);
+-> 			switch (simState) {
+-> 				case TelephonyManager.SIM_STATE_READY:
+-> 					isCmccCard = true;
+-> 					break;
+-> 				default:
+-> 					isCmccCard = false;
+-> 					break;
+-> 			}
+->             return isCmccCard;
+->         }
+->                     if (value.equals("no")){
+-> 						if(!checkCmccCard(0)){// && !checkCmccCard(1)
+-> 							return;
+-> 						}
+-> 						mIsUsbSimSecurityCheck = true;
+-> 					}
+->                             .setSmallIcon(com.android.internal.R.drawable.stat_sys_data_usb)
+->                             .setPriority(Notification.PRIORITY_DEFAULT)
+-> 		//changeByUser = true;//wqq
+-
+-vendor/branch/5058Y/frameworks/base/services/usb/java/com/android/server/usb/UsbService.java:
+-> 		/*filter.addAction(Intent.ACTION_USER_PRESENT);
+->         filter.addAction(Intent.ACTION_SCREEN_ON);*/
+-> 			/*else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+->             }*/
+-
+ vendor/branch/5058Y/frameworks/base/core/res/res/values/config.xml:
+ >     <string name="config_mms_user_agent" translatable="false">Android-Mms/0.1</string>
+ >     <string name="config_mms_user_agent_profile_url" translatable="false">http://www.google.com/oha/rdf/ua-profile-kila.xml</string>
++>     <bool name="config_dreamsActivatedOnDockByDefault">false</bool>
++>     <bool name="config_dreamsActivatedOnSleepByDefault">true</bool>
+ >     <string name="config_dozeComponent" translatable="false"></string>
+ >     <bool name="config_camera_sound_forced">true</bool>
+ >     <bool name="config_supportAudioSourceUnprocessed">false</bool>
+@@ -285,17 +302,22 @@
+ 
+ vendor/branch/5058Y/frameworks/base/packages/SystemUI/src/com/android/systemui/SystemUIApplication.java:
+ > 
++> 			
++> 		   // checkLicense();
+ >             //DetectProxy.init();
+ >             //VerifyProxy.init(this);
++> 		startFaceService();
++> 	
+ 
+ vendor/branch/5058Y/frameworks/base/packages/SystemUI/assets/app_info_db.db:
+ 
+-vendor/branch/5058Y/frameworks/base/packages/SystemUI/assets/LScreen.apk:
++vendor/branch/5058Y/frameworks/base/packages/SystemUI/res/values/config.xml:
++>         wifi,bt,cell,audioprofile,airplane,rotation,battery,location,flashlight,hotspot,night
++>         wifi,bt,cell,audioprofile,airplane,rotation,battery,location,flashlight,hotspot,dnd,hotknot,inversion,saver,work,night
+ 
+ vendor/branch/5058Y/frameworks/base/packages/SettingsProvider/res/values/defaults.xml:
+ >  * Licensed under the Apache License, Version 2.0 (the "License");
+ >  *     http://www.apache.org/licenses/LICENSE-2.0
+->     <string name="def_location_providers_allowed" translatable="false">gps,network</string>
+ 
+ vendor/branch/5058Y/frameworks/base/packages/Keyguard/res/layout/keyguard_status_area.xml:
+ 
+@@ -338,10 +360,9 @@
+ > MTK_MD3_SUPPORT = 2
+ > MTK_MULTI_SIM_SUPPORT = dsds
+ > MTK_PROTOCOL1_RAT_CONFIG = C/Lf/Lt/W/T/G
+-> MTK_VILTE_SUPPORT = yes
+-> MTK_VIWIFI_SUPPORT = yes
++> MTK_SIGNATURE_CUSTOMIZATION = no
+ > #ST_NFC_FM_SE_CONFIG = 3
+-> OP01SOUNDRECORDER_APP = yes
++> TCT_DIAGNOSTIC = no
+ 
+ vendor/branch/5058Y/external/icu/icu4c/source/data/zone/en.txt:
+ > 		"Asia:Chongqing"{
+@@ -405,6 +426,11 @@
+ vendor/branch/5058Y/packages/services/Telecomm/src/com/android/server/telecom/Ringer.java:
+ >                 mVibrator.vibrate(MO_CALL_VIBRATE_TIME);
+ 
++vendor/branch/5058Y/packages/apps/Nfc/AndroidManifest.xml:
++>                 <!--<action android:name="android.intent.action.SEND" />-->
++>            <!-- <intent-filter>
++>             </intent-filter>-->
++
+ vendor/branch/5058Y/packages/apps/ContactsCommon/src/com/android/contacts/common/preference/ContactsPreferenceActivity.java:
+ 
+ vendor/branch/5058Y/packages/apps/ContactsCommon/src/com/android/contacts/common/preference/ContactsPreferences.java:
+@@ -437,6 +463,7 @@
+ >                 android:configChanges="orientation|keyboard|keyboardHidden|navigation|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+ >                 android:configChanges="orientation|screenSize"
+ >                 android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize">
++>                   android:theme="@style/SetupWizardAccessibilityTheme"
+ > 				android:configChanges="orientation|screenSize"
+ > 			android:configChanges="orientation|screenSize"
+ > 			android:configChanges="orientation|screenSize"
+@@ -458,29 +485,6 @@
+ >                        <action android:name="android.settings.FINGERPRINT_SETUP"/>				 
+ >                  </intent-filter> 
+ > 			</activity>
+->         <activity android:name="Settings$TetherWifiSettingsActivity"
+->                 android:label="@string/wifi_tethering_title"
+->                 android:clearTaskOnLaunch="true"
+->                 android:configChanges="orientation|screenSize"
+->                 android:parentActivityName="Settings$TetherSettingsActivity">
+->             <intent-filter>
+->                 <action android:name="android.intent.action.MAIN" />
+->                 <action android:name="mediatek.intent.action.WIFI_TETHER" />
+->                 <category android:name="android.intent.category.DEFAULT" />
+->                 <category android:name="android.intent.category.VOICE_LAUNCH" />
+->                 <category android:name="com.android.settings.SHORTCUT" />
+->             </intent-filter>
+->             <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+->                 android:value="com.mediatek.wifi.hotspot.TetherWifiSettings" />
+->         </activity>
+->         <activity-alias android:name=".wifi.hotspot.TetherWifiSettings"
+->                   android:label="@string/wifi_tethering_title"
+->                   android:clearTaskOnLaunch="true"
+->                   android:exported="true"
+->                   android:targetActivity="Settings$TetherWifiSettingsActivity">
+->             <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+->                 android:value="com.mediatek.wifi.hotspot.TetherWifiSettings" />
+->         </activity-alias>
+ > 
+ > 
+ > 		<receiver android:name="com.android.settings.BootedReceiver">
+@@ -552,7 +556,6 @@
+ > 	<bool name="remove_sound_settings_cast">true</bool>
+ > 	<bool name="guest_cannot_open_hotspot">false</bool>
+ > 	<bool name="config_remove_snooze_enabled">false</bool>
+-> 	<bool name="def_settings_informed_consent_show">true</bool>
+ 
+ vendor/branch/5058Y/packages/apps/Settings/res/layout-sw360dp-land/fingerprint_enroll_finish.xml:
+ 

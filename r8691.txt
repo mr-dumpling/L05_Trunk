@@ -1,0 +1,54 @@
+Index: vendor/branch/5058A_CNT_Ecuador/frameworks/base/services/core/java/com/android/server/wm/WindowManagerService.java
+===================================================================
+--- vendor/branch/5058A_CNT_Ecuador/frameworks/base/services/core/java/com/android/server/wm/WindowManagerService.java	(revision 8690)
++++ vendor/branch/5058A_CNT_Ecuador/frameworks/base/services/core/java/com/android/server/wm/WindowManagerService.java	(revision 8691)
+@@ -6351,18 +6351,6 @@
+     }
+ 
+     public void performEnableScreen() {
+-    	///for solving black screen when boot up
+-		Slog.d(TAG, "mUserUnlock=" + mUserUnlocked);
+-		//when all windows drawn in boot up,going to notify ams finishBooting,let ams send USER_UNLOCKED early to avoid FallbackHome block
+-		//launcher's starting and then can avoid black screen when boot up
+-		if (!hasNofifyAMSFinishBooting) {
+-			try {
+-				hasNofifyAMSFinishBooting = true;
+-				Slog.d(TAG, "begin bootAnimationComplete");
+-				mActivityManager.bootAnimationComplete();
+-			} catch (Exception e) {
+-			}
+-		}
+         synchronized(mWindowMap) {
+             if (DEBUG_BOOT || !IS_USER_BUILD) {
+                 Slog.i(TAG_WM, "performEnableScreen: mDisplayEnabled=" + mDisplayEnabled
+@@ -6393,6 +6381,19 @@
+                 return;
+             }
+             /// @}
++
++            ///for solving black screen when boot up
++            Slog.d(TAG, "mUserUnlock=" + mUserUnlocked);
++            //when all windows drawn in boot up,going to notify ams finishBooting,let ams send USER_UNLOCKED early to avoid FallbackHome block
++            //launcher's starting and then can avoid black screen when boot up
++            if (!hasNofifyAMSFinishBooting) {
++                try {
++                    hasNofifyAMSFinishBooting = true;
++                    Slog.d(TAG, "begin bootAnimationComplete");
++                    mActivityManager.bootAnimationComplete();
++                } catch (Exception e) {
++                }
++            }
+             
+             //when user_unlocked start to stop the boot animation			 
+ 			if (!mUserUnlocked && !mForceDisplayEnabled) {
+@@ -12650,7 +12651,9 @@
+         } catch (IllegalAccessException e) {
+             Slog.e(TAG, "initFullscreenSwitchState IllegalAccessException:" + e);
+         } catch (InvocationTargetException e) {
+-            Slog.e(TAG, "initFullscreenSwitchState InvocationTargetException:" + e);
++            if (DEBUG_LAYOUT) {
++                Slog.e(TAG, "initFullscreenSwitchState InvocationTargetException:" + e);
++            }
+         }
+         return on;
+     }

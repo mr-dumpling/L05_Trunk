@@ -1,0 +1,150 @@
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 3758)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 3759)
+@@ -41,11 +41,6 @@
+ import java.util.ArrayList;
+ import java.util.Locale;
+ 
+-// add by dongdongli for 115446/115447 20171209 start
+-import android.app.NotificationManager;
+-import android.provider.Settings;
+-// add by dongdongli for 115446/115447 20171209 end
+-
+ import static com.mediatek.cellbroadcastreceiver.CellBroadcastReceiver.DBG;
+ import com.mediatek.cmas.ext.ICmasMainSettingsExt;
+ /**
+@@ -130,11 +125,6 @@
+     private AudioManager mAudioManager;
+     private TelephonyManager mTelephonyManager;
+     private int mInitialCallState;
+-	
+-	// add by dongdongli for 115446/115447 20171209 start
+-	private NotificationManager mNotificationManager = null;
+-	private boolean mIsSetZenMode = false;
+-	// add by dongdongli for 115446/115447 20171209 end
+ 
+     private final Handler mHandler = new Handler() {
+         @Override
+@@ -276,9 +266,6 @@
+                 (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+         mTelephonyManager.listen(
+                 mPhoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
+-		// add by dongdongli for 115446/115447 20171209 start
+-		mNotificationManager = NotificationManager.from(this);
+-		// add by dongdongli for 115446/115447 20171209 end
+     }
+ 
+     @Override
+@@ -345,31 +332,31 @@
+         mEnableVibrate = intent.getBooleanExtra(ALERT_AUDIO_VIBRATE_EXTRA, true);
+         boolean forceVibrate = intent.getBooleanExtra(ALERT_AUDIO_ETWS_VIBRATE_EXTRA, false);
+ 
+-        //switch (mAudioManager.getRingerMode()) {
+-        //    case AudioManager.RINGER_MODE_SILENT:
+-        //       if (DBG) log("Ringer mode: silent");
+-        //        mEnableVibrate = forceVibrate;
+-        //       mEnableAudio = false;
+-        //        break;
+-		//
+-        //    case AudioManager.RINGER_MODE_VIBRATE:
+-        //        if (DBG) log("Ringer mode: vibrate");
+-        //        mEnableAudio = false;
+-        //        break;
+-		//
+-        //    case AudioManager.RINGER_MODE_NORMAL:
+-        //    default:
+-        //        if (DBG) log("Ringer mode: normal");
+-        //        /// M: add to distinguish general and outdoor mode. Do not vibrate
+-        //        // in general mode. @{
+-        //        if (!mAudioManager.shouldVibrate(AudioManager.VIBRATE_TYPE_NOTIFICATION)) {
+-        //            mEnableVibrate = forceVibrate;
+-        //        }
+-        //        /// @}
+-        //        mEnableAudio = true;
+-        //        break;
+-        //}
++        switch (mAudioManager.getRingerMode()) {
++            case AudioManager.RINGER_MODE_SILENT:
++                if (DBG) log("Ringer mode: silent");
++                mEnableVibrate = forceVibrate;
++                mEnableAudio = false;
++                break;
+ 
++            case AudioManager.RINGER_MODE_VIBRATE:
++                if (DBG) log("Ringer mode: vibrate");
++                mEnableAudio = false;
++                break;
++
++            case AudioManager.RINGER_MODE_NORMAL:
++            default:
++                if (DBG) log("Ringer mode: normal");
++                /// M: add to distinguish general and outdoor mode. Do not vibrate
++                // in general mode. @{
++                if (!mAudioManager.shouldVibrate(AudioManager.VIBRATE_TYPE_NOTIFICATION)) {
++                    mEnableVibrate = forceVibrate;
++                }
++                /// @}
++                mEnableAudio = true;
++                break;
++        }
++
+         ICmasMainSettingsExt optSetAlertAudioVibration = (ICmasMainSettingsExt)
+                 CellBroadcastPluginManager.getCellBroadcastPluginObject(
+                 CellBroadcastPluginManager.CELLBROADCAST_PLUGIN_TYPE_MAIN_SETTINGS);
+@@ -377,11 +364,6 @@
+             mEnableAudio = optSetAlertAudioVibration.setAlertVolumeVibrate(mMessageId, mEnableAudio);
+             mEnableVibrate = optSetAlertAudioVibration.setAlertVolumeVibrate(mMessageId, mEnableVibrate);
+ 
+-		// add by dongdongli for 115446/115447 20171209 start
+-		mEnableAudio = true;
+-		mEnableVibrate = true;	
+-		// add by dongdongli for 115446/115447 20171209 end
+-			
+         Log.d(TAG, "mEnableAudio:" + mEnableAudio + ", mEnableVibrate:" + mEnableVibrate);
+         if (mMessageBody != null && mEnableAudio) {
+             if (mTts == null) {
+@@ -419,14 +401,7 @@
+     private void play() {
+         // stop() checks to see if we are already playing.
+         stop();
+-		// add by dongdongli for 115446/115447 20171209 start
+-		if(mNotificationManager.getZenMode() == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS){
+-			mNotificationManager.setZenMode(Settings.Global.ZEN_MODE_ALARMS,null,"ZenModePanel.selectZen");
+-			mIsSetZenMode = true; 
+-		}
+-		mAudioManager.setStreamVolume(AudioManager.STREAM_ALARM, mAudioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM) ,0);
+-		// add by dongdongli for 115446/115447 20171209 end
+-		
++
+         if (DBG) log("play()");
+ 
+         // Start the vibration first.
+@@ -489,13 +464,6 @@
+         // stop alert after the specified duration
+         mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_FINISHED), mDuration);
+         mState = STATE_ALERTING;
+-		
+-		// add by dongdongli for 115446/115447 20171209 start
+-		if(mIsSetZenMode){
+-			mNotificationManager.setZenMode(Settings.Global.ZEN_MODE_NO_INTERRUPTIONS,null,"ZenModePanel.selectZen");
+-			mIsSetZenMode = false; 
+-		}
+-		// add by dongdongli for 115446/115447 20171209 end
+     }
+ 
+     // Do the common stuff when starting the alarm.
+@@ -605,11 +573,8 @@
+     private boolean forceAlert() {
+         boolean isSilentMode = mAudioManager.getRingerMode() == AudioManager.RINGER_MODE_SILENT;
+         boolean isRepeating = mEnableRepeat && (mRepeatPattern.size() < sRepeatTimes.length);
+-        // add by dongdongli for 115446/115447 20171209 start
+-		//return isSilentMode && isRepeating;
+-		return true;
+-		// add by dongdongli for 115446/115447 20171209 end
+-	}
++        return isSilentMode && isRepeating;
++    }
+ 
+     private boolean forcePresidentAlert() {
+         boolean modeValue = (mAudioManager.getRingerMode() == AudioManager.RINGER_MODE_SILENT) || (mAudioManager.getRingerMode() == AudioManager.RINGER_MODE_VIBRATE);

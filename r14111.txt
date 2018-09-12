@@ -1,0 +1,43 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/ImeiInformation.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/ImeiInformation.java	(revision 14110)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/ImeiInformation.java	(revision 14111)
+@@ -17,6 +17,7 @@
+ 
+ import android.content.Context;
+ import android.os.Bundle;
++import android.os.SystemProperties;
+ import android.support.v7.preference.Preference;
+ import android.support.v7.preference.PreferenceScreen;
+ import android.telephony.SubscriptionManager;
+@@ -74,7 +75,11 @@
+ 
+     private void setPreferenceValue(int phoneId) {
+         final Phone phone = PhoneFactory.getPhone(phoneId);
+-
++		String version = SystemProperties.get("ro.def.software.version");
++		String imei_sv = "";
++		if (!TextUtils.isEmpty(version)) {
++			imei_sv = version.substring(version.length()-2, version.length());
++		}
+         if (phone != null) {
+             if (phone.getPhoneType() == TelephonyManager.PHONE_TYPE_CDMA) {
+                 setSummaryText(KEY_MEID_NUMBER, phone.getMeid());
+@@ -90,7 +95,7 @@
+                     // Show ICC ID and IMEI for LTE device
+                     setSummaryText(KEY_ICC_ID, phone.getIccSerialNumber());
+                     setSummaryTextAsDigit(KEY_IMEI, phone.getImei());
+-                    setSummaryTextAsDigit(KEY_IMEI_SV, phone.getDeviceSvn());
++                    setSummaryTextAsDigit(KEY_IMEI_SV, imei_sv/* phone.getDeviceSvn() */);
+                 } else {
+                     // device is not GSM/UMTS, do not display GSM/UMTS features
+                     // check Null in case no specified preference in overlay xml
+@@ -100,7 +105,7 @@
+                 }
+             } else {
+                 setSummaryTextAsDigit(KEY_IMEI, phone.getImei());
+-                setSummaryTextAsDigit(KEY_IMEI_SV, phone.getDeviceSvn());
++                setSummaryTextAsDigit(KEY_IMEI_SV, imei_sv/* phone.getDeviceSvn() */);
+                 // device is not CDMA, do not display CDMA features
+                 // check Null in case no specified preference in overlay xml
+                 removePreferenceFromScreen(KEY_PRL_VERSION);

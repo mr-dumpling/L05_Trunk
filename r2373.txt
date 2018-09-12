@@ -1,0 +1,162 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 2372)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 2373)
+@@ -122,6 +122,7 @@
+         db = AppDB.getInstance();
+         list.clear();
+         list.add(AppUtils.getDefaultAppInfoTitle(getApplicationContext()));
++		list.add(AppUtils.getFuncNotice(getApplicationContext()));
+         List<AppInfo> defaultApps = db.getDefaultApp(DEFAULT_TABLE);
+ 		for(AppInfo appinfo:defaultApps){
+ 			if(isAppInstalled(getApplicationContext(),appinfo.getPackerName())){
+@@ -128,7 +129,7 @@
+ 				list.add(appinfo);
+ 			}
+ 		}
+-        defaultNum= list.size()-1;
++        defaultNum= list.size()-2;
+         list.add(AppUtils.getAppInfoTitle(getApplicationContext()));
+         List<AppInfo> availableApps = db.getApp(TABLE);
+ 		for(AppInfo appinfo:availableApps){
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 2372)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 2373)
+@@ -46,6 +46,7 @@
+     public static final int APPS = 3;
+     public static final int FOOTER_INDEX = 4;
+     public static final int APPS_LIST = 5;
++	public static final int FUNC_NOTICE = 6;
+     public final static String FUNC_TO_MUSIC="func_to_music";
+     public static void startMusicApp(Context mContext){     
+         String packagerName="com.android.music";
+@@ -140,6 +141,14 @@
+         info.setIndex(DEFAULT_APPS_TITLE_INDEX);
+         return info;
+     }
++	
++	public static AppInfo getFuncNotice(Context context) {
++        AppInfo info = new AppInfo();
++        info.setPackerName(context.getResources().getString(R.string.func_notice));
++        info.setIndex(FUNC_NOTICE);
++        return info;
++    }
++	
+     public static AppInfo getFooterView(String footerViewName) {
+         AppInfo info = new AppInfo();
+         info.setPackerName(footerViewName);
+@@ -202,11 +211,13 @@
+     public static void showDialog(final Context context, String content){
+         AlertDialog.Builder builder=new AlertDialog.Builder(context,R.style.Theme_AppCompat_Light_Dialog_Alert_Self);
+         builder.setMessage(content);
+-        builder.setPositiveButton(null/*context.getResources().getString(R.string.func_dialog_button)*/, new DialogInterface.OnClickListener() {
+-            @Override
+-            public void onClick(DialogInterface dialog, int which) {
+-            }
+-        });
++		if(context.getResources().getString(R.string.func_remove_all).equals(content)){
++			builder.setPositiveButton(context.getResources().getString(R.string.func_dialog_button), new DialogInterface.OnClickListener() {
++				@Override
++				public void onClick(DialogInterface dialog, int which) {
++				}
++			});
++		}
+         builder.setCancelable(true);
+         AlertDialog dialog = builder.show();
+ 		final Timer t = new Timer();
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 2372)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 2373)
+@@ -50,7 +50,9 @@
+             view = LayoutInflater.from(mContext).inflate(R.layout.func_default_item, parent, false);
+         } else if (viewType == AppUtils.APPS) {
+             view = LayoutInflater.from(mContext).inflate(R.layout.func_app_item, parent, false);
+-        }
++        } else if (viewType == AppUtils.FUNC_NOTICE) {
++			view = LayoutInflater.from(mContext).inflate(R.layout.func_notice_item, parent, false);
++		}
+         return new AppInfoHodler(view, viewType);
+     }
+ 
+@@ -79,7 +81,14 @@
+                     }
+                 });
+             }
+-        } else {
++        } else if (viewType == AppUtils.FUNC_NOTICE) {
++			holder.func_notice.setText(info.getPackerName());
++			if(FuncSettings.defaultNum > 0) {
++				holder.func_notice.setVisibility(View.GONE);
++			} else {
++				holder.func_notice.setVisibility(View.VISIBLE);
++			}
++		} else {
+             if(info.getPackerName().equals("com.android.settings")){
+                 holder.app_name.setText(mContext.getResources().getString(R.string.func_settings_switch));
+             }else{
+@@ -224,6 +233,7 @@
+ 
+     public class AppInfoHodler extends RecyclerView.ViewHolder {
+         public TextView title;
++		public TextView func_notice;
+         public TextView app_name;
+         public ImageView app_icon;
+ 		public ImageView edit_icon;
+@@ -236,8 +246,11 @@
+                     || viewType == AppUtils.FOOTER_INDEX) {
+                 title = (TextView) itemView.findViewById(R.id.title);
+                 if( viewType == AppUtils.FOOTER_INDEX){
+-                    title.setGravity(Gravity.LEFT);}
+-            } else {
++                    title.setGravity(Gravity.LEFT);
++				}
++            } else if (viewType == AppUtils.FUNC_NOTICE) {
++				func_notice = (TextView) itemView.findViewById(R.id.func_notice);
++			} else {
+                 app_name = (TextView) itemView.findViewById(R.id.app_name);
+                 right_icon = (ImageView) itemView.findViewById(R.id.right_icon);
+ 				edit_icon = (ImageView) itemView.findViewById(R.id.edit_icon);
+Index: frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml	(revision 2372)
++++ frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml	(revision 2373)
+@@ -674,4 +674,5 @@
+ 	<string name="default_apps_title">"锁屏快捷功能"</string>
+ 	<string name="apps_title">"可用快捷功能"</string>
+ 	<string name="func_dialog_button">"确定"</string>
++	<string name="func_notice">"从下方列表添加快捷方式。"</string>
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml	(revision 2372)
++++ frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml	(revision 2373)
+@@ -670,4 +670,5 @@
+ 	<string name="default_apps_title">"鎖屏快捷功能"</string>
+ 	<string name="apps_title">"可用快捷功能"</string>
+ 	<string name="func_dialog_button">"確定"</string>
++	<string name="func_notice">"從下方列表添加快捷方式。"</string>
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml	(revision 2372)
++++ frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml	(revision 2373)
+@@ -672,4 +672,5 @@
+ 	<string name="default_apps_title">"鎖屏快捷功能"</string>
+ 	<string name="apps_title">"可用快捷功能"</string>
+ 	<string name="func_dialog_button">"確定"</string>
++	<string name="func_notice">"從下方列表添加快捷方式。"</string>
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 2372)
++++ frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 2373)
+@@ -1696,6 +1696,7 @@
+ 	<string name="default_apps_title">"Shortcut on lock screen"</string>
+ 	<string name="apps_title">"Alternative shortcuts"</string>
+ 	<string name="func_dialog_button">"go to it"</string>
++	<string name="func_notice">"Add shortcuts from the list below."</string>
+ 	
+     <!-- ADD-S By Justin.Shen for Hide/Show navigation-bar -->
+     <string name="navigation_bar_tips">Tap to auto hide the navigation bar</string>

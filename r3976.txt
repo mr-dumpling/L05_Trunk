@@ -1,0 +1,108 @@
+Index: frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java
+===================================================================
+--- frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java	(revision 3975)
++++ frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java	(revision 3976)
+@@ -830,14 +830,14 @@
+                 connected = 0;
+                 configured = 0;
+                 mHwDisconnected = true;
+-				changeByUser = false;
++				//changeByUser = false;//wqq
+             } else if ("DISCONNECTED".equals(state)) {
+                 connected = 0;
+                 configured = 0;
+                 mHwDisconnected = false;
+-				if(screenOff){
++				/*if(screenOff){//wqq s
+                     mUserPresent = false;
+-                 }
++                 }//wqq e*/
+             } else if ("CONNECTED".equals(state)) {
+                 connected = 1;
+                 configured = 0;
+@@ -905,7 +905,7 @@
+ 
+         private void setUsbDataUnlocked(boolean enable) {
+             if (DEBUG) Slog.d(TAG, "setUsbDataUnlocked: " + enable);
+-			changeByUser  = false;
++			//changeByUser  = false;//wqq
+             mUsbDataUnlocked = enable;
+             /*No need to update the USB notification and broadcast USB state
+               at this moment. After calling setEnabledFunctions(), the device
+@@ -1376,12 +1376,12 @@
+                     mConnected = (msg.arg1 == 1);
+                     mConfigured = (msg.arg2 == 1);
+                     mUsbConfigured = mConfigured;
+-					if (mUserPresent &&!changeByUser) { 
++					/*if (mUserPresent &&!changeByUser) {//wqq s 
+                         mUsbDataUnlocked = true;
+-                    }	
++                    }	//wqq e*/
+                     if (!mConnected) {
+                         // When a disconnect occurs, relock access to sensitive user data
+-                        mUsbDataUnlocked = false;
++                        mUsbDataUnlocked = true/*false*/;
+                     }
+                     updateUsbNotification();
+                     updateAdbNotification();
+@@ -1390,7 +1390,7 @@
+                         updateCurrentAccessory();
+                     } else if (!mConnected) {
+                         // restore defaults when USB is disconnected
+-                        setEnabledFunctions(null, false);
++                        setEnabledFunctions(null, true);//wqq modify  false
+                     }
+                     if (mBootCompleted) {
+                         updateUsbStateBroadcastIfNeeded();
+@@ -1445,7 +1445,7 @@
+                     setEnabledFunctions(mCurrentFunctions, false);
+                     break;
+                 case MSG_SET_USB_DATA_UNLOCKED:
+-					if(!changeByUser && mUsbDataUnlocked) return;
++					//if(!changeByUser && mUsbDataUnlocked) return;//wqq
+                     setUsbDataUnlocked(msg.arg1 == 1);
+                     break;
+                 case MSG_SYSTEM_READY:
+@@ -1723,7 +1723,7 @@
+ 
+     public void setCurrentFunctions(String functions) {
+         if (DEBUG) Slog.d(TAG, "setCurrentFunctions(" + functions + ")");
+-		changeByUser = true;
++		//changeByUser = true;//wqq
+         mHandler.sendMessage(MSG_SET_CURRENT_FUNCTIONS, functions);
+     }
+ 
+Index: frameworks/base/services/usb/java/com/android/server/usb/UsbService.java
+===================================================================
+--- frameworks/base/services/usb/java/com/android/server/usb/UsbService.java	(revision 3975)
++++ frameworks/base/services/usb/java/com/android/server/usb/UsbService.java	(revision 3976)
+@@ -126,9 +126,9 @@
+         filter.addAction(Intent.ACTION_USER_SWITCHED);
+         filter.addAction(Intent.ACTION_USER_STOPPED);
+         filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
+-		filter.addAction(Intent.ACTION_USER_PRESENT);
++		/*filter.addAction(Intent.ACTION_USER_PRESENT);
+         filter.addAction(Intent.ACTION_SCREEN_OFF);
+-        filter.addAction(Intent.ACTION_SCREEN_ON);
++        filter.addAction(Intent.ACTION_SCREEN_ON);*/
+         mContext.registerReceiver(mReceiver, filter, null, null);
+     }
+ 
+@@ -149,7 +149,7 @@
+                     mDeviceManager.updateUserRestrictions();
+                 }
+             }
+-			else if (Intent.ACTION_USER_PRESENT.equals(action)) {
++			/*else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+                 if (mDeviceManager != null) {
+                     mDeviceManager.setUsbDataUnlocked(true);
+                     mDeviceManager.setUserPresent();
+@@ -162,7 +162,7 @@
+               if (mDeviceManager != null) {
+                     mDeviceManager.updateScreentSate(false);
+                 }
+-            }
++            }*/
+         }
+     };
+ 

@@ -1,0 +1,117 @@
+Index: vendor/branch/5058I_ALRU/frameworks/base/core/java/android/widget/Toolbar.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/core/java/android/widget/Toolbar.java	(revision 9032)
++++ vendor/branch/5058I_ALRU/frameworks/base/core/java/android/widget/Toolbar.java	(revision 9033)
+@@ -736,7 +736,8 @@
+                 final Context context = getContext();
+                 mTitleTextView = new TextView(context);
+                 mTitleTextView.setSingleLine();
+-                mTitleTextView.setEllipsize(TextUtils.TruncateAt.END);
++                mTitleTextView.setEllipsize(TextUtils.TruncateAt.MARQUEE);
++				mTitleTextView.setSelected(true);
+                 if (mTitleTextAppearance != 0) {
+                     mTitleTextView.setTextAppearance(mTitleTextAppearance);
+                 }
+@@ -790,7 +791,8 @@
+                 final Context context = getContext();
+                 mSubtitleTextView = new TextView(context);
+                 mSubtitleTextView.setSingleLine();
+-                mSubtitleTextView.setEllipsize(TextUtils.TruncateAt.END);
++                mSubtitleTextView.setEllipsize(TextUtils.TruncateAt.MARQUEE);
++				mSubtitleTextView.setSelected(true);
+                 if (mSubtitleTextAppearance != 0) {
+                     mSubtitleTextView.setTextAppearance(mSubtitleTextAppearance);
+                 }
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/SecurityBasePreference.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/SecurityBasePreference.java	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/SecurityBasePreference.java	(revision 9033)
+@@ -0,0 +1,67 @@
++/*
++* Copyright (C) 2014 MediaTek Inc.
++* Modification based on code covered by the mentioned copyright
++* and/or permission notice(s).
++*/
++/*
++ * Copyright (C) 2007 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings;
++
++import android.content.Context;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.PreferenceViewHolder;
++import android.util.AttributeSet;
++import android.util.Log;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.text.TextUtils;
++import android.widget.TextView;
++
++public class SecurityBasePreference extends Preference  {
++    private static final String LOG_TAG = "SecurityBasePreference";
++    
++    private static final boolean DBG = true;
++
++    private Context mContext;
++    
++	public SecurityBasePreference(Context context) {
++        super(context);
++        init(context);
++    }
++	
++    public SecurityBasePreference(Context context, AttributeSet attrs) {
++        super(context, attrs);
++        init(context);
++    }
++	
++    private void init(Context context) {
++        mContext = context;
++        setEnabled(true);
++        
++    }
++
++    @Override
++    public void onBindViewHolder(PreferenceViewHolder holder) {
++        super.onBindViewHolder(holder);
++
++        View titleView = holder.findViewById(com.android.internal.R.id.title);
++        if (titleView != null && titleView instanceof TextView) {
++           ((TextView) titleView).setEllipsize(TextUtils.TruncateAt.valueOf("MARQUEE"));
++		   ((TextView) titleView).setSelected(true);
++        }
++    }
++}
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/security_settings_misc.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/security_settings_misc.xml	(revision 9032)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/security_settings_misc.xml	(revision 9033)
+@@ -148,13 +148,14 @@
+                 android:summary="@string/switch_off_text"
+                 android:fragment="com.android.settings.ScreenPinningSettings"/>
+ 
+-        <Preference android:key="usage_access"
++        <com.android.settings.SecurityBasePreference 
++					android:key="usage_access"
+                     android:title="@string/usage_access_title"
+                     android:fragment="com.android.settings.applications.ManageApplications">
+             <extra
+                 android:name="classname"
+                 android:value="com.android.settings.Settings$UsageAccessSettingsActivity" />
+-        </Preference>
++        </com.android.settings.SecurityBasePreference>
+ 
+     </PreferenceCategory>
+ 

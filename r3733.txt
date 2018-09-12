@@ -1,0 +1,187 @@
+Index: packages/apps/Contacts/res/values/strings.xml
+===================================================================
+--- packages/apps/Contacts/res/values/strings.xml	(revision 3732)
++++ packages/apps/Contacts/res/values/strings.xml	(revision 3733)
+@@ -916,4 +916,6 @@
+ 
+     <!-- The menu item to open blocked numbers activity [CHAR LIMIT=60]-->
+     <string name="menu_blocked_numbers">Blocked numbers</string>
++    
++    <string name="permission_denied">Permission Denied</string>
+ </resources>
+Index: packages/apps/Contacts/src/com/android/contacts/activities/AttachPhotoActivity.java
+===================================================================
+--- packages/apps/Contacts/src/com/android/contacts/activities/AttachPhotoActivity.java	(revision 3732)
++++ packages/apps/Contacts/src/com/android/contacts/activities/AttachPhotoActivity.java	(revision 3733)
+@@ -65,6 +65,9 @@
+ import java.io.FileNotFoundException;
+ import java.util.List;
+ 
++import android.support.v4.app.ActivityCompat;
++import android.support.v4.content.ContextCompat;
++import android.Manifest;
+ /**
+  * Provides an external interface for other applications to attach images
+  * to contacts. It will first present a contact picker and then run the
+@@ -153,6 +156,8 @@
+             outState.putString(KEY_CROPPED_PHOTO_URI, mCroppedPhotoUri.toString());
+         }
+     }
++    
++    private Intent tempResult;
+ 
+     @Override
+     protected void onActivityResult(int requestCode, int resultCode, Intent result) {
+@@ -181,62 +186,14 @@
+                 finish();
+                 return;
+             }
+-            // A contact was picked. Launch the cropper to get face detection, the right size, etc.
+-            // TODO: get these values from constants somewhere
+-            final Intent myIntent = getIntent();
+-            final Uri inputUri = myIntent.getData();
+-
+-
+-            // Save the URI into a temporary file provider URI so that
+-            // we can add the FLAG_GRANT_WRITE_URI_PERMISSION flag to the eventual
+-            // crop intent for read-only URI's.
+-            // TODO: With b/10837468 fixed should be able to avoid this copy.
+-            /// M: Fix ALPS01258109:if it is drm image,just return the inputUri to CropImage @{
+-            Uri toCrop = null;
+-            if (DrmUtils.isDrmImage(this, inputUri)) {
+-                toCrop = inputUri;
+-            }
+-            if (toCrop == null) {
+-                if (!ContactPhotoUtils.savePhotoFromUriToUri(this,
+-                        inputUri, mTempPhotoUri, false)) {
+-                    finish();
+-                    return;
+-                }
+-                toCrop = mTempPhotoUri;
+-            }
+-            Log.d(TAG, "[onActivityResult] inputUri:" + inputUri + ",toCrop" + toCrop);
+-
+-            /// M: it should use toCrop which include drm image case
+-            final Intent intent = new Intent("com.android.camera.action.CROP", toCrop);
+-            if (myIntent.getStringExtra("mimeType") != null) {
+-                intent.setDataAndType(toCrop, myIntent.getStringExtra("mimeType"));
+-            }
+-            /// @}
+-            ContactPhotoUtils.addPhotoPickerExtras(intent, mCroppedPhotoUri);
+-            ContactPhotoUtils.addCropExtras(intent, mPhotoDim != 0 ? mPhotoDim : mDefaultPhotoDim);
+-            if (!hasIntentHandler(intent)) {
+-                // No activity supports the crop action. So skip cropping and set the photo
+-                // without performing any cropping.
+-                mCroppedPhotoUri = mTempPhotoUri;
+-                mContactUri = result.getData();
+-                loadContact(mContactUri, new Listener() {
+-                    @Override
+-                    public void onContactLoaded(Contact contact) {
+-                        saveContact(contact);
+-                    }
+-                });
++            tempResult = result;
++            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
++                    != PackageManager.PERMISSION_GRANTED) {
++                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+                 return;
++            } else {
++            	attachSet(result);
+             }
+-
+-            try {
+-                startActivityForResult(intent, REQUEST_CROP_PHOTO);
+-            } catch (ActivityNotFoundException ex) {
+-                Toast.makeText(this, R.string.missing_app, Toast.LENGTH_SHORT).show();
+-                return;
+-            }
+-
+-            mContactUri = result.getData();
+-
+         } else if (requestCode == REQUEST_CROP_PHOTO) {
+             // Delete the temporary photo from cache now that we have a cropped version.
+             // We should do this even if the crop failed and we eventually bail
+@@ -253,7 +210,83 @@
+             });
+         }
+     }
++    
++    private void attachSet(Intent result) {
++    	// A contact was picked. Launch the cropper to get face detection, the right size, etc.
++    	// TODO: get these values from constants somewhere
++    	final Intent myIntent = getIntent();
++    	final Uri inputUri = myIntent.getData();
+ 
++
++    	// Save the URI into a temporary file provider URI so that
++    	// we can add the FLAG_GRANT_WRITE_URI_PERMISSION flag to the eventual
++    	// crop intent for read-only URI's.
++    	// TODO: With b/10837468 fixed should be able to avoid this copy.
++    	/// M: Fix ALPS01258109:if it is drm image,just return the inputUri to CropImage @{
++    	Uri toCrop = null;
++    	if (DrmUtils.isDrmImage(this, inputUri)) {
++    	    toCrop = inputUri;
++    	}
++    	if (toCrop == null) {
++    	    if (!ContactPhotoUtils.savePhotoFromUriToUri(this,
++                    inputUri, mTempPhotoUri, false)) {
++    	        finish();
++    	        return;
++    	    }
++    	    toCrop = mTempPhotoUri;
++    	}
++    	Log.d(TAG, "[onActivityResult] inputUri:" + inputUri + ",toCrop" + toCrop);
++
++    	/// M: it should use toCrop which include drm image case
++    	final Intent intent = new Intent("com.android.camera.action.CROP", toCrop);
++    	if (myIntent.getStringExtra("mimeType") != null) {
++    	    intent.setDataAndType(toCrop, myIntent.getStringExtra("mimeType"));
++    	}
++    	/// @}
++    	ContactPhotoUtils.addPhotoPickerExtras(intent, mCroppedPhotoUri);
++    	ContactPhotoUtils.addCropExtras(intent, mPhotoDim != 0 ? mPhotoDim : mDefaultPhotoDim);
++    	if (!hasIntentHandler(intent)) {
++    	    // No activity supports the crop action. So skip cropping and set the photo
++    	    // without performing any cropping.
++    	    mCroppedPhotoUri = mTempPhotoUri;
++    	    mContactUri = result.getData();
++    	    loadContact(mContactUri, new Listener() {
++    	        @Override
++    	        public void onContactLoaded(Contact contact) {
++    	            saveContact(contact);
++    	        }
++    	    });
++    	    return;
++    	}
++
++    	try {
++    	    startActivityForResult(intent, REQUEST_CROP_PHOTO);
++    	} catch (ActivityNotFoundException ex) {
++    	    Toast.makeText(this, R.string.missing_app, Toast.LENGTH_SHORT).show();
++    	    return;
++    	}
++
++    	mContactUri = result.getData();
++    }
++    
++    @Override 
++    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) { 
++        switch (requestCode) {
++                case 1: 
++                    if (grantResults[0] == PackageManager.PERMISSION_GRANTED) { 
++                        // Permission Granted 
++                        attachSet(tempResult);
++                    } else { 
++                        // Permission Denied 
++                        Toast.makeText(AttachPhotoActivity.this, R.string.permission_denied, Toast.LENGTH_SHORT).show();
++                        return;
++                    } 
++                    break; 
++                default: 
++                    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
++        }
++    }
++
+     private boolean hasIntentHandler(Intent intent) {
+         final List<ResolveInfo> resolveInfo = getPackageManager()
+                 .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);

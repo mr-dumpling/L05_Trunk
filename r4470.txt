@@ -1,0 +1,44 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/GlobalActions.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/GlobalActions.java	(revision 4469)
++++ frameworks/base/services/core/java/com/android/server/policy/GlobalActions.java	(revision 4470)
+@@ -81,6 +81,10 @@
+ import java.util.ArrayList;
+ import java.util.List;
+ import android.view.Window;
++// lance add for bug 117199 @{
++import android.content.res.Configuration;
++import android.view.Display;
++// @}
+ 
+ /**
+  * Helper to show the global actions dialog.  Each item is an {@link Action} that
+@@ -1242,6 +1246,7 @@
+         private void initView() {
+             View contentView = View.inflate(mContext, R.layout.content_dialog, null);
+             mHorizontalListView = (HorizontalListView) contentView.findViewById(R.id.lv);
++            setDpiToDefault(mContext); // lance add for bug 117199
+             setContentView(contentView);
+             mHorizontalListView.setAdapter(mAdapter);
+ 
+@@ -1249,6 +1254,20 @@
+             view.setText("\n" + mContext.getResources().getString(R.string.global_action_enforce_restart) + "\n");
+         }
+ 
++		// lance add for bug 117199 @{
++        private static void setDpiToDefault(Context context) {
++            if(Build.VERSION.SDK_INT > 23 ) {
++                Configuration origConfig = context.getResources().getConfiguration();
++                 try {
++                    origConfig.densityDpi = WindowManagerGlobal.getWindowManagerService().getInitialDisplayDensity(Display.DEFAULT_DISPLAY);
++                 } catch (RemoteException exc) {
++                     //do nothing
++                 }
++                context.getResources().updateConfiguration(origConfig, context.getResources().getDisplayMetrics());
++            }
++        }
++		// @}
++
+         private static int getDialogTheme(Context context) {
+             TypedValue outValue = new TypedValue();
+             context.getTheme().resolveAttribute(com.android.internal.R.attr.alertDialogTheme,

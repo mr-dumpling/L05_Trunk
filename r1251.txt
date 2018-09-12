@@ -1,0 +1,78 @@
+Index: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1250)
++++ packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1251)
+@@ -108,7 +108,11 @@
+         KEY_NOTIFICATION_VOLUME,
+         KEY_ZEN_MODE,
+     };
+-
++    private static final String[] INTERNAL_COLUMNS = new String[] {
++        MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
++        "\"" + MediaStore.Audio.Media.INTERNAL_CONTENT_URI + "\"",
++        MediaStore.Audio.Media.TITLE_KEY
++    };
+     private static final int SAMPLE_CUTOFF = 2000;  // manually cap sample playback at 2 seconds
+ 
+     private final VolumePreferenceCallback mVolumeCallback = new VolumePreferenceCallback();
+@@ -116,7 +120,9 @@
+     private final SettingsObserver mSettingsObserver = new SettingsObserver();
+     private final Receiver mReceiver = new Receiver();
+     private final ArrayList<VolumeSeekBarPreference> mVolumePrefs = new ArrayList<>();
+-
++	private static final String DEFAULT_RING = "Fresh";
++	private static final String DEFAULT_ALARM = "Galactic";
++	private static final String DEFAULT_NOTIFICATION = "Success";
+     private Context mContext;
+     private boolean mVoiceCapable;
+     private Vibrator mVibrator;
+@@ -519,6 +525,10 @@
+                 if (cursor != null) {
+                     if (cursor.moveToFirst()) {
+                         summary = cursor.getString(0);
++                    }else if(!ringtoneUri.toString().startsWith(MediaStore.Audio.Media.INTERNAL_CONTENT_URI.toString())){
++						ringtoneUri = queryDefaultUri(context,type);
++						if(null != ringtoneUri) RingtoneManager.setActualDefaultRingtoneUri(context,type,ringtoneUri);
++						summary = updateRingtoneName(context,type);
+                     }
+                 }
+             } catch (SQLiteException sqle) {
+@@ -534,6 +544,38 @@
+         return summary;
+     }
+ 
++	private static Uri queryDefaultUri(Context context,int type){
++		Cursor cursor = null;
++		try {
++			cursor = context.getContentResolver().query(MediaStore.Audio.Media.INTERNAL_CONTENT_URI, INTERNAL_COLUMNS, null,
++						null, MediaStore.Audio.Media.DEFAULT_SORT_ORDER);
++			if(cursor.moveToFirst()){
++			   while(cursor != null){
++			        if(cursor.getString(1).startsWith(DEFAULT_ALARM) && type == RingtoneManager.TYPE_ALARM){
++					    Uri aUri = Uri.parse(cursor.getString(2)+"/"+cursor.getString(0));
++					    return aUri;
++				    }else if(cursor.getString(1).startsWith(DEFAULT_RING) && type == RingtoneManager.TYPE_RINGTONE){
++						Uri aUri = Uri.parse(cursor.getString(2)+"/"+cursor.getString(0));
++					    return aUri;
++					}else if(cursor.getString(1).startsWith(DEFAULT_NOTIFICATION) && type == RingtoneManager.TYPE_NOTIFICATION){
++						Uri aUri = Uri.parse(cursor.getString(2)+"/"+cursor.getString(0));
++					    return aUri;
++					}
++				    if(!cursor.moveToNext()) break;
++			    }
++			}
++		} catch (SQLiteException sqle) {
++			return null;
++		} catch (IllegalArgumentException iae) {
++			return null;
++		} finally {
++			if (cursor != null) {
++				cursor.close();
++			}
++  	    }
++		return null;
++	}
++	
+     // === Vibrate when ringing ===
+ 
+     private void initVibrateWhenRinging() {

@@ -1,0 +1,264 @@
+Index: diff_all.sh
+===================================================================
+--- diff_all.sh	(revision 6451)
++++ diff_all.sh	(revision 6452)
+@@ -6,8 +6,19 @@
+ # 
+ 
+ $BRANCH="vendor/branch";
+-$PARAM=$ARGV[0];
+-
++$PARAM=" -no_print";
++$cmp = 0;
++print "-" x 50;print "\n";
++print "--- Useage: diff_all.sh [-ov] [-cmp] --- \n";
++#input param: ./diff_all.sh [-ov] [-cmp]
++if(getCmdParam("-ov") > 0){
++	$PARAM = $PARAM." -ov";
++}
++if(getCmdParam("-cmp") > 0){
++	$cmp = getCmdParam("-cmp");
++	#$PARAM = $PARAM." -cmp ".$ARGV[$idx];
++}
++$my_count = 1;
+ @flist = `ls -F $BRANCH`;
+ foreach $file (@flist){
+ 	#print "FIND: $file \n";
+@@ -16,8 +27,61 @@
+ 	if(-d $BRANCH."/".$file){
+ 		$cmd = "./diff_branch.sh $file $PARAM";
+ 		#print $cmd."\n";
++		$zero = "";
++		if($my_count < 10){
++			$zero = "0";
++		}
++		print "Doing [".$zero.$my_count++."]......$file\n";
+ 		print `$cmd`;
++		if($cmp > 0){
++			doCmpBranch($file,$PARAM);
++		}
+ 	}
+ }
++print "\n---FINISHED!---\n\n";
+ 
+-#######################################end###################
++#######################################end###################	
++#no input param
++sub getCmdParam {  
++	my ($my_pa) = @_;
++	
++	$av_str = "";
++	foreach $my_b(@ARGV){
++		$av_str = $av_str.$my_b.",";
++	}
++	
++	my @my_av = split(",", $av_str);
++	my $mycount = 0;
++
++	#print "PARAMS: $av_str/$my_pa\n";
++	foreach $my_la(@my_av){
++		$mycount++;
++		#print "getCmdParam my_la: $my_la\n";
++		if($my_pa eq $my_la){
++			return $mycount;
++		}
++	}
++	return -1;
++} 
++
++sub doCmpBranch(){
++	my ($my_dir, $my_p) = @_;
++	@br_list =("5058A","5058I","5058J","5058T","5058Y","5058A_Claro");
++	$my_sub_count = 1;
++	foreach $my_br(@br_list){
++		$len1 = length($my_br);
++		$len2 = length($my_dir);
++		$my_s_br = substr($my_dir, 0, $len1);
++		if(($len1 != $len2) && ($my_br eq $my_s_br)){
++			$cmd_m1 = "./diff_branch.sh $my_dir $my_p -cmp $my_br -no_print";
++			#print "cmd_m1: $cmd_m1\n";
++			print "................$my_dir - $my_s_br [".$my_sub_count++."]\n";
++			print `$cmd_m1`;
++		}
++	}
++
++}
++#####
++#
++#
++#
+Index: diff_branch.sh
+===================================================================
+--- diff_branch.sh	(revision 6451)
++++ diff_branch.sh	(revision 6452)
+@@ -3,35 +3,42 @@
+ # Author : javen
+ # Date : 2018.1.18
+ # ##########################################################
+-# 
++#
+ 
+ if(@ARGV < 1){
+ 	print "PLEASE INPUT BRANCH NAME like 5058I_ALAV1\n";
+-	print "Command: diff_branch.pl [branch_name] [-ov] [save_file]\n";
++	print "Useage: diff_branch.pl [branch_name] [-ov] [-cmp branch_name] [-no_modem] [-no_apn]\n";
+ 	#print "Command: diff_branch.pl [branch_name] [-ov -add -no_modem] [save_file]\n";
+ 	exit;
+ }
++#for -print
++$idx_no_print = getCmdParam("-no_print");
+ 
+-print "##################### BEGIN ######################\n";
+-
+-if(!$save_f){
+-	$save_f = "diff.txt";
+-}else{
+-	$save_f = $ARGV[1].".txt";
++if($idx_no_print <0){
++	print "##################### BEGIN ######################\n";
+ }
+-
++# variable define---
+ $BRANCH = "vendor/branch/".$ARGV[0];
++$CMP_DIR = "";
++$save_f = "diff.txt";
+ 
+ ## code
+ @flist = `find $BRANCH`;
+-print "-" x 50;
+-print "\n";
++if($idx_no_print <0){
++	print "-" x 50;print "\n";
++}
+ 
++#for -cmp of sub branch
++$idx_cmp = getCmdParam("-cmp");
++if($idx_cmp > 0){
++	$CMP_DIR = "vendor/branch/".$ARGV[$idx_cmp]."/";
++	#print "CMP_DIR $idx_cmp: $CMP_DIR\n";
++	$save_f = "diff_".$ARGV[$idx_cmp].".txt";
++}
++
+ #open a file
+ open(FH, ">$save_f") or die $!;
+ 
+-#exit;
+-
+ #print @flist;
+ foreach $file (@flist){
+ 	if($file =~ /\./){
+@@ -41,6 +48,7 @@
+ 		$r_len = length($BRANCH);
+ 		#root dir file $r_file
+ 		$r_file = substr($file, $r_len+1);
++		$r_file = $CMP_DIR.$r_file;
+ 		if(!(-e $r_file)){
+ 			#print "NO ROOT FILE: $r_file\n";
+ 			next;
+@@ -50,7 +58,18 @@
+ 			#print "diff.txt ignore!\n";
+ 			next;
+ 		}
+-		if(($file =~ /AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/) && ("-no_modem" eq $ARGV[1])){ #No Modem match
++
++		if($file =~ m/diff_.*.txt/){
++			#print "ERROR: diff * do\n";
++			next;
++		}
++		
++		if((getCmdParam("-no_apn")>0) && ($file =~ m/apns-conf.xml/)){
++			#print "no_apn : apns-conf.xml";
++			next;
++		}
++
++		if(($file =~ /AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/) && (getCmdParam("-no_modem")>0)){ #No Modem match
+ 			#print "No Modem match --AUS6739_66_N1_MOLY.LR12A.R2.MP.V1-- ignore!\n";
+ 			next;
+ 		}
+@@ -57,13 +76,11 @@
+ 		print FH $file.":\n";
+ 		#print $r_file;
+ 		$cmd = "diff $file $r_file";
+-		#print "-" x 50;
+-		#print "\n";
+-		#print "[DIFF]:$file\n";
++		#print "[DIFF][CMD]:$cmd\n";
+ 		$diff_s = `$cmd`;
+-		if($diff_s eq "" && "-add" eq $ARGV[1]){
+-			print "---ADD---[$file]\n";
+-		}
++		#if($diff_s eq "" && $idx_no_print<0){
++			#print "---ADD---[$file]\n";
++		#}
+ 		
+ 		#print $diff_s;
+ 		@diff_a = split("\n", $diff_s);
+@@ -86,15 +103,14 @@
+ 		print FH "\n";
+ 	}
+ }
+-#print "-" x 50;
+-#print "\n";
+ 
+ close(FH);
+ 
+ # diff for the old one
+-$brh_diff = "$BRANCH/$save_f";
+-if(-f $brh_diff && "-ov" ne $ARGV[1]){
+-	$cmd = "diff $brh_diff $save_f";
++$my_path = "$BRANCH/$save_f";
++$my_cmp_path = $CMP_DIR.$save_f;
++if(-f $my_path && getCmdParam("-ov")<0){
++	$cmd = "diff $my_path $save_f";
+ 	$ret = `$cmd`;
+ 	#print "$cmd\n";
+ 	if($ret eq ""){
+@@ -107,17 +123,39 @@
+ 			$ret = substr($ret,0,200);
+ 			$ret = $ret."\n---More detail see diff_diff.log---\n";
+ 		}
+-		
+-		print "DIFF [ $ARGV[0] ] [$brh_diff] RESULT: \n---[ ".$ret." ]---\n";
++		print "DIFF [ $ARGV[0] ] [$my_path] RESULT: \n---[ ".$ret." ]---\n";
+ 	}
+ }else{
+-	$cmd = "cp $save_f $brh_diff";
++	$cmd = "cp $save_f $my_path";
+ 	$ret = `$cmd`;
+ 	#print "$cmd\n";
+-	print "\nCP RESULT : $brh_diff ".$ret."\n\n";
++	print "COPY RESULT : $my_path ".$ret."\n";
+ }
+-print "-" x 50;
+-print "\n";
+-print "##################### END ########################\n";
++if($idx_no_print <0){
++	print "-" x 50;print "\n";
++	print "##################### END ########################\n";
++}
+ 
+-#######################################end###################
++#######################################end###################		
++#no input param
++sub getCmdParam {  
++	my ($my_pa) = @_;
++	
++	$av_str = "";
++	foreach $my_b(@ARGV){
++		$av_str = $av_str.$my_b.",";
++	}
++	
++	my @my_av = split(",", $av_str);
++	my $mycount = 0;
++
++	#print "PARAMS: $av_str/$my_pa\n";
++	foreach $my_la(@my_av){
++		$mycount++;
++		#print "getCmdParam my_la: $my_la\n";
++		if($my_pa eq $my_la){
++			return $mycount;
++		}
++	}
++	return -1;
++} 
+\ No newline at end of file

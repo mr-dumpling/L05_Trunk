@@ -1,0 +1,457 @@
+Index: vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java	(revision 0)
++++ vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java	(revision 10670)
+@@ -0,0 +1,452 @@
++package com.android.settings;
++import android.os.Bundle;
++import com.android.settings.search.Indexable;
++import com.android.settings.search.SearchIndexableRaw;
++import android.support.v7.preference.Preference;
++import android.content.SharedPreferences;
++import android.support.v7.preference.CheckBoxPreference;
++import android.app.UiModeManager;
++import android.content.Context;
++import com.android.settings.NightModeReceiver;
++
++import android.app.TimePickerDialog;
++import java.util.Calendar;
++import android.support.v7.app.AppCompatDelegate;
++
++import android.text.format.DateFormat;
++import android.widget.TimePicker;
++import android.widget.Toast;
++import com.mediatek.pq.PictureQuality;
++import java.util.Calendar;
++import android.app.AlarmManager;
++import android.app.PendingIntent;
++import android.app.Service;
++import android.content.Intent;
++import android.util.Log;
++import android.widget.Toast;
++import java.util.Calendar;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.support.v14.preference.SwitchPreference;
++import java.text.SimpleDateFormat;
++import android.content.BroadcastReceiver;
++import java.util.Date;
++
++import android.support.v7.preference.PreferenceCategory;
++import android.widget.Checkable;
++import android.widget.RadioButton;
++
++
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++/**
++ * Created by Administrator on 2017/8/21.
++ Set the night mode time
++ */
++public class SchedulePlanTypeSettings extends SettingsPreferenceFragment implements Indexable,
++                TechRadioButtonPreference.RadioButtonGroupState {
++	private static final String TAG = "SchedulePlanTypeSettings";
++	public static final String OPEN_ACTION = "com.android.settings.nightmode.open";
++	public static final String CLOSE_ACTION ="com.android.settings.nightmode.close";
++	private static final String PREFERENCE_NAME = "com.android.settings";
++	private static final String SETTING_TIME_PLAN = "setting_time_plan";
++	private static final String SUNSET_TO_SUNRISE = "sunset_to_sunrise";
++	private static final String TIME_ON = "timeOn";
++	private static final String TIME_Off = "timeOff";
++	private static final String KEY_TIME_ON = "turn_on_at";
++	private static final String KEY_TIME_OFF = "turn_off_at";
++	private static final String KEY_SETTING_TIME = "custom_schedule";
++	private static final String KEY_SUNSET_SUNRISE = "sunset2sunrise";
++	private final String timeOn="10:00";
++	private final String timeOff="07:00";
++	 private final String OPEN="open_nightMode";
++    private final String CLOSE="close_nightMode";
++	private  Preference turn_on_at ;
++	private   Preference turn_off_at ;
++// private   CheckBoxPreference custom_schedule ;
++// private   CheckBoxPreference sunset2sunrise ;
++    private PreferenceCategory mSchedulePlanPreferenceCategory;
++    private Checkable mCurrentChecked;
++    private String mCurrentEngine;
++    private TechRadioButtonPreference radioOne;
++    private TechRadioButtonPreference radioTwo;
++    private RadioButton radioButtonOne;
++    private RadioButton radioButtonTwo;
++
++	private   SharedPreferences modePrenference ;
++	private TimePickerDialog.OnTimeSetListener timeOffListener;
++	private TimePickerDialog.OnTimeSetListener timeOnListener;
++	private int startTime_Hour;
++	private int startTime_Min;
++    private boolean  mIs24HourBool;
++    private boolean mPrefChangeFlag = false;
++    @Override
++    protected int getMetricsCategory() {
++        return MetricsEvent.WALLPAPER_TYPE;
++    }
++    @Override
++    protected int getHelpResource() {
++        return R.string.help_uri_wallpaper;
++    }
++	/*display attribute list*/
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++
++        addPreferencesFromResource(R.xml.schedule_plan_settings);
++        mIs24HourBool=is24Hour();
++		initListener();
++		initPreference();
++    }
++	/* Initialize the layout and display the user data*/
++	public void initPreference() {
++        turn_on_at= findPreference(KEY_TIME_ON);
++        turn_off_at =  findPreference(KEY_TIME_OFF);
++        //custom_schedule = (CheckBoxPreference) findPreference(KEY_SETTING_TIME);
++        //sunset2sunrise = (CheckBoxPreference) findPreference(KEY_SUNSET_SUNRISE);
++        modePrenference = getContext().getSharedPreferences(PREFERENCE_NAME, 0);
++        boolean checkoutTime = modePrenference.getBoolean(SETTING_TIME_PLAN, false);
++		boolean auto = modePrenference.getBoolean(SUNSET_TO_SUNRISE, true);
++		updateTimeDisplay();
++        //sunset2sunrise.setChecked(auto);
++
++        updateSunset2Sunrise(auto);
++
++        turn_on_at.setEnabled(checkoutTime);
++        turn_on_at.setShouldDisableView(!checkoutTime);
++        turn_off_at.setEnabled(checkoutTime);
++        turn_off_at.setShouldDisableView(!checkoutTime);
++
++        mSchedulePlanPreferenceCategory = (PreferenceCategory) findPreference("schedule_plan_preference");
++        radioOne = new TechRadioButtonPreference(getPrefContext(), getPrefContext().getString(R.string.keywords_sunset2sunrise), this, (SettingsActivity)getActivity(), auto);
++        radioTwo = new TechRadioButtonPreference(getPrefContext(), getPrefContext().getString(R.string.keywords_custom_schedule), this, (SettingsActivity)getActivity(), checkoutTime);
++        mSchedulePlanPreferenceCategory.addPreference(radioOne);
++        mSchedulePlanPreferenceCategory.addPreference(radioTwo);
++
++/*
++        sunset2sunrise.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++            		 modePrenference.edit().putBoolean(SUNSET_TO_SUNRISE, Boolean.parseBoolean(newValue.toString())).commit();
++            		 if(Boolean.parseBoolean(newValue.toString())){
++					 	custom_schedule.setChecked(false);
++						modePrenference.edit().putBoolean(SETTING_TIME_PLAN, false).commit();
++						NightModeUtils.sendBroad(OPEN_ACTION,getContext(),OPEN,22,0,0);
++						NightModeUtils.sendBroad(CLOSE_ACTION,getContext(),CLOSE,7,0,-1);
++						Calendar c = Calendar.getInstance();
++           		 		int mHour = c.get(Calendar.HOUR_OF_DAY);
++				 		int mMinute = c.get(Calendar.MINUTE);
++						if(22<mHour){
++							PictureQuality.enableBlueLight(true);
++						}else if(22==mHour&&00<mMinute){
++							PictureQuality.enableBlueLight(true);
++
++						}
++					 }else{
++						NightModeUtils.cancelAlarm(getContext(),OPEN_ACTION,0);
++						NightModeUtils.cancelAlarm(getContext(),CLOSE_ACTION,-1);
++						if(!custom_schedule.isChecked()){
++                            PictureQuality.enableBlueLight(false);
++						}
++
++					 }
++					  return true;
++            	}
++			});
++        custom_schedule.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++                modePrenference.edit().putBoolean(SETTING_TIME_PLAN, Boolean.parseBoolean(newValue.toString())).commit();
++                if(Boolean.parseBoolean(newValue.toString())){
++					sunset2sunrise.setChecked(false);
++                    turn_on_at.setEnabled(true);
++                    turn_on_at.setShouldDisableView(false);
++                    turn_off_at.setEnabled(true);
++                    turn_off_at.setShouldDisableView(false);
++					modePrenference.edit().putBoolean(SUNSET_TO_SUNRISE, false).commit();
++					String[] timeOns=modePrenference.getString(TIME_ON,timeOn).split(":");
++					String[] timeOffs=modePrenference.getString(TIME_ON,timeOff).split(":");
++					startTime_Min=Integer.parseInt(timeOns[0]);
++					startTime_Hour=Integer.parseInt(timeOns[1]);
++					NightModeUtils.sendBroad(OPEN_ACTION, getContext(), OPEN, Integer.parseInt(timeOns[0]), Integer.parseInt(timeOns[1]), 0);
++            		NightModeUtils.sendBroad(CLOSE_ACTION, getContext(), CLOSE, Integer.parseInt(timeOffs[0]), Integer.parseInt(timeOffs[1]), -1);
++*/
++            /*PictureQuality.enableBlueLight(true);
++
++					UiModeManager uiManager = (UiModeManager) getContext().getSystemService(
++                		Context.UI_MODE_SERVICE);
++        			uiManager.setNightMode(UiModeManager.MODE_NIGHT_YES);
++					AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
++					getActivity().recreate();
++            int currentNightMode = uiManager.getNightMode();
++			Toast.makeText(getContext(),"currentNightMode==="+currentNightMode,Toast.LENGTH_LONG).show();*/
++/*
++                }else{
++                    turn_on_at.setEnabled(false);
++                    turn_on_at.setShouldDisableView(true);
++                    turn_off_at.setEnabled(false);
++                    turn_off_at.setShouldDisableView(true);
++					NightModeUtils.cancelAlarm(getContext(),OPEN_ACTION,0);
++					NightModeUtils.cancelAlarm(getContext(),CLOSE_ACTION,-1);
++					if(!sunset2sunrise.isChecked()){
++						PictureQuality.enableBlueLight(false);
++					}
++                }
++                return true;
++            }
++        });
++*/
++        turn_on_at.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++            @Override
++            public boolean onPreferenceClick(Preference preference) {
++                if(!modePrenference.getBoolean(SETTING_TIME_PLAN, false)){
++
++                }else{
++
++       				String timeon=modePrenference.getString(TIME_ON,timeOn);
++                    Log.d("faker:","timeon:"+timeon);
++					String[] hourMin=timeon.split(":");
++					TimePickerDialog timeOnDialog=new TimePickerDialog(getContext(),timeOnListener,
++							 Integer.parseInt(hourMin[0]),Integer.parseInt(hourMin[1]),
++							DateFormat.is24HourFormat(getActivity()));
++					timeOnDialog.show();
++				}
++                return true;
++            }
++        });
++        turn_off_at.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++            @Override
++            public boolean onPreferenceClick(Preference preference) {
++                if(!modePrenference.getBoolean(SETTING_TIME_PLAN, false)){
++
++                }else{
++					String timeoff=modePrenference.getString(TIME_Off,timeOff);
++					String[] hourMin=timeoff.split(":");
++
++        			TimePickerDialog dialog=new TimePickerDialog(getContext(),timeOffListener,
++                							Integer.parseInt(hourMin[0]),Integer.parseInt(hourMin[1]),
++               								 DateFormat.is24HourFormat(getActivity()));
++       				 dialog.show();
++				}
++                return true;
++            }
++        });
++	}
++
++    private void updateSunset2Sunrise(boolean auto) {
++        if (auto) {
++            PictureQuality.enableBlueLight(false);
++            NightModeUtils.sendBroad(OPEN_ACTION, getContext(), OPEN, 22, 0, 0);
++            NightModeUtils.sendBroad(CLOSE_ACTION, getContext(), CLOSE, 7, 0, -1);
++            Calendar c = Calendar.getInstance();
++            int mHour = c.get(Calendar.HOUR_OF_DAY);
++            int mMinute = c.get(Calendar.MINUTE);
++            if (22 < mHour || 7 > mHour) {
++                PictureQuality.enableBlueLight(true);
++            } else if (22 == mHour && 00<mMinute) {
++                PictureQuality.enableBlueLight(true);
++            } else {
++               PictureQuality.enableBlueLight(false);
++            }
++        }
++    }
++    
++	/*init listener*/
++	public void initListener(){
++		timeOnListener=new TimePickerDialog.OnTimeSetListener() {
++            @Override
++            public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
++            	startTime_Hour=hourOfDay;
++				startTime_Min=minute;
++            	String hour="";
++				String min="";
++           		 if(hourOfDay<10){
++					hour="0"+hourOfDay;
++				}else{
++					 hour=""+hourOfDay;
++
++				}
++				if(minute<10){
++					min="0"+minute;
++				}else{
++					min=""+minute;
++				}
++                if(mIs24HourBool){
++                   modePrenference.edit().putString(TIME_ON,hour+":"+min).commit();
++                }else{
++                    int stHour=Integer.parseInt(hour);
++                    if(stHour>12){
++                        hour=(stHour-12)+"";
++                    }
++                   modePrenference.edit().putString(TIME_ON,hour+":"+min).commit();
++                   Log.d("faker:", "245lin");                   
++                }
++            	updateTimeDisplay();
++				//modified by zxp for 112000
++				NightModeUtils.sendBroad(OPEN_ACTION,getContext(),OPEN,startTime_Hour,startTime_Min,0);
++				//NightModeUtils.sendBroad(CLOSE_ACTION,getContext(),CLOSE,hourOfDay,minute,-1);
++            }
++        };
++		 timeOffListener=new TimePickerDialog.OnTimeSetListener() {
++            @Override
++            public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
++            	if(startTime_Hour==hourOfDay&&startTime_Min==minute){
++					String content=getContext().getResources().getString(R.string.setting_time_error);
++					Toast.makeText(getContext(),content,Toast.LENGTH_SHORT).show();
++				}else{
++
++            	String hour="";
++				String min="";
++           		 if(hourOfDay<10){
++					hour="0"+hourOfDay;
++				}else{
++					 hour=""+hourOfDay;
++
++				}
++				if(minute<10){
++					min="0"+minute;
++				}else{
++					min=""+minute;
++				}
++				 Calendar c = Calendar.getInstance();
++           		 int mHour = c.get(Calendar.HOUR_OF_DAY);
++				 int mMinute = c.get(Calendar.MINUTE);
++				if(startTime_Hour<mHour){
++					PictureQuality.enableBlueLight(true);
++				}else if(startTime_Hour==mHour&&startTime_Min<mMinute){
++					PictureQuality.enableBlueLight(true);
++
++				}
++                if(mIs24HourBool){
++                   modePrenference.edit().putString(TIME_Off,hour+":"+min).commit();
++                }else{
++                    int stHour=Integer.parseInt(hour);
++                    if(stHour>12){
++                        hour=(stHour-12)+"";
++                    }
++                   modePrenference.edit().putString(TIME_Off,hour+":"+min).commit(); 
++                   Log.d("faker:", "288lin");
++                }
++                updateTimeDisplay();
++				// modified by zxp for 112000
++				//NightModeUtils.sendBroad(OPEN_ACTION,getContext(),OPEN,startTime_Hour,startTime_Min,0);
++				NightModeUtils.sendBroad(CLOSE_ACTION,getContext(),CLOSE,hourOfDay,minute,-1);
++				}
++            }
++        };
++	}
++	/*Update the selected time to the page above */
++	public void updateTimeDisplay(){
++    
++            mPrefChangeFlag =PrefChangeBroadcast.mPrefChangeFlag;
++            Log.d("faker:updateTimeDisplay:", ""+mPrefChangeFlag);
++            String[] deOnTime=modePrenference.getString(TIME_ON,timeOn).split(":");
++            String[] deOffTime=modePrenference.getString(TIME_Off,timeOff).split(":");
++            int deOnHour=Integer.parseInt(deOnTime[0]);
++            int deOffHour=Integer.parseInt(deOffTime[0]);
++            if(mPrefChangeFlag){
++                   if(deOnHour<12){
++                       String nTimeOn=(deOnHour+12)+":"+deOnTime[1];
++                       //turn_on_at.setSummary(nTimeOn);
++                       Log.i("faker:", "nTimeOn:"+nTimeOn);
++                       modePrenference.edit().putString(TIME_ON,nTimeOn).commit();
++                       //turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                   }
++                   /*
++                   else if(deOnHour>12){
++                        String nTimeOn=(deOnHour-12)+":"+deOnTime[1];
++                        modePrenference.edit().putString(TIME_ON,nTimeOn).commit();
++                        turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                   }
++                   */
++                   if(deOffHour<12){
++                       Log.i("faker:", "deOffHour"+deOffHour);  
++                       String nTimeOff=(deOffHour+12)+":"+deOffTime[1];
++                       //turn_off_at.setSummary(nTimeOff);
++                       Log.i("faker:", "nTimeOff:"+nTimeOff);
++                       modePrenference.edit().putString(TIME_Off,nTimeOff).commit();
++                       //turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff)); 
++                   }
++                   /*
++                   else if(deOffHour>12){
++                       String nTimeOff=(deOffHour-12)+":"+deOffTime[1];
++                       modePrenference.edit().putString(TIME_Off,nTimeOff).commit();
++                       turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff));
++                   }
++                   */
++                    turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                    turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff)); 
++            }else if(!mPrefChangeFlag){
++                    if(deOnHour>12){
++                        String nTimeOn=(deOnHour-12)+":"+deOnTime[1];
++                        modePrenference.edit().putString(TIME_ON,nTimeOn).commit();
++                        //turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                    }
++                    if(deOffHour>12){
++                       String nTimeOff=(deOffHour-12)+":"+deOffTime[1];
++                       modePrenference.edit().putString(TIME_Off,nTimeOff).commit();
++                       //turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff));
++                   }
++                       turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                       turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff));
++                   
++	}
++    }
++     private boolean is24Hour() {
++        return DateFormat.is24HourFormat(getActivity());
++    }
++    
++	    @Override
++    public String getCurrentKey() {
++        return mCurrentEngine;
++    }
++
++    @Override
++    public Checkable getCurrentChecked() {
++        return mCurrentChecked;
++    }
++
++    @Override
++    public void setCurrentKey(String key) {
++        mCurrentEngine = key;
++    }
++
++    @Override
++    public void setCurrentChecked(Checkable current) {
++        mCurrentChecked = current;
++    }
++
++    @Override
++    public void setRadioOne(RadioButton rb) {
++        radioButtonOne = rb;
++    }
++
++    @Override
++    public void setRadioTwo(RadioButton rb) {
++        radioButtonTwo = rb;
++    }
++
++    @Override
++    public void update() {
++        boolean sunsetToSunriseFlag = radioButtonOne.isChecked();
++        boolean settingTimeFlag = radioButtonTwo.isChecked();
++        modePrenference.edit().putBoolean(SUNSET_TO_SUNRISE, sunsetToSunriseFlag).commit();
++        modePrenference.edit().putBoolean(SETTING_TIME_PLAN, settingTimeFlag).commit();
++        turn_on_at.setEnabled(settingTimeFlag);
++        turn_on_at.setShouldDisableView(!settingTimeFlag);
++        turn_off_at.setEnabled(settingTimeFlag);
++        turn_off_at.setShouldDisableView(!settingTimeFlag);
++
++        if (sunsetToSunriseFlag) {
++            updateSunset2Sunrise(sunsetToSunriseFlag);
++        } else {
++            PictureQuality.enableBlueLight(false);
++            String[] timeOns = modePrenference.getString(TIME_ON, timeOn).split(":");
++            String[] timeOffs = modePrenference.getString(TIME_ON, timeOff).split(":");
++            startTime_Min = Integer.parseInt(timeOns[0]);
++            startTime_Hour = Integer.parseInt(timeOns[1]);
++            NightModeUtils.sendBroad(OPEN_ACTION, getContext(), OPEN, Integer.parseInt(timeOns[0]), Integer.parseInt(timeOns[1]), 0);
++            NightModeUtils.sendBroad(CLOSE_ACTION, getContext(), CLOSE, Integer.parseInt(timeOffs[0]), Integer.parseInt(timeOffs[1]), -1);
++        }
++    }
++
++}

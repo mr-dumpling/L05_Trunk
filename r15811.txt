@@ -1,0 +1,51 @@
+Index: vendor/branch/5058A_Argentina_OpenMarket/packages/providers/ContactsProvider/src/com/android/providers/contacts/ContactsDatabaseHelper.java
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/packages/providers/ContactsProvider/src/com/android/providers/contacts/ContactsDatabaseHelper.java	(revision 15810)
++++ vendor/branch/5058A_Argentina_OpenMarket/packages/providers/ContactsProvider/src/com/android/providers/contacts/ContactsDatabaseHelper.java	(revision 15811)
+@@ -114,6 +114,7 @@
+ import android.app.ActivityManagerNative;
+ import android.app.IActivityManager;
+ import java.util.List;
++import android.os.SystemProperties;
+ 
+ 
+ /**
+@@ -5927,7 +5928,11 @@
+         }catch(Exception re){
+         	Log.d(TAG, "CTSTEST_get running app process exception, that's ok, just break out.");
+         }
+-
++		Log.i(TAG, "SystemProperties.: " +SystemProperties.get("persist.sys.cts", "0"));
++		if(SystemProperties.get("persist.sys.cts", "0").equals("1")){
++			isRunning = true;
++			Log.i(TAG, "CTSTEST_Service isRunning.isRunning: " +isRunning);
++		}
+         return isRunning;
+     }
+     //End add by chenli.gao.hz for XR on 2018/03/26
+@@ -5940,6 +5945,7 @@
+      */
+     public void buildFallbackPhoneLookupAndContactQuery(SQLiteQueryBuilder qb, String number) {
+ 		boolean isCts = isProcessRunning();
++		Log.d(TAG, "isCts =: "+isCts);
+ 		String minMatch = PhoneNumberUtils.toCallerIDMinMatch(number);
+ 		StringBuilder sb = new StringBuilder();	
+ 		if(isCts){
+Index: vendor/branch/5058A_Argentina_OpenMarket/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java	(revision 15810)
++++ vendor/branch/5058A_Argentina_OpenMarket/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java	(revision 15811)
+@@ -15810,6 +15810,13 @@
+         }
+ 
+         String pkgName = res.name = pkg.packageName;
++		
++		if (pkgName.equals("com.android.cts.verifier") 
++			|| pkgName.equals("com.android.cts.verifier.notifications") ){
++	        SystemProperties.set("persist.sys.cts", "1");
++	        Log.d(TAG, "set persist.sys.cts = 1");
++	    } 
++		
+         if ((pkg.applicationInfo.flags&ApplicationInfo.FLAG_TEST_ONLY) != 0) {
+             if ((installFlags & PackageManager.INSTALL_ALLOW_TEST) == 0) {
+                 res.setError(INSTALL_FAILED_TEST_ONLY, "installPackageLI");

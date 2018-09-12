@@ -1,0 +1,226 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/db/AppDB.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/db/AppDB.java	(revision 1210)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/db/AppDB.java	(revision 1211)
+@@ -101,19 +101,19 @@
+     }
+ 
+     public void add(AppInfo info) {
+-        ContentValues values = new ContentValues();
+-        values.put("package_name", info.getPackerName());
+-        values.put("index", info.getIndex());
+-        values.put("introduction", info.getIntroduction().isEmpty());
+-        if (sqLiteDatabase == null) {
+-            sqLiteDatabase = SQLiteDatabase.openDatabase(DB_PATH, null, SQLiteDatabase.OPEN_READWRITE);
+-        }
+-        if (info.getIndex() == DEFAULT_APPS) {
+-            sqLiteDatabase.insert(DEFAULT_APPS_TABLE, null, values);
+-        } else if (info.getIndex() == APPS) {
+-            sqLiteDatabase.insert(APPS_TABLE, null, values);
+-        }
++         if (sqLiteDatabase .isOpen()) {
++                    sqLiteDatabase = SQLiteDatabase.openDatabase(DB_PATH, null, SQLiteDatabase.OPEN_READWRITE);
++                }
+ 
++                String sq="";
++                if (info.getIndex() == DEFAULT_APPS) {
++                     sq="INSERT INTO "+DEFAULT_APPS_TABLE+" VALUES ('"+info.getIntroduction()+"','"+info.getIndex()+"','"+ info.getPackerName()+"', '"+info.getAppName()+"')";
++
++                } else if (info.getIndex() == APPS) {
++                     sq="INSERT INTO "+APPS_TABLE+" VALUES ('"+info.getIntroduction()+"','"+info.getIndex()+"','"+ info.getPackerName()+"', '"+info.getAppName()+"')";
++
++                }
++			sqLiteDatabase.execSQL(sq);
+     }
+     public void closeDB(){
+         sqLiteDatabase.close();
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 1210)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 1211)
+@@ -42,6 +42,7 @@
+     private AppDB db;
+     private FuncListAdapter adapter;
+ 	private View switchBar;
++	
+ 
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListAdapter.java	(revision 1210)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListAdapter.java	(revision 1211)
+@@ -12,6 +12,7 @@
+ import android.widget.TextView;
+ import com.android.systemui.R;
+ import android.util.Log;
++import com.android.systemui.db.AppDB;
+ 
+ import java.util.List;
+ 
+@@ -21,10 +22,12 @@
+ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppInfoHodler> {
+     private List<AppInfo> data;
+     private Context mContext;
++	private AppDB db;
+ 
+     public AppListAdapter(Context context, List<AppInfo> data) {
+         this.data = data;
+         mContext = context;
++		db = AppDB.getInstance();
+     }
+ 
+     @Override
+@@ -41,8 +44,10 @@
+         holder.right_icon.setImageResource(R.mipmap.add);
+         if(info.isContanin()){
+             holder.app_name.setTextColor(Color.GRAY);
++			holder.right_icon.setVisibility(View.GONE);
+         }else{
+             holder.app_name.setTextColor(Color.BLACK);
++			holder.right_icon.setVisibility(View.VISIBLE);
+         }
+ 		holder.item.setOnClickListener(new View.OnClickListener() {
+             @Override
+@@ -50,6 +55,19 @@
+                 Log.i("content",info.getPackerName());
+             }
+         });
++		holder.right_icon.setOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                if(!info.isContanin()){
++						
++        			info.setIndex(AppUtils.APPS);
++					db.add( info);
++					info.setContanin(true);
++					holder.right_icon.setVisibility(View.GONE);
++					holder.app_name.setTextColor(Color.GRAY);
++                }
++            }
++        });
+     }
+ 
+     @Override
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 1210)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 1211)
+@@ -30,6 +30,7 @@
+  * Created by Administrator on 2017/9/1.
+  */
+ public class AppUtils {
++	public static final String GOOGLE_SEARCH="com.google.android.googlequicksearchbox";
+     public static final String DEFAULT_APPS_TITLE = "Shortcut on lock screen";
+     public static final String APPS_TITLE = "Available shortcut";
+ 	public static final String CONTANCTS_URI = "contacts_uri";
+@@ -103,6 +104,11 @@
+ 						info.setDrawable(context.getDrawable(R.drawable.ic_signal_flashlight_disable));
+ 						info.setAppName(context.getString(R.string.torch_text));
+ 						
++					}else if(info.getPackerName().equals(GOOGLE_SEARCH)){
++						ApplicationInfo licationInfo = pm.getApplicationInfo(info.getPackerName(), PackageManager.GET_META_DATA | PackageManager.GET_SHARED_LIBRARY_FILES);
++                    	
++                    	info.setAppName(licationInfo.loadLabel(pm).toString());
++						info.setDrawable(context.getDrawable( R.drawable.ic_mic_26dp));
+ 					}else{
+                     	ApplicationInfo licationInfo = pm.getApplicationInfo(info.getPackerName(), PackageManager.GET_META_DATA | PackageManager.GET_SHARED_LIBRARY_FILES);
+                     	info.setDrawable(licationInfo.loadIcon(pm));
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1210)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1211)
+@@ -344,7 +344,7 @@
+         			
+ 					mAppInfo=info;
+             	}
+-				if(info.getPackerName().equals(AppUtils.CONTACTS)){
++				else if(info.getPackerName().equals(AppUtils.CONTACTS)){
+ 					String url =Settings.System.getString(mContext.getContentResolver(),AppUtils.CONTANCTS_URI);
+ 					
+ 					//String url="content://com.android.contacts/contacts/lookup/3176r1-4F4F4B4B/1";
+@@ -354,6 +354,8 @@
+ 							info=getContactImage(info,mContactId);
+ 						}	
+ 					}
++				}else if(info.getPackerName().equals(GOOGLE_SEARCH)){
++					info.setDrawable(mContext.getDrawable( R.drawable.ic_mic_26dp));
+ 				}
+         	}
+ 				initIcon();
+@@ -986,13 +988,28 @@
+             }
+         });
+     }
++	public void startFunc(String packageName){
++        Intent intent = new Intent(packageName)
++				.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
++        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++		intent.setAction("start_func");
++        AsyncTask.execute(new Runnable() {
++            @Override
++            public void run() {
++                mContext.startActivityAsUser(intent,
++                        new UserHandle(UserHandle.USER_CURRENT));
++            }
++        });
++    }
+ 	public void startApp(Context mContext,String packageName){
++		mActivityStarter.startActivity(AppUtils.startApp(mContext,packagerName),false);
++		/*
+ 		mActivityStarter.startActivity(AppUtils.startApp(mContext,packagerName),false,new ActivityStarter.Callback() {
+ 			@Override
+ 			public void onActivityStarted(int resultCode) {
+ 				//unbindCameraPrewarmService(isSuccessfulLaunch(resultCode));
+ 			}
+-		});
++		});*/
+ 	}
+ 	class OnClik implements View.OnClickListener {
+         int index;
+@@ -1046,8 +1063,7 @@
+         				}else if(packagerName.equals(FUNC_SETTINGS)){
+         					String introduction = list.get(index).getIntroduction();
+         					if(introduction.equals("Edit Func settings")){
+-								Intent intent=new Intent(mContext,FuncSettings.class);
+-        						mContext.startActivity(intent);
++								startFunc(packagerName);
+ 							}else{
+ 								startApp(mContext,packagerName);
+ 							}
+Index: frameworks/base/packages/SystemUI
+===================================================================
+--- frameworks/base/packages/SystemUI	(revision 1210)
++++ frameworks/base/packages/SystemUI	(revision 1211)
+
+Property changes on: frameworks/base/packages/SystemUI
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages/SystemUI:r1022
+Index: frameworks/base/packages
+===================================================================
+--- frameworks/base/packages	(revision 1210)
++++ frameworks/base/packages	(revision 1211)
+
+Property changes on: frameworks/base/packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages:r1022
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1210)
++++ frameworks/base	(revision 1211)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r1022
+Index: frameworks
+===================================================================
+--- frameworks	(revision 1210)
++++ frameworks	(revision 1211)
+
+Property changes on: frameworks
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks:r1022

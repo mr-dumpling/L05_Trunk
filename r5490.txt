@@ -1,0 +1,282 @@
+Index: vendor/branch/5058A_Telcel/packages/services/Telephony/src/com/android/services/telephony/DisconnectCauseUtil.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/services/Telephony/src/com/android/services/telephony/DisconnectCauseUtil.java	(revision 5489)
++++ vendor/branch/5058A_Telcel/packages/services/Telephony/src/com/android/services/telephony/DisconnectCauseUtil.java	(revision 5490)
+@@ -27,7 +27,7 @@
+ import android.provider.Settings;
+ /// @}
+ import android.telecom.DisconnectCause;
+-
++import android.telephony.TelephonyManager;
+ import com.android.phone.PhoneGlobals;
+ import com.android.phone.common.R;
+ import com.android.phone.ImsUtil;
+@@ -150,6 +150,14 @@
+             /// M: CC: Error message due to VoLTE SS checking @{
+             case android.telephony.DisconnectCause.VOLTE_SS_DATA_OFF:
+             /// @}
++            /* add Start by chenhu, 2018-01-08 for call celar code */
++            case android.telephony.DisconnectCause.NUMBER_CHANGED:
++            case android.telephony.DisconnectCause.STATUS_ENQUIRY:
++            case android.telephony.DisconnectCause.TEMPORARY_FAILURE:
++            case android.telephony.DisconnectCause.CHANNEL_NOT_AVAIL:
++            case android.telephony.DisconnectCause.QOS_NOT_AVAIL:
++            case android.telephony.DisconnectCause.NETWORK_OUT_OF_ORDER:
++            /* add End by chenhu, 2018-01-08 for call celar code */
+                 return DisconnectCause.ERROR;
+ 
+             case android.telephony.DisconnectCause.DIALED_MMI:
+@@ -470,6 +478,152 @@
+             default:
+                 break;
+         }
++		TelephonyManager telManager = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
++		String imsi = telManager.getSubscriberId();
++		if (imsi != null) {
++			if (imsi.startsWith("334020")) {
++				switch (telephonyDisconnectCause) {
++                case android.telephony.DisconnectCause.UNOBTAINABLE_NUMBER: //add clear code 1
++                    resourceId = R.string.callFailed_telcel_one;
++                    break;
++                case android.telephony.DisconnectCause.NO_ROUTE_TO_DESTINATION: //add clear code 3
++                    resourceId = R.string.callFailed_telcel_three;
++                    break;
++                case android.telephony.DisconnectCause.CHANNEL_UNACCEPTABLE: //add clear code 6
++                    resourceId = R.string.callFailed_telcel_six;
++                    break;
++                case android.telephony.DisconnectCause.OPERATOR_DETERMINED_BARRING: //add clear code 8
++                    resourceId = R.string.callFailed_telcel_eight;
++                    break;
++				case android.telephony.DisconnectCause.BUSY: //add clear code 17
++					resourceId = R.string.callFailed_telcel_seventeen;
++					break;
++				case android.telephony.DisconnectCause.NO_USER_RESPONDING: //add clear code 18
++					resourceId = R.string.callFailed_telcel_eighteen;
++					break;
++				case android.telephony.DisconnectCause.USER_ALERTING_NO_ANSWER: //add clear code 19
++					resourceId = R.string.callFailed_telcel_nineteen;
++					break;
++				case android.telephony.DisconnectCause.CALL_REJECTED: //add clear code 21
++					resourceId = R.string.callFailed_telcel_twoone;
++					break;
++				case android.telephony.DisconnectCause.NUMBER_CHANGED: //add clear code 22
++					resourceId = R.string.callFailed_telcel_twotwo;
++					break;
++				case android.telephony.DisconnectCause.NON_SELECTED_USER_CLEARING: //add clear code 26
++					resourceId = R.string.callFailed_telcel_twosix;
++					break;
++				case android.telephony.DisconnectCause.DESTINATION_OUT_OF_ORDER: //add clear code 27
++					resourceId = R.string.callFailed_telcel_twoseven;
++					break;
++				case android.telephony.DisconnectCause.INVALID_NUMBER_FORMAT: //add clear code 28
++					resourceId = R.string.callFailed_telcel_twoeight;
++					break;
++				case android.telephony.DisconnectCause.FACILITY_REJECTED: //add clear code 29
++					resourceId = R.string.callFailed_telcel_twonine;
++					break;
++				case android.telephony.DisconnectCause.STATUS_ENQUIRY: //add clear code 30
++					resourceId = R.string.callFailed_telcel_thirty;
++					break;
++				case android.telephony.DisconnectCause.NORMAL_UNSPECIFIED: //add clear code 31
++					resourceId = R.string.callFailed_telcel_threeone;
++					break;
++				case android.telephony.DisconnectCause.NETWORK_OUT_OF_ORDER: //add clear code 38
++					resourceId = R.string.callFailed_telcel_threeeight;
++					break;
++				case android.telephony.DisconnectCause.TEMPORARY_FAILURE: //add clear code 41
++					resourceId = R.string.callFailed_telcel_fourone;
++					break;
++				case android.telephony.DisconnectCause.SWITCHING_CONGESTION: //add clear code 42
++					resourceId = R.string.callFailed_telcel_fourtwo;
++					break;
++				case android.telephony.DisconnectCause.ACCESS_INFORMATION_DISCARDED: //add clear code 43
++					resourceId = R.string.callFailed_telcel_fourthree;
++					break;
++				case android.telephony.DisconnectCause.CHANNEL_NOT_AVAIL: //add clear code 44
++					resourceId = R.string.callFailed_telcel_fourfour;
++					break;
++				case android.telephony.DisconnectCause.RESOURCE_UNAVAILABLE: //add clear code 47
++					resourceId = R.string.callFailed_telcel_fourseven;
++					break;
++				case android.telephony.DisconnectCause.QOS_NOT_AVAIL: //add clear code 49
++					resourceId = R.string.callFailed_telcel_fournine;
++					break;
++				case android.telephony.DisconnectCause.REQUESTED_FACILITY_NOT_SUBSCRIBED: //add clear code 50
++					resourceId = R.string.callFailed_telcel_fifty;
++					break;
++				case android.telephony.DisconnectCause.INCOMING_CALL_BARRED_WITHIN_CUG: //add clear code 55
++					resourceId = R.string.callFailed_telcel_fivefive;
++					break;
++				case android.telephony.DisconnectCause.BEARER_NOT_AUTHORIZED: //add clear code 57
++					resourceId = R.string.callFailed_telcel_fiveseven;
++					break;
++				case android.telephony.DisconnectCause.BEARER_NOT_AVAIL: //add clear code 58
++					resourceId = R.string.callFailed_telcel_fiveeight;
++					break;
++				case android.telephony.DisconnectCause.SERVICE_NOT_AVAILABLE: //add clear code 63
++					resourceId = R.string.callFailed_telcel_sixthree;
++					break;
++				case android.telephony.DisconnectCause.BEARER_NOT_IMPLEMENT: //add clear code 65
++					resourceId = R.string.callFailed_telcel_sixfive;
++					break;
++				case android.telephony.DisconnectCause.LIMIT_EXCEEDED: //add clear code 68
++					resourceId = R.string.callFailed_telcel_sixeight;
++					break;
++				case android.telephony.DisconnectCause.FACILITY_NOT_IMPLEMENT: //add clear code 69
++					resourceId = R.string.callFailed_telcel_sixnine;
++					break;
++				case android.telephony.DisconnectCause.RESTRICTED_BEARER_AVAILABLE: //add clear code 70
++					resourceId = R.string.callFailed_telcel_seventy;
++					break;
++				case android.telephony.DisconnectCause.OPTION_NOT_AVAILABLE: //add clear code 79
++					resourceId = R.string.callFailed_telcel_sevennine;
++					break;
++				case android.telephony.DisconnectCause.INVALID_TRANSACTION_ID_VALUE: //add clear code 81
++					resourceId = R.string.callFailed_telcel_eightone;
++					break;
++				case android.telephony.DisconnectCause.USER_NOT_MEMBER_OF_CUG: //add clear code 87
++					resourceId = R.string.callFailed_telcel_eightseven;
++					break;
++				case android.telephony.DisconnectCause.INCOMPATIBLE_DESTINATION: //add clear code 88
++					resourceId = R.string.callFailed_telcel_eighteight;
++					break;
++				case android.telephony.DisconnectCause.SEMANTICALLY_INCORRECT_MESSAGE: //add clear code 95
++					resourceId = R.string.callFailed_telcel_ninefive;
++					break;
++				case android.telephony.DisconnectCause.INVALID_MANDATORY_INFORMATION: //add clear code 96
++					resourceId = R.string.callFailed_telcel_ninesix;
++					break;
++				case android.telephony.DisconnectCause.MESSAGE_TYPE_NON_EXISTENT: //add clear code 97
++					resourceId = R.string.callFailed_telcel_nineseven;
++					break;
++				case android.telephony.DisconnectCause.MESSAGE_TYPE_NOT_COMPATIBLE_WITH_PROT_STATE: //add clear code 98
++					resourceId = R.string.callFailed_telcel_nineeight;
++					break;
++				case android.telephony.DisconnectCause.IE_NON_EXISTENT_OR_NOT_IMPLEMENTED: //add clear code 99
++					resourceId = R.string.callFailed_telcel_ninenine;
++					break;
++				case android.telephony.DisconnectCause.CONDITIONAL_IE_ERROR: //add clear code 100
++					resourceId = R.string.callFailed_telcel_hundred;
++					break;
++				case android.telephony.DisconnectCause.MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE: //add clear code 101
++					resourceId = R.string.callFailed_telcel_hundredone;
++					break;
++				case android.telephony.DisconnectCause.RECOVERY_ON_TIMER_EXPIRY: //add clear code 102
++					resourceId = R.string.callFailed_telcel_hundredtwo;
++					break;
++				case android.telephony.DisconnectCause.PROTOCOL_ERROR_UNSPECIFIED: //add clear code 111
++					resourceId = R.string.callFailed_telcel_hundredeleven;
++					break;
++				case android.telephony.DisconnectCause.INTERWORKING_UNSPECIFIED: //add clear code 127
++					resourceId = R.string.callFailed_telcel_hundredtwoseven;
++					break;
++                default:
++                    break;
++				}
++			}
++		}
++		Log.i("chenhu", "resourceId="+resourceId);
+         return resourceId == null ? ExtensionManager.getDisconnectCauseExt()
+                 .toDisconnectCauseDescription(telephonyDisconnectCause, "")
+                 : context.getResources().getString(resourceId);
+Index: vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/GsmCdmaConnection.java
+===================================================================
+--- vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/GsmCdmaConnection.java	(revision 5489)
++++ vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/GsmCdmaConnection.java	(revision 5490)
+@@ -502,9 +502,12 @@
+ 
+             case CallFailCause.NO_CIRCUIT_AVAIL:
+             case CallFailCause.TEMPORARY_FAILURE:
++                return DisconnectCause.TEMPORARY_FAILURE;
+             case CallFailCause.SWITCHING_CONGESTION:
+             case CallFailCause.CHANNEL_NOT_AVAIL:
++                return DisconnectCause.CHANNEL_NOT_AVAIL;
+             case CallFailCause.QOS_NOT_AVAIL:
++                return DisconnectCause.QOS_NOT_AVAIL;
+             case CallFailCause.BEARER_NOT_AVAIL:
+                 return DisconnectCause.CONGESTION;
+ 
+@@ -580,11 +583,11 @@
+              * Return DisconnectCause.ERROR_UNSPECIFIED to play TONE_CALL_ENDED for
+              * CALL_REJECTED(+CEER: 21) and NORMAL_UNSPECIFIED(+CEER: 31)
+              */
+-            //case CallFailCause.CALL_REJECTED:
+-            //    return DisconnectCause.CALL_REJECTED;
++            case CallFailCause.CALL_REJECTED:
++                return DisconnectCause.CALL_REJECTED;
+ 
+-            //case CallFailCause.NORMAL_UNSPECIFIED:
+-            //    return DisconnectCause.NORMAL_UNSPECIFIED;
++            case CallFailCause.NORMAL_UNSPECIFIED:
++                return DisconnectCause.NORMAL_UNSPECIFIED;
+ 
+             case CallFailCause.INVALID_NUMBER_FORMAT:
+                 return DisconnectCause.INVALID_NUMBER_FORMAT;
+@@ -599,9 +602,9 @@
+                 return DisconnectCause.BEARER_NOT_AUTHORIZED;
+ 
+             case CallFailCause.SERVICE_NOT_AVAILABLE:
+-
++                return DisconnectCause.SERVICE_NOT_AVAILABLE;
+             case CallFailCause.NETWORK_OUT_OF_ORDER:
+-                return DisconnectCause.SERVICE_NOT_AVAILABLE;
++                return DisconnectCause.NETWORK_OUT_OF_ORDER;
+ 
+             case CallFailCause.BEARER_NOT_IMPLEMENT:
+                 return DisconnectCause.BEARER_NOT_IMPLEMENT;
+@@ -685,6 +688,12 @@
+             case CallFailCause.PROTOCOL_ERROR_UNSPECIFIED:
+                 return DisconnectCause.PROTOCOL_ERROR_UNSPECIFIED;
+ 
++            /* add Start by chenhu, 2018-01-08 for call celar code */   
++            case CallFailCause.NUMBER_CHANGED:
++                return DisconnectCause.NUMBER_CHANGED;
++            case CallFailCause.STATUS_ENQUIRY:
++                return DisconnectCause.STATUS_ENQUIRY;
++            /* add End by chenhu, 2018-01-08 for call celar code */
+             /**
+              * Google default behavior:
+              * Return DisconnectCause.ERROR_UNSPECIFIED to avoid UNKNOWN cause in inCallUI,
+Index: vendor/branch/5058A_Telcel/frameworks/base/telephony/java/android/telephony/DisconnectCause.java
+===================================================================
+--- vendor/branch/5058A_Telcel/frameworks/base/telephony/java/android/telephony/DisconnectCause.java	(revision 5489)
++++ vendor/branch/5058A_Telcel/frameworks/base/telephony/java/android/telephony/DisconnectCause.java	(revision 5490)
+@@ -431,6 +431,38 @@
+      */
+     public static final int VOLTE_SS_DATA_OFF              = MTK_DISCONNECTED_CAUSE_BASE + 42;
+     /// @}
++
++    /* add Start by chenhu, 2018-01-08 for call celar code */
++    /**
++     * @hide
++     */
++    public static final int NUMBER_CHANGED    = MTK_DISCONNECTED_CAUSE_BASE + 43;
++
++    /**
++     * @hide
++     */
++    public static final int STATUS_ENQUIRY    = MTK_DISCONNECTED_CAUSE_BASE + 44;
++
++    /**
++     * @hide
++     */
++    public static final int TEMPORARY_FAILURE    = MTK_DISCONNECTED_CAUSE_BASE + 45;
++
++    /**
++     * @hide
++     */
++    public static final int CHANNEL_NOT_AVAIL    = MTK_DISCONNECTED_CAUSE_BASE + 46;
++
++    /**
++     * @hide
++     */
++    public static final int QOS_NOT_AVAIL    = MTK_DISCONNECTED_CAUSE_BASE + 47;
++
++    /**
++     * @hide
++     */
++    public static final int NETWORK_OUT_OF_ORDER    = MTK_DISCONNECTED_CAUSE_BASE + 48;
++    /* add End by chenhu, 2018-01-08 for call celar code */
+     /// M: IMS feature. @{
+     public static final int IMS_EMERGENCY_REREG = 380;
+     /// @}

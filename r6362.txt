@@ -1,0 +1,29 @@
+Index: frameworks/base/services/core/java/com/android/server/pm/DefaultPermissionGrantPolicy.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/pm/DefaultPermissionGrantPolicy.java	(revision 6361)
++++ frameworks/base/services/core/java/com/android/server/pm/DefaultPermissionGrantPolicy.java	(revision 6362)
+@@ -89,6 +89,7 @@
+     private static final String ATTR_PACKAGE = "package";
+     private static final String ATTR_NAME = "name";
+     private static final String ATTR_FIXED = "fixed";
++    private static final String EXCHANGE_PACKAGE = "com.android.exchange";
+ 
+     private static final Set<String> PHONE_PERMISSIONS = new ArraySet<>();
+     static {
+@@ -545,6 +546,16 @@
+                 grantRuntimePermissionsLPw(emailPackage, CALENDAR_PERMISSIONS, userId);
+             }
+ 
++            // Exchange
++            PackageParser.Package exchangePackage = getSystemPackageLPr(EXCHANGE_PACKAGE);
++            if (exchangePackage != null
++                    && doesPackageSupportRuntimePermissions(exchangePackage)) {
++                grantRuntimePermissionsLPw(exchangePackage, STORAGE_PERMISSIONS, userId);
++                grantRuntimePermissionsLPw(exchangePackage, CALENDAR_PERMISSIONS, userId);
++                grantRuntimePermissionsLPw(exchangePackage, CONTACTS_PERMISSIONS, userId);
++                grantRuntimePermissionsLPw(exchangePackage, PHONE_PERMISSIONS, userId);
++            }
++
+             // Browser
+             PackageParser.Package browserPackage = null;
+             String defaultBrowserPackage = mService.getDefaultBrowserPackageName(userId);

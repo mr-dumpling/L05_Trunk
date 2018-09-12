@@ -1,0 +1,91 @@
+Index: vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/contactinfo/ContactInfoCache.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/contactinfo/ContactInfoCache.java	(revision 8577)
++++ vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/contactinfo/ContactInfoCache.java	(revision 8578)
+@@ -31,6 +31,8 @@
+ import com.android.dialer.calllog.CallLogFragment;
+ import android.telephony.PhoneNumberUtils;
+ 
++import android.provider.Settings;
++import android.content.Context;
+ /**
+  * This is a cache of contact details for the phone numbers in the c all log. The key is the
+  * phone number with the country in which teh call was placed or received. The content of the
+@@ -152,7 +154,17 @@
+         mRequests = new LinkedList<ContactInfoRequest>();
+         mCache = ExpirableCache.create(CONTACT_INFO_CACHE_SIZE);
+     }
++    
++    public ContactInfoCache(ContactInfoHelper contactInfoHelper,
++            OnContactInfoChangedListener onContactInfoChangedListener, Context context) {
++        mContactInfoHelper = contactInfoHelper;
++        mOnContactInfoChangedListener = onContactInfoChangedListener;
+ 
++        mRequests = new LinkedList<ContactInfoRequest>();
++        mCache = ExpirableCache.create(CONTACT_INFO_CACHE_SIZE);
++        mContext = context;
++    }
++
+     public ContactInfo getValue(String number, String countryIso, ContactInfo cachedContactInfo) {
+         NumberWithCountryIso numberCountryIso = new NumberWithCountryIso(number, countryIso);
+         ExpirableCache.CachedValue<ContactInfo> cachedInfo =
+@@ -222,15 +234,19 @@
+         boolean updated = (existingInfo != ContactInfo.EMPTY || isRemoteSource) &&
+                 !info.equals(existingInfo);
+         
+-        for (int i = 0; i < CallLogFragment.list.size(); i++) {
+-            String fdnNumber = CallLogFragment.list.get(i).get("number");
+-            String fdnName = CallLogFragment.list.get(i).get("name");
+-            Log.d(TAG, "fdnNumber: "+ fdnNumber+"; fdnName="+fdnName);
++        boolean isFDNAct = Settings.Global.getInt(mContext.getContentResolver(), "is_fdn_enable", 0) != 0;
++        Log.d(TAG, "xiawei isFDNAct = " + isFDNAct);
++        if (isFDNAct) {
++            for (int i = 0; i < CallLogFragment.list.size(); i++) {
++                String fdnNumber = CallLogFragment.list.get(i).get("number");
++                String fdnName = CallLogFragment.list.get(i).get("name");
++                Log.d(TAG, "fdnNumber: "+ fdnNumber+"; fdnName="+fdnName);
+ 
+-            String minNum = fetchMinNumber(number);
+-            String minfdnNumber = fetchMinNumber(fdnNumber);          
+-            Log.d(TAG, "minNum: "+ minNum+"; minfdnNumber:"+minfdnNumber);
+-            if(TextUtils.equals(minfdnNumber, minNum)) info.name = fdnName;
++                String minNum = fetchMinNumber(number);
++                String minfdnNumber = fetchMinNumber(fdnNumber);          
++                Log.d(TAG, "minNum: "+ minNum+"; minfdnNumber:"+minfdnNumber);
++                if(TextUtils.equals(minfdnNumber, minNum)) info.name = fdnName;
++            }
+         }
+ 
+         // Store the data in the cache so that the UI thread can use to display it. Store it
+Index: vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java	(revision 8577)
++++ vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java	(revision 8578)
+@@ -289,7 +289,7 @@
+         mActivityType = activityType;
+ 
+         mContactInfoCache = new ContactInfoCache(
+-                mContactInfoHelper, mOnContactInfoChangedListener);
++                mContactInfoHelper, mOnContactInfoChangedListener, mContext);
+         if (!PermissionsUtil.hasContactsPermissions(context)) {
+             mContactInfoCache.disableRequestProcessing(true);
+         }
+Index: vendor/branch/5058A_Telcel/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnSetting.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnSetting.java	(revision 8577)
++++ vendor/branch/5058A_Telcel/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnSetting.java	(revision 8578)
+@@ -497,12 +497,12 @@
+             mButtonEnableFDN.setTitle(R.string.enable_fdn_ok);
+             mButtonEnableFDN.setSummary(R.string.fdn_enabled);
+             mButtonEnableFDN.setDialogTitle(R.string.disable_fdn);
+-            Settings.Global.putInt(mPhone.getContext().getContentResolver(), "is_fdn_enable", 0);
++            Settings.Global.putInt(mPhone.getContext().getContentResolver(), "is_fdn_enable", 1);
+         } else {
+             mButtonEnableFDN.setTitle(R.string.disable_fdn_ok);
+             mButtonEnableFDN.setSummary(R.string.fdn_disabled);
+             mButtonEnableFDN.setDialogTitle(R.string.enable_fdn);
+-            Settings.Global.putInt(mPhone.getContext().getContentResolver(), "is_fdn_enable", 1);
++            Settings.Global.putInt(mPhone.getContext().getContentResolver(), "is_fdn_enable", 0);
+         }
+     }
+ 

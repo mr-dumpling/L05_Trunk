@@ -1,0 +1,1163 @@
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/IccLockSettings.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/IccLockSettings.java	(revision 0)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/IccLockSettings.java	(revision 6734)
+@@ -0,0 +1,706 @@
++/*
++ * Copyright (C) 2008 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.content.res.Resources;
++import android.os.AsyncResult;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Message;
++import android.support.v14.preference.SwitchPreference;
++import android.support.v7.preference.Preference;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.util.Log;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.ListView;
++import android.widget.TabHost;
++import android.widget.TabHost.OnTabChangeListener;
++import android.widget.TabHost.TabContentFactory;
++import android.widget.TabHost.TabSpec;
++import android.widget.TabWidget;
++import android.widget.Toast;
++
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++import com.android.internal.telephony.CommandException;
++import com.android.internal.telephony.Phone;
++import com.android.internal.telephony.PhoneFactory;
++import com.android.internal.telephony.TelephonyIntents;
++import com.mediatek.settings.UtilsExt;
++import com.mediatek.settings.ext.ISettingsMiscExt;
++import com.mediatek.settings.ext.ISimRoamingExt;
++import com.mediatek.settings.sim.SimHotSwapHandler;
++import com.mediatek.settings.sim.TelephonyUtils;
++import com.mediatek.settings.sim.SimHotSwapHandler.OnSimHotSwapListener;
++import com.android.internal.telephony.PhoneConstants;
++/**
++ * Implements the preference screen to enable/disable ICC lock and
++ * also the dialogs to change the ICC PIN. In the former case, enabling/disabling
++ * the ICC lock will prompt the user for the current PIN.
++ * In the Change PIN case, it prompts the user for old pin, new pin and new pin
++ * again before attempting to change it. Calls the SimCard interface to execute
++ * these operations.
++ *
++ */
++public class IccLockSettings extends SettingsPreferenceFragment
++        implements EditPinPreference.OnPinEnteredListener {
++    private static final String TAG = "IccLockSettings";
++    private static final boolean DBG = true;
++
++    private static final int OFF_MODE = 0;
++    // State when enabling/disabling ICC lock
++    private static final int ICC_LOCK_MODE = 1;
++    // State when entering the old pin
++    private static final int ICC_OLD_MODE = 2;
++    // State when entering the new pin - first time
++    private static final int ICC_NEW_MODE = 3;
++    // State when entering the new pin - second time
++    private static final int ICC_REENTER_MODE = 4;
++
++    // Keys in xml file
++    private static final String PIN_DIALOG = "sim_pin";
++    private static final String PIN_TOGGLE = "sim_toggle";
++    // Keys in icicle
++    private static final String DIALOG_STATE = "dialogState";
++    private static final String DIALOG_PIN = "dialogPin";
++    private static final String DIALOG_ERROR = "dialogError";
++    private static final String ENABLE_TO_STATE = "enableState";
++
++    // Save and restore inputted PIN code when configuration changed
++    // (ex. portrait<-->landscape) during change PIN code
++    private static final String OLD_PINCODE = "oldPinCode";
++    private static final String NEW_PINCODE = "newPinCode";
++
++    private static final int MIN_PIN_LENGTH = 4;
++    private static final int MAX_PIN_LENGTH = 8;
++    // Which dialog to show next when popped up
++    private int mDialogState = OFF_MODE;
++
++    private String mPin;
++    private String mOldPin;
++    private String mNewPin;
++    private String mError;
++    // Are we trying to enable or disable ICC lock?
++    private boolean mToState;
++
++    private TabHost mTabHost;
++    private TabWidget mTabWidget;
++    private ListView mListView;
++
++    private Phone mPhone;
++
++    private EditPinPreference mPinDialog;
++    private SwitchPreference mPinToggle;
++
++    private Resources mRes;
++
++    // For async handler to identify request type
++    private static final int MSG_ENABLE_ICC_PIN_COMPLETE = 100;
++    private static final int MSG_CHANGE_ICC_PIN_COMPLETE = 101;
++    private static final int MSG_SIM_STATE_CHANGED = 102;
++
++    // For replies from IccCard interface
++    private Handler mHandler = new Handler() {
++        public void handleMessage(Message msg) {
++            AsyncResult ar = (AsyncResult) msg.obj;
++            switch (msg.what) {
++                case MSG_ENABLE_ICC_PIN_COMPLETE:
++                    iccLockChanged(ar.exception, msg.arg1);
++                    break;
++                case MSG_CHANGE_ICC_PIN_COMPLETE:
++                    iccPinChanged(ar.exception, msg.arg1);
++                    break;
++                case MSG_SIM_STATE_CHANGED:
++                    updatePreferences();
++                    break;
++            }
++
++            return;
++        }
++    };
++
++    private final BroadcastReceiver mSimStateReceiver = new BroadcastReceiver() {
++        public void onReceive(Context context, Intent intent) {
++            final String action = intent.getAction();
++            Log.d(TAG, "onReceive, action = " + action);
++            if (TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(action)) {
++                mHandler.sendMessage(mHandler.obtainMessage(MSG_SIM_STATE_CHANGED));
++            /// M: check airplane mode @{
++            } else if (Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(action)) {
++                mIsAirplaneModeOn = intent.getBooleanExtra("state", false);
++                updatePreferences();
++            }
++            /// @}
++        }
++    };
++
++    // For top-level settings screen to query
++    static boolean isIccLockEnabled() {
++        final boolean enabled = PhoneFactory.getDefaultPhone().getIccCard().getIccLockEnabled();
++        Log.d(TAG, "isIccLockEnabled = " + enabled);
++        return enabled;
++    }
++
++    static String getSummary(Context context) {
++        Resources res = context.getResources();
++        String summary = isIccLockEnabled()
++                ? res.getString(R.string.sim_lock_on)
++                : res.getString(R.string.sim_lock_off);
++        return summary;
++    }
++
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++
++        /* If finish before initialization, JE will happend.
++        if (Utils.isMonkeyRunning()) {
++            finish();
++            return;
++        }*/
++
++        /// M: check airplane mode
++        mIsAirplaneModeOn = TelephonyUtils.isAirplaneModeOn(getActivity());
++
++        /// M: for plug in @{
++        mMiscExt = UtilsExt.getMiscPlugin(getContext());
++        mSimRoamingExt = UtilsExt.getSimRoamingExtPlugin(getActivity());
++        /// @}
++
++        addPreferencesFromResource(R.xml.sim_lock_settings);
++
++        mPinDialog = (EditPinPreference) findPreference(PIN_DIALOG);
++        mPinToggle = (SwitchPreference) findPreference(PIN_TOGGLE);
++        if (savedInstanceState != null && savedInstanceState.containsKey(DIALOG_STATE)) {
++            mDialogState = savedInstanceState.getInt(DIALOG_STATE);
++            mPin = savedInstanceState.getString(DIALOG_PIN);
++            mError = savedInstanceState.getString(DIALOG_ERROR);
++            mToState = savedInstanceState.getBoolean(ENABLE_TO_STATE);
++
++            // Restore inputted PIN code
++            switch (mDialogState) {
++                case ICC_NEW_MODE:
++                    mOldPin = savedInstanceState.getString(OLD_PINCODE);
++                    break;
++
++                case ICC_REENTER_MODE:
++                    mOldPin = savedInstanceState.getString(OLD_PINCODE);
++                    mNewPin = savedInstanceState.getString(NEW_PINCODE);
++                    break;
++
++                case ICC_LOCK_MODE:
++                case ICC_OLD_MODE:
++                default:
++                    break;
++            }
++        }
++
++        mPinDialog.setOnPinEnteredListener(this);
++
++        // Don't need any changes to be remembered
++        getPreferenceScreen().setPersistent(false);
++
++        mRes = getResources();
++
++        /// M: for [SIM Hot Swap] @{
++        mSimHotSwapHandler = new SimHotSwapHandler(getActivity());
++        mSimHotSwapHandler.registerOnSimHotSwap(new OnSimHotSwapListener() {
++            @Override
++            public void onSimHotSwap() {
++                Log.d(TAG, "onSimHotSwap, finish Activity~~");
++                finish();
++            }
++        });
++        /// @}
++
++        /// M: for plug-in
++        getActivity().setTitle(mMiscExt.customizeSimDisplayString(
++                    getActivity().getTitle().toString(),
++                    SubscriptionManager.INVALID_SUBSCRIPTION_ID));
++        /// M: Finish activity after initialization to avoid JE.
++        if (Utils.isMonkeyRunning()) {
++            finish();
++            return;
++        }
++    }
++
++    @Override
++    public View onCreateView(LayoutInflater inflater, ViewGroup container,
++            Bundle savedInstanceState) {
++
++        final TelephonyManager tm =
++                (TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE);
++        final int numSims = tm.getSimCount();
++        if (numSims > 1) {
++            View view = inflater.inflate(R.layout.icc_lock_tabs, container, false);
++            final ViewGroup prefs_container = (ViewGroup) view.findViewById(R.id.prefs_container);
++            Utils.prepareCustomPreferencesList(container, view, prefs_container, false);
++            View prefs = super.onCreateView(inflater, prefs_container, savedInstanceState);
++            prefs_container.addView(prefs);
++
++            mTabHost = (TabHost) view.findViewById(android.R.id.tabhost);
++            mTabWidget = (TabWidget) view.findViewById(android.R.id.tabs);
++            mListView = (ListView) view.findViewById(android.R.id.list);
++
++            mTabHost.setup();
++            mTabHost.setOnTabChangedListener(mTabListener);
++            mTabHost.clearAllTabs();
++
++            SubscriptionManager sm = SubscriptionManager.from(getContext());
++            for (int i = 0; i < numSims; ++i) {
++                final SubscriptionInfo subInfo = sm.getActiveSubscriptionInfoForSimSlotIndex(i);						
++				if(subInfo != null) {	
++					if(tm.getSimState(PhoneConstants.SIM_ID_1) != TelephonyManager.SIM_STATE_ABSENT) {
++						mTabHost.addTab(buildTabSpec(String.valueOf(i),String.valueOf(subInfo.getDisplayName())));	
++					} else {
++						mTabHost.addTab(buildTabSpec(String.valueOf(0),String.valueOf(subInfo.getDisplayName())));	
++					}								
++				}
++				
++                /*mTabHost.addTab(buildTabSpec(String.valueOf(i),
++                        String.valueOf(subInfo == null
++                            ? getContext().getString(R.string.sim_editor_title, i + 1)
++                            : subInfo.getDisplayName())));*/
++            }
++            final SubscriptionInfo sir = sm.getActiveSubscriptionInfoForSimSlotIndex(0);
++
++            mPhone = (sir == null) ? null
++                : PhoneFactory.getPhone(SubscriptionManager.getPhoneId(sir.getSubscriptionId()));
++            Log.d(TAG, "onCreateView()... mPhone: " + mPhone);
++            return view;
++        } else {
++            mPhone = PhoneFactory.getDefaultPhone();
++            /// M: if SIM count > 1, onTabChanged() will be invoked when addTab()
++            // so no need to call changeSimTitle(). Call this API only when no tab added.
++            changeSimTitle();
++            Log.d(TAG, "onCreateView()... mPhone: " + mPhone);
++            return super.onCreateView(inflater, container, savedInstanceState);
++        }
++
++    }
++
++    @Override
++    public void onViewCreated(View view, Bundle savedInstanceState) {
++        super.onViewCreated(view, savedInstanceState);
++        updatePreferences();
++    }
++
++    private void updatePreferences() {
++        /// M: check airplane mode
++        mPinDialog.setEnabled(mPhone != null && !mIsAirplaneModeOn);
++        mPinToggle.setEnabled(mPhone != null && !mIsAirplaneModeOn);
++
++        if (mPhone != null) {
++            final boolean enabled = mPhone.getIccCard().getIccLockEnabled();
++            Log.d(TAG, "getIccLockEnabled = " + enabled);
++            mPinToggle.setChecked(enabled);
++        }
++    }
++
++    @Override
++    protected int getMetricsCategory() {
++        return MetricsEvent.ICC_LOCK;
++    }
++
++    @Override
++    public void onResume() {
++        super.onResume();
++
++        // ACTION_SIM_STATE_CHANGED is sticky, so we'll receive current state after this call,
++        // which will call updatePreferences().
++        final IntentFilter filter = new IntentFilter(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
++        /// M: check airplane mode
++        filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
++        getContext().registerReceiver(mSimStateReceiver, filter);
++
++        /// M: for ALPS02323548 @{
++        // need to update preference when activity resume
++        mIsAirplaneModeOn = TelephonyUtils.isAirplaneModeOn(getActivity());
++        updatePreferences();
++        /// @}
++        if (mDialogState != OFF_MODE) {
++            showPinDialog();
++        } else {
++            // Prep for standard click on "Change PIN"
++            resetDialogState();
++        }
++    }
++
++    @Override
++    public void onPause() {
++        super.onPause();
++        getContext().unregisterReceiver(mSimStateReceiver);
++    }
++
++    @Override
++    public void onSaveInstanceState(Bundle out) {
++        // Need to store this state for slider open/close
++        // There is one case where the dialog is popped up by the preference
++        // framework. In that case, let the preference framework store the
++        // dialog state. In other cases, where this activity manually launches
++        // the dialog, store the state of the dialog.
++        if (mPinDialog.isDialogOpen()) {
++            out.putInt(DIALOG_STATE, mDialogState);
++            out.putString(DIALOG_PIN, mPinDialog.getEditText().getText().toString());
++            out.putString(DIALOG_ERROR, mError);
++            out.putBoolean(ENABLE_TO_STATE, mToState);
++
++            // Save inputted PIN code
++            switch (mDialogState) {
++                case ICC_NEW_MODE:
++                    out.putString(OLD_PINCODE, mOldPin);
++                    break;
++
++                case ICC_REENTER_MODE:
++                    out.putString(OLD_PINCODE, mOldPin);
++                    out.putString(NEW_PINCODE, mNewPin);
++                    break;
++
++                case ICC_LOCK_MODE:
++                case ICC_OLD_MODE:
++                default:
++                    break;
++            }
++        }
++        super.onSaveInstanceState(out);
++    }
++
++    private void showPinDialog() {
++        if (mDialogState == OFF_MODE) {
++            return;
++        }
++        setDialogValues();
++
++        mPinDialog.showPinDialog();
++    }
++
++    private void setDialogValues() {
++        mPinDialog.setText(mPin);
++        String message = "";
++        switch (mDialogState) {
++            case ICC_LOCK_MODE:
++                message = mRes.getString(R.string.sim_enter_pin);
++                mPinDialog.setDialogTitle(mToState
++                        ? mRes.getString(R.string.sim_enable_sim_lock)
++                        : mRes.getString(R.string.sim_disable_sim_lock));
++                break;
++            case ICC_OLD_MODE:
++                message = mRes.getString(R.string.sim_enter_old);
++                mPinDialog.setDialogTitle(mRes.getString(R.string.sim_change_pin));
++                break;
++            case ICC_NEW_MODE:
++                message = mRes.getString(R.string.sim_enter_new);
++                mPinDialog.setDialogTitle(mRes.getString(R.string.sim_change_pin));
++                break;
++            case ICC_REENTER_MODE:
++                message = mRes.getString(R.string.sim_reenter_new);
++                mPinDialog.setDialogTitle(mRes.getString(R.string.sim_change_pin));
++                break;
++        }
++        if (mError != null) {
++            message = mError + "\n" + message;
++            mError = null;
++        }
++        Log.d(TAG, "setDialogValues mDialogState = " + mDialogState);
++        mPinDialog.setDialogMessage(message);
++        /// M: for plug-in
++        changeDialogStrings(mPinDialog.getDialogTitle().toString(), message);
++    }
++
++    @Override
++    public void onPinEntered(EditPinPreference preference, boolean positiveResult) {
++        if (!positiveResult) {
++            resetDialogState();
++            return;
++        }
++
++        mPin = preference.getText();
++        if (!reasonablePin(mPin)) {
++            // inject error message and display dialog again
++            mError = mRes.getString(R.string.sim_bad_pin);
++            /// M: for ALPS02367598, make sure activity is running when showing dialog
++            if (isResumed()) {
++                showPinDialog();
++            }
++            return;
++        }
++        switch (mDialogState) {
++            case ICC_LOCK_MODE:
++                tryChangeIccLockState();
++                break;
++            case ICC_OLD_MODE:
++                mOldPin = mPin;
++                mDialogState = ICC_NEW_MODE;
++                mError = null;
++                mPin = null;
++                showPinDialog();
++                break;
++            case ICC_NEW_MODE:
++                mNewPin = mPin;
++                mDialogState = ICC_REENTER_MODE;
++                mPin = null;
++                showPinDialog();
++                break;
++            case ICC_REENTER_MODE:
++                if (!mPin.equals(mNewPin)) {
++                    mError = mRes.getString(R.string.sim_pins_dont_match);
++                    mDialogState = ICC_NEW_MODE;
++                    mPin = null;
++                    showPinDialog();
++                } else {
++                    mError = null;
++                    tryChangePin();
++                }
++                break;
++        }
++    }
++
++    @Override
++    public boolean onPreferenceTreeClick(Preference preference) {
++        if (preference == mPinToggle) {
++            // Get the new, preferred state
++            mToState = mPinToggle.isChecked();
++            // Flip it back and pop up pin dialog
++            mPinToggle.setChecked(!mToState);
++            mDialogState = ICC_LOCK_MODE;
++            showPinDialog();
++        } else if (preference == mPinDialog) {
++            mDialogState = ICC_OLD_MODE;
++            return false;
++        }
++        return true;
++    }
++
++    private void tryChangeIccLockState() {
++        // Try to change icc lock. If it succeeds, toggle the lock state and
++        // reset dialog state. Else inject error message and show dialog again.
++        Message callback = Message.obtain(mHandler, MSG_ENABLE_ICC_PIN_COMPLETE);
++        if (mPhone != null) {
++            Log.d(TAG, "setIccLockEnabled, mToState = " + mToState);
++            mPhone.getIccCard().setIccLockEnabled(mToState, mPin, callback);
++            // Disable the setting till the response is received.
++            mPinToggle.setEnabled(false);
++        }
++    }
++
++    private void iccLockChanged(Throwable exception, int attemptsRemaining) {
++        Log.d(TAG, "iccLockChanged, exception = " + exception + ",attemptsRemaining = "
++                + attemptsRemaining);
++        boolean success = (exception == null);
++        if (success) {
++            mPinToggle.setChecked(mToState);
++            /// M: for plug-in
++            mSimRoamingExt.showPinToast(mToState);
++        } else {
++            //M: 03334997 : No toast if context unavailable.
++            if (getContext() != null) {
++                Toast.makeText(getContext(), getPinPasswordErrorMessage(
++                        attemptsRemaining, exception), Toast.LENGTH_LONG).show();
++            }
++
++        }
++        mPinToggle.setEnabled(true);
++        resetDialogState();
++        //M: 3349075 clear dialog .
++        mPinDialog.setText("");
++    }
++
++    private void iccPinChanged(Throwable exception, int attemptsRemaining) {
++        Log.d(TAG, "iccPinChanged, exception = " + exception + ",attemptsRemaining = "
++                + attemptsRemaining);
++        boolean success = (exception == null);
++        if (!success) {
++            Toast.makeText(getContext(), getPinPasswordErrorMessage(attemptsRemaining, exception),
++                    Toast.LENGTH_LONG)
++                    .show();
++        } else {
++            /// M: for plug-in @{
++            /*
++            Toast.makeText(getContext(), mRes.getString(R.string.sim_change_succeeded),
++                    Toast.LENGTH_SHORT)
++                    .show();
++            */
++            String successMsg = mRes.getString(R.string.sim_change_succeeded);
++            successMsg = mMiscExt.customizeSimDisplayString(successMsg, mPhone.getSubId());
++            Toast.makeText(getContext(), successMsg,
++                    Toast.LENGTH_SHORT)
++                    .show();
++            /// @}
++
++        }
++        resetDialogState();
++    }
++
++    private void tryChangePin() {
++        Message callback = Message.obtain(mHandler, MSG_CHANGE_ICC_PIN_COMPLETE);
++        if (mPhone != null) {
++            Log.d(TAG, "changeIccLockPassword");
++            mPhone.getIccCard().changeIccLockPassword(mOldPin,
++                    mNewPin, callback);
++        }
++    }
++
++    private String getPinPasswordErrorMessage(int attemptsRemaining, Throwable exception) {
++        String displayMessage;
++		int subId = mPhone.getSubId();
++		Log.d(TAG, "subId:" + subId);
++
++        /// M: when enable pin or change pin and fail, reason is not pin wrong, @{
++        // but is CommandException.Error.GENERIC_FAILURE, should return
++        // pin fail
++        /// M: ALPS03313399 Same behaviour for SIM_ERR
++        if (exception instanceof CommandException
++                && (((CommandException) exception).getCommandError() ==
++                CommandException.Error.GENERIC_FAILURE ||
++                 ((CommandException) exception).getCommandError() ==
++                CommandException.Error.SIM_ERR)) {
++            displayMessage = mRes.getString(R.string.pin_failed);
++        /// @}
++        } else if (attemptsRemaining == 0) {
++            displayMessage = mRes.getString(R.string.wrong_pin_code_pukked);
++        } else if (attemptsRemaining > 0) {
++			if(subId == 0){
++				displayMessage = mRes
++                    .getQuantityString(R.plurals.wrong_pin_code_alwe, attemptsRemaining,
++                            attemptsRemaining);
++			}else{
++				displayMessage = mRes
++                    .getQuantityString(R.plurals.wrong_pin_code_alwe2, attemptsRemaining,
++                            attemptsRemaining);
++			}
++        } else {
++            displayMessage = mRes.getString(R.string.pin_failed);
++        }
++        /// M: for plug-in
++        displayMessage = mMiscExt.customizeSimDisplayString(displayMessage, mPhone.getSubId());
++        if (DBG) Log.d(TAG, "getPinPasswordErrorMessage:"
++                + " attemptsRemaining=" + attemptsRemaining + " displayMessage=" + displayMessage);
++        return displayMessage;
++    }
++
++    private boolean reasonablePin(String pin) {
++        if (pin == null || pin.length() < MIN_PIN_LENGTH || pin.length() > MAX_PIN_LENGTH) {
++            return false;
++        } else {
++            return true;
++        }
++    }
++
++    private void resetDialogState() {
++        mError = null;
++        mDialogState = ICC_OLD_MODE; // Default for when Change PIN is clicked
++        mPin = "";
++        setDialogValues();
++        mDialogState = OFF_MODE;
++    }
++
++    private OnTabChangeListener mTabListener = new OnTabChangeListener() {
++        @Override
++        public void onTabChanged(String tabId) {
++            final int slotId = Integer.parseInt(tabId);
++            final SubscriptionInfo sir = SubscriptionManager.from(getActivity().getBaseContext())
++                    .getActiveSubscriptionInfoForSimSlotIndex(slotId);
++
++            mPhone = (sir == null) ? null
++                : PhoneFactory.getPhone(SubscriptionManager.getPhoneId(sir.getSubscriptionId()));
++            Log.d(TAG, "onTabChanged()... mPhone: " + mPhone);
++            // The User has changed tab; update the body.
++            updatePreferences();
++
++            /// M: for plug-in.
++            changeSimTitle();
++            //M: 3349075 clear dialog .
++            mPinDialog.setText("");
++        }
++    };
++
++    private TabContentFactory mEmptyTabContent = new TabContentFactory() {
++        @Override
++        public View createTabContent(String tag) {
++            return new View(mTabHost.getContext());
++        }
++    };
++
++    private TabSpec buildTabSpec(String tag, String title) {
++        return mTabHost.newTabSpec(tag).setIndicator(title).setContent(
++                mEmptyTabContent);
++    }
++
++    ///-----------------------------------------MTK-----------------------------------------------
++
++    /// M: check airplane mode
++    private boolean mIsAirplaneModeOn = false;
++
++    /// M: for plug in @{
++    private ISimRoamingExt mSimRoamingExt;
++    private ISettingsMiscExt mMiscExt;
++    /// @}
++
++    /// M: for [SIM Hot Swap]
++    SimHotSwapHandler mSimHotSwapHandler;
++
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++        /// M: for [SIM Hot Swap] @{
++        if (mSimHotSwapHandler != null) {
++            mSimHotSwapHandler.unregisterOnSimHotSwap();
++        }
++        /// @}
++    };
++
++    /**
++     * for plug-in, Replace sim to sim/uim.
++     */
++    private void changeSimTitle() {
++        if (mPhone != null) {
++            int subId = mPhone.getSubId();
++            Log.d(TAG, "changeSimTitle subId = " + subId);
++            ///M: replace sim to sim/uim check box title
++            mPinToggle.setTitle(mMiscExt.customizeSimDisplayString(
++                    getResources().getString(R.string.sim_pin_toggle), subId));
++
++            ///M: replace sim to sim/uim pin dialog
++            mPinDialog.setTitle(mMiscExt.customizeSimDisplayString(
++                    getResources().getString(R.string.sim_pin_change), subId));
++        }
++    }
++
++    /**
++     * for plug-in, Replace sim to sim/uim.
++     *
++     * @param dialogTitle the string of dialog title.
++     * @param dialogMessage the string of dialog message.
++     */
++    private void changeDialogStrings(String dialogTitle, String dialogMessage) {
++        if (mPhone != null) {
++            int subId = mPhone.getSubId();
++            Log.d(TAG, "changeSimTitle subId = " + subId);
++            mPinDialog.setDialogTitle(mMiscExt.customizeSimDisplayString(
++                    dialogTitle, subId));
++            mPinDialog.setDialogMessage(mMiscExt.customizeSimDisplayString(
++                    dialogMessage, subId));
++        }
++    }
++}
+Index: vendor/branch/5058I_ALWE/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardSimPinView.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardSimPinView.java	(revision 0)
++++ vendor/branch/5058I_ALWE/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardSimPinView.java	(revision 6734)
+@@ -0,0 +1,419 @@
++/*
++ * Copyright (C) 2012 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.keyguard;
++
++import com.android.internal.telephony.ITelephony;
++import com.android.internal.telephony.IccCardConstants;
++import com.android.internal.telephony.IccCardConstants.State;
++import com.android.internal.telephony.PhoneConstants;
++
++import android.content.Context;
++import android.content.res.ColorStateList;
++import android.content.res.Configuration;
++import android.content.res.Resources;
++import android.app.AlertDialog;
++import android.app.AlertDialog.Builder;
++import android.app.Dialog;
++import android.app.ProgressDialog;
++import android.graphics.Bitmap;
++import android.graphics.Color;
++import android.os.RemoteException;
++import android.os.ServiceManager;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.util.AttributeSet;
++import android.util.Log;
++import android.view.View;
++import android.view.WindowManager;
++import android.widget.ImageView;
++import android.widget.TextView;
++
++
++/**
++ * Displays a PIN pad for unlocking.
++ */
++public class KeyguardSimPinView extends KeyguardPinBasedInputView {
++    private static final String LOG_TAG = "KeyguardSimPinView";
++    private static final boolean DEBUG = KeyguardConstants.DEBUG_SIM_STATES;
++    public static final String TAG = "KeyguardSimPinView";
++
++    private ProgressDialog mSimUnlockProgressDialog = null;
++    private CheckSimPin mCheckSimPinThread;
++
++    private AlertDialog mRemainingAttemptsDialog;
++    //M:
++    KeyguardUtils mKeyguardUtils;
++    private int mSubId;
++    private ImageView mSimImageView;
++
++    //M:
++    private int mPhoneId = 0;
++
++    KeyguardUpdateMonitorCallback mUpdateMonitorCallback = new KeyguardUpdateMonitorCallback() {
++        @Override
++        // public void onSimStateChanged(int phoneId, /*int slotId,*/ State simState) {
++        public void onSimStateChangedUsingPhoneId(int phoneId, IccCardConstants.State simState) {
++            // if (DEBUG)
++            // Log.v(TAG, "onSimStateChanged(subId=" + subId + ",state=" + simState + ")");
++            // resetState();
++            if (DEBUG) {
++                Log.d(TAG, "onSimStateChangedUsingSubId: " + simState + ", phoneId=" + phoneId);
++            }
++
++            switch (simState) {
++                case NOT_READY:
++                case ABSENT:
++                    if (phoneId == mPhoneId) {
++                        KeyguardUpdateMonitor.getInstance(getContext())
++                            .reportSimUnlocked(mPhoneId);
++                        mCallback.dismiss(true);
++                    }
++                    break;
++            }
++       }
++    };
++
++    public KeyguardSimPinView(Context context) {
++        this(context, null);
++    }
++
++    public KeyguardSimPinView(Context context, AttributeSet attrs) {
++        super(context, attrs);
++        mKeyguardUtils = new KeyguardUtils(context);
++    }
++
++    @Override
++    public void resetState() {
++        super.resetState();
++        if (DEBUG) Log.v(TAG, "Resetting state");
++        /** KeyguardUpdateMonitor monitor = KeyguardUpdateMonitor.getInstance(mContext);
++        mSubId = monitor.getNextSubIdForState(IccCardConstants.State.PIN_REQUIRED);
++        if (SubscriptionManager.isValidSubscriptionId(mSubId)) {
++            int count = TelephonyManager.getDefault().getSimCount();
++            Resources rez = getResources();
++            final String msg;
++            int color = Color.WHITE;
++            if (count < 2) {
++                msg = rez.getString(R.string.kg_sim_pin_instructions);
++            } else {
++                SubscriptionInfo info = monitor.getSubscriptionInfoForSubId(mSubId);
++                CharSequence displayName = info != null ? info.getDisplayName() : ""; // don't crash
++                msg = rez.getString(R.string.kg_sim_pin_instructions_multi, displayName);
++                if (info != null) {
++                    color = info.getIconTint();
++                }
++            }
++            mSecurityMessageDisplay.setMessage(msg, true);
++            mSimImageView.setImageTintList(ColorStateList.valueOf(color));
++        } **/
++        mSecurityMessageDisplay.setMessage(R.string.kg_sim_pin_instructions, true);
++    }
++
++    @Override
++    protected void onConfigurationChanged(Configuration newConfig) {
++        super.onConfigurationChanged(newConfig);
++        resetState();
++    }
++
++    @Override
++    protected int getPromtReasonStringRes(int reason) {
++        // No message on SIM Pin
++        return 0;
++    }
++
++    private String getPinPasswordErrorMessage(int attemptsRemaining) {
++        String displayMessage;
++		int subId = KeyguardUtils.getSubIdUsingPhoneId(mPhoneId);
++		Log.d(TAG, "subId:" + subId);
++
++        if (attemptsRemaining == 0) {
++            displayMessage = getContext().getString(R.string.kg_password_wrong_pin_code_pukked);
++        } else if (attemptsRemaining > 0) {
++			if(subId == 0){
++				displayMessage = getContext().getResources()
++                    .getQuantityString(R.plurals.kg_password_wrong_pin_code_alwe, attemptsRemaining,
++                            attemptsRemaining);
++			}else{
++				displayMessage = getContext().getResources()
++                    .getQuantityString(R.plurals.kg_password_wrong_pin_code_alwe2, attemptsRemaining,
++                            attemptsRemaining);
++			}
++        } else {
++            displayMessage = getContext().getString(R.string.kg_password_pin_failed);
++        }
++        if (DEBUG) Log.d(LOG_TAG, "getPinPasswordErrorMessage:"
++                + " attemptsRemaining=" + attemptsRemaining + " displayMessage=" + displayMessage);
++        return displayMessage;
++    }
++
++    @Override
++    protected boolean shouldLockout(long deadline) {
++        // SIM PIN doesn't have a timed lockout
++        return false;
++    }
++
++    @Override
++    protected int getPasswordTextViewId() {
++        return R.id.simPinEntry;
++    }
++
++    @Override
++    protected void onFinishInflate() {
++        super.onFinishInflate();
++
++        mPhoneId = KeyguardUpdateMonitor.getInstance(getContext()).getSimPinLockPhoneId();
++        if (KeyguardUtils.getNumOfPhone() > 1) {
++            View simIcon = findViewById(R.id.keyguard_sim);
++            if (simIcon != null) {
++                simIcon.setVisibility(View.GONE);
++            }
++            View simInfoMsg = findViewById(R.id.sim_info_message);
++            if (simInfoMsg != null) {
++                simInfoMsg.setVisibility(View.VISIBLE);
++            }
++            dealwithSIMInfoChanged();
++        }
++
++        mSecurityMessageDisplay.setTimeout(0); // don't show ownerinfo/charging status by default
++        if (mEcaView instanceof EmergencyCarrierArea) {
++            ((EmergencyCarrierArea) mEcaView).setCarrierTextVisible(true);
++        }
++        // mSimImageView = (ImageView) findViewById(R.id.keyguard_sim);
++    }
++
++    @Override
++    protected void onAttachedToWindow() {
++        super.onAttachedToWindow();
++        KeyguardUpdateMonitor.getInstance(mContext).registerCallback(mUpdateMonitorCallback);
++    }
++
++    @Override
++    protected void onDetachedFromWindow() {
++        super.onDetachedFromWindow();
++        KeyguardUpdateMonitor.getInstance(mContext).removeCallback(mUpdateMonitorCallback);
++    }
++
++    @Override
++    public void showUsabilityHint() {
++    }
++
++    @Override
++    public void onPause() {
++        // dismiss the dialog.
++        if (mSimUnlockProgressDialog != null) {
++            mSimUnlockProgressDialog.dismiss();
++            mSimUnlockProgressDialog = null;
++        }
++    }
++
++    /**
++     * Since the IPC can block, we want to run the request in a separate thread
++     * with a callback.
++     */
++    private abstract class CheckSimPin extends Thread {
++        private final String mPin;
++        // private int mSubId;
++
++        protected CheckSimPin(String pin/**, int subId**/) {
++            mPin = pin;
++            // mSubId = subId;
++        }
++
++        abstract void onSimCheckResponse(final int result, final int attemptsRemaining);
++
++        @Override
++        public void run() {
++            try {
++                if (DEBUG) {
++                    Log.v(TAG, "call supplyPinReportResultForSubscriber(subid=" + mSubId + ")");
++                }
++                Log.d(TAG, "call supplyPinReportResultForSubscriber() mPhoneId = " + mPhoneId);
++                int subId = KeyguardUtils.getSubIdUsingPhoneId(mPhoneId);
++                final int[] result = ITelephony.Stub.asInterface(ServiceManager
++                        .checkService("phone")).supplyPinReportResultForSubscriber(mSubId, mPin);
++                if (DEBUG) {
++                    Log.v(TAG, "supplyPinReportResult returned: " + result[0] + " " + result[1]);
++                }
++                post(new Runnable() {
++                    @Override
++                    public void run() {
++                        onSimCheckResponse(result[0], result[1]);
++                    }
++                });
++            } catch (RemoteException e) {
++                Log.e(TAG, "RemoteException for supplyPinReportResult:", e);
++                post(new Runnable() {
++                    @Override
++                    public void run() {
++                        onSimCheckResponse(PhoneConstants.PIN_GENERAL_FAILURE, -1);
++                    }
++                });
++            }
++        }
++    }
++
++    private Dialog getSimUnlockProgressDialog() {
++        if (mSimUnlockProgressDialog == null) {
++            mSimUnlockProgressDialog = new ProgressDialog(mContext);
++            mSimUnlockProgressDialog.setMessage(
++                    mContext.getString(R.string.kg_sim_unlock_progress_dialog_message));
++            mSimUnlockProgressDialog.setIndeterminate(true);
++            mSimUnlockProgressDialog.setCancelable(false);
++            mSimUnlockProgressDialog.getWindow().setType(
++                    WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
++        }
++        return mSimUnlockProgressDialog;
++    }
++
++    private Dialog getSimRemainingAttemptsDialog(int remaining) {
++        String msg = getPinPasswordErrorMessage(remaining);
++        if (mRemainingAttemptsDialog == null) {
++            Builder builder = new AlertDialog.Builder(mContext);
++            builder.setMessage(msg);
++            builder.setCancelable(false);
++            builder.setNeutralButton(R.string.ok, null);
++            mRemainingAttemptsDialog = builder.create();
++            mRemainingAttemptsDialog.getWindow().setType(
++                    WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
++        } else {
++            mRemainingAttemptsDialog.setMessage(msg);
++        }
++        return mRemainingAttemptsDialog;
++    }
++
++    @Override
++    protected void verifyPasswordAndUnlock() {
++        String entry = mPasswordEntry.getText();
++
++        if (entry.length() < 4) {
++            // otherwise, display a message to the user, and don't submit.
++            mSecurityMessageDisplay.setMessage(R.string.kg_invalid_sim_pin_hint, true);
++            resetPasswordText(true /* animate */, true /* announce */);
++            mCallback.userActivity();
++            return;
++        }
++
++        getSimUnlockProgressDialog().show();
++
++        if (mCheckSimPinThread == null) {
++            // mCheckSimPinThread = new CheckSimPin(mPasswordEntry.getText(), mSubId) {
++            mCheckSimPinThread = new CheckSimPin(mPasswordEntry.getText()) {
++                @Override
++                void onSimCheckResponse(final int result, final int attemptsRemaining) {
++                    post(new Runnable() {
++                        @Override
++                        public void run() {
++                            if (mSimUnlockProgressDialog != null) {
++                                mSimUnlockProgressDialog.hide();
++                            }
++                            //resetPasswordText(true /* animate */,
++                            //        result != PhoneConstants.PIN_RESULT_SUCCESS /* announce */);
++                            if (result == PhoneConstants.PIN_RESULT_SUCCESS) {
++                                // KeyguardUpdateMonitor.getInstance(getContext())
++                                //         .reportSimUnlocked(mSubId);
++                                KeyguardUpdateMonitor.getInstance(getContext())
++                                        .reportSimUnlocked(mPhoneId);
++                                mCallback.dismiss(true);
++                            } else {
++                                if (result == PhoneConstants.PIN_PASSWORD_INCORRECT) {
++                                    if (attemptsRemaining <= 2) {
++                                        // this is getting critical - show dialog
++                                        getSimRemainingAttemptsDialog(attemptsRemaining).show();
++                                    } else {
++                                        // show message
++                                        mSecurityMessageDisplay.setMessage(
++                                                getPinPasswordErrorMessage(attemptsRemaining), true);
++                                    }
++                                } else {
++                                    // "PIN operation failed!" - no idea what this was and no way to
++                                    // find out. :/
++                                    mSecurityMessageDisplay.setMessage(getContext().getString(
++                                            R.string.kg_password_pin_failed), true);
++                                }
++                                if (DEBUG) Log.d(LOG_TAG, "verifyPasswordAndUnlock "
++                                        + " CheckSimPin.onSimCheckResponse: " + result
++                                        + " attemptsRemaining=" + attemptsRemaining);
++                                //M:
++                                resetPasswordText(true /* animate */,
++                                        result != PhoneConstants.PIN_RESULT_SUCCESS /* announce */);
++                            }
++                            mCallback.userActivity();
++                            mCheckSimPinThread = null;
++                        }
++                    });
++                }
++            };
++            mCheckSimPinThread.start();
++        }
++    }
++
++    @Override
++    public void startAppearAnimation() {
++        // noop.
++    }
++
++    @Override
++    public boolean startDisappearAnimation(Runnable finishRunnable) {
++        return false;
++    }
++
++    private void dealwithSIMInfoChanged() {
++        String operName = null;
++
++        try {
++            operName = mKeyguardUtils.getOptrNameUsingPhoneId(mPhoneId, mContext);
++        } catch (IndexOutOfBoundsException e) {
++            Log.w(TAG, "getOptrNameBySlot exception, mPhoneId=" + mPhoneId);
++        }
++        if (DEBUG) {
++            Log.i(TAG, "dealwithSIMInfoChanged, mPhoneId=" + mPhoneId + ", operName=" + operName);
++        }
++        TextView forText = (TextView) findViewById(R.id.for_text);
++        ImageView subIcon = (ImageView) findViewById(R.id.sub_icon);
++        TextView simCardName = (TextView) findViewById(R.id.sim_card_name);
++        if (null == operName) { //this is the new SIM card inserted
++            if (DEBUG) {
++                Log.d(TAG, "mPhoneId " + mPhoneId + " is new subInfo record");
++            }
++            setForTextNewCard(mPhoneId, forText);
++            subIcon.setVisibility(View.GONE);
++            simCardName.setVisibility(View.GONE);
++        } else {
++            if (DEBUG) {
++                Log.d(TAG, "dealwithSIMInfoChanged, show operName for mPhoneId=" + mPhoneId);
++            }
++            forText.setText(mContext.getString(R.string.kg_slot_id, mPhoneId + 1) + " ");
++            simCardName.setText(null == operName ?
++                    mContext.getString(R.string.kg_detecting_simcard) : operName);
++            Bitmap iconBitmap = mKeyguardUtils.getOptrBitmapUsingPhoneId(mPhoneId, mContext);
++            subIcon.setImageBitmap(iconBitmap);
++            subIcon.setVisibility(View.VISIBLE);
++            simCardName.setVisibility(View.VISIBLE);
++        }
++    }
++
++    private void setForTextNewCard(int phoneId, TextView forText) {
++        StringBuffer forSb = new StringBuffer();
++
++        forSb.append(mContext.getString(R.string.kg_slot_id, phoneId + 1));
++        forSb.append(" ");
++        forSb.append(mContext.getText(R.string.kg_new_simcard));
++        forText.setText(forSb.toString());
++    }
++}
++
+Index: vendor/branch/5058I_ALWE/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java	(revision 6733)
++++ vendor/branch/5058I_ALWE/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java	(revision 6734)
+@@ -340,13 +340,21 @@
+ 
+     private String getPinPasswordErrorMessage(int attemptsRemaining) {
+         String displayMessage;
++		int subId = KeyguardUtils.getSubIdUsingPhoneId(mPhoneId) ;
++		Log.d(TAG, "subId:" + subId);
+ 
+         if (attemptsRemaining == 0) {
+             displayMessage = getContext().getString(R.string.kg_password_wrong_pin_code_pukked);
+         } else if (attemptsRemaining > 0) {
+-            displayMessage = getContext().getResources()
+-                    .getQuantityString(R.plurals.kg_password_wrong_pin_code, attemptsRemaining,
++			if(subId == 0){
++				displayMessage = getContext().getResources()
++                    .getQuantityString(R.plurals.kg_password_wrong_pin_code_alwe, attemptsRemaining,
+                             attemptsRemaining);
++			}else{
++				displayMessage = getContext().getResources()
++                    .getQuantityString(R.plurals.kg_password_wrong_pin_code_alwe2, attemptsRemaining,
++                            attemptsRemaining);
++			}
+         } else {
+             displayMessage = getContext().getString(R.string.kg_password_pin_failed);
+         }

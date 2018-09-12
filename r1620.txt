@@ -1,0 +1,99 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1619)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1620)
+@@ -713,11 +713,6 @@
+     private boolean mScreenshotChordPowerKeyTriggered;
+     private long mScreenshotChordPowerKeyTime;
+     
+-    //[BUGFIX]-Mod-BEGIN by TCTNB.yubin.ying,10/21/2016,3179079,
+-    private boolean mScreenRecordVolumeUpKeyConsumed;
+-    private long mScreenRecordVolumeUpKeyTime;
+-    private boolean mScreenRecordVolumeUpKeyTriggered;
+-    //[BUGFIX]-Mod-END by TCTNB.yubin.ying
+ 
+     /* The number of steps between min and max brightness */
+     private static final int BRIGHTNESS_STEPS = 10;
+@@ -3201,23 +3196,6 @@
+                 return -1;
+             }
+ 			
+-			 //[BUGFIX]-Mod-BEGIN by TCTNB.yubin.ying,10/21/2016,3179079,
+-            if (mScreenRecordVolumeUpKeyTriggered && !mScreenshotChordPowerKeyTriggered) {
+-                final long now = SystemClock.uptimeMillis();
+-                final long timeoutTime = mScreenRecordVolumeUpKeyTime
+-                        + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS;
+-                if (now < timeoutTime) {
+-                    return timeoutTime - now;
+-                }
+-            }
+-            if (keyCode == KeyEvent.KEYCODE_VOLUME_UP
+-                    && mScreenRecordVolumeUpKeyConsumed ) {
+-                    if (!down) {
+-                        mScreenRecordVolumeUpKeyConsumed = false;
+-                    }
+-                return -1;
+-            }
+-         //[BUGFIX]-Mod-END by TCTNB.yubin.ying
+         }
+ 
+         /// M: Screen unpinning @{
+@@ -6051,14 +6029,6 @@
+                             mScreenshotChordVolumeUpKeyTriggered = true;
+                             cancelPendingPowerKeyAction();
+                             cancelPendingScreenshotChordAction();
+-							//[BUGFIX]-Mod-BEGIN by TCTNB.yubin.ying,10/21/2016,3179079,
+-                            if (true) {//tcl Default feature 
+-                                mScreenRecordVolumeUpKeyTriggered = true;
+-                                mScreenRecordVolumeUpKeyTime = event.getDownTime();
+-                                mScreenRecordVolumeUpKeyConsumed = false;
+-                                interceptScreenRecord();
+-                            }
+-                            //[BUGFIX]-Mod-END by TCTNB.yubin.ying
+                         }
+                     } else {
+                         mScreenshotChordVolumeUpKeyTriggered = false;
+@@ -6301,43 +6271,6 @@
+ 
+         return result;
+     }
+-
+-	    //[BUGFIX]-Mod-BEGIN by TCTNB.yubin.ying,10/21/2016,3179079,
+-    private void interceptScreenRecord() {
+-        if(mScreenRecordVolumeUpKeyTriggered && mScreenshotChordPowerKeyTriggered) {
+-            final long now = SystemClock.uptimeMillis();
+-            if (now <= mScreenRecordVolumeUpKeyTime
+-                    + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS) {
+-                mScreenRecordVolumeUpKeyConsumed = true;
+-                Intent intent = new Intent("com.tct.screenrecorder.recordservice.LAUNCH");
+-                try{
+-                    mContext.startService(createExplicitIntent(mContext, intent));
+-                }catch(Exception e){
+-                    Slog.e(TAG, "Exception when start Screen Record service", e);
+-                }
+-            }
+-        }
+-    }
+-
+-    private Intent createExplicitIntent(Context context, Intent implicitIntent) {
+-        PackageManager pm = context.getPackageManager();
+-        List<ResolveInfo> resolveInfo = pm.queryIntentServices(implicitIntent, 0);
+-
+-        if (resolveInfo == null || resolveInfo.size() != 1) {
+-            return null;
+-        }
+-
+-        ResolveInfo serviceInfo = resolveInfo.get(0);
+-        String packageName = serviceInfo.serviceInfo.packageName;
+-        String className = serviceInfo.serviceInfo.name;
+-        ComponentName component = new ComponentName(packageName, className);
+-
+-        Intent explicitIntent = new Intent(implicitIntent);
+-        explicitIntent.setComponent(component);
+-        return explicitIntent;
+-    }
+-    //[BUGFIX]-Mod-END by TCTNB.yubin.ying
+-
+     /**
+      * Handle statusbar expansion events.
+      * @param event

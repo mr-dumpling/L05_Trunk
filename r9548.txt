@@ -1,0 +1,55 @@
+Index: vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 9547)
++++ vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 9548)
+@@ -155,7 +155,7 @@
+     private RestrictedSwitchPreference mButtonDataRoam;
+     private SwitchPreference mButton4glte;
+     private Preference mLteDataServicePref;
+-    private ListPreference mButtonPreferredDataRoam;
++    private RestrictedListPreference mButtonPreferredDataRoam;
+     private ListPreference mButtonPreferredShowDataRoamReminder;
+ 
+     private static final String iface = "rmnet0"; //TODO: this will go away
+@@ -568,7 +568,8 @@
+                 BUTTON_ENABLED_NETWORKS_KEY);
+         mButtonDataRoam.setOnPreferenceChangeListener(this);
+ 
+-        mButtonPreferredDataRoam = (ListPreference) prefSet.findPreference(BUTTON_ROAMING_KEY2);
++        mButtonPreferredDataRoam = (RestrictedListPreference) prefSet
++            .findPreference(BUTTON_ROAMING_KEY2);
+         mButtonPreferredDataRoam.setOnPreferenceChangeListener(this);
+ 
+         mButtonPreferredShowDataRoamReminder =
+@@ -1112,21 +1113,17 @@
+             }
+         }
+ 
+-        mButtonPreferredDataRoam.setEnabled(true);
+-        final String userRestriction = UserManager.DISALLOW_DATA_ROAMING;
+-        if (RestrictedLockUtils.hasBaseUserRestriction(context,
+-                    userRestriction, UserHandle.myUserId())) {
+-            mButtonPreferredDataRoam.setEnabled(false);
+-        } else {
+-            UserManager um = UserManager.get(mPhone.getContext());
+-            UserHandle user = UserHandle.of(um.getUserHandle());
+-            boolean disabledByAdmin = (um.hasUserRestriction(userRestriction, user)
+-                && !um.hasBaseUserRestriction(userRestriction, user));
+-            mButtonPreferredDataRoam.setEnabled(!disabledByAdmin);
+-            if (disabledByAdmin) {
+-                mButtonPreferredDataRoam.setSummary(R.string.disabled_by_admin);
++        mButtonPreferredDataRoam.setDisabledByAdmin(false);
++        if (mButtonPreferredDataRoam.isEnabled()) {
++            if (RestrictedLockUtils.hasBaseUserRestriction(context,
++                    UserManager.DISALLOW_DATA_ROAMING, UserHandle.myUserId())) {
++                mButtonPreferredDataRoam.setEnabled(false);
+             } else {
+-                updatePreferredRoamingFromDb();
++                boolean disabledByAdmin = mButtonPreferredDataRoam.checkRestrictionAndSetDisabled(
++                        UserManager.DISALLOW_DATA_ROAMING);
++                if (!disabledByAdmin) {
++                    updatePreferredRoamingFromDb();
++                }
+             }
+         }
+         /*

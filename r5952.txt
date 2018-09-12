@@ -1,0 +1,76 @@
+Index: vendor/branch/5058A_Telcel/packages/apps/Settings/src/com/android/settings/TetherSettings.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Settings/src/com/android/settings/TetherSettings.java	(revision 5951)
++++ vendor/branch/5058A_Telcel/packages/apps/Settings/src/com/android/settings/TetherSettings.java	(revision 5952)
+@@ -35,6 +35,7 @@
+ import android.os.Bundle;
+ import android.os.Environment;
+ import android.os.Handler;
++import android.os.UserHandle;
+ import android.os.UserManager;
+ import android.support.v14.preference.SwitchPreference;
+ import android.support.v7.preference.Preference;
+@@ -203,7 +204,9 @@
+         }
+ 
+         if (wifiAvailable && !Utils.isMonkeyRunning()) {
+-            mWifiApEnabler = new WifiApEnabler(activity, mDataSaverBackend, mEnableWifiAp);
++            /** M: Google original code phased out to adapt to our feature
++            mWifiApEnabler = new WifiApEnabler(activity, mEnableWifiAp);
++             */
+             initWifiTethering();
+             /// M: ALPS03058883 Hotspot can't turn on automatically if rotate screen quickly
+             /// after press "SAVE" button. @{
+@@ -216,6 +219,9 @@
+             getPreferenceScreen().removePreference(wifiApSettings);
+         }
+ 
++         mWifiApEnabler = null;
++         mTetherSettingsExt.updateWifiTether(mEnableWifiAp, wifiApSettings, wifiAvailable);
++		 
+         // WpsDialog: Create the dialog like WifiSettings does.
+         Preference wpsPushPref = findPreference(KEY_WPS_PUSH);
+         wpsPushPref.setOnPreferenceClickListener(new OnPreferenceClickListener() {
+@@ -636,20 +642,8 @@
+ 
+     @Override
+     public boolean onPreferenceChange(Preference preference, Object value) {
+-        /// M : Judged for USB tethering type & Hotspot tethering settings @{
+-        if (preference == mEnableWifiAp) {
+-            boolean enable = (Boolean) value;
+-
+-            if (enable) {
+-                startTethering(TETHERING_WIFI);
+-            } else {
+-                mCm.stopTethering(TETHERING_WIFI);
+-            }
+-            return false;
+-        } else {
+-            return mTetherSettingsExt.onPreferenceChange(preference, value);
+-        }
+-        /// @}
++        mTetherSettingsExt.onPreferenceChange(preference, value);
++        return true;
+     }
+ 
+     public static boolean isProvisioningNeededButUnavailable(Context context) {
+@@ -804,6 +798,19 @@
+         }
+     }
+ 
++    /**
++     * Checks whether this screen will have anything to show on this device. This is called by
++     * the shortcut picker for Settings shortcuts (home screen widget).
++     * @param context a context object for getting a system service.
++     * @return whether Tether & portable hotspot should be shown in the shortcuts picker.
++     */
++    public static boolean showInShortcuts(Context context) {
++        final ConnectivityManager cm =
++                (ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);
++        final boolean isSecondaryUser = UserHandle.myUserId() != UserHandle.USER_OWNER;
++        return !isSecondaryUser && cm.isTetheringSupported();
++    }
++
+     private void onReceiveExt(String action, Intent intent) {
+         if (action.equals(BluetoothPan.ACTION_CONNECTION_STATE_CHANGED)
+                     || action.equals(BluetoothDun.STATE_CHANGED_ACTION)) {

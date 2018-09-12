@@ -1,0 +1,156 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java	(revision 7636)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java	(revision 7637)
+@@ -26,6 +26,8 @@
+ import android.telephony.SubscriptionInfo;
+ import android.telephony.SubscriptionManager;
+ import android.telephony.TelephonyManager;
++import android.telephony.PreciseDataConnectionState;
++
+ import android.text.TextUtils;
+ import android.util.Log;
+ import android.util.SparseArray;
+@@ -79,6 +81,7 @@
+     private SignalStrength mSignalStrength;
+     private MobileIconGroup mDefaultIcons;
+     private Config mConfig;
++	private String mApnType = "unknow";
+ 
+     /// M: Add for Plugin feature. @ {
+     private IMobileIconExt mMobileIconExt;
+@@ -192,7 +195,8 @@
+                         | PhoneStateListener.LISTEN_CALL_STATE
+                         | PhoneStateListener.LISTEN_DATA_CONNECTION_STATE
+                         | PhoneStateListener.LISTEN_DATA_ACTIVITY
+-                        | PhoneStateListener.LISTEN_CARRIER_NETWORK_CHANGE);
++                        | PhoneStateListener.LISTEN_CARRIER_NETWORK_CHANGE
++                        | PhoneStateListener.LISTEN_PRECISE_DATA_CONNECTION_STATE);
+         mStatusBarExt.registerOpStateListener();
+     }
+ 
+@@ -311,7 +315,7 @@
+                         && mCurrentState.activityOut;
+         showDataIcon &= mCurrentState.isDefault
+                 || mCurrentState.iconGroup == TelephonyIcons.ROAMING
+-                || dataDisabled;
++                || dataDisabled || mApnType.equals("mms");
+         int typeIcon = showDataIcon ? icons.mDataType : 0;
+         /** M: Support [Network Type on StatusBar], change the implement methods.
+           * Get the network icon base on service state.
+@@ -604,7 +608,7 @@
+         } else if (isRoaming()) {
+             mCurrentState.iconGroup = TelephonyIcons.ROAMING;
+         } else if (isDataDisabled()) {
+-            mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
++            //mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
+         }
+         if (isEmergencyOnly() != mCurrentState.isEmergency) {
+             mCurrentState.isEmergency = isEmergencyOnly();
+@@ -711,6 +715,18 @@
+             }
+             updateTelephony();
+         }
++		@Override 
++		public void onPreciseDataConnectionStateChanged(PreciseDataConnectionState dataConnectionState){
++			if (DEBUG) {
++				Log.d(mTag, "onPreciseDataConnectionStateChanged: dataConnectionState=" + dataConnectionState);
++	 		}
++        	if ((mDataState==dataConnectionState.getDataConnectionState())&&(mDataNetType==dataConnectionState.getDataConnectionNetworkType()))
++        	{
++            	mApnType = dataConnectionState.getDataConnectionAPNType();
++            	Log.d(TAG, "mtk onPreciseDataConnectionStateChanged mApnType: " + mApnType);
++            	notifyListenersIfNecessary();
++        	}
++		}
+ 
+         @Override
+         public void onDataActivity(int direction) {
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java	(revision 7636)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java	(revision 7637)
+@@ -28,6 +28,9 @@
+ import android.os.SystemProperties;
+ import android.telephony.SubscriptionInfo;
+ import android.telephony.TelephonyManager;
++import android.telephony.PhoneStateListener;
++import android.telephony.PreciseDataConnectionState;
++
+ import android.util.ArraySet;
+ import android.util.AttributeSet;
+ import android.util.Log;
+@@ -114,6 +117,10 @@
+     private boolean mBlockMobile;
+     private boolean mBlockWifi;
+     private boolean mBlockEthernet;
++	private TelephonyManager mPhone;
++	private MobilePhoneStateListener mPhoneStateListener;
++	private String mApnType = "unknow";
++	private boolean showDataIcon=false;
+ 
+     static final int[] DATA_ACTIVITY = {
+         R.drawable.stat_sys_signal,
+@@ -139,7 +146,9 @@
+ 
+     public SignalClusterView(Context context, AttributeSet attrs, int defStyle) {
+         super(context, attrs, defStyle);
+-
++		mPhone=(TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
++		mPhoneStateListener=new MobilePhoneStateListener();
++		mPhone.listen(mPhoneStateListener, PhoneStateListener.LISTEN_PRECISE_DATA_CONNECTION_STATE | PhoneStateListener.LISTEN_DATA_CONNECTION_STATE);
+         Resources res = getResources();
+         mMobileSignalGroupEndPadding =
+                 res.getDimensionPixelSize(R.dimen.mobile_signal_group_end_padding);
+@@ -780,6 +789,15 @@
+                     mDataActivityInOut.setImageDrawable(null);
+                     mDataActivityInOut.setVisibility(View.GONE);
+                 }
++				if(mApnType.equals("mms")){
++					if(showDataIcon){
++						mDataActivityInOut.setImageResource(mDataActivityId);
++                    	mDataActivityInOut.setVisibility(View.VISIBLE);
++					}else{
++						mDataActivityInOut.setImageDrawable(null);
++                    	mDataActivityInOut.setVisibility(View.GONE);
++					}
++				}
+             } else {
+                 if (mIsAirplaneMode && (mIsWfcEnable && mVolteIcon != 0)) {
+                     /// M:Bug fix for show vowifi icon in flight mode
+@@ -960,5 +978,34 @@
+             }
+         }
+     }
+-
++	class MobilePhoneStateListener extends PhoneStateListener {
++        public MobilePhoneStateListener() {
++            super();
++			
++        }
++		@Override 
++		public void onPreciseDataConnectionStateChanged(PreciseDataConnectionState dataConnectionState){
++			if (DEBUG) {
++				Log.d(TAG, "MobilePhoneStateListener:onPreciseDataConnectionStateChanged() dataConnectionState=" + dataConnectionState);
++	 		}
++            mApnType = dataConnectionState.getDataConnectionAPNType();
++            
++		}
++		@Override
++        public void onDataConnectionStateChanged(int state, int networkType) {
++        	if (DEBUG) {
++				Log.d(TAG, "onDataConnectionStateChanged: dataConnectionState..." );
++	 		}
++			switch(state){
++				case TelephonyManager.DATA_DISCONNECTED:
++					showDataIcon=false;
++				break;
++				case TelephonyManager.DATA_CONNECTED:
++				case TelephonyManager.DATA_CONNECTING:
++					showDataIcon=true;
++				break;
++			}
++        }
++    }
++		
+ }

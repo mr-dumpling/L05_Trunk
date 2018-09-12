@@ -1,0 +1,61 @@
+Index: vendor/mediatek/proprietary/packages/apps/Stk/src/com/android/stk/ProactiveSetTitleReceiver.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Stk/src/com/android/stk/ProactiveSetTitleReceiver.java	(revision 5570)
++++ vendor/mediatek/proprietary/packages/apps/Stk/src/com/android/stk/ProactiveSetTitleReceiver.java	(revision 5571)
+@@ -23,20 +23,35 @@
+ import android.content.pm.PackageManager;  
+ import android.util.Log;  
+ import android.os.SystemProperties;  
++import com.android.internal.telephony.TelephonyIntents;
++import android.telephony.TelephonyManager;
+ 
+ public class ProactiveSetTitleReceiver extends BroadcastReceiver {
+     PackageManager pm;  
+     @Override  
+     public void onReceive(Context context, Intent intent) {
+-        pm = context.getPackageManager();  
+-        int simId = intent.getIntExtra("simId", 0);  
+-        String persoStkAppName = SystemProperties.get("gsm.stk.perso.app_title");
+-        String defaultStkAppName = "";
+-        try {
+-            defaultStkAppName = pm.getApplicationLabel(pm.getApplicationInfo("com.android.stk",0)).toString();
+-        } catch (PackageManager.NameNotFoundException e) {
+-            e.printStackTrace();
+-        }
++		String action = intent.getAction();
++		String persoStkAppName = null;
++		TelephonyManager telMgr = (TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
++		pm = context.getPackageManager(); 
++		int simState = telMgr.getSimState();
++		if (action.equals("proactive_set_stkselection_app_title")) { 
++			int simId = intent.getIntExtra("simId", 0);  
++			persoStkAppName = SystemProperties.get("gsm.stk.perso.app_title");
++			Log.i("Stk", "insert persoStkAppName = " + persoStkAppName);
++			String defaultStkAppName = "";
++			try {
++				defaultStkAppName = pm.getApplicationLabel(pm.getApplicationInfo("com.android.stk",0)).toString();
++			} catch (PackageManager.NameNotFoundException e) {
++				e.printStackTrace();
++			}
++		}
++		if (action.equals(TelephonyIntents.ACTION_SIM_STATE_CHANGED)) {
++			if (TelephonyManager.SIM_STATE_ABSENT == simState) {
++				SystemProperties.set("gsm.stk.perso.app_title", "SIM Telcel");
++				Log.i("Stk", "persoStkAppName = " + persoStkAppName);
++			}
++		}
+         setAppState(false);
+         setAppState(true);
+     }
+Index: vendor/branch/5058A_Telcel/vendor/mediatek/proprietary/packages/apps/Stk/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058A_Telcel/vendor/mediatek/proprietary/packages/apps/Stk/AndroidManifest.xml	(revision 5570)
++++ vendor/branch/5058A_Telcel/vendor/mediatek/proprietary/packages/apps/Stk/AndroidManifest.xml	(revision 5571)
+@@ -135,6 +135,7 @@
+         <receiver android:name=".ProactiveSetTitleReceiver">
+             <intent-filter>
+                 <action android:name="proactive_set_stkselection_app_title" />
++                <action android:name="android.intent.action.SIM_STATE_CHANGED" />
+             </intent-filter>
+         </receiver>
+         <!--END-chenhu-->

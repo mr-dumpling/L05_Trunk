@@ -1,0 +1,134 @@
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 10595)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 10596)
+@@ -24,6 +24,7 @@
+ import android.content.ContentUris;
+ import android.content.ContentValues;
+ import android.content.Context;
++import android.content.DialogInterface;
+ import android.content.Intent;
+ import android.content.IntentFilter;
+ import android.database.Cursor;
+@@ -55,6 +56,10 @@
+ import android.view.MotionEvent;
+ import android.widget.TextView;
+ import android.widget.Toast;
++//Added by hongfen.chen for Task 4804185 on 2017/05/16 begin
++import android.app.AlertDialog;
++import android.content.DialogInterface;
++//Added by hongfen.chen for Task 4804185 on 2017/05/16 end
+ 
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ import com.android.internal.telephony.PhoneConstants;
+@@ -108,6 +113,9 @@
+     private static final int EVENT_RESTORE_DEFAULTAPN_COMPLETE = 2;
+ 
+     private static final int DIALOG_RESTORE_DEFAULTAPN = 1001;
++    //Added by hongfen.chen for Task 4804185 on 2017/05/16 begin
++    private static final int PROMPT_DIALOG_RESTORE_DEFAULTAPN = 1002;
++    //Added by hongfen.chen for Task 4804185 on 2017/05/16 end
+ 
+     private static final Uri DEFAULTAPN_URI = Uri.parse(RESTORE_CARRIERS_URI);
+     private static final Uri PREFERAPN_URI = Uri.parse(PREFERRED_APN_URI);
+@@ -527,7 +535,13 @@
+             return true;
+ 
+         case MENU_RESTORE:
+-            restoreDefaultApn();
++            //Modified by hongfen.chen for Task 4804185 on 2017/05/16 begin
++            if (getResources().getBoolean(R.bool.def_show_dialog_when_restore_default_apn)) {
++                showDialog(PROMPT_DIALOG_RESTORE_DEFAULTAPN);
++            } else {
++                restoreDefaultApn();
++            }
++            //Modified by hongfen.chen for Task 4804185 on 2017/05/16 end
+             return true;
+         }
+         return super.onOptionsItemSelected(item);
+@@ -631,6 +645,37 @@
+         return true;
+     }
+ 
++    /**
++     * the function can decide whether display sim provider list to user.
++     * if the sim provider list is empty ,don't display.
++     * @param numeric numeric
++     * @return true if display ,false if don't display.
++     * @author added by shifeng.cao for defect 4621250 on 2017/04/20.
++     */
++    private boolean isDisplaySimProviderList(String numeric) {
++        boolean  mSimproviderOpenmarket=getResources().getBoolean(R.bool.def_sim_service_for_openmarket);
++        Log.d(TAG,"isDisplaySimProviderList: mSimproviderOpenmarket = "+mSimproviderOpenmarket);
++        if(!mSimproviderOpenmarket){
++            return false;
++        }
++        String mSimprovierWhere = "numeric=\"" +numeric
++                +"\" AND NOT (type='ia' AND (apn=\"\" OR apn IS NULL))"
++                +"AND mvno_type=\""+"simprovider\"";
++
++        Log.d(TAG, "isDisplaySimProviderList:mSimprovierWhere: " + mSimprovierWhere);
++
++        Cursor mSimprovierCursor = getContentResolver().query(
++                Telephony.Carriers.CONTENT_URI,
++                new String[]{"mvno_type", "mvno_match_data"}, mSimprovierWhere, null, null);
++        int mSimProviderCount = mSimprovierCursor.getCount();
++        mSimprovierCursor.close();
++        if(mSimProviderCount > 0){
++            return true;
++        }else {
++            return false;
++        }
++    }
++    //Added by shifeng.cao for Defect 4621250 on 2017/04/20 end
+     private class RestoreApnUiHandler extends Handler {
+         @Override
+         public void handleMessage(Message msg) {
+@@ -651,7 +696,26 @@
+                         getResources().getString(
+                                 R.string.restore_default_apn_completed),
+                         Toast.LENGTH_LONG).show();
+-                    mRestoreOngoing = false;
++                    //Add by zubin.chen.hz for Task3601617 on 2016/12/29 begin
++                        final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++                        final String mNumeric = mSubscriptionInfo == null ? ""
++                                : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
++                        if ("23430".equals(mNumeric) || "23420".equals(mNumeric)
++                                ||"23410".equals(mNumeric) ||"23415".equals(mNumeric)) {
++                            Log.d(TAG, "EVENT_RESTORE_DEFAULTAPN_COMPLETE, simNumeric=" + mNumeric
++                                    + " getActivity()=" + getActivity().toString());
++                            //Added by shifeng.cao for Defect 4621250 on 2017/04/20 begin
++                            if(isDisplaySimProviderList(mNumeric)){
++                            //Added by shifeng.cao for Defect 4621250 on 2017/04/20 end
++                                Intent simServiceIntent = new Intent("android.intent.action.SIMSERVICE", Telephony.Carriers.CONTENT_URI);
++                                simServiceIntent.putExtra("mccmnc", mNumeric);
++                                simServiceIntent.putExtra("subid", mSubscriptionInfo.getSubscriptionId());
++                                simServiceIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++                                startActivity(simServiceIntent);
++                                return;
++                            }
++                        }
++                    //Add by zubin.chen.hz for Task3601617 on 2016/12/29 end
+                     break;
+             }
+         }
+@@ -694,6 +758,19 @@
+             dialog.setMessage(getResources().getString(R.string.restore_default_apn));
+             dialog.setCancelable(false);
+             return dialog;
++        //Added by hongfen.chen for Task 4804185 on 2017/05/16 begin
++        } else if (id == PROMPT_DIALOG_RESTORE_DEFAULTAPN) {
++            final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
++            builder.setMessage(R.string.prompt_message_when_restore_default_apn);
++            builder.setPositiveButton(R.string.apn_reset, new DialogInterface.OnClickListener() {
++                @Override
++                public void onClick(DialogInterface dialog, int which) {
++                    restoreDefaultApn();
++                }
++            });
++            builder.setNegativeButton(android.R.string.cancel, null);
++            return builder.create();
++        //Added by hongfen.chen for Task 4804185 on 2017/05/16 end
+         }
+         return null;
+     }

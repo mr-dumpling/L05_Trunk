@@ -1,0 +1,68 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/LockscreenWallpaper.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/LockscreenWallpaper.java	(revision 8353)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/LockscreenWallpaper.java	(revision 8354)
+@@ -90,12 +90,13 @@
+         if (mCached) {
+             return mCache;
+         }
++		Log.i("chenhu", "getBitmap() mWallpaperManager.isWallpaperSupported()="+mWallpaperManager.isWallpaperSupported());
+         if (!mWallpaperManager.isWallpaperSupported()) {
+             mCached = true;
+             mCache = null;
+             return null;
+         }
+-
++		Log.i("chenhu", "getBitmap()");
+         LoaderResult result = loadBitmap(mCurrentUserId, mSelectedUser);
+         if (result.success) {
+             mCached = true;
+@@ -110,20 +111,30 @@
+ 
+         // Prefer the selected user (when specified) over the current user for the FLAG_SET_LOCK
+         // wallpaper.
++		Log.i("chenhu", "loadBitmap   currentUserId="+currentUserId);
++		Log.i("chenhu", "loadBitmap   selectedUser="+selectedUser);
+         final int lockWallpaperUserId =
+                 selectedUser != null ? selectedUser.getIdentifier() : currentUserId;
++		Log.i("chenhu", "loadBitmap   lockWallpaperUserId="+lockWallpaperUserId);
+         ParcelFileDescriptor fd = mWallpaperManager.getWallpaperFile(
+                 WallpaperManager.FLAG_LOCK, lockWallpaperUserId);
+-
++		Log.i("chenhu", "loadBitmap   fd="+fd);
++		if (fd == null) {
++			fd = mWallpaperManager.getWallpaperFile(
++                WallpaperManager.FLAG_SYSTEM, lockWallpaperUserId);
++		}
+         if (fd != null) {
+             try {
+                 BitmapFactory.Options options = new BitmapFactory.Options();
+                 //Begin modified by zengjie for XR5429900 on 10/21/17
++				Log.i("chenhu", "lscreen="+SystemProperties.getBoolean("ro.tcl.lscreen", false));
+ 				if(SystemProperties.getBoolean("ro.tcl.lscreen", false)){
+ 					Bitmap  mWallpaper = BitmapFactory.decodeFileDescriptor(
+ 							fd.getFileDescriptor());
++					Log.i("chenhu", "loadBitmap   mWallpaperChange="+mWallpaperChange);
+ 					if (mWallpaperChange){
+ 						mWallpaperChange = false;
++						Log.i("chenhu", "JoyLscreenProxy.getLScreen()="+JoyLscreenProxy.getLScreen());
+ 						if (JoyLscreenProxy.getLScreen() != null ) {
+ 							Log.d("joylockscreen","onWallpaper change  onLockWallpaperChange");
+ 							JoyLscreenProxy.getLScreen().onLockWallpaperChange(mWallpaper);
+@@ -177,6 +188,7 @@
+ 		if(SystemProperties.getBoolean("ro.tcl.lscreen", false)){
+ 			mWallpaperChange = true;
+ 		}
++		Log.i("chenhu", "mWallpaperChange="+mWallpaperChange);
+         //End added by zengjie for joylockscreen task 5429900 on 9/28/17
+     }
+ 
+@@ -195,6 +207,8 @@
+ 
+         final int currentUser = mCurrentUserId;
+         final UserHandle selectedUser = mSelectedUser;
++		Log.i("chenhu", "run   currentUser="+currentUser);
++		Log.i("chenhu", "run   selectedUser="+selectedUser);
+         mLoader = new AsyncTask<Void, Void, LoaderResult>() {
+             @Override
+             protected LoaderResult doInBackground(Void... params) {

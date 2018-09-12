@@ -1,0 +1,100 @@
+Index: packages/providers/MediaProvider/src/com/android/providers/media/MtpService.java
+===================================================================
+--- packages/providers/MediaProvider/src/com/android/providers/media/MtpService.java	(revision 1082)
++++ packages/providers/MediaProvider/src/com/android/providers/media/MtpService.java	(revision 1083)
+@@ -37,6 +37,7 @@
+ 
+ import java.io.File;
+ import java.util.HashMap;
++import android.net.Uri; //wqtao.add.
+ 
+ public class MtpService extends Service {
+     private static final String TAG = "MtpService";
+@@ -47,9 +48,13 @@
+         Environment.DIRECTORY_DCIM,
+         Environment.DIRECTORY_PICTURES,
+     };
++	private static final String[] PTP_DIRECTORIES_SD2 = new String[] {
++        Environment.DIRECTORY_SD2_DCIM,
++        Environment.DIRECTORY_SD2_PICTURES,
++    };
+ 
+     private void addStorageDevicesLocked() {
+-        if (mPtpMode) {
++       /* if (mPtpMode) {
+             // In PTP mode we support only primary storage
+             final StorageVolume primary = StorageManager.getPrimaryVolume(mVolumes);
+             final String path = primary.getPath();
+@@ -58,8 +63,7 @@
+                 if (Environment.MEDIA_MOUNTED.equals(state)) {
+                     addStorageLocked(mVolumeMap.get(path));
+                 }
+-            }
+-        } else {
++        } else  cancelled. for PTP two disk. */{
+             for (StorageVolume volume : mVolumeMap.values()) {
+                 addStorageLocked(volume);
+             }
+@@ -128,7 +132,8 @@
+             String[] subdirs = null;
+             if (mPtpMode) {
+                 int count = PTP_DIRECTORIES.length;
+-                subdirs = new String[count];
++				int count2 = PTP_DIRECTORIES_SD2.length; //add.
++                subdirs = new String[count+count2];
+                 for (int i = 0; i < count; i++) {
+                     File file =
+                             Environment.getExternalStoragePublicDirectory(PTP_DIRECTORIES[i]);
+@@ -136,6 +141,20 @@
+                     file.mkdirs();
+                     subdirs[i] = file.getPath();
+                 }
++			String secondary_storage=null;
++			if(mVolumes!=null){
++				for(StorageVolume volume:mVolumes)
++					if(!volume.isPrimary()){
++					secondary_storage=volume.getPath();
++					break;
++				}
++			for (int i = count; i < count+count2; i++) {
++				File file = new File(secondary_storage, PTP_DIRECTORIES_SD2[i-count]);	
++				if(file.mkdirs())    
++				sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)));    
++				subdirs[i]=file.getPath();
++			}
++                }
+             }
+                 final StorageVolume primary = StorageManager.getPrimaryVolume(mVolumes);
+                 if (mDatabase != null) {
+@@ -243,7 +262,7 @@
+                 mVolumeMap.put(path, volume);
+                 if (!mMtpDisabled) {
+                     // In PTP mode we support only primary storage
+-                    if (volume.isPrimary() || !mPtpMode) {
++                   /*i   if (volume.isPrimary() || !mPtpMode)  cancelled. for PTP two disk. */{
+                         addStorageLocked(volume);
+                     }
+                 }
+
+Property changes on: packages/providers/MediaProvider/src/com/android/providers/media/MtpService.java
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/providers/MediaProvider/src/com/android/providers/media/MtpService.java:r853
+Index: frameworks/base/core/java/android/os/Environment.java
+===================================================================
+--- frameworks/base/core/java/android/os/Environment.java	(revision 1082)
++++ frameworks/base/core/java/android/os/Environment.java	(revision 1083)
+@@ -80,6 +80,8 @@
+ 
+     ///usbotg:
+     private static final String USBOTG_PATH_ZONE = "usbotg-sd";
++	public static String DIRECTORY_SD2_PICTURES = "Pictures";    //add. for PTP two disk.
++	public static String DIRECTORY_SD2_DCIM = "DCIM";    //add. for PTP two disk.
+ 
+     static {
+         initForCurrentUser();
+
+Property changes on: frameworks/base/core/java/android/os/Environment.java
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/core/java/android/os/Environment.java:r634,853

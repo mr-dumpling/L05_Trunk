@@ -1,0 +1,145 @@
+Index: vendor/branch/5058A_BRIGHTSTAR_Ecuador/vendor/mediatek/proprietary/frameworks/base/packages/FwkPlugin/src/com/mediatek/op/telephony/PhoneNumberExt.java
+===================================================================
+--- vendor/branch/5058A_BRIGHTSTAR_Ecuador/vendor/mediatek/proprietary/frameworks/base/packages/FwkPlugin/src/com/mediatek/op/telephony/PhoneNumberExt.java	(revision 5599)
++++ vendor/branch/5058A_BRIGHTSTAR_Ecuador/vendor/mediatek/proprietary/frameworks/base/packages/FwkPlugin/src/com/mediatek/op/telephony/PhoneNumberExt.java	(revision 5600)
+@@ -49,7 +49,7 @@
+     }
+ 
+     public int getMinMatch() {
+-        return 7;
++        return 10;
+     }
+ 
+     public boolean isPauseOrWait(char c) {
+Index: vendor/branch/5058A_BRIGHTSTAR_Ecuador/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java
+===================================================================
+--- vendor/branch/5058A_BRIGHTSTAR_Ecuador/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java	(revision 5599)
++++ vendor/branch/5058A_BRIGHTSTAR_Ecuador/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java	(revision 5600)
+@@ -1594,7 +1594,7 @@
+     //
+     // However, in order to loose match 650-555-1212 and 555-1212, we need to set the min match
+     // to 7.
+-    static final int MIN_MATCH = 6;
++    static final int MIN_MATCH = 10;
+ 
+     /**
+      * Checks a given number against the list of
+@@ -1979,6 +1979,7 @@
+                                                           Context context,
+                                                           boolean useExactMatch) {
+         String countryIso;
++        vlog("[DBG] isLocalEmergencyNumberInternal CountryDetector start>>>");
+         CountryDetector detector = (CountryDetector) context.getSystemService(
+                 Context.COUNTRY_DETECTOR);
+         if (detector != null && detector.detectCountry() != null) {
+@@ -1989,6 +1990,7 @@
+             Rlog.w(LOG_TAG, "No CountryDetector; falling back to countryIso based on locale: "
+                     + countryIso);
+         }
++        vlog("[DBG] isLocalEmergencyNumberInternal CountryDetector end<<<");
+         return isEmergencyNumberInternal(subId, number, countryIso, useExactMatch);
+     }
+ 
+@@ -3070,6 +3072,12 @@
+         "gsm.ril.fulluicctype.4",
+     };
+ 
++    private static final String[] SIM_OMH_PROPERTY = {
++        "ril.cdma.card.omh",
++        "ril.cdma.card.omh.1",
++        "ril.cdma.card.omh.2",
++        "ril.cdma.card.omh.3",
++    };
+     private static IPlusCodeUtils sPlusCodeUtils = null;
+ 
+     private static boolean sIsCtaSupport = false;
+@@ -3302,6 +3310,7 @@
+             String[] propertyList = (phoneType == PhoneConstants.PHONE_TYPE_CDMA) ?
+                 CDMA_SIM_RECORDS_PROPERTY_ECC_LIST : SIM_RECORDS_PROPERTY_ECC_LIST;
+ 
++            vlog("[DBG] isSimInsert start>>> subId: " + subId + ", phoneType: " + phoneType);
+             // DEFAULT_SUBSCRIPTION_ID, check all slot
+             if (SubscriptionManager.DEFAULT_SUBSCRIPTION_ID == subId) {
+                 for (int i = 0; i < MAX_SIM_NUM; i++) {
+@@ -3343,6 +3352,7 @@
+                     }
+                 }
+             }
++            vlog("[DBG] isSimInsert end <<<");
+             return bSIMInserted;
+         }
+ 
+@@ -3959,6 +3969,7 @@
+ 
+         @Override
+         public synchronized boolean isEmergencyNumber(String number, int subId, int phoneType) {
++            vlog("[DBG][isEmergencyNumber] OMH start");
+             if (!isPhoneTypeSupport(phoneType)) {
+                 return false;
+             }
+@@ -3966,7 +3977,8 @@
+             try {
+                 ITelephonyEx telEx = ITelephonyEx.Stub.asInterface(ServiceManager.getService(
+                         Context.TELEPHONY_SERVICE_EX));
+-                if (isSimInsert(phoneType) && telEx.isUserCustomizedEcc(number)) {
++                if (isOmhCardInsert() && isSimInsert(phoneType)
++                        && telEx.isUserCustomizedEcc(number)) {
+                     dlog("[isEmergencyNumber] match OMH ECC for phoneType: " + phoneType);
+                     return true;
+                 }
+@@ -3977,8 +3989,18 @@
+                 log("[isEmergencyNumber] NullPointerException:" + ex);
+                 return false;
+             }
++            vlog("[DBG][isEmergencyNumber] OMH end");
+             return false;
+         }
++        private boolean isOmhCardInsert() {
++            for (int i = 0; i < MAX_SIM_NUM; i++) {
++                String omhCard = SystemProperties.get(SIM_OMH_PROPERTY[i], "-1");
++                if ("1".equals(omhCard)) {
++                    return true;
++                }
++            }
++            return false;
++        }
+     }
+ 
+     /** @hide */
+@@ -4639,9 +4661,12 @@
+         boolean needQueryGsm = false;
+         boolean needQueryCdma = false;
+ 
++        vlog("[DBG] getQueryPhoneType start");
+         // Only Query GSM and CDMA for C2K Project to enhance performance
+         if (sIsC2kSupport) {
+             for (int i = 0; i < simNum; i++) {
++                vlog("[DBG][getQueryPhoneType] getCurrentPhoneTypeForSlot start");
++                /*
+                 int[] allSubId = SubscriptionManager.getSubId(i);
+                 if (allSubId == null) {
+                     dlog("[getQueryPhoneType] allSubId is null");
+@@ -4649,11 +4674,14 @@
+                 }
+                 vlog("[getQueryPhoneType] allSubId:" + allSubId[0]);
+                 int phoneType = TelephonyManager.getDefault().getCurrentPhoneType(allSubId[0]);
++                */
++                int phoneType = TelephonyManager.getDefault().getCurrentPhoneTypeForSlot(i);
+                 if (phoneType == PhoneConstants.PHONE_TYPE_GSM) {
+                     needQueryGsm = true;
+                 } else if (phoneType == PhoneConstants.PHONE_TYPE_CDMA) {
+                     needQueryCdma = true;
+                 }
++                vlog("[DBG][getQueryPhoneType] getCurrentPhoneTypeForSlot end");
+             }
+ 
+             // If no SIM insert in all slot, should query GSM
+@@ -4716,7 +4744,7 @@
+         if (needQueryCdma) {
+             phoneTypeRet |= PhoneConstants.PHONE_TYPE_CDMA;
+         }
+-        vlog("[getQueryPhoneType] needQueryGsm:" + needQueryGsm
++        vlog("[DBG][getQueryPhoneType] needQueryGsm:" + needQueryGsm
+                 + ", needQueryCdma:" + needQueryCdma + ", ret: " + phoneTypeRet);
+         return phoneTypeRet;
+     }

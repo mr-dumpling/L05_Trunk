@@ -1,0 +1,73 @@
+Index: packages/apps/Email/res/values/strings.xml
+===================================================================
+--- packages/apps/Email/res/values/strings.xml	(revision 7618)
++++ packages/apps/Email/res/values/strings.xml	(revision 7619)
+@@ -616,5 +616,7 @@
+ 	<string name="preferences_signature_summary_set_cnt">Sent from my ALCATEL 3X</string>
+ 	<string name="preferences_signature_summary_set_israel">Sent from my Alcatel 3X</string>
+ 	<string name="preferences_signature_summary_set_default">Sent from my Alcatel 3X</string>
+-	<string name="preferences_signature_summary_set_ofus">Sent from my Alcatel 3X</string>
++	<string name="preferences_signature_summary_set_ofus">Sent from my Alcatel 3X</string>
++		<string name="preferences_signature_content_alru_settings">Alcatel 3X</string>
++	<string name="preferences_signature_content_alru">Sent from my Alcatel 3X</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/Email/UnifiedEmail/res/values/strings.xml
+===================================================================
+--- packages/apps/Email/UnifiedEmail/res/values/strings.xml	(revision 7618)
++++ packages/apps/Email/UnifiedEmail/res/values/strings.xml	(revision 7619)
+@@ -1156,5 +1156,6 @@
+ 	<string name="preferences_signature_content_claro_ecuador">Sent from my ALCATEL Claro</string>
+ 	<string name="preferences_signature_content_israel">Sent from my Alcatel 3X</string>
+ 	<string name="preferences_signature_content_default">Sent from my Alcatel 3X</string>
+-	<string name="preferences_signature_content_alru">ALCATEL Alcatel 3X</string>
++	<string name="preferences_signature_content_alru_settings">Alcatel 3X</string>
++	<string name="preferences_signature_content_alru">Sent from my Alcatel 3X</string>
+ </resources>
+\ No newline at end of file
+Index: vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 7618)
++++ vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 7619)
+@@ -4230,9 +4230,9 @@
+         if (null == newSignature || newSignature.isEmpty()) {
+             boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
+ 			if(bFrBug119814){
+-				newSignature = getResources().getString(R.string.preferences_signature_content_default);
++				newSignature = getResources().getString(R.string.preferences_signature_content_alru);
+ 			}else{
+-				newSignature = getResources().getString(R.string.preferences_signature_content);
++				newSignature = getResources().getString(R.string.preferences_signature_content_alru);
+ 			}            
+         }
+ 
+Index: vendor/branch/5058I_ALRU/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 7618)
++++ vendor/branch/5058I_ALRU/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 7619)
+@@ -739,20 +739,19 @@
+         }
+         String accountSignature = defaultSignature;
+         */
++		boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
+         mAccountSignature = (EditTextPreference) findPreference(PREFERENCE_SIGNATURE);
+ 		if(accountSignature==null || TextUtils.isEmpty(accountSignature)){
++			if(bFrBug119814){
+ 			accountSignature=mContext.getResources().getString(R.string.preferences_signature_content_alru);
++			}else{
++				accountSignature=mContext.getResources().getString(R.string.preferences_signature_content_alru_settings);
++			}
+ 		}
+         mAccountSignature.setText(accountSignature);
+         mAccountSignature.setOnPreferenceChangeListener(this);
+-		boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
+-		if(bFrBug119814){
+-			SettingsUtils.updatePreferenceSummary(mAccountSignature, accountSignature,
+-                R.string.preferences_signature_content_default);
+-		}else{
+         SettingsUtils.updatePreferenceSummary(mAccountSignature, accountSignature,
+                 R.string.preferences_signature_summary_not_set);
+-		}
+         /** M: Insert oof preference to fragment when the account is EasAccount @{ */
+         boolean showOof = true;
+         showOof = protocol.equalsIgnoreCase("eas");

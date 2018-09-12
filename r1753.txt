@@ -1,0 +1,480 @@
+Index: vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/flashlight/FlashLight.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/flashlight/FlashLight.java	(revision 1752)
++++ vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/flashlight/FlashLight.java	(revision 1753)
+@@ -1,268 +1,211 @@
+ package com.mediatek.factorymode.flashlight;
+ 
+ import android.app.Activity;
+-import android.content.Context;
+ import android.content.Intent;
+-import android.content.IntentFilter;
+-import android.graphics.SurfaceTexture;
+-import android.hardware.Camera;
+-import android.hardware.Camera.Parameters;
+-import android.hardware.camera2.CameraAccessException;
+-import android.hardware.camera2.CameraCaptureSession;
+-import android.hardware.camera2.CameraCharacteristics;
+-import android.hardware.camera2.CameraDevice;
+-import android.hardware.camera2.CameraManager;
+-import android.hardware.camera2.CameraMetadata;
+-import android.hardware.camera2.CaptureRequest;
+-import android.hardware.camera2.params.StreamConfigurationMap;
+-import android.os.Build;
+ import android.os.Bundle;
+-import android.os.Handler;
+-import android.os.Looper;
+-import android.os.Message;
+-import android.util.Log;
+ import android.view.KeyEvent;
+-import android.view.Surface;
+ import android.view.View;
++import android.view.Window;
+ import android.view.WindowManager;
+ import android.widget.Button;
+ import android.widget.TextView;
++import android.hardware.Camera;
++import android.hardware.Camera.Parameters;
++import android.os.Handler;
++import android.os.Looper;
++import android.os.Message;
++import java.util.List;
++import android.view.SurfaceHolder;
++import android.view.SurfaceView;
++import android.view.TextureView;
++import android.graphics.SurfaceTexture;
+ 
+ import com.mediatek.factorymode.FactoryMode;
+ import com.mediatek.factorymode.R;
++import com.mediatek.factorymode.earphone.Earphone;
+ 
+-import java.util.ArrayList;  
+-import java.util.List;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.content.BroadcastReceiver;
++import android.util.Log;
++import android.content.Context;
+ 
+-public class FlashLight extends Activity{
+-  private final String TAG = "FlashLightTest";
+-  private Button succesButton ;
+-  private Button failButton ;
+-  private Camera camera;
+-  private int count;
+-  public final static int OPEN_CAMERA = 1011;
+-  public final static int CLOSE_CAMERA = 1012;
+-  private CameraManager manager = null;
+-  private CameraDevice cameraDevice;
+-  private CameraCaptureSession captureSession = null;
+-  private CaptureRequest request = null;
+-  private SurfaceTexture surfaceTexture;
+-  private Surface surface;
+-  private String cameraId = null;
+-  private boolean isSupportFlashCamera2 = false;
+-  private boolean isOpen = false;
+-  private final CameraCaptureSession.StateCallback stateCallback = new CameraCaptureSession.StateCallback() {
+-    public void onConfigured(CameraCaptureSession arg0) {
+-      captureSession = arg0;
+-      CaptureRequest.Builder builder;
+-      try {
+-        builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+-        builder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_TORCH);
+-        builder.addTarget(surface);
+-        request = builder.build();
+-        captureSession.capture(request, null, null);
+-      } catch (CameraAccessException e) {
+-        Log.e(TAG, e.getMessage());
+-      }
+-    };
+-    public void onConfigureFailed(CameraCaptureSession arg0) {
+-    };
+-  };
+-  
+-  @Override
+-  protected void onCreate(Bundle savedInstanceState) {
+-    // TODO Auto-generated method stub
+-    super.onCreate(savedInstanceState);
+-    //getWindow().addFlags(WindowManager.LayoutParams.FLAG_HOMEKEY_DISPATCHED);
+-    getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_GESTURE_ISOLATED);		
+-    setContentView(R.layout.flashlight);
+-    count = 0;
+-    succesButton = (Button)this.findViewById(R.id.flashlight_bt_ok);
+-    failButton = (Button)this.findViewById(R.id.flashlight_bt_failed);
+-    succesButton.setOnClickListener(new Button.OnClickListener(){
+-      
+-      @Override
+-      public void onClick(View v) {
+-        // TODO Auto-generated method stub
+-        Intent intent = new Intent(FlashLight.this, FactoryMode.class);
+-        setResult(FactoryMode.TEST_OK,intent);
+-        finish();
+-      }
+-    });
+-    failButton.setOnClickListener(new Button.OnClickListener(){
+-      
+-      @Override
+-      public void onClick(View v) {
+-        // TODO Auto-generated method stub
+-        Intent intent = new Intent(FlashLight.this, FactoryMode.class);
+-        setResult(FactoryMode.TEST_FAIL,intent);
+-        finish();
+-      }
+-    });
+-    this.manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+-    initCamera2();
+-    handler.sendEmptyMessage(OPEN_CAMERA);
+-  }
+-  
+-  Handler handler = new Handler(Looper.getMainLooper()) {
++public class FlashLight extends Activity implements TextureView.SurfaceTextureListener{
++	private Button succesButton ;
++	private Button failButton ;
++	private Camera camera;
++	private boolean isOpen = true;
++	public final static int OPEN_CAMERA = 1011;
++	public final static int OPEN_LIGHT = 1012;
++	public final static int CLOSE_LIGHT = 1013;	
++	private Parameters mParams ;
++	private TextureView mTextureView = null;
++    private SurfaceTexture mSurfaceTexture = null;
++	
++	private int count;
++
++	
++	@Override
++	protected void onCreate(Bundle savedInstanceState) {
++		// TODO Auto-generated method stub
++		super.onCreate(savedInstanceState);
++        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
++	    getWindow().getDecorView().setSystemUiVisibility(View.STATUS_BAR_DISABLE_EXPAND);	
++		setContentView(R.layout.flashlight);
++
++
++		mTextureView = (TextureView) findViewById(R.id.preview_content);
++		mTextureView.setSurfaceTextureListener(this);
++		
++		succesButton = (Button)this.findViewById(R.id.flashlight_bt_ok);
++		failButton = (Button)this.findViewById(R.id.flashlight_bt_failed);
++		succesButton.setEnabled(false);
++		succesButton.setOnClickListener(new Button.OnClickListener(){
++		
++			@Override
++			public void onClick(View v) {
++				// TODO Auto-generated method stub
++				Intent intent = new Intent(FlashLight.this, FactoryMode.class);
++				setResult(FactoryMode.TEST_OK,intent);
++				finish();
++			}
++			
++		});
++		failButton.setOnClickListener(new Button.OnClickListener(){
++
++			@Override
++			public void onClick(View v) {
++				// TODO Auto-generated method stub
++				Intent intent = new Intent(FlashLight.this, FactoryMode.class);
++				setResult(FactoryMode.TEST_FAIL,intent);
++				finish();
++			}
++			
++		});
++				
++		//handler.sendEmptyMessage(OPEN_CAMERA);
++		//handler.sendEmptyMessage(OPEN_LIGHT);
++
++	}
++	
++
++	Handler handler = new Handler(Looper.getMainLooper()) {
++		@Override
++		public void handleMessage(Message msg) {
++			switch (msg.what) {
++			case OPEN_CAMERA:
++				try {
++					camera = Camera.open();
++					mParams = camera.getParameters();
++					List<String> list = mParams.getSupportedFlashModes();
++					if (list.contains(Parameters.FLASH_MODE_TORCH)) {
++						mParams.setFlashMode(Parameters.FLASH_MODE_TORCH);
++					} else {
++					Intent intent = new Intent(FlashLight.this, FactoryMode.class);
++					setResult(FactoryMode.TEST_CANCEL,intent);
++					finish();
++					}
++					camera.setParameters(mParams);
++				
++				    camera.setPreviewTexture(mSurfaceTexture);
++				} catch (Exception e) {
++					e.printStackTrace();
++				}
++				camera.startPreview();
++				isOpen = true;
++				count++;
++                handler.sendEmptyMessageDelayed(CLOSE_LIGHT , 400);
++				break;
++			case OPEN_LIGHT:
++				mParams.setFlashMode(Parameters.FLASH_MODE_TORCH);
++				camera.setParameters(mParams);
++				camera.startPreview();
++				isOpen = true;
++				break;
++			case CLOSE_LIGHT:
++				if (isOpen) {
++					try{
++						mParams.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
++						camera.setParameters(mParams);
++						camera.stopPreview();
++						camera.release();
++						isOpen = false;
++					}catch (Exception e) {
++						e.printStackTrace();
++					}
++					
++					// sendEmptyMessage(OPEN_CAMERA);
++					if(0 < count && count < 6){
++                       handler.sendEmptyMessageDelayed(OPEN_CAMERA , 600);  
++                    }
++					if(count==6){
++						succesButton.setEnabled(true);
++					}
++				}
++				break;
++			default:
++				break;
++			}
++		}
++	};
++	
++	@Override
++	public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
++		mSurfaceTexture = surface;
++		handler.sendEmptyMessage(OPEN_CAMERA);
++	}
++
+     @Override
+-    public void handleMessage(Message msg) {
+-      switch (msg.what) {
+-        case OPEN_CAMERA:
+-          if (isLOLLIPOP()) {
+-            try {
+-              openCamera2Flash();
+-            } catch (CameraAccessException e) {
+-              Log.e(TAG, e.getMessage());
+-            } catch (Exception e) {
+-              e.printStackTrace();
+-            }
+-          } else {
+-            turnLightOnCamera(camera);
+-          }
+-          isOpen = true;
+-          count++;
+-          handler.sendEmptyMessageDelayed(CLOSE_CAMERA , 400);
+-          break;
+-        case CLOSE_CAMERA:
+-          if (isOpen) {
+-            if (isLOLLIPOP()) {
+-              if (cameraDevice != null) {
+-                cameraDevice.close();
+-              }
+-            } else {
+-              turnLightOffCamera(camera);
+-            }
+-            isOpen = false;
+-          }
+-          if( 0 < count && count < 6){
+-            handler.sendEmptyMessageDelayed(OPEN_CAMERA , 1000);
+-          }
+-        default:
+-          break;
+-      }
++    public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width,
++            int height) {
+     }
+-  };
+-  
+-  private void createCaptureSession() {
+-    this.surfaceTexture = new SurfaceTexture(0, false);
+-    this.surface = new Surface(this.surfaceTexture);
+-    ArrayList localArrayList = new ArrayList(1);
+-    localArrayList.add(this.surface);
+-    try {
+-      this.cameraDevice.createCaptureSession(localArrayList, this.stateCallback, null);
+-    } catch (CameraAccessException e) {
+-      Log.e(TAG, e.getMessage());
++
++    @Override
++    public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
++        return false;
+     }
+-  }
+-  
+-  private void openCamera2Flash() throws CameraAccessException {
+-    manager.openCamera(cameraId, new CameraDevice.StateCallback() {
+-      
+-      @Override
+-      public void onOpened(CameraDevice camera) {
+-        cameraDevice = camera;
+-        createCaptureSession();
+-      }
+-      
+-      @Override
+-      public void onError(CameraDevice camera, int error) {
+-      }
+-      @Override
+-      public void onDisconnected(CameraDevice camera) {
+-      }
+-    }, null);
+-  }
+-  
+-  private void initCamera2() {
+-    try {
+-      for (String cameraId : this.manager.getCameraIdList()) {
+-        CameraCharacteristics characteristics = this.manager.getCameraCharacteristics(cameraId);
+-        // ���˵�ǰ������ͷ
+-        Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+-        if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+-          continue;
+-        }
+-        StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+-        if (map == null) {
+-          continue;
+-        }
+-        this.cameraId = cameraId;
+-        // �ж��豸�Ƿ�֧�������
+-        this.isSupportFlashCamera2 = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+-      }
+-    } catch (CameraAccessException e) {
+-      Log.e(TAG, e.getMessage());
++
++
++    @Override
++    public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+     }
+-  }
+-  
+-  public void turnLightOnCamera(Camera mCamera) {
+-    Camera.Parameters parameters = camera.getParameters();
+-    List<String> flashModes = parameters.getSupportedFlashModes();
+-    String flashMode = parameters.getFlashMode();
+-    if (!Camera.Parameters.FLASH_MODE_TORCH.equals(flashMode)) {
+-      // ���������
+-      if (flashModes.contains(Camera.Parameters.FLASH_MODE_TORCH)) {
+-        parameters.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
+-        mCamera.setParameters(parameters);
+-      }
+-    }
+-  }
+-  
+-  public void turnLightOffCamera(Camera mCamera) {
+-    Camera.Parameters parameters = mCamera.getParameters();
+-    List<String> flashModes = parameters.getSupportedFlashModes();
+-    String flashMode = parameters.getFlashMode();
+-    if (!Camera.Parameters.FLASH_MODE_OFF.equals(flashMode)) {
+-      // �ر������
+-      if (flashModes.contains(Camera.Parameters.FLASH_MODE_OFF)) {
+-        parameters.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
+-        mCamera.setParameters(parameters);  
+-      }
+-    }
+-  }
+-  
+-  private boolean isLOLLIPOP() {
+-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+-      return true;
+-    } else {
+-      return false;
+-    }
+-  }
+-  
+-  @Override
+-  protected void onPause() {
+-    // TODO Auto-generated method stub
+-    super.onPause();
+-  }
+-  
+-  @Override
+-  protected void onResume() {
+-    // TODO Auto-generated method stub
+-    super.onResume();
+-  }
+-  
+-  @Override
+-  protected void onDestroy() {
+-    //getWindow().clearFlags(WindowManager.LayoutParams.FLAG_HOMEKEY_DISPATCHED);
+-    count = 0;
+-    handler.removeMessages(1011);
+-    handler.removeMessages(1012);
+-    handler.sendEmptyMessage(CLOSE_CAMERA);
+-    super.onDestroy();
+-  }
+-  
+-  @Override
+-  public boolean onKeyUp(int keyCode, KeyEvent event) {
+-    switch (keyCode) {
+-      case KeyEvent.KEYCODE_MENU:
+-        return true;
+-      case KeyEvent.KEYCODE_BACK:
+-        Intent intent = new Intent(FlashLight.this, FactoryMode.class);
+-        setResult(FactoryMode.TEST_CANCEL,intent);
+-        finish();
+-        return true;
+-    }
+-    return super.onKeyUp(keyCode, event);
+-  }
++
++	@Override
++	protected void onPause() {
++		// TODO Auto-generated method stub
++		super.onPause();
++	}
++
++	@Override
++	protected void onResume() {
++		// TODO Auto-generated method stub
++		super.onResume();
++	}
++
++	@Override
++	protected void onDestroy() {
++		//getWindow().clearFlags(WindowManager.LayoutParams.FLAG_HOMEKEY_DISPATCHED);
++		count = 0;
++        handler.removeMessages(1011);
++        handler.removeMessages(1013);
++        handler.sendEmptyMessage(CLOSE_LIGHT);
++		super.onDestroy();
++	}
++	
++
++	
++	@Override
++	public boolean onKeyUp(int keyCode, KeyEvent event) {
++		switch (keyCode) {
++		case KeyEvent.KEYCODE_MENU:
++			return true;
++			
++		case KeyEvent.KEYCODE_BACK:
++			Intent intent = new Intent(FlashLight.this, FactoryMode.class);
++			setResult(FactoryMode.TEST_CANCEL,intent);
++			finish();
++			return true;
++		}
++		return super.onKeyUp(keyCode, event);
++	}
+ }
+Index: vendor/mediatek/proprietary/packages/apps/FactoryMode/res/layout/flashlight.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FactoryMode/res/layout/flashlight.xml	(revision 1752)
++++ vendor/mediatek/proprietary/packages/apps/FactoryMode/res/layout/flashlight.xml	(revision 1753)
+@@ -2,6 +2,11 @@
+ <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="fill_parent"
+   xmlns:android="http://schemas.android.com/apk/res/android">
+     <TextView android:textSize="22.0dip" android:textColor="@color/Green" android:id="@id/flashlight_tips" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/flashlight_tips" />
++<TextureView
++        android:id="@+id/preview_content"
++        android:layout_width="match_parent"
++        android:layout_height="0dip" />
++
+     <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="fill_parent">
+         <Button android:textSize="25.0dip" android:id="@id/flashlight_bt_ok" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="@string/Success" android:layout_weight="0.8" />
+         <Button android:textSize="25.0dip" android:id="@id/flashlight_bt_failed" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="@string/Failed" android:layout_weight="0.2" />

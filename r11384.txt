@@ -1,0 +1,42 @@
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java	(revision 11383)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java	(revision 11384)
+@@ -85,6 +85,7 @@
+ 
+     private static final String KEY_PAIRED_DEVICES = "paired_devices";
+ 
++    private static final String KEY_DISCOVERABLE_TIMEOUT = "discoverable_timeout";
+     public static final String EXTRA_FROM_DRAWER = "from_drawer";
+ 
+     private static View mSettingsDialogView = null;
+@@ -204,8 +205,8 @@
+     void addPreferencesForActivity() {
+         addPreferencesFromResource(R.xml.bluetooth_settings);
+         mDiscoverableTimeoutSwitchPreference = new SwitchPreference(getPrefContext());
+-        mDiscoverableTimeoutSwitchPreference.setKey("discoverable_timeout");
+-        mDiscoverableTimeoutSwitchPreference.setTitle("alcatel SHINE LITE");
++        mDiscoverableTimeoutSwitchPreference.setKey(KEY_DISCOVERABLE_TIMEOUT);
++        mDiscoverableTimeoutSwitchPreference.setTitle(R.string.discoverable_timeout_pf_title);
+         mDiscoverableTimeoutSwitchPreference.setChecked(false);
+         mDiscoverableTimeoutSwitchPreference.setOrder(0);
+         getPreferenceScreen().addPreference(mDiscoverableTimeoutSwitchPreference);
+@@ -391,7 +392,8 @@
+                 getPreferenceScreen().addPreference(mPairedDevicesCategory);
+                 getPreferenceScreen().addPreference(mAvailableDevicesCategory);
+                 getPreferenceScreen().addPreference(mMyDevicePreference);
+-                mDiscoverableTimeoutSwitchPreference.setSummaryOff("Not visible to other Bluetooth devices");
++                mDiscoverableTimeoutSwitchPreference.setSummaryOff(R.string.discoverable_timeout_pf_summary_off);
++
+                 mDiscoverableTimeoutSwitchPreference.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                     @Override
+                     public boolean onPreferenceChange(Preference preference, Object newValue) {
+@@ -463,7 +465,7 @@
+                     mLocalAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+                     mInitiateDiscoverable = false;
+                 }else {
+-                    mLocalAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE);
++                    BluetoothDiscoverableTimeoutReceiver.setDiscoverableAlarm(getPrefContext(), 0);
+                 }
+                 if (fromDrawer) {
+                     Message message = Message.obtain();

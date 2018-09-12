@@ -1,0 +1,194 @@
+Index: packages/apps/Settings/src/com/android/settings/ResetNetwork.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/ResetNetwork.java	(revision 1476)
++++ packages/apps/Settings/src/com/android/settings/ResetNetwork.java	(revision 1477)
+@@ -41,6 +41,19 @@
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+ 
++import android.app.AlertDialog;
++import android.content.DialogInterface;
++import android.widget.Toast;
++import android.bluetooth.BluetoothAdapter;
++import android.bluetooth.BluetoothManager;
++import android.content.Context;
++import android.net.ConnectivityManager;
++import android.net.NetworkPolicyManager;
++import android.net.wifi.WifiManager;
++import android.telephony.TelephonyManager;
++import com.android.ims.ImsManager;
++
++
+ /**
+  * Confirm and execute a reset of the device's network settings to a clean "just out of the box"
+  * state.  Multiple confirmations are required: first, a general "are you sure you want to do this?"
+@@ -61,7 +74,7 @@
+     private View mContentView;
+     private Spinner mSubscriptionSpinner;
+     private Button mInitiateButton;
+-
++	private int mSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+     /**
+      * Keyguard validation is run using the standard {@link ConfirmLockPattern}
+      * component as a subactivity
+@@ -96,10 +109,28 @@
+         if (mSubscriptions != null && mSubscriptions.size() > 0) {
+             int selectedIndex = mSubscriptionSpinner.getSelectedItemPosition();
+             SubscriptionInfo subscription = mSubscriptions.get(selectedIndex);
+-            args.putInt(PhoneConstants.SUBSCRIPTION_KEY, subscription.getSubscriptionId());
++            //args.putInt(PhoneConstants.SUBSCRIPTION_KEY, subscription.getSubscriptionId());
++            mSubId=subscription.getSubscriptionId();
+         }
+-        ((SettingsActivity) getActivity()).startPreferencePanel(ResetNetworkConfirm.class.getName(),
+-                args, R.string.reset_network_confirm_title, null, null, 0);
++        /*((SettingsActivity) getActivity()).startPreferencePanel(ResetNetworkConfirm.class.getName(),
++                args, R.string.reset_network_confirm_title, null, null, 0);*/
++         Resources res = getActivity().getResources();
++         AlertDialog ad=new AlertDialog.Builder(getActivity()).create();      
++         ad.setMessage(res.getString(R.string.reset_network_message));  
++         ad.setButton(res.getString(R.string.reset_confirm), new DialogInterface.OnClickListener() {
++               @Override  
++               public void onClick(DialogInterface dialog, int which) {  
++					resetImsNetwork(getActivity(),mSubId);
++					Toast.makeText(getActivity(), R.string.reset_network_complete_toast, Toast.LENGTH_LONG).show();
++                }  
++          });  
++         ad.setButton2(res.getString(R.string.reset_cancel), new DialogInterface.OnClickListener() {       
++               @Override  
++                  public void onClick(DialogInterface dialog, int which) {           
++                       
++                 }  
++         });  
++        ad.show(); 
+     }
+ 
+     /**
+@@ -206,6 +237,52 @@
+         return mContentView;
+     }
+ 
++	private void resetImsNetwork(Context context ,int sub) {
++			if (Utils.isMonkeyRunning()) {
++                return;
++            }
++            ConnectivityManager connectivityManager = (ConnectivityManager)
++                    context.getSystemService(Context.CONNECTIVITY_SERVICE);
++            if (connectivityManager != null) {
++                connectivityManager.factoryReset();
++            }
++
++            WifiManager wifiManager = (WifiManager)
++                    context.getSystemService(Context.WIFI_SERVICE);
++            if (wifiManager != null) {
++                wifiManager.factoryReset();
++            }
++
++            TelephonyManager telephonyManager = (TelephonyManager)
++                    context.getSystemService(Context.TELEPHONY_SERVICE);
++            if (telephonyManager != null) {
++                telephonyManager.factoryReset(mSubId);
++            }
++
++            NetworkPolicyManager policyManager = (NetworkPolicyManager)
++                    context.getSystemService(Context.NETWORK_POLICY_SERVICE);
++            if (policyManager != null) {
++                String subscriberId = telephonyManager.getSubscriberId(mSubId);
++                policyManager.factoryReset(subscriberId);
++            }
++
++            BluetoothManager btManager = (BluetoothManager)
++                    context.getSystemService(Context.BLUETOOTH_SERVICE);
++            if (btManager != null) {
++                BluetoothAdapter btAdapter = btManager.getAdapter();
++                if (btAdapter != null) {
++                    btAdapter.factoryReset();
++                }
++            }
++        int phoneId;
++        if (sub == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
++            phoneId = 0;
++        } else {
++            phoneId = SubscriptionManager.getPhoneId(sub);
++        }
++        ImsManager.factoryReset(context, phoneId);
++    }
++	
+     @Override
+     protected int getMetricsCategory() {
+         return MetricsEvent.RESET_NETWORK;
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1476)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1477)
+@@ -1240,7 +1240,7 @@
+     <string name="menu_restore" msgid="8260067415075573273">"重置为默认设置"</string>
+     <string name="restore_default_apn_completed" msgid="2824775307377604897">"已重置默认APN设置。"</string>
+     <string name="reset_network_title" msgid="4557113742173895074">"重置网络设置"</string>
+-    <string name="reset_network_desc" msgid="581668983587311282">"此操作会重置所有网络设置，包括：\n\n"<li>"WLAN"</li>\n<li>"移动数据网络"</li>\n<li>"蓝牙"</li></string>
++    <string name="reset_network_desc" msgid="581668983587311282">"所有网络设置，包括Wi-Fi，蓝牙和其他网络设置将被重置为出厂默认设置。</li></string>
+     <string name="reset_network_button_text" msgid="2035676527471089853">"重置设置"</string>
+     <string name="reset_network_final_desc" msgid="6388371121099245116">"要重置所有网络设置吗？此操作无法撤消！"</string>
+     <string name="reset_network_final_button_text" msgid="1797434793741744635">"重置设置"</string>
+@@ -3347,4 +3347,5 @@
+ 	<string name="reset_attention">清除所有数据并重置为出厂默认值？ 您的设备将重新启动以执行出厂重置。 此操作不能撤消。</string>
+ 	<string name="reset_confirm">重置</string>
+ 	<string name="reset_cancel">取消</string>
++	<string name="reset_network_message">重置所有网络设置？ 此操作不能撤消。</string>
+ </resources>
+Index: packages/apps/Settings/res/values-zh-rTW/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rTW/strings.xml	(revision 1476)
++++ packages/apps/Settings/res/values-zh-rTW/strings.xml	(revision 1477)
+@@ -1223,7 +1223,7 @@
+     <string name="menu_restore" msgid="8260067415075573273">"還原為預設狀態"</string>
+     <string name="restore_default_apn_completed" msgid="2824775307377604897">"重設預設 APN 設定已完成。"</string>
+     <string name="reset_network_title" msgid="4557113742173895074">"重設網路設定"</string>
+-    <string name="reset_network_desc" msgid="581668983587311282">"這個動作會重設所有網路設定，包括：\n\n"<li>"Wi‑Fi"</li>\n<li>"行動數據"</li>\n<li>"藍牙"</li></string>
++    <string name="reset_network_desc" msgid="581668983587311282">"所有網絡設置，包括Wi-Fi，藍牙和其他網絡設置將被重置為出廠默認設置。"</li></string>
+     <string name="reset_network_button_text" msgid="2035676527471089853">"重設設定"</string>
+     <string name="reset_network_final_desc" msgid="6388371121099245116">"您要重設所有網路設定嗎？這個動作無法復原！"</string>
+     <string name="reset_network_final_button_text" msgid="1797434793741744635">"重設設定"</string>
+@@ -3274,4 +3274,5 @@
+ 	<string name="reset_attention">清除所有數據並重置為出廠默認值？ 您的設備將重新啟動以執行出廠重置。 此操作不能撤消。</string>
+ 	<string name="reset_confirm">重置</string>
+ 	<string name="reset_cancel">取消</string>
++		<string name="reset_network_message">重置所有網絡設置？ 此操作不能撤消。</string>
+ </resources>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1476)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1477)
+@@ -2871,7 +2871,7 @@
+     <!-- SD card & phone storage settings screen, setting option name under Backup & Restore heading -->
+     <string name="reset_network_title">Network settings reset</string>
+     <!-- SD card & phone storage settings screen, message on screen after user selects Reset network settings [CHAR LIMIT=NONE] -->
+-    <string name="reset_network_desc">This will reset all network settings, including:\n\n<li>Wi\u2011Fi</li>\n<li>Cellular data</li>\n<li>Bluetooth</li>"</string>
++    <string name="reset_network_desc">All network settings, including Wi-Fi, Bluetooth &amp; other network settings, will be reset to factory defaults.</string>
+     <!-- SD card & phone storage settings screen, button on screen after user selects Reset network settings -->
+     <string name="reset_network_button_text">Reset settings</string>
+     <!-- SD card & phone storage settings screen, message on screen after user selects Reset settings button -->
+@@ -8041,4 +8041,5 @@
+ 	
+ 	<string name="switch_func_shortcuts_on">on</string>
+ 	<string name="switch_func_shortcuts_off">off</string>
++    <string name="reset_network_message">Reset all network settings? This action can not be undone.</string>
+ </resources>
+Index: packages/apps/Settings/res/values-zh-rHK/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rHK/strings.xml	(revision 1476)
++++ packages/apps/Settings/res/values-zh-rHK/strings.xml	(revision 1477)
+@@ -1224,7 +1224,7 @@
+     <string name="menu_restore" msgid="8260067415075573273">"重設回預設值"</string>
+     <string name="restore_default_apn_completed" msgid="2824775307377604897">"重設預設 APN 設定已完成。"</string>
+     <string name="reset_network_title" msgid="4557113742173895074">"重設網絡設定"</string>
+-    <string name="reset_network_desc" msgid="581668983587311282">"這將重設所有網絡設定，包括：\n\n"<li>" Wi‑Fi "</li>\n<li>"流動數據"</li>\n<li>"藍牙"</li></string>
++    <string name="reset_network_desc" msgid="581668983587311282">"所有網絡設置，包括Wi-Fi，藍牙和其他網絡設置將被重置為出廠默認設置。"</li></string>
+     <string name="reset_network_button_text" msgid="2035676527471089853">"重設設定"</string>
+     <string name="reset_network_final_desc" msgid="6388371121099245116">"您要重設所有的網絡設定嗎？您無法復原這項操作！"</string>
+     <string name="reset_network_final_button_text" msgid="1797434793741744635">"重設設定"</string>
+@@ -3276,4 +3276,5 @@
+ 	<string name="reset_attention">清除所有數據並重置為出廠默認值？ 您的設備將重新啟動以執行出廠重置。 此操作不能撤消。</string>
+ 	<string name="reset_confirm">重置</string>
+ 	<string name="reset_cancel">取消</string>
++	<string name="reset_network_message">重置所有網絡設置？ 此操作不能撤消。</string>
+ </resources>

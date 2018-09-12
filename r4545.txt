@@ -1,0 +1,106 @@
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/ShotFactory.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/ShotFactory.cpp	(revision 4544)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/ShotFactory.cpp	(revision 4545)
+@@ -196,7 +196,8 @@
+ createInstance_CapBufShot(
+     char const*const    pszShotName,
+     uint32_t const      u4ShotMode,
+-    int32_t const       i4OpenId
++    int32_t const       i4OpenId,
++	sp<IParamsManager>  pParamsMgr
+ );
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+@@ -304,12 +305,12 @@
+     //
+     //  Zero-shutter-delay Shot
+     case eShotMode_ZsdShot:
+-        rpShot = createInstance_CapBufShot("ZSD", u4ShotMode, i4OpenId);
++        rpShot = createInstance_CapBufShot("ZSD", u4ShotMode, i4OpenId,pParamsMgr);
+         break;
+     //
+     //  Video Snap Shot
+     case eShotMode_VideoSnapShot:
+-        rpShot = createInstance_CapBufShot("VSS", u4ShotMode, i4OpenId);
++        rpShot = createInstance_CapBufShot("VSS", u4ShotMode, i4OpenId,pParamsMgr);
+         break;
+     //
+     //  Face-beautifier Shot
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/CapBufShot.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/CapBufShot.cpp	(revision 4544)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/CapBufShot.cpp	(revision 4545)
+@@ -93,7 +93,8 @@
+ createInstance_CapBufShot(
+     char const*const    pszShotName,
+     uint32_t const      u4ShotMode,
+-    int32_t const       i4OpenId
++    int32_t const       i4OpenId,
++	sp<IParamsManager>  pParamsMgr
+ )
+ {
+     sp<IShot>       pShot = NULL;
+@@ -100,7 +101,7 @@
+     sp<CapBufShot>     pImpShot = NULL;
+     //
+     //  (1.1) new Implementator.
+-    pImpShot = new CapBufShot(pszShotName, u4ShotMode, i4OpenId);
++    pImpShot = new CapBufShot(pszShotName, u4ShotMode, i4OpenId, pParamsMgr);
+     if  ( pImpShot == 0 ) {
+         CAM_LOGE("[%s] new CapBufShot", __FUNCTION__);
+         goto lbExit;
+@@ -164,10 +165,12 @@
+ CapBufShot(
+     char const*const pszShotName,
+     uint32_t const u4ShotMode,
+-    int32_t const i4OpenId
++    int32_t const i4OpenId,
++	sp<IParamsManager>  pParamsMgr
+ )
+     : ImpShot(pszShotName, u4ShotMode, i4OpenId)
+     , p2outBuf(NULL)
++	, mpParamsMgr(pParamsMgr) 
+ {
+     FUNC_NAME;
+ }
+@@ -268,7 +271,7 @@
+     AutoCPTLog cptlog(Event_Shot_capture);
+     MBOOL ret = MTRUE;
+     NSCamShot::ISingleShot *pSingleShot =
+-        NSCamShot::ISingleShot::createInstance(static_cast<EShotMode>(mu4ShotMode), "CapBufShot");
++        NSCamShot::ISingleShot::createInstance(static_cast<EShotMode>(mu4ShotMode), "CapBufShot", mpParamsMgr);
+     //
+     MUINT32 nrtype = queryCapNRType( getPreviewIso() );
+     //
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/CapBufShot.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/CapBufShot.h	(revision 4544)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/CapBufShot.h	(revision 4545)
+@@ -38,7 +38,7 @@
+ #ifndef _MTK_CAMERA_CAMADAPTER_SCENARIO_SHOT_CAPBUFSHOT_H_
+ #define _MTK_CAMERA_CAMADAPTER_SCENARIO_SHOT_CAPBUFSHOT_H_
+ 
+-
++#include <v1/IParamsManager.h>
+ namespace android {
+ namespace NSShot {
+ /******************************************************************************
+@@ -59,7 +59,8 @@
+                                     CapBufShot(
+                                         char const*const pszShotName,
+                                         uint32_t const u4ShotMode,
+-                                        int32_t const i4OpenId
++                                        int32_t const i4OpenId,
++										sp<IParamsManager>  pParamsMgr
+                                     );
+ 
+ public:     ////                    Operations.
+@@ -101,6 +102,7 @@
+ 
+ protected:
+     IImageBuffer*   p2outBuf;
++	sp<IParamsManager>              mpParamsMgr; 
+ };
+ 
+ 

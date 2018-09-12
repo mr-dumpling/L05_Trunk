@@ -1,0 +1,74 @@
+Index: frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- frameworks/base/core/res/res/values/config.xml	(revision 7597)
++++ frameworks/base/core/res/res/values/config.xml	(revision 7598)
+@@ -1580,10 +1580,10 @@
+     <bool name="config_mms_content_disposition_support">true</bool>
+ 
+     <!-- MMS user agent string -->
+-    <string name="config_mms_user_agent" translatable="false">Android-Mms/0.1</string>
++    <string name="config_mms_user_agent" translatable="false">5058I-MMS/2.0</string>
+ 
+     <!-- MMS user agent prolfile url -->
+-    <string name="config_mms_user_agent_profile_url" translatable="false">http://www.google.com/oha/rdf/ua-profile-kila.xml</string>
++    <string name="config_mms_user_agent_profile_url" translatable="false">http://www-ccpp.tcl-ta.com/files/5058i.xml</string>
+ 
+     <!-- National Language Identifier codes for the following two config items.
+          (from 3GPP TS 23.038 V9.1.1 Table 6.2.1.2.4.1):
+@@ -1847,7 +1847,7 @@
+     </integer-array>
+ 
+     <!-- Set to true to add links to Cell Broadcast app from Settings and MMS app. -->
+-    <bool name="config_cellBroadcastAppLinks">false</bool>
++    <bool name="config_cellBroadcastAppLinks">true</bool>
+ 
+     <!-- The default value if the SyncStorageEngine should sync automatically or not -->
+     <bool name="config_syncstorageengine_masterSyncAutomatically">true</bool>
+@@ -1861,7 +1861,7 @@
+ 
+     <!--  Enable multiuser for CTS Verifier -->
+     <!--  Maximum number of supported users -->
+-    <integer name="config_multiuserMaximumUsers">4</integer>
++    <integer name="config_multiuserMaximumUsers">1</integer>
+ 
+     <!-- Whether UI for multi user should be shown -->
+     <bool name="config_enableMultiUserUI">false</bool>
+Index: frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- frameworks/base/core/res/res/values/features.xml	(revision 7597)
++++ frameworks/base/core/res/res/values/features.xml	(revision 7598)
+@@ -17,9 +17,15 @@
+ 	<!-- feature for fmradio call music, BUG: 119814 -->
+ 	<bool name="FR_MUSIC_STOP_FM_DELETE_BUG">false</bool>
+ 	
+-	<!-- feature for fmradio call music, BUG: 119848 -->
++	<!-- feature for email same signature on set and show, BUG: 119848 -->
+ 	<bool name="FR_EMAIL_SAME_SIGNATURE_BUG">false</bool>
+ 	
++	<!-- feature for airplane mode close gps, BUG: 119376 -->
++	<bool name="FR_GPS_AIRPLANE_OFF_BUG">false</bool>
++	
++	<!-- feature for emc call button on even on screen on secrity -->
++	<!--<bool name="FR_EMC_CALL_ALWAYS_ON_SECRITY">false</bool>-->
++	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">false</bool>
+     
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/EmergencyButton.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/EmergencyButton.java	(revision 7597)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/EmergencyButton.java	(revision 7598)
+@@ -171,7 +171,12 @@
+ 
+         /// M: Save secure query result here, when lockscreen is created, secure result should
+         /// stay unchanged @{
+-        mIsSecure = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser());
++        boolean bFrEmcOn = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_EMC_CALL_ALWAYS_ON_SECRITY);
++        if(bFrEmcOn){
++			mIsSecure = true;
++		}else{
++			mIsSecure = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser());
++		}
+         /// @}
+         setOnLongClickListener(new OnLongClickListener() {
+             @Override

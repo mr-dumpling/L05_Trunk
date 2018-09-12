@@ -1,0 +1,89 @@
+Index: vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 7274)
++++ vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 7275)
+@@ -79,6 +79,8 @@
+ import android.view.WindowManager;
+ import android.content.DialogInterface;
+ 
++import android.text.TextUtils;
++
+ // MTK-END
+ 
+ /**
+@@ -128,6 +130,8 @@
+ 
+     String mPnnHomeName = null;
+ 
++    public boolean isSetByCountry = false;
++
+     UsimServiceTable mUsimServiceTable;
+ 
+     @Override
+@@ -2582,7 +2586,8 @@
+             // MTK-START
+             log("setVoiceMailByCountry");
+             // MTK-END
+-            mIsVoiceMailFixed = true;
++            //mIsVoiceMailFixed = true;
++            isSetByCountry = true;
+             mVoiceMailNum = mVmConfig.getVoiceMailNumber(spn);
+             mVoiceMailTag = mVmConfig.getVoiceMailTag(spn);
+         }
+Index: vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/GsmCdmaPhone.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/GsmCdmaPhone.java	(revision 7274)
++++ vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/GsmCdmaPhone.java	(revision 7275)
+@@ -1788,11 +1788,11 @@
+         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
+         SharedPreferences.Editor editor = sp.edit();
+         if (isPhoneTypeGsm()) {
+-            editor.putString(VM_NUMBER + getPhoneId(), number);
++            editor.putString(getSubscriberId(), number);
+             editor.apply();
+             setVmSimImsi(getSubscriberId());
+         } else {
+-            editor.putString(VM_NUMBER_CDMA + getPhoneId(), number);
++            editor.putString(getSubscriberId(), number);
+             editor.apply();
+         }
+     }
+@@ -1804,13 +1804,18 @@
+             // Read from the SIM. If its null, try reading from the shared preference area.
+             IccRecords r = mIccRecords.get();
+             number = (r != null) ? r.getVoiceMailNumber() : "";
+-            if (TextUtils.isEmpty(number)) {
++            if (TextUtils.isEmpty(number) || ((SIMRecords)mIccRecords.get()).isSetByCountry) {
+                 SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
+-                number = sp.getString(VM_NUMBER + getPhoneId(), null);
++                //Log.d(LOG_TAG, "vm num from simRecords, num=" + number + "is from factory= " + ((SIMRecords)mIccRecords.get()).isSetbyCountry);
++                String temp = sp.getString(getSubscriberId(), null);
++                if (temp != null) {
++                    Log.d(LOG_TAG, "replace vm num with user defined, num= " +temp);
++                    number = temp;
++                }
+             }
+         } else {
+             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
+-            number = sp.getString(VM_NUMBER_CDMA + getPhoneId(), null);
++            number = sp.getString(getSubscriberId(), null);
+         }
+ 
+         if (TextUtils.isEmpty(number)) {
+@@ -4654,8 +4659,14 @@
+                     // voice mail number.
+                     String imsi = getVmSimImsi();
+                     String imsiFromSIM = getSubscriberId();
+-                    if (imsi != null && imsiFromSIM != null && !imsiFromSIM.equals(imsi)) {
+-                        storeVoiceMailNumber(null);
++                    SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
++                    boolean clear_if_change_sim = sp.getBoolean("clear_if_change", false);
++                    if (clear_if_change_sim && imsi != null && imsiFromSIM != null && !imsiFromSIM.equals(imsi)){
++                        //storeVoiceMailNumber(null);
++                        Log.d(LOG_TAG, "reset vm number because sim changed");
++                        SharedPreferences.Editor editor = sp.edit();
++                        editor.remove(getVmSimImsi());
++                        editor.apply();
+                         setVmSimImsi(null);
+                     }
+                     Log.d(LOG_TAG,"EVENT_SIM_RECORDS_LOADED");

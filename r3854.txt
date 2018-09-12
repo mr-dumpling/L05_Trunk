@@ -1,0 +1,1856 @@
+Index: vendor/branch/5058A_Cable_Bahamas/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 0)
++++ vendor/branch/5058A_Cable_Bahamas/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 3854)
+@@ -0,0 +1,1152 @@
++/*
++* Copyright (C) 2014 MediaTek Inc.
++* Modification based on code covered by the mentioned copyright
++* and/or permission notice(s).
++*/
++/*
++ * Copyright (C) 2010 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.email.activity.setup;
++
++import android.app.Activity;
++import android.app.FragmentManager;
++import android.app.FragmentTransaction;
++import android.app.LoaderManager;
++import android.content.ContentResolver;
++import android.content.ContentValues;
++import android.content.Context;
++import android.content.Intent;
++import android.content.Loader;
++import android.content.res.Resources;
++import android.database.Cursor;
++import android.media.Ringtone;
++import android.media.RingtoneManager;
++import android.net.Uri;
++import android.os.Bundle;
++import android.os.Vibrator;
++import android.os.SystemProperties;
++
++import android.preference.CheckBoxPreference;
++import android.preference.EditTextPreference;
++import android.preference.ListPreference;
++import android.preference.Preference;
++import android.preference.PreferenceActivity;
++import android.preference.PreferenceCategory;
++import android.preference.Preference.OnPreferenceClickListener;
++import android.preference.PreferenceScreen;
++import android.provider.CalendarContract;
++import android.provider.ContactsContract;
++import android.provider.Settings;
++import android.support.annotation.NonNull;
++import android.text.TextUtils;
++import android.view.Menu;
++import android.view.MenuInflater;
++import android.view.MenuItem;
++
++import com.android.email.R;
++import com.android.email.SecurityPolicy;
++import com.android.email.provider.EmailProvider;
++import com.android.email.provider.FolderPickerActivity;
++import com.android.email.service.EmailServiceUtils;
++import com.android.email.service.EmailServiceUtils.EmailServiceInfo;
++import com.android.emailcommon.provider.Account;
++import com.android.emailcommon.provider.EmailContent;
++import com.android.emailcommon.provider.EmailContent.AccountColumns;
++import com.android.emailcommon.provider.Mailbox;
++import com.android.emailcommon.provider.Policy;
++import com.android.mail.preferences.AccountPreferences;
++import com.android.mail.preferences.FolderPreferences;
++import com.android.mail.providers.Folder;
++import com.android.mail.providers.UIProvider;
++import com.android.mail.ui.MailAsyncTaskLoader;
++import com.android.mail.ui.settings.MailAccountPrefsFragment;
++import com.android.mail.ui.settings.SettingsUtils;
++import com.android.mail.utils.ContentProviderTask.UpdateTask;
++import com.android.mail.utils.LogUtils;
++import com.android.mail.utils.NotificationUtils;
++import com.android.mail.utils.Utils;
++import com.mediatek.email.outofoffice.OofGetWaitingFragment;
++
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.Map;
++
++import android.accounts.AccountManager;
++
++/**
++ * Fragment containing the main logic for account settings.  This also calls out to other
++ * fragments for server settings.
++ *
++ * TODO: Can we defer calling addPreferencesFromResource() until after we load the account?  This
++ *       could reduce flicker.
++ */
++public class AccountSettingsFragment extends MailAccountPrefsFragment
++        implements Preference.OnPreferenceChangeListener {
++
++    private static final String ARG_ACCOUNT_ID = "account_id";
++
++    public static final String PREFERENCE_DESCRIPTION = "account_description";
++    private static final String PREFERENCE_NAME = "account_name";
++    private static final String PREFERENCE_SIGNATURE = "account_signature";
++    private static final String PREFERENCE_QUICK_RESPONSES = "account_quick_responses";
++    private static final String PREFERENCE_FREQUENCY = "account_check_frequency";
++    private static final String PREFERENCE_SYNC_WINDOW = "account_sync_window";
++    private static final String PREFERENCE_SYNC_SETTINGS = "account_sync_settings";
++    private static final String PREFERENCE_SYNC_EMAIL = "account_sync_email";
++    private static final String PREFERENCE_SYNC_CONTACTS = "account_sync_contacts";
++    private static final String PREFERENCE_SYNC_CALENDAR = "account_sync_calendar";
++    private static final String PREFERENCE_BACKGROUND_ATTACHMENTS =
++            "account_background_attachments";
++    private static final String PREFERENCE_CATEGORY_DATA_USAGE = "data_usage";
++    private static final String PREFERENCE_CATEGORY_NOTIFICATIONS = "account_notifications";
++    private static final String PREFERENCE_CATEGORY_SERVER = "account_servers";
++    private static final String PREFERENCE_CATEGORY_POLICIES = "account_policies";
++    @SuppressWarnings("unused") // temporarily unused pending policy UI
++    private static final String PREFERENCE_POLICIES_ENFORCED = "policies_enforced";
++    @SuppressWarnings("unused") // temporarily unused pending policy UI
++    private static final String PREFERENCE_POLICIES_UNSUPPORTED = "policies_unsupported";
++    private static final String PREFERENCE_POLICIES_RETRY_ACCOUNT = "policies_retry_account";
++    private static final String PREFERENCE_INCOMING = "incoming";
++    private static final String PREFERENCE_OUTGOING = "outgoing";
++
++    private static final String PREFERENCE_SYSTEM_FOLDERS = "system_folders";
++    private static final String PREFERENCE_SYSTEM_FOLDERS_TRASH = "system_folders_trash";
++    private static final String PREFERENCE_SYSTEM_FOLDERS_SENT = "system_folders_sent";
++
++    private static final String SAVESTATE_SYNC_INTERVALS = "savestate_sync_intervals";
++    private static final String SAVESTATE_SYNC_INTERVAL_STRINGS = "savestate_sync_interval_strings";
++	
++	// add by dongdongli for remove account 20171127 start{
++	private static final String PREFERENCE_REMOVE_ACCOUNT = "remove_account";
++	// add by dongdongli for remove account 20171127 end }
++
++    /// M: MTK OOF Feature
++    private static final String PREFERENCE_OOF_SETTINGS = "account_oof_settings";
++
++    // Request code to start different activities.
++    private static final int RINGTONE_REQUEST_CODE = 0;
++
++    private EditTextPreference mAccountDescription;
++    private EditTextPreference mAccountName;
++    private EditTextPreference mAccountSignature;
++    private ListPreference mCheckFrequency;
++    private ListPreference mSyncWindow;
++    private Preference mSyncSettings;
++    private CheckBoxPreference mInboxVibrate;
++    private Preference mInboxRingtone;
++    //M: MTK OOF Feature
++    private Preference mAccountOof;
++
++    private Context mContext;
++
++    private Account mAccount;
++    private com.android.mail.providers.Account mUiAccount;
++    private EmailServiceInfo mServiceInfo;
++    private Folder mInboxFolder;
++
++    private Ringtone mRingtone;
++    /**
++     * This may be null if the account exists but the inbox has not yet been created in the database
++     * (waiting for initial sync)
++     */
++    private FolderPreferences mInboxFolderPreferences;
++
++    // The email of the account being edited
++    private String mAccountEmail;
++
++    /**
++     * If launching with an email address, use this method to build the arguments.
++     */
++    public static Bundle buildArguments(final String email) {
++        final Bundle b = new Bundle(1);
++        b.putString(ARG_ACCOUNT_EMAIL, email);
++        return b;
++    }
++
++    /**
++     * If launching with an account ID, use this method to build the arguments.
++     */
++    public static Bundle buildArguments(final long accountId) {
++        final Bundle b = new Bundle(1);
++        b.putLong(ARG_ACCOUNT_ID, accountId);
++        return b;
++    }
++
++    @Override
++    public void onAttach(Activity activity) {
++        super.onAttach(activity);
++        mContext = activity;
++    }
++
++    /**
++     * Called to do initial creation of a fragment.  This is called after
++     * {@link #onAttach(Activity)} and before {@link #onActivityCreated(Bundle)}.
++     */
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++
++        setHasOptionsMenu(true);
++
++        // Load the preferences from an XML resource
++        addPreferencesFromResource(R.xml.account_settings_preferences);
++
++        if (!getResources().getBoolean(R.bool.quickresponse_supported)) {
++            final Preference quickResponsePref = findPreference(PREFERENCE_QUICK_RESPONSES);
++            if (quickResponsePref != null) {
++                getPreferenceScreen().removePreference(quickResponsePref);
++            }
++        }
++
++        // Start loading the account data, if provided in the arguments
++        // If not, activity must call startLoadingAccount() directly
++        Bundle b = getArguments();
++        if (b != null) {
++            mAccountEmail = b.getString(ARG_ACCOUNT_EMAIL);
++        }
++        if (savedInstanceState != null) {
++            // We won't know what the correct set of sync interval values and strings are until
++            // our loader completes. The problem is, that if the sync frequency chooser is
++            // displayed when the screen rotates, it reinitializes it to the defaults, and doesn't
++            // correct it after the loader finishes again. See b/13624066
++            // To work around this, we'll save the current set of sync interval values and strings,
++            // in onSavedInstanceState, and restore them here.
++            final CharSequence [] syncIntervalStrings =
++                    savedInstanceState.getCharSequenceArray(SAVESTATE_SYNC_INTERVAL_STRINGS);
++            final CharSequence [] syncIntervals =
++                    savedInstanceState.getCharSequenceArray(SAVESTATE_SYNC_INTERVALS);
++            mCheckFrequency = (ListPreference) findPreference(PREFERENCE_FREQUENCY);
++            if (mCheckFrequency != null) {
++                mCheckFrequency.setEntries(syncIntervalStrings);
++                mCheckFrequency.setEntryValues(syncIntervals);
++            }
++        }
++        /**
++         * M: For some case,the AccountLoader do not running completely,but user has
++         * been clicked the perference.the AccountName may be use the last value
++         * stored in sharePreference(xml),Disable preferenceScreen during loading.{@
++         */
++        getPreferenceScreen().setEnabled(false);
++        /**@}*/
++    }
++
++    @Override
++    public void onSaveInstanceState(@NonNull Bundle outstate) {
++        super.onSaveInstanceState(outstate);
++        if (mCheckFrequency != null) {
++            outstate.putCharSequenceArray(SAVESTATE_SYNC_INTERVAL_STRINGS,
++                    mCheckFrequency.getEntries());
++            outstate.putCharSequenceArray(SAVESTATE_SYNC_INTERVALS,
++                    mCheckFrequency.getEntryValues());
++        }
++    }
++
++    @Override
++    public void onActivityCreated(Bundle savedInstanceState) {
++        super.onActivityCreated(savedInstanceState);
++        final Bundle args = new Bundle(1);
++        if (!TextUtils.isEmpty(mAccountEmail)) {
++            args.putString(AccountLoaderCallbacks.ARG_ACCOUNT_EMAIL, mAccountEmail);
++        } else {
++            args.putLong(AccountLoaderCallbacks.ARG_ACCOUNT_ID,
++                    getArguments().getLong(ARG_ACCOUNT_ID, -1));
++        }
++        getLoaderManager().initLoader(0, args, new AccountLoaderCallbacks(getActivity()));
++    }
++
++    @Override
++    public void onActivityResult(int requestCode, int resultCode, Intent data) {
++        switch (requestCode) {
++            case RINGTONE_REQUEST_CODE:
++                if (resultCode == Activity.RESULT_OK && data != null) {
++                    Uri uri = data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
++                    setRingtone(uri);
++                }
++                break;
++        }
++    }
++
++    /**
++     * Sets the current ringtone.
++     */
++    private void setRingtone(Uri ringtone) {
++        /// M: null check applied for Inbox Folder Prefs.
++        if (mInboxFolderPreferences == null) {
++            return;
++        }
++        if (ringtone != null) {
++            mInboxFolderPreferences.setNotificationRingtoneUri(ringtone.toString());
++            mRingtone = RingtoneManager.getRingtone(getActivity(), ringtone);
++        } else {
++            // Null means silent was selected.
++            mInboxFolderPreferences.setNotificationRingtoneUri("");
++            mRingtone = null;
++        }
++
++        setRingtoneSummary();
++    }
++
++    private void setRingtoneSummary() {
++        final String summary = mRingtone != null ? mRingtone.getTitle(mContext)
++                : mContext.getString(R.string.silent_ringtone);
++
++        mInboxRingtone.setSummary(summary);
++    }
++
++    @Override
++    public boolean onPreferenceTreeClick(PreferenceScreen preferenceScreen,
++            @NonNull Preference preference) {
++        final String key = preference.getKey();
++        if (key.equals(PREFERENCE_SYNC_SETTINGS)) {
++            /// M: Avoid the folder is not synced or loaded.
++            if (null != mInboxFolder && null != mUiAccount) {
++                startActivity(MailboxSettings.getIntent(getActivity(), mUiAccount.fullFolderListUri,
++                        mInboxFolder));
++            } else {
++                LogUtils.e(LogUtils.TAG, "Account null %s, folder null %s",
++                        (null == mUiAccount), (null == mInboxFolder));
++            }
++            return true;
++        } else {
++            return super.onPreferenceTreeClick(preferenceScreen, preference);
++        }
++    }
++
++    /**
++     * Listen to all preference changes in this class.
++     * @param preference The changed Preference
++     * @param newValue The new value of the Preference
++     * @return True to update the state of the Preference with the new value
++     */
++    @Override
++    public boolean onPreferenceChange(Preference preference, Object newValue) {
++        // Can't use a switch here. Falling back to a giant conditional.
++        final String key = preference.getKey();
++        final ContentValues cv = new ContentValues(1);
++        if (key.equals(PREFERENCE_DESCRIPTION)){
++            String summary = newValue.toString().trim();
++            if (TextUtils.isEmpty(summary)) {
++                summary = mUiAccount.getEmailAddress();
++            }
++            mAccountDescription.setSummary(summary);
++            mAccountDescription.setText(summary);
++            cv.put(AccountColumns.DISPLAY_NAME, summary);
++        } else if (key.equals(PREFERENCE_NAME)) {
++            final String summary = newValue.toString().trim();
++            if (!TextUtils.isEmpty(summary)) {
++                mAccountName.setSummary(summary);
++                mAccountName.setText(summary);
++                cv.put(AccountColumns.SENDER_NAME, summary);
++            }
++        } else if (key.equals(PREFERENCE_SIGNATURE)) {
++            // Clean up signature if it's only whitespace (which is easy to do on a
++            // soft keyboard) but leave whitespace in place otherwise, to give the user
++            // maximum flexibility, e.g. the ability to indent
++            String signature = newValue.toString();
++            if (signature.trim().isEmpty()) {
++                signature = "";
++            }
++            mAccountSignature.setText(signature);
++            SettingsUtils.updatePreferenceSummary(mAccountSignature, signature,
++                    R.string.preferences_signature_summary_not_set);
++            cv.put(AccountColumns.SIGNATURE, signature);
++        } else if (key.equals(PREFERENCE_FREQUENCY)) {
++            final String summary = newValue.toString();
++            final int index = mCheckFrequency.findIndexOfValue(summary);
++            mCheckFrequency.setSummary(mCheckFrequency.getEntries()[index]);
++            mCheckFrequency.setValue(summary);
++            if (mServiceInfo.syncContacts || mServiceInfo.syncCalendar) {
++                // This account allows syncing of contacts and/or calendar, so we will always have
++                // separate preferences to enable or disable syncing of email, contacts, and
++                // calendar.
++                // The "sync frequency" preference really just needs to control the frequency value
++                // in our database.
++                /**
++                 * M: If user selected smart push, set account sync interval as
++                 * push. The sync interval would be dynamically changed by
++                 * SmartPushService
++                 */
++                int newFlags = mAccount.getFlags();
++                if (Integer.parseInt(summary) ==
++                        AccountSetupOptionsFragment.SMART_PUSH_MENU_ITEM_VALUE) {
++                    cv.put(AccountColumns.SYNC_INTERVAL,
++                            AccountSetupOptionsFragment.PUSH_MENU_ITEM_VALUE);
++                    newFlags |= Account.FLAGS_SMART_PUSH;
++                } else {
++                    cv.put(AccountColumns.SYNC_INTERVAL, Integer.parseInt(summary));
++                    newFlags &= ~Account.FLAGS_SMART_PUSH;
++                }
++                cv.put(AccountColumns.FLAGS, newFlags);
++                /** @} */
++            } else {
++                // This account only syncs email (not contacts or calendar), which means that we
++                // will hide the preference to turn syncing on and off. In this case, we want the
++                // sync frequency preference to also control whether or not syncing is enabled at
++                // all. If sync is turned off, we will display "sync never" regardless of what the
++                // numeric value we have stored says.
++                final android.accounts.Account androidAcct = new android.accounts.Account(
++                        mAccount.mEmailAddress, mServiceInfo.accountType);
++                if (Integer.parseInt(summary) == Account.CHECK_INTERVAL_NEVER) {
++                    // Disable syncing from the account manager. Leave the current sync frequency
++                    // in the database.
++                    ContentResolver.setSyncAutomatically(androidAcct, EmailContent.AUTHORITY,
++                            false);
++                } else {
++                    // Enable syncing from the account manager.
++                    ContentResolver.setSyncAutomatically(androidAcct, EmailContent.AUTHORITY,
++                            true);
++                    cv.put(AccountColumns.SYNC_INTERVAL, Integer.parseInt(summary));
++                }
++            }
++        } else if (key.equals(PREFERENCE_SYNC_WINDOW)) {
++            final String summary = newValue.toString();
++            int index = mSyncWindow.findIndexOfValue(summary);
++            mSyncWindow.setSummary(mSyncWindow.getEntries()[index]);
++            mSyncWindow.setValue(summary);
++            cv.put(AccountColumns.SYNC_LOOKBACK, Integer.parseInt(summary));
++        } else if (key.equals(PREFERENCE_SYNC_EMAIL)) {
++            final android.accounts.Account androidAcct = new android.accounts.Account(
++                    mAccount.mEmailAddress, mServiceInfo.accountType);
++            ContentResolver.setSyncAutomatically(androidAcct, EmailContent.AUTHORITY,
++                    (Boolean) newValue);
++            /// M: Return true to update the state of the Preference with the
++            // new value
++            return true;
++        } else if (key.equals(PREFERENCE_SYNC_CONTACTS)) {
++            final android.accounts.Account androidAcct = new android.accounts.Account(
++                    mAccount.mEmailAddress, mServiceInfo.accountType);
++            ContentResolver.setSyncAutomatically(androidAcct, ContactsContract.AUTHORITY,
++                    (Boolean) newValue);
++            /// M: Return true to update the state of the Preference with the
++            // new value
++            return true;
++        } else if (key.equals(PREFERENCE_SYNC_CALENDAR)) {
++            final android.accounts.Account androidAcct = new android.accounts.Account(
++                    mAccount.mEmailAddress, mServiceInfo.accountType);
++            ContentResolver.setSyncAutomatically(androidAcct, CalendarContract.AUTHORITY,
++                    (Boolean) newValue);
++            /// M: Return true to update the state of the Preference with the
++            // new value
++            return true;
++        } else if (key.equals(PREFERENCE_BACKGROUND_ATTACHMENTS)) {
++            int newFlags = mAccount.getFlags() & ~(Account.FLAGS_BACKGROUND_ATTACHMENTS);
++
++            newFlags |= (Boolean) newValue ?
++                    Account.FLAGS_BACKGROUND_ATTACHMENTS : 0;
++
++            cv.put(AccountColumns.FLAGS, newFlags);
++        } else if (FolderPreferences.PreferenceKeys.NOTIFICATIONS_ENABLED.equals(key)) {
++            mInboxFolderPreferences.setNotificationsEnabled((Boolean) newValue);
++            return true;
++        } else if (FolderPreferences.PreferenceKeys.NOTIFICATION_VIBRATE.equals(key)) {
++            final boolean vibrateSetting = (Boolean) newValue;
++            mInboxVibrate.setChecked(vibrateSetting);
++            mInboxFolderPreferences.setNotificationVibrateEnabled(vibrateSetting);
++            return true;
++        } else if (FolderPreferences.PreferenceKeys.NOTIFICATION_RINGTONE.equals(key)) {
++            return true;
++        } else {
++            // Default behavior, just indicate that the preferences were written
++            LogUtils.d(LogUtils.TAG, "Unknown preference key %s", key);
++            return true;
++        }
++        if (cv.size() > 0) {
++            new UpdateTask().run(mContext.getContentResolver(), mAccount.getUri(), cv, null, null);
++            EmailProvider.setServicesEnabledAsync(mContext);
++        }
++        return false;
++    }
++
++    @Override
++    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
++        menu.clear();
++        inflater.inflate(R.menu.settings_fragment_menu, menu);
++    }
++
++    /**
++     * Async task loader to load account in order to view/edit it
++     */
++    private static class AccountLoader extends MailAsyncTaskLoader<Map<String, Object>> {
++        public static final String RESULT_KEY_ACCOUNT = "account";
++        private static final String RESULT_KEY_UIACCOUNT_CURSOR = "uiAccountCursor";
++        public static final String RESULT_KEY_UIACCOUNT = "uiAccount";
++        public static final String RESULT_KEY_INBOX = "inbox";
++
++        private final ForceLoadContentObserver mObserver;
++        private final String mAccountEmail;
++        private final long mAccountId;
++
++        private AccountLoader(Context context, String accountEmail, long accountId) {
++            super(context);
++            mObserver = new ForceLoadContentObserver();
++            mAccountEmail = accountEmail;
++            mAccountId = accountId;
++        }
++
++        @Override
++        public Map<String, Object> loadInBackground() {
++            final Map<String, Object> map = new HashMap<>();
++
++            final Account account;
++            if (!TextUtils.isEmpty(mAccountEmail)) {
++                account = Account.restoreAccountWithAddress(getContext(), mAccountEmail, mObserver);
++            } else {
++                account = Account.restoreAccountWithId(getContext(), mAccountId, mObserver);
++            }
++            if (account == null) {
++                return map;
++            }
++
++            map.put(RESULT_KEY_ACCOUNT, account);
++
++            // We don't monitor these for changes, but they probably won't change in any meaningful
++            // way
++            account.getOrCreateHostAuthRecv(getContext());
++            account.getOrCreateHostAuthSend(getContext());
++
++            if (account.mHostAuthRecv == null) {
++                return map;
++            }
++
++            account.mPolicy =
++                    Policy.restorePolicyWithId(getContext(), account.mPolicyKey, mObserver);
++
++            final Cursor uiAccountCursor = getContext().getContentResolver().query(
++                    EmailProvider.uiUri("uiaccount", account.getId()),
++                    UIProvider.ACCOUNTS_PROJECTION,
++                    null, null, null);
++
++            if (uiAccountCursor != null) {
++                map.put(RESULT_KEY_UIACCOUNT_CURSOR, uiAccountCursor);
++                uiAccountCursor.registerContentObserver(mObserver);
++            } else {
++                return map;
++            }
++
++            if (!uiAccountCursor.moveToFirst()) {
++                return map;
++            }
++
++            final com.android.mail.providers.Account uiAccount =
++                    com.android.mail.providers.Account.builder().buildFrom(uiAccountCursor);
++
++            map.put(RESULT_KEY_UIACCOUNT, uiAccount);
++
++            final Cursor folderCursor = getContext().getContentResolver().query(
++                    uiAccount.settings.defaultInbox, UIProvider.FOLDERS_PROJECTION, null, null,
++                    null);
++
++            final Folder inbox;
++            try {
++                if (folderCursor != null && folderCursor.moveToFirst()) {
++                    inbox = new Folder(folderCursor);
++                } else {
++                    return map;
++                }
++            } finally {
++                if (folderCursor != null) {
++                    folderCursor.close();
++                }
++            }
++
++            map.put(RESULT_KEY_INBOX, inbox);
++            return map;
++        }
++
++        @Override
++        protected void onDiscardResult(Map<String, Object> result) {
++            final Account account = (Account) result.get(RESULT_KEY_ACCOUNT);
++            if (account != null) {
++                if (account.mPolicy != null) {
++                    account.mPolicy.close(getContext());
++                }
++                account.close(getContext());
++            }
++            final Cursor uiAccountCursor = (Cursor) result.get(RESULT_KEY_UIACCOUNT_CURSOR);
++            if (uiAccountCursor != null) {
++                uiAccountCursor.close();
++            }
++        }
++    }
++
++    private class AccountLoaderCallbacks
++            implements LoaderManager.LoaderCallbacks<Map<String, Object>> {
++        public static final String ARG_ACCOUNT_EMAIL = "accountEmail";
++        public static final String ARG_ACCOUNT_ID = "accountId";
++        private final Context mContext;
++
++        private AccountLoaderCallbacks(Context context) {
++            mContext = context;
++        }
++
++        @Override
++        public void onLoadFinished(Loader<Map<String, Object>> loader, Map<String, Object> data) {
++            final Activity activity = getActivity();
++            if (activity == null) {
++                return;
++            }
++            if (data == null) {
++                activity.finish();
++                return;
++            }
++
++            mUiAccount = (com.android.mail.providers.Account)
++                    data.get(AccountLoader.RESULT_KEY_UIACCOUNT);
++            mAccount = (Account) data.get(AccountLoader.RESULT_KEY_ACCOUNT);
++
++            if (mAccount != null && (mAccount.mFlags & Account.FLAGS_SECURITY_HOLD) != 0) {
++                final Intent i = AccountSecurity.actionUpdateSecurityIntent(mContext,
++                        mAccount.getId(), true);
++                mContext.startActivity(i);
++                activity.finish();
++                return;
++            }
++
++            mInboxFolder = (Folder) data.get(AccountLoader.RESULT_KEY_INBOX);
++
++            if (mUiAccount == null || mAccount == null) {
++                activity.finish();
++                return;
++            }
++
++            mServiceInfo =
++                    EmailServiceUtils.getServiceInfo(mContext, mAccount.getProtocol(mContext));
++
++            if (mInboxFolder == null) {
++                mInboxFolderPreferences = null;
++            } else {
++                mInboxFolderPreferences = new FolderPreferences(mContext,
++                        mUiAccount.getEmailAddress(), mInboxFolder, true);
++            }
++            loadSettings();
++            ///M: After loaded,enable the preferenceScreen that user can click.
++            getPreferenceScreen().setEnabled(true);
++        }
++
++        @Override
++        public Loader<Map<String, Object>> onCreateLoader(int id, Bundle args) {
++            return new AccountLoader(mContext, args.getString(ARG_ACCOUNT_EMAIL),
++                    args.getLong(ARG_ACCOUNT_ID));
++        }
++
++        @Override
++        public void onLoaderReset(Loader<Map<String, Object>> loader) {}
++    }
++
++    /**
++     * From a Policy, create and return an ArrayList of Strings that describe (simply) those
++     * policies that are supported by the OS.  At the moment, the strings are simple (e.g.
++     * "password required"); we should probably add more information (# characters, etc.), though
++     */
++    @SuppressWarnings("unused") // temporarily unused pending policy UI
++    private ArrayList<String> getSystemPoliciesList(Policy policy) {
++        Resources res = mContext.getResources();
++        ArrayList<String> policies = new ArrayList<>();
++        if (policy.mPasswordMode != Policy.PASSWORD_MODE_NONE) {
++            policies.add(res.getString(R.string.policy_require_password));
++        }
++        if (policy.mPasswordHistory > 0) {
++            policies.add(res.getString(R.string.policy_password_history));
++        }
++        if (policy.mPasswordExpirationDays > 0) {
++            policies.add(res.getString(R.string.policy_password_expiration));
++        }
++        if (policy.mMaxScreenLockTime > 0) {
++            policies.add(res.getString(R.string.policy_screen_timeout));
++        }
++        if (policy.mDontAllowCamera) {
++            policies.add(res.getString(R.string.policy_dont_allow_camera));
++        }
++        if (policy.mMaxEmailLookback != 0) {
++            policies.add(res.getString(R.string.policy_email_age));
++        }
++        if (policy.mMaxCalendarLookback != 0) {
++            policies.add(res.getString(R.string.policy_calendar_age));
++        }
++        return policies;
++    }
++
++    @SuppressWarnings("unused") // temporarily unused pending policy UI
++    private void setPolicyListSummary(ArrayList<String> policies, String policiesToAdd,
++            String preferenceName) {
++        Policy.addPolicyStringToList(policiesToAdd, policies);
++        if (policies.size() > 0) {
++            Preference p = findPreference(preferenceName);
++            StringBuilder sb = new StringBuilder();
++            for (String desc: policies) {
++                sb.append(desc);
++                sb.append('\n');
++            }
++            p.setSummary(sb.toString());
++        }
++    }
++
++    /**
++     * Load account data into preference UI. This must be called on the main thread.
++     */
++    private void loadSettings() {
++        final AccountPreferences accountPreferences =
++                new AccountPreferences(mContext, mUiAccount.getEmailAddress());
++        if (mInboxFolderPreferences != null) {
++            NotificationUtils.moveNotificationSetting(
++                    accountPreferences, mInboxFolderPreferences);
++        }
++
++        final String protocol = mAccount.getProtocol(mContext);
++        if (mServiceInfo == null) {
++            LogUtils.e(LogUtils.TAG,
++                    "Could not find service info for account %d with protocol %s", mAccount.mId,
++                    protocol);
++            getActivity().onBackPressed();
++            // TODO: put up some sort of dialog/toast here to tell the user something went wrong
++            return;
++        }
++        final android.accounts.Account androidAcct = mUiAccount.getAccountManagerAccount();
++
++        mAccountDescription = (EditTextPreference) findPreference(PREFERENCE_DESCRIPTION);
++        mAccountDescription.setSummary(mAccount.getDisplayName());
++        mAccountDescription.setText(mAccount.getDisplayName());
++        mAccountDescription.setOnPreferenceChangeListener(this);
++
++        mAccountName = (EditTextPreference) findPreference(PREFERENCE_NAME);
++        String senderName = mUiAccount.getSenderName();
++        // In rare cases, sendername will be null;  Change this to empty string to avoid NPE's
++        if (senderName == null) {
++            senderName = "";
++        }
++        mAccountName.setSummary(senderName);
++        mAccountName.setText(senderName);
++        mAccountName.setOnPreferenceChangeListener(this);
++        String accountSignature = mAccount.getSignature();
++		/*
++		String defaultSignature;
++        if (null == mAccount.getSignature() || mAccount.getSignature().isEmpty() ) {
++            defaultSignature = mContext.getResources().getString(R.string.preferences_signature_content);
++        } else {
++            defaultSignature = mAccount.getSignature();
++        }
++        String accountSignature = defaultSignature;
++        */
++        mAccountSignature = (EditTextPreference) findPreference(PREFERENCE_SIGNATURE);
++		if(accountSignature==null || TextUtils.isEmpty(accountSignature)){
++			accountSignature= getActivity().getString(R.string.preferences_signature_summary_set_cable);
++		}
++        mAccountSignature.setText(accountSignature);
++        mAccountSignature.setOnPreferenceChangeListener(this);
++        SettingsUtils.updatePreferenceSummary(mAccountSignature, accountSignature,
++                R.string.preferences_signature_summary_not_set);
++
++        /** M: Insert oof preference to fragment when the account is EasAccount @{ */
++        boolean showOof = true;
++        showOof = protocol.equalsIgnoreCase("eas");
++        mAccountOof = findPreference(PREFERENCE_OOF_SETTINGS);
++        if (mAccountOof != null) {
++            if (showOof) {
++                mAccountOof.setOnPreferenceClickListener(
++                        new Preference.OnPreferenceClickListener() {
++                            @Override
++                            public boolean onPreferenceClick(Preference preference) {
++                                onOutOfOffice(mAccount);
++                                return true;
++                            }
++                        });
++            } else {
++                getPreferenceScreen().removePreference(mAccountOof);
++            }
++        }
++        /** @} */
++        mCheckFrequency = (ListPreference) findPreference(PREFERENCE_FREQUENCY);
++        mCheckFrequency.setEntries(mServiceInfo.syncIntervalStrings);
++        mCheckFrequency.setEntryValues(mServiceInfo.syncIntervals);
++        if (mServiceInfo.syncContacts || mServiceInfo.syncCalendar) {
++            // This account allows syncing of contacts and/or calendar, so we will always have
++            // separate preferences to enable or disable syncing of email, contacts, and calendar.
++            // The "sync frequency" preference really just needs to control the frequency value
++            // in our database.
++            /// M: If the account is smart push, always show sync interval as smart push
++            // regardless of the actual interval.
++            if ((mAccount.mFlags & Account.FLAGS_SMART_PUSH) != 0) {
++                mCheckFrequency.setValue(String
++                        .valueOf(AccountSetupOptionsFragment.SMART_PUSH_MENU_ITEM_VALUE));
++            } else {
++                mCheckFrequency.setValue(String.valueOf(mAccount.getSyncInterval()));
++            }
++           /// @}
++        } else {
++            // This account only syncs email (not contacts or calendar), which means that we will
++            // hide the preference to turn syncing on and off. In this case, we want the sync
++            // frequency preference to also control whether or not syncing is enabled at all. If
++            // sync is turned off, we will display "sync never" regardless of what the numeric
++            // value we have stored says.
++            boolean synced = ContentResolver.getSyncAutomatically(androidAcct,
++                    EmailContent.AUTHORITY);
++            if (synced) {
++                mCheckFrequency.setValue(String.valueOf(mAccount.getSyncInterval()));
++            } else {
++                mCheckFrequency.setValue(String.valueOf(Account.CHECK_INTERVAL_NEVER));
++            }
++        }
++        mCheckFrequency.setSummary(mCheckFrequency.getEntry());
++        mCheckFrequency.setOnPreferenceChangeListener(this);
++
++        final Preference quickResponsePref = findPreference(PREFERENCE_QUICK_RESPONSES);
++        if (quickResponsePref != null) {
++            quickResponsePref.setOnPreferenceClickListener(
++                    new Preference.OnPreferenceClickListener() {
++                        @Override
++                        public boolean onPreferenceClick(Preference preference) {
++                            onEditQuickResponses(mUiAccount);
++                            return true;
++                        }
++                    });
++        }
++
++        // Add check window preference
++        final PreferenceCategory dataUsageCategory =
++                (PreferenceCategory) findPreference(PREFERENCE_CATEGORY_DATA_USAGE);
++        /// M: Get this ListPreference from the preferences xml configuration.
++        mSyncWindow = (ListPreference) findPreference(PREFERENCE_SYNC_WINDOW);
++        if (mSyncWindow != null) {
++            if (mServiceInfo.offerLookback) {
++                mSyncWindow.setKey(PREFERENCE_SYNC_WINDOW);
++                dataUsageCategory.addPreference(mSyncWindow);
++                mSyncWindow.setTitle(R.string.account_setup_options_mail_window_label);
++                mSyncWindow.setValue(String.valueOf(mAccount.getSyncLookback()));
++                final int maxLookback;
++                if (mAccount.mPolicy != null) {
++                    maxLookback = mAccount.mPolicy.mMaxEmailLookback;
++                } else {
++                    maxLookback = 0;
++                }
++
++                MailboxSettings.setupLookbackPreferenceOptions(mContext, mSyncWindow, maxLookback,
++                        false);
++
++                // Must correspond to the hole in the XML file that's reserved.
++                mSyncWindow.setOrder(2);
++                mSyncWindow.setOnPreferenceChangeListener(this);
++
++                if (mSyncSettings == null) {
++                    mSyncSettings = new Preference(mContext);
++                    mSyncSettings.setKey(PREFERENCE_SYNC_SETTINGS);
++                    dataUsageCategory.addPreference(mSyncSettings);
++                }
++
++                mSyncSettings.setTitle(R.string.folder_sync_settings_pref_title);
++                mSyncSettings.setOrder(3);
++            } else {
++                /// M: Remove this syncWindow ListPreference when it's not eas.
++                dataUsageCategory.removePreference(mSyncWindow);
++            }
++        }
++
++        final PreferenceCategory folderPrefs =
++                (PreferenceCategory) findPreference(PREFERENCE_SYSTEM_FOLDERS);
++        if (folderPrefs != null) {
++            if (mServiceInfo.requiresSetup) {
++                Preference trashPreference = findPreference(PREFERENCE_SYSTEM_FOLDERS_TRASH);
++                Intent i = new Intent(mContext, FolderPickerActivity.class);
++                Uri uri = EmailContent.CONTENT_URI.buildUpon().appendQueryParameter(
++                        "account", Long.toString(mAccount.getId())).build();
++                i.setData(uri);
++                i.putExtra(FolderPickerActivity.MAILBOX_TYPE_EXTRA, Mailbox.TYPE_TRASH);
++                trashPreference.setIntent(i);
++
++                Preference sentPreference = findPreference(PREFERENCE_SYSTEM_FOLDERS_SENT);
++                i = new Intent(mContext, FolderPickerActivity.class);
++                i.setData(uri);
++                i.putExtra(FolderPickerActivity.MAILBOX_TYPE_EXTRA, Mailbox.TYPE_SENT);
++                sentPreference.setIntent(i);
++            } else {
++                getPreferenceScreen().removePreference(folderPrefs);
++            }
++        }
++
++        final CheckBoxPreference backgroundAttachments = (CheckBoxPreference)
++                findPreference(PREFERENCE_BACKGROUND_ATTACHMENTS);
++        if (backgroundAttachments != null) {
++            if (!mServiceInfo.offerAttachmentPreload) {
++                dataUsageCategory.removePreference(backgroundAttachments);
++            } else {
++                backgroundAttachments.setChecked(
++                        0 != (mAccount.getFlags() & Account.FLAGS_BACKGROUND_ATTACHMENTS));
++                backgroundAttachments.setOnPreferenceChangeListener(this);
++            }
++        }
++
++        final PreferenceCategory notificationsCategory =
++                (PreferenceCategory) findPreference(PREFERENCE_CATEGORY_NOTIFICATIONS);
++
++        if (mInboxFolderPreferences != null) {
++            final CheckBoxPreference inboxNotify = (CheckBoxPreference) findPreference(
++                FolderPreferences.PreferenceKeys.NOTIFICATIONS_ENABLED);
++            inboxNotify.setChecked(mInboxFolderPreferences.areNotificationsEnabled());
++            inboxNotify.setOnPreferenceChangeListener(this);
++
++            mInboxRingtone = findPreference(FolderPreferences.PreferenceKeys.NOTIFICATION_RINGTONE);
++            final String ringtoneUri = mInboxFolderPreferences.getNotificationRingtoneUri();
++            if (!TextUtils.isEmpty(ringtoneUri)) {
++                mRingtone = RingtoneManager.getRingtone(getActivity(), Uri.parse(ringtoneUri));
++            }
++            setRingtoneSummary();
++            mInboxRingtone.setOnPreferenceChangeListener(this);
++            mInboxRingtone.setOnPreferenceClickListener(new OnPreferenceClickListener() {
++                @Override
++                public boolean onPreferenceClick(final Preference preference) {
++                    showRingtonePicker();
++
++                    return true;
++                }
++            });
++
++            notificationsCategory.setEnabled(true);
++
++            // Set the vibrator value, or hide it on devices w/o a vibrator
++            mInboxVibrate = (CheckBoxPreference) findPreference(
++                    FolderPreferences.PreferenceKeys.NOTIFICATION_VIBRATE);
++            if (mInboxVibrate != null) {
++                mInboxVibrate.setChecked(
++                        mInboxFolderPreferences.isNotificationVibrateEnabled());
++                Vibrator vibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
++                if (vibrator.hasVibrator()) {
++                    // When the value is changed, update the setting.
++                    mInboxVibrate.setOnPreferenceChangeListener(this);
++                } else {
++                    // No vibrator present. Remove the preference altogether.
++                    notificationsCategory.removePreference(mInboxVibrate);
++                    mInboxVibrate = null;
++                }
++            }
++        } else {
++            notificationsCategory.setEnabled(false);
++        }
++
++        final Preference retryAccount = findPreference(PREFERENCE_POLICIES_RETRY_ACCOUNT);
++        final PreferenceCategory policiesCategory = (PreferenceCategory) findPreference(
++                PREFERENCE_CATEGORY_POLICIES);
++        if (policiesCategory != null) {
++            // TODO: This code for showing policies isn't working. For KLP, just don't even bother
++            // showing this data; we'll fix this later.
++    /*
++            if (policy != null) {
++                if (policy.mProtocolPoliciesEnforced != null) {
++                    ArrayList<String> policies = getSystemPoliciesList(policy);
++                    setPolicyListSummary(policies, policy.mProtocolPoliciesEnforced,
++                            PREFERENCE_POLICIES_ENFORCED);
++                }
++                if (policy.mProtocolPoliciesUnsupported != null) {
++                    ArrayList<String> policies = new ArrayList<String>();
++                    setPolicyListSummary(policies, policy.mProtocolPoliciesUnsupported,
++                            PREFERENCE_POLICIES_UNSUPPORTED);
++                } else {
++                    // Don't show "retry" unless we have unsupported policies
++                    policiesCategory.removePreference(retryAccount);
++                }
++            } else {
++    */
++            // Remove the category completely if there are no policies
++            getPreferenceScreen().removePreference(policiesCategory);
++
++            //}
++        }
++
++        if (retryAccount != null) {
++            retryAccount.setOnPreferenceClickListener(
++                    new Preference.OnPreferenceClickListener() {
++                        @Override
++                        public boolean onPreferenceClick(Preference preference) {
++                            // Release the account
++                            SecurityPolicy.setAccountHoldFlag(mContext, mAccount, false);
++                            // Remove the preference
++                            if (policiesCategory != null) {
++                                policiesCategory.removePreference(retryAccount);
++                            }
++                            return true;
++                        }
++                    });
++        }
++        findPreference(PREFERENCE_INCOMING).setOnPreferenceClickListener(
++                new Preference.OnPreferenceClickListener() {
++                    @Override
++                    public boolean onPreferenceClick(Preference preference) {
++                        onIncomingSettings(mAccount);
++                        return true;
++                    }
++                });
++
++        // Hide the outgoing account setup link if it's not activated
++        final Preference prefOutgoing = findPreference(PREFERENCE_OUTGOING);
++        if (prefOutgoing != null) {
++            if (mServiceInfo.usesSmtp && mAccount.mHostAuthSend != null) {
++                prefOutgoing.setOnPreferenceClickListener(
++                        new Preference.OnPreferenceClickListener() {
++                            @Override
++                            public boolean onPreferenceClick(Preference preference) {
++                                onOutgoingSettings(mAccount);
++                                return true;
++                            }
++                        });
++            } else {
++                if (mServiceInfo.usesSmtp) {
++                    // We really ought to have an outgoing host auth but we don't.
++                    // There's nothing we can do at this point, so just log the error.
++                    LogUtils.e(LogUtils.TAG, "Account %d has a bad outbound hostauth",
++                            mAccount.getId());
++                }
++                PreferenceCategory serverCategory = (PreferenceCategory) findPreference(
++                        PREFERENCE_CATEGORY_SERVER);
++                serverCategory.removePreference(prefOutgoing);
++            }
++        }
++		
++		//add by dongdongli for remove account 20171127 start {
++		final Preference prefRemoveAccount = findPreference(PREFERENCE_REMOVE_ACCOUNT);
++		prefRemoveAccount.setOnPreferenceClickListener(
++                new Preference.OnPreferenceClickListener() {
++                    @Override
++                    public boolean onPreferenceClick(Preference preference) {
++                        final android.accounts.Account androidAcct = new android.accounts.Account(
++								mAccount.mEmailAddress, mServiceInfo.accountType);
++							boolean result = AccountManager.get(getActivity())
++                                .removeAccountExplicitly(androidAcct);
++                        return true;
++                    }
++                });
++		//add by dongdongli for remove account 20171127 end }
++
++        final CheckBoxPreference syncContacts =
++                (CheckBoxPreference) findPreference(PREFERENCE_SYNC_CONTACTS);
++        final CheckBoxPreference syncCalendar =
++                (CheckBoxPreference) findPreference(PREFERENCE_SYNC_CALENDAR);
++        final CheckBoxPreference syncEmail =
++                (CheckBoxPreference) findPreference(PREFERENCE_SYNC_EMAIL);
++        if (syncContacts != null && syncCalendar != null && syncEmail != null) {
++            if (mServiceInfo.syncContacts || mServiceInfo.syncCalendar) {
++                if (mServiceInfo.syncContacts) {
++                    syncContacts.setChecked(ContentResolver
++                            .getSyncAutomatically(androidAcct, ContactsContract.AUTHORITY));
++                    syncContacts.setOnPreferenceChangeListener(this);
++                } else {
++                    syncContacts.setChecked(false);
++                    syncContacts.setEnabled(false);
++                }
++                if (mServiceInfo.syncCalendar) {
++                    syncCalendar.setChecked(ContentResolver
++                            .getSyncAutomatically(androidAcct, CalendarContract.AUTHORITY));
++                    syncCalendar.setOnPreferenceChangeListener(this);
++                } else {
++                    syncCalendar.setChecked(false);
++                    syncCalendar.setEnabled(false);
++                }
++                syncEmail.setChecked(ContentResolver
++                        .getSyncAutomatically(androidAcct, EmailContent.AUTHORITY));
++                syncEmail.setOnPreferenceChangeListener(this);
++            } else {
++                dataUsageCategory.removePreference(syncContacts);
++                dataUsageCategory.removePreference(syncCalendar);
++                dataUsageCategory.removePreference(syncEmail);
++            }
++        }
++    }
++
++    /**
++     * Shows the system ringtone picker.
++     */
++    private void showRingtonePicker() {
++        Intent intent = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER);
++        final String ringtoneUri = mInboxFolderPreferences.getNotificationRingtoneUri();
++        if (!TextUtils.isEmpty(ringtoneUri)) {
++            intent.putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(ringtoneUri));
++        }
++        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true);
++        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI,
++                Settings.System.DEFAULT_NOTIFICATION_URI);
++        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true);
++        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION);
++        startActivityForResult(intent, RINGTONE_REQUEST_CODE);
++    }
++
++    /**
++     * Dispatch to edit quick responses.
++     */
++    public void onEditQuickResponses(com.android.mail.providers.Account account) {
++        final Bundle args = AccountSettingsEditQuickResponsesFragment.createArgs(account);
++        final PreferenceActivity activity = (PreferenceActivity) getActivity();
++        activity.startPreferencePanel(AccountSettingsEditQuickResponsesFragment.class.getName(),
++                args, R.string.account_settings_edit_quick_responses_label, null, null, 0);
++    }
++
++    /**
++     * Dispatch to edit incoming settings.
++     */
++    public void onIncomingSettings(Account account) {
++        final Intent intent =
++                AccountServerSettingsActivity.getIntentForIncoming(getActivity(), account);
++        getActivity().startActivity(intent);
++    }
++
++    /**
++     * Dispatch to edit outgoing settings.
++     */
++    public void onOutgoingSettings(Account account) {
++        final Intent intent =
++                AccountServerSettingsActivity.getIntentForOutgoing(getActivity(), account);
++        getActivity().startActivity(intent);
++    }
++
++    /**
++     * M: Dispatch to edit out of office settings.
++     *
++     */
++    public void onOutOfOffice(Account account) {
++        startOofGetWaitingFragment(account.mId, this);
++    }
++
++    /**
++     * M: Start the oof waiting fragment for get the out of office settings.
++     *
++     */
++    private void startOofGetWaitingFragment(long accountId, AccountSettingsFragment target) {
++        FragmentManager fm = getFragmentManager();
++        // Just return because another FragmentTransaction has been invoked just now
++        if (fm.getBackStackEntryCount() > 0
++                && fm.findFragmentByTag(OofGetWaitingFragment.TAG) != null) {
++            return;
++        }
++        OofGetWaitingFragment checkerFragment =
++            OofGetWaitingFragment.newInstance(accountId, target);
++        FragmentTransaction transaction = fm.beginTransaction();
++        transaction.add(checkerFragment, OofGetWaitingFragment.TAG);
++        transaction.addToBackStack("back");
++        transaction.commit();
++        fm.executePendingTransactions();
++    }
++
++    /**
++     * M: Don't show feedback menu if no feedback Uri is set
++     */
++    @Override
++    public void onPrepareOptionsMenu(Menu menu) {
++        super.onPrepareOptionsMenu(menu);
++        MenuItem feedBackMenuItem = menu.findItem(R.id.feedback_menu_item);
++        if (feedBackMenuItem != null) {
++            Uri feedBackUri = Utils.getValidUri(getString(R.string.email_feedback_uri));
++            // We only want to enable the feedback menu item, if there is a
++            // valid feedback uri
++            feedBackMenuItem.setVisible(!Uri.EMPTY.equals(feedBackUri));
++        }
++    }
++}
+Index: vendor/branch/5058A_Cable_Bahamas/packages/apps/Email/res/values/strings.xml
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/packages/apps/Email/res/values/strings.xml	(revision 0)
++++ vendor/branch/5058A_Cable_Bahamas/packages/apps/Email/res/values/strings.xml	(revision 3854)
+@@ -0,0 +1,694 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2008 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <!-- Names of packages and authorities that are common to all apps
++    and read from resources -->
++
++    <!-- Permissions label for reading attachments -->
++    <string name="permission_read_attachment_label">Read email attachments</string>
++    <!-- Permissions description for reading attachments -->
++    <string name="permission_read_attachment_desc">Allows the app to read your email
++        attachments.</string>
++    <!-- Permissions label for accessing the main provider -->
++    <string name="permission_access_provider_label">Access email provider data</string>
++    <!-- Permissions description for accessing the main provider -->
++    <string name="permission_access_provider_desc">Allows the app to access your email
++        database, including received messages, sent messages, usernames, and passwords.</string>
++
++    <!-- Name of application on Home screen -->
++    <string name="app_name">Email</string>
++
++    <!-- Actions will be used as buttons and in menu items -->
++    <skip />
++
++    <!-- Button name used to confirm acceptance of dialog boxes, warnings, errors, etc. -->
++    <string name="okay_action">OK</string>
++    <!-- Button name used to cancel out of dialog boxes -->
++    <string name="cancel_action">Cancel</string>
++    <!--  Menu item used to create a new quick response [CHAR_LIMIT=16] -->
++    <string name="create_action">Create new</string>
++
++    <!-- Message informing user when a list that would contain quick responses
++            is empty [CHAR_LIMIT=80] -->
++    <string name="quick_responses_empty_view">No quick responses.</string>
++    <!-- Menu item -->
++    <string name="account_settings_action">Account settings</string>
++    <!-- The next set of strings are used in local display and may be localized. -->
++    <!-- In the UI, the inbox will be displayed with this name -->
++    <string name="mailbox_name_display_inbox">Inbox</string>
++    <!-- In the UI, the outbox will be displayed with this name -->
++    <string name="mailbox_name_display_outbox">Outbox</string>
++    <!-- In the UI, the drafts will be displayed with this name -->
++    <string name="mailbox_name_display_drafts">Drafts</string>
++    <!-- In the UI, the trash will be displayed with this name -->
++    <string name="mailbox_name_display_trash">Trash</string>
++    <!-- In the UI, the sent will be displayed with this name -->
++    <string name="mailbox_name_display_sent">Sent</string>
++    <!-- In the UI, the junk will be displayed with this name -->
++    <string name="mailbox_name_display_junk">Junk</string>
++    <!-- In the UI, the starred will be displayed with this name -->
++    <string name="mailbox_name_display_starred">Starred</string>
++    <!-- In the UI, the unread will be displayed with this name [CHAR LIMIT=15] -->
++    <string name="mailbox_name_display_unread">Unread</string>
++
++    <!-- Title of debug screen -->
++    <string name="debug_title">Debug</string>
++    <!-- Do Not Translate.  Checkbox label, shown only on debug screen -->
++    <string name="debug_enable_debug_logging_label" translatable="false">
++        Enable extra debug logging?</string>
++    <!-- Do Not Translate.  Checkbox label, shown only on debug screen -->
++    <string name="debug_enable_verbose_logging_label" translatable="false">
++        Enable exchange logging?</string>
++    <!-- Do Not Translate.  Checkbox label, shown only on debug screen -->
++    <string name="debug_enable_file_logging_label" translatable="false">
++        Enable sd card logging?</string>
++    <!-- Do Not Translate.  Button label, shown only on debug screen -->
++    <string name="debug_clear_webview_cache" translatable="false">
++        Clear WebView cache</string>
++    <!-- Do Not Translate. Button label. Shown only on debug screen -->
++    <string name="debug_clear_migration_state" translatable="false">Clear migration state</string>
++    <!-- Do Not Translate.  Checkbox label, shown on debug screen. -->
++    <string name="debug_force_one_minute_refresh_label" translatable="false">
++        Force 1-minute refresh for POP/IMAP</string>
++    <!-- Do Not Translate.  Checkbox label, shown on debug screen. -->
++    <string name="debug_enable_strict_mode_label" translatable="false">
++        Enable strict mode (with logging)</string>
++
++
++    <!-- Label shown in the account selector to select "Combined view", which contains
++         Combined Inbox, Combined Outbox, etc. [CHAR LIMIT=30] -->
++    <string name="mailbox_list_account_selector_combined_view">Combined view</string>
++
++    <!-- Header for forwarded original messages -->
++    <string name="message_compose_fwd_header_fmt">\n\n-------- Original Message --------\nSubject: <xliff:g id="subject">%1$s</xliff:g>\nFrom: <xliff:g id="sender">%2$s</xliff:g>\nTo: <xliff:g id="to">%3$s</xliff:g>\nCC: <xliff:g id="cc">%4$s</xliff:g>\n\n</string>
++    <!-- Title for dialog containing list of quick responses that user may insert
++            into message body. [CHAR_LIMIT=30] -->
++    <string name="message_compose_insert_quick_response_list_title">Insert quick response</string>
++    <!-- Menu item for inserting quick responses into email compose activity. [CHAR_LIMIT=30] -->
++    <string name="message_compose_insert_quick_response_menu_title">Insert quick response</string>
++    <!-- Toast upon using "send" when one or more attachments will need to be background loaded
++      [CHAR LIMIT=none]-->
++    <string name="message_view_attachment_background_load">One or more attachments in your
++        forwarded message will be downloaded prior to sending.</string>
++
++    <!-- String used in place of a message that could not be properly decoded (e.g. bad base64
++         data was received.) [CHAR LIMIT=none] -->
++    <string name="message_decode_error">There was an error while decoding the message.</string>
++
++    <!-- Notification ticker when a forwarded attachment couldn't be sent [CHAR LIMIT=none] -->
++    <string name="forward_download_failed_ticker">Couldn\'t forward one or more attachments.</string>
++    <!-- Notification title when a forwarded attachment couldn't be sent [CHAR LIMIT=30]-->
++    <string name="forward_download_failed_title">Attachment not forwarded</string>
++
++    <!-- Notification ticker when email account authentication fails [CHAR LIMIT=none] -->
++    <string name="login_failed_ticker">
++        <xliff:g id="account_name">%s</xliff:g> signin unsuccessful.</string>
++    <!-- Notification title when email account authentication fails [CHAR LIMIT=30]-->
++    <string name="login_failed_title">Couldn\'t sign in</string>
++
++    <!-- Title of screen when setting up new email account [CHAR LIMIT=45] -->
++    <string name="account_setup_basics_title">Account setup</string>
++    <!-- Title of screen when trying to get oauth authentication -->
++    <string name="oauth_authentication_title">Requesting authorization</string>
++    <!-- Title of screen to choose with authentication to use -->
++    <string name="sign_in_title">Sign in</string>
++
++    <!-- Warning if there is a problem authenticating with oauth -->
++    <string name="oauth_error_description">Unable to authenticate</string>
++    <!-- Warning label displayed when the email address or password are incorrect -->
++    <string name="password_warning_label">Email address or password are incorrect</string>
++    <!-- Label displayed to confirm what email address we are trying to validate -->
++    <string name="email_confirmation_label">Email address:</string>
++    <!-- Headline of screen when setting up new email account (large text over divider)
++        [CHAR LIMIT=none] -->
++    <string name="account_setup_basics_headline">Email account</string>
++    <!-- On "Set up email" screen, enthusiastic welcome message. -->
++    <string name="accounts_welcome">You can set up your account in just a few steps.
++        </string>
++    <!-- On "Set up email" screen, hint for account email address text field -->
++    <string name="account_setup_basics_email_label">Email address</string>
++
++    <!-- Label between OAuth and password authentication, indicating the user must do one or the other [CHAR LIMIT=40] -->
++    <string name="or_label">OR</string>
++    <!-- Label for signing in with Google using OAuth -->
++    <string name="sign_in_with_google">Sign in with Google</string>
++    <!-- On "Set up email" screen, hint for account email password text field, should be uppercase where applicable -->
++    <string name="account_setup_basics_password_label">PASSWORD</string>
++    <!-- hint for account email password text field -->
++    <string name="password_hint">Password</string>
++    <!--  On the "Setup up email" screen, label indicating what service we are signed in with [CHAR LIMIT=40] -->
++    <string name="signed_in_with_service_label">Signed in with %s</string>
++    <!-- Label for the authentication section, should be uppercase where applicable [CHAR LIMIT=20] -->
++    <string name="authentication_label">AUTHENTICATION</string>
++    <!-- Label for the add authentication icon [CHAR LIMIT=40] -->
++    <string name="add_authentication_label">Add authentication</string>
++    <!-- Label for the add authentication icon [CHAR LIMIT=40] -->
++    <string name="clear_authentication_label">Clear authentication</string>
++    <!-- Button name on "Set up email" screen, with action underlined using html [CHAR LIMIT=20] -->
++    <string name="account_setup_basics_manual_setup_action">Manual setup</string>
++    <!-- Toast when we can't build a URI from the given email & password -->
++    <!-- Note, the error message in the toast is purposefully vague, because I *don't* know
++        exactly what's wrong. -->
++    <string name="account_setup_username_password_toast">
++        Type a valid email address and password.</string>
++    <!-- Title of dialog shown when a duplicate account is created -->
++    <string name="account_duplicate_dlg_title">Duplicate account</string>
++    <!-- Message of dialog shown when a duplicate account is created.  The display name of
++         the duplicate account is displayed. -->
++    <string name="account_duplicate_dlg_message_fmt">
++        You\'re already using this username for the account \"<xliff:g id="duplicate">%s</xliff:g>\".
++    </string>
++
++    <!-- On check-settings screen, this is the initially-displayed message. -->
++    <string name="account_setup_check_settings_retr_info_msg">
++    Retrieving account information\u2026</string>
++    <!-- Appears on screen while system is checking incoming server settings -->
++    <string name="account_setup_check_settings_check_incoming_msg">
++    Validating server settings\u2026</string>
++    <!-- Appears on screen while system is checking outgoing server settings -->
++    <string name="account_setup_check_settings_check_outgoing_msg">
++    Validating smtp settings\u2026</string>
++        <!-- Appears on screen while system is creating the account -->
++    <string name="account_setup_creating_account_msg">
++    Creating account\u2026</string>
++
++    <!-- Headline text that appears on "Confirm account type" screen [CHAR LIMIT=none] -->
++    <string name="account_setup_ab_headline">Confirm account type</string>
++    <!-- Explanatory text that appears on the "Confirm account type" screen [CHAR LIMIT=none] -->
++    <string name="account_setup_ab_instructions_format">You indicated <xliff:g id="email">%1$s</xliff:g> uses <xliff:g id="userProtocol">%2$s</xliff:g>, but the account may use <xliff:g id="providerProtocol">%3$s</xliff:g></string>
++
++    <!-- Text that appears on "Set up email" screen after successfully setting up an account
++        [CHAR LIMIT=none] -->
++    <string name="account_setup_names_headline">
++        Your account is set up and email is on its way!</string>
++    <!-- On "Set up email" screen, label of text field -->
++    <string name="account_setup_names_account_name_label">
++        Give this account a name (optional)</string>
++    <!-- On "Set up email" screen, label of text field -->
++    <string name="account_setup_names_user_name_label">
++        Your name (displayed on outgoing messages)</string>
++
++    <!-- Headline for the the account type selector (IMAP or POP3 or EAS) [CHAR LIMIT=none] -->
++    <string name="account_setup_account_type_headline">Account type</string>
++    <!-- "Add new email account" screen, text that appears on screen -->
++    <string name="account_setup_account_type_instructions">What type of account is this?</string>
++
++    <!-- "Incoming server settings" screen, headline (text over divider) [CHAR LIMIT=none] -->
++    <string name="account_setup_incoming_headline">Incoming server settings</string>
++    <!-- "Incoming server settings" screen, label for text field, should be uppercase where applicable -->
++    <string name="account_setup_incoming_username_label">USERNAME</string>
++    <!-- "Incoming server settings" screen, label for text field, should be uppercase where applicable -->
++    <string name="account_setup_incoming_password_label">PASSWORD</string>
++    <!-- "Incoming server settings" screen, label for text field -->
++    <string name="account_setup_password_subheading">Password</string>
++    <!-- "Incoming server settings" screen, label for text field, should be uppercase where applicable -->
++    <string name="account_setup_incoming_server_label">SERVER</string>
++    <!-- "Incoming server settings" screen, label for text field, should be uppercase where applicable -->
++    <string name="account_setup_incoming_port_label">PORT</string>
++    <!-- "Incoming server settings" screen, label for pop-up menu, should be uppercase where applicable -->
++    <string name="account_setup_incoming_security_label">SECURITY TYPE</string>
++    <!-- "Incoming server settings" screen, option for "Security type" pop-up menu indicating
++        the desire for an unencrypted session -->
++    <string name="account_setup_incoming_security_none_label">None</string>
++    <!-- "Incoming server settings" screen, option for "Security type" pop-up menu indicating
++        the desire for an encrypted session on the selected port, accepting all SSL certificates -->
++    <string name="account_setup_incoming_security_ssl_trust_certificates_label">
++        SSL/TLS (Accept all certificates)</string>
++    <!-- "Incoming server settings" screen, option for "Security type" pop-up menu indicating
++        the desire for an encrypted session on the selected port, including SSL certificate
++        checks -->
++    <string name="account_setup_incoming_security_ssl_label">SSL/TLS</string>
++    <!-- "Incoming server settings" screen, option for "Security type" pop-up menu indicating
++        the desire for an encrypted session overlaid on a plain text session using the selected
++        port, accepting all SSL certificates -->
++    <string name="account_setup_incoming_security_tls_trust_certificates_label">
++        STARTTLS (accept all certificates)</string>
++    <!-- "Incoming server settings" screen, option for "Security type" pop-up menu indicating
++        the desire for an encrypted session overlaid on a plain text session on the selected
++        port, including SSL certificate checks -->
++    <string name="account_setup_incoming_security_tls_label">STARTTLS</string>
++    <!-- "Incoming server settings" screen, label for pop-up menu -->
++    <string name="account_setup_incoming_delete_policy_label">Delete email from server</string>
++    <!-- "Incoming server settings" screen, options in pop-up menu for Delete email from server: -->
++    <!-- "Incoming server settings" screen, options in pop-up menu for Delete email from server: -->
++    <string name="account_setup_incoming_delete_policy_never_label">Never</string>
++    <!-- "Incoming server settings" screen, options in pop-up menu for Delete email from server: -->
++    <string name="account_setup_incoming_delete_policy_delete_label">
++        When I delete from Inbox</string>
++    <!-- "Incoming server settings" screen, label for setting IMAP path prefix: -->
++    <string name="account_setup_incoming_imap_path_prefix_label">IMAP path prefix</string>
++    <!-- "Incoming server settings" screen, hint for setting IMAP path prefix: -->
++    <string name="account_setup_incoming_imap_path_prefix_hint">Optional</string>
++
++    <!-- "Outgoing server settings" screen, headline (text over divider) [CHAR LIMIT=none] -->
++    <string name="account_setup_outgoing_headline">Outgoing server settings</string>
++    <!-- On "Outgoing server settings" screen, label for text field, should be uppercase where applicable -->
++    <string name="account_setup_outgoing_smtp_server_label">SMTP SERVER</string>
++    <!-- On "Outgoing server settings" screen, label for text field, should be uppercase where applicable -->
++    <string name="account_setup_outgoing_port_label">PORT</string>
++    <!-- On "Outgoing server settings" screen, label for pop-up menu, should be uppercase where applicable -->
++    <string name="account_setup_outgoing_security_label">SECURITY TYPE</string>
++    <!-- On "Outgoing server settings" screen, label for check box, should be uppercase where applicable -->
++    <string name="account_setup_outgoing_require_login_label">Require signin</string>
++    <!-- On "Outgoing server settings" screen, label for text field, should be uppercase where applicable-->
++    <string name="account_setup_outgoing_username_label">USERNAME</string>
++
++    <!-- On "Exchange" setup screen, a heading title for the current client certificate, should be uppercase where applicable [CHAR LIMIT=50] -->
++    <string name="account_setup_exchange_certificate_title">CLIENT CERTIFICATE</string>
++    <!-- On "Exchange" setup screen, a button label to include a client certificate [CHAR LIMIT=35] -->
++    <string name="account_setup_exchange_select_certificate">Select</string>
++    <!-- On "Exchange" setup screen, a button label to include a client certificate [CHAR LIMIT=35] -->
++    <string name="account_setup_exchange_use_certificate">Use client certificate</string>
++    <!-- On "Exchange" setup screen, a button label to remove the currently used client certificate [CHAR LIMIT=35] -->
++    <string name="account_setup_exchange_remove_certificate">Remove</string>
++    <!-- On "Exchange" setup screen, placeholder text to indicate no client
++         certificate is used [CHAR LIMIT=50] -->
++    <string name="account_setup_exchange_no_certificate">None</string>
++    <!-- On "Exchange" setup screen, the exchange device-id label, should be uppercase where applicable [CHAR LIMIT=30] -->
++    <string name="account_setup_exchange_device_id_label">MOBILE DEVICE ID</string>
++
++    <!-- In Account setup options screen, Activity headline [CHAR LIMIT=none] -->
++    <string name="account_setup_options_headline">Account options</string>
++    <!-- In Account setup options screen, label for email check frequency selector -->
++    <string name="account_setup_options_mail_check_frequency_label">Sync frequency:</string>
++    <!-- In Account setup options & Account Settings screens, label for email check frequency option -->
++    <string name="account_setup_options_mail_check_frequency_never">Never</string>
++    <!-- In Account setup options & Account Settings screens, label for email check frequency option -->
++    <string name="account_setup_options_mail_check_frequency_push">Automatic (Push)</string>
++    <!-- In Account setup options & Account Settings screens, email check frequency option -->
++    <string name="account_setup_options_mail_check_frequency_5min">Every 5 minutes</string>
++    <!-- In Account setup options & Account Settings screens, email check frequency option -->
++    <string name="account_setup_options_mail_check_frequency_10min">Every 10 minutes</string>
++    <!-- In Account setup options & Account Settings screens, email check frequency option -->
++    <string name="account_setup_options_mail_check_frequency_15min">Every 15 minutes</string>
++    <!-- In Account setup options & Account Settings screens, email check frequency option -->
++    <string name="account_setup_options_mail_check_frequency_30min">Every 30 minutes</string>
++    <!-- In Account setup options & Account Settings screens, email check frequency option -->
++    <string name="account_setup_options_mail_check_frequency_1hour">Every hour</string>
++    <!-- In Account setup options & Account Settings screens, check box for new-mail notification -->
++    <string name="account_setup_options_notify_label">Notify me when email arrives</string>
++    <!-- In Account setup options screen, optional check box to also sync contacts -->
++    <string name="account_setup_options_sync_contacts_label">Sync contacts from this account</string>
++    <!-- In Account setup options screen, optional check box to also sync contacts -->
++    <string name="account_setup_options_sync_calendar_label">Sync calendar from this account</string>
++    <!-- In Account setup options screen, check box to sync email -->
++    <string name="account_setup_options_sync_email_label">Sync email from this account</string>
++    <!-- In Account setup options screen, check box to auto-download attachments  [CHAR LIMIT=none] -->
++    <string name="account_setup_options_background_attachments_label">
++        Automatically download attachments when connected to Wi-Fi</string>
++    <!-- Dialog title when "setup" could not finish -->
++    <string name="account_setup_failed_dlg_title">Couldn\'t finish</string>
++    <!-- In Account setup options screen, label for email lookback selector -->
++    <string name="account_setup_options_mail_window_label">Sync emails from</string>
++    <!-- In account setup options & account settings screens (exchange), sync window length; this
++        implies loading a 'reasonable' number of messages [CHAR LIMIT=25] -->
++    <string name="account_setup_options_mail_window_auto">Automatic</string>
++    <!-- A sync window length setting (i.e. load messages this far back) [CHAR LIMIT=25]  -->
++    <string name="account_setup_options_mail_window_1day">Last day</string>
++    <!-- A sync window length setting (i.e. load messages this far back) [CHAR LIMIT=25]  -->
++    <string name="account_setup_options_mail_window_3days">Last three days</string>
++    <!-- A sync window length setting (i.e. load messages this far back) [CHAR LIMIT=25]  -->
++    <string name="account_setup_options_mail_window_1week">Last week</string>
++    <!-- A sync window length setting (i.e. load messages this far back) [CHAR LIMIT=25]  -->
++    <string name="account_setup_options_mail_window_2weeks">Last two weeks</string>
++    <!-- A sync window length setting (i.e. load messages this far back) [CHAR LIMIT=25]  -->
++    <string name="account_setup_options_mail_window_1month">Last month</string>
++    <!-- A sync window length setting (i.e. load messages this far back) [CHAR LIMIT=25]  -->
++    <string name="account_setup_options_mail_window_all">All</string>
++    <!-- Per-mailbox sync window setting.  This means "use the account's sync window setting" [CHAR LIMIT=40] -->
++    <string name="account_setup_options_mail_window_default">Use account default</string>
++
++    <!-- "Setup could not finish" dialog text; e.g., Username or password incorrect -->
++    <string name="account_setup_failed_dlg_auth_message">Username or password is incorrect.</string>
++
++    <!-- Account setup autodiscover auth failure dialog title. This is shown when autodiscover hits
++        an "access denied" server error, which could imply incorrect username/password or that no
++        autodiscover service has been configured for the domain [CHAR LIMIT=40] -->
++    <string name="account_setup_autodiscover_dlg_authfail_title">Problem with account setup</string>
++    <!-- Account setup autodiscover auth failure dialog message. This is shown when autodiscover hits
++        an "access denied" server error, which could imply incorrect username/password or that no
++        autodiscover service has been configured for the domain [CHAR LIMIT=NONE] -->
++    <string name="account_setup_autodiscover_dlg_authfail_message">Confirm username, password, and account settings are correct.</string>
++
++    <!-- An error message presented to the user when the server's identity
++         cannot be established or trusted [CHAR LIMIT=NONE] -->
++    <string name="account_setup_failed_dlg_certificate_message"
++        >Can\'t safely connect to server.</string>
++    <!-- An error message presented to the user when the server's identity
++         cannot be established or trusted [CHAR LIMIT=NONE] -->
++    <string name="account_setup_failed_dlg_certificate_message_fmt"
++        >Can\'t safely connect to server.\n(<xliff:g id="error">%s</xliff:g>)</string>
++    <!-- An error message presented to the user when the server requires a
++         client certificate to connect [CHAR LIMIT=NONE] -->
++    <string name="account_setup_failed_certificate_required"
++        >A client certificate is required. Do you want to connect to the server with a client certificate?</string>
++    <!-- An error message presented to the user when the certificate they
++         specified for connecting to a server is inaccessible [CHAR LIMIT=NONE] -->
++    <string name="account_setup_failed_certificate_inaccessible"
++        >The certificate is invalid or inaccessible.</string>
++
++    <!-- Dialog text for ambiguous setup failure; server error/bad credentials [CHAR LIMIT=none] -->
++    <string name="account_setup_failed_check_credentials_message">
++         The server responded with an error. Check your username and password, then try again.</string>
++
++    <!-- "Setup could not finish" dialog text; e.g., Cannot connect to server -->
++    <string name="account_setup_failed_dlg_server_message">Can\'t connect to server.</string>
++    <!-- "Setup could not finish" dialog text; e.g., Cannot connect to server\n(Connection timed out) -->
++    <string name="account_setup_failed_dlg_server_message_fmt">Can\'t connect to server.\n(<xliff:g id="error">%s</xliff:g>)</string>
++
++    <!-- Additional diagnostic text when TLS was required but the server doesn't support it -->
++    <string name="account_setup_failed_tls_required">TLS required but not supported by server.</string>
++    <!-- Additional diagnostic text when server does not support any of our authentication methods -->
++    <string name="account_setup_failed_auth_required">Authentication methods aren\'t supported by server.</string>
++    <!-- Additional diagnostic text when server connection failed due to security error -->
++    <string name="account_setup_failed_security">Couldn\'t open connection to server due to security error.</string>
++    <!-- Additional diagnostic text when server connection failed due to io error (connection) -->
++    <string name="account_setup_failed_ioerror">Couldn\'t open connection to server.</string>
++    <!-- Additional diagnostic text when server connection failed due to our inability to support a
++         required EAS protocol version [CHAR LIMIT=none] -->
++    <string name="account_setup_failed_protocol_unsupported">
++         You typed an incorrect server address or the server requires a protocol version that
++         Email doesn\'t support.</string>
++    <!-- Additional diagnostic text when server access was denied; the user should contact the
++         administrator of the server for more information [CHAR LIMIT=none] -->
++    <string name="account_setup_failed_access_denied">
++         You don\'t have permission to sync with this server. Contact your server\'s
++         administrator for more information.</string>
++
++    <!-- Dialog title when validation requires security provisioning (e.g. support
++         for device lock PIN, or remote wipe.) and we ask the user permission before continuing -->
++    <string name="account_setup_security_required_title">Remote security administration</string>
++    <!-- Additional diagnostic text when validation requires security provisioning (e.g. support
++         for device lock PIN, or remote wipe.) and we ask the user permission before continuing.
++         [CHAR LIMIT=none] -->
++    <string name="account_setup_security_policies_required_fmt">
++         The server <xliff:g id="server">%s</xliff:g> requires that you allow it to remotely control
++         some security features of your Android device. Do you want to finish setting up this
++         account?</string>
++    <!-- Additional diagnostic text when validation failed due to required provisioning not
++         being supported [CHAR LIMIT=none] -->
++    <string name="account_setup_failed_security_policies_unsupported">
++         This server requires security features that your Android device doesn\'t support,
++          including: <xliff:g id="error">%s</xliff:g></string>
++    <!-- Warning given to users when they request disabling device administration (i.e. that their
++         administered accounts will be deleted) [CHAR LIMIT=none] -->
++    <string name="disable_admin_warning">WARNING: Deactivating the Email app\'s authority
++         to administer your device will delete all email accounts that require it, along with their
++         email, contacts, calendar events, and other data.</string>
++
++    <!-- Dialog shown when the account requires some amount of device security provisioning,
++         just before jumping into system settings such as Device Policy grant, PIN/password,
++         or encryption setup.  [CHAR_LIMIT=40] -->
++    <string name="account_security_dialog_title">Security update</string>
++    <!-- Additional diagnostic text when the account requires some amount of device security
++         provisioning, just before jumping into system settings such as Device Policy grant,
++         PIN/password, or encryption setup.  [CHAR LIMIT=none] -->
++    <string name="account_security_dialog_content_fmt">
++         <xliff:g id="account">%s</xliff:g> requires that you update your security
++         settings.</string>
++
++    <!-- Notification ticker when device security required (note: unused in Holo XL) -->
++    <string name="security_unsupported_ticker_fmt">
++            Account \"<xliff:g id="account">%s</xliff:g>\" can\'t be synced due to security
++    requirements.</string>
++    <!-- Notification ticker when device security required (note: unused in Holo XL) -->
++    <string name="security_needed_ticker_fmt">
++            Account \"<xliff:g id="account">%s</xliff:g>\" requires security settings update.
++    </string>
++    <!-- Notification ticker when device security required (note: unused in Holo XL) -->
++    <string name="security_changed_ticker_fmt">
++            Account \"<xliff:g id="account">%s</xliff:g>\" changed its security settings; no user
++            action is required.
++    </string>
++    <!-- Notification content title when device security required [CHAR_LIMIT=30] -->
++    <string name="security_notification_content_update_title">Security update required</string>
++    <!-- Notification content title when device security policies have changed [CHAR_LIMIT=36] -->
++    <string name="security_notification_content_change_title">Security policies have
++         changed</string>
++    <!-- Notification content title when device security policies cannot be met [CHAR_LIMIT=30] -->
++    <string name="security_notification_content_unsupported_title">Security policies can\'t be
++         met</string>
++    <!-- Title of the activity that dispatches changes to device security.  Not normally seen. -->
++    <string name="account_security_title">Device security</string>
++    <!-- Additional diagnostic text when the email app asserts control of the phone.
++        [CHAR LIMIT=none] -->
++    <string name="account_security_policy_explanation_fmt">
++         The server <xliff:g id="server">%s</xliff:g> requires that you allow it to remotely control
++         some security features of your Android device.</string>
++
++    <!-- "Setup could not finish" dialog action button -->
++    <string name="account_setup_failed_dlg_edit_details_action">Edit details</string>
++
++    <!-- Notification ticker when device password is getting ready to expire [CHAR_LIMIT=80] -->
++    <string name="password_expire_warning_ticker_fmt">
++            \"<xliff:g id="account">%s</xliff:g>\" requires that you change your lock screen
++            PIN or password.</string>
++    <!-- Notification content title when device password is getting ready to expire
++            [CHAR_LIMIT=30] -->
++    <string name="password_expire_warning_content_title">Lock screen password expiring</string>
++
++    <!-- Notification ticker when device password has expired [CHAR_LIMIT=80] -->
++    <string name="password_expired_ticker">Your lock screen PIN or password has expired.</string>
++    <!-- Notification content title when device password has expired [CHAR_LIMIT=28] -->
++    <string name="password_expired_content_title">Lock screen password expired</string>
++
++    <!-- Dialog title if device pin/password is going to expire soon. [CHAR_LIMIT=40] -->
++    <string name="password_expire_warning_dialog_title">Lock screen password expiring</string>
++    <!-- Dialog content device pin/password is going to expire soon. [CHAR_LIMIT=none] -->
++    <string name="password_expire_warning_dialog_content_fmt">
++         You need to change your lock screen PIN or password soon, or the data for
++         <xliff:g id="account">%s</xliff:g> will be erased. Do you want to change it now?</string>
++
++    <!-- Dialog title if device pin/password has already expired. [CHAR_LIMIT=40] -->
++    <string name="password_expired_dialog_title">Lock screen password expired</string>
++    <!-- Dialog content device pin/password has already expired. [CHAR_LIMIT=none] -->
++    <string name="password_expired_dialog_content_fmt">
++         The data for <xliff:g id="account">%s</xliff:g> is being erased from your device.
++         You can restore it by changing your lock screen PIN or password. Do you want to change it now?</string>
++
++    <!-- On AccountSettingsXL, dialog text if you try to exit in/out/eas fragment (server settings)
++         without checking/saving [CHAR LIMIT=none]-->
++    <string name="account_settings_exit_server_settings">Discard unsaved changes?</string>
++
++    <!-- On Settings screen, setting option name -->
++    <!-- Title of account preference for downloading attachments in background [CHAR LIMIT=32] -->
++    <string name="account_settings_background_attachments_label">
++        Download attachments</string>
++    <!-- Summary of account preference for downloading attachments in background [CHAR LIMIT=64] -->
++    <string name="account_settings_background_attachments_summary">
++        Auto-download attachments to recent messages via Wi-Fi</string>
++    <string name="account_settings_notify_label">Email notifications</string>
++    <!-- On Settings screen, summary line when called via AccountManager for Exchange accounts
++        [CHAR LIMIT=50] -->
++    <string name="account_settings_summary">Sync frequency, notifications, etc.</string>
++    <!-- On Settings screen, setting summary text -->
++    <string name="account_settings_notify_summary">Send notification when email arrives</string>
++    <!-- On Settings screen, setting option name and title of dialog box that opens -->
++    <string name="account_settings_mail_check_frequency_label">Sync frequency</string>
++    <!-- On Settings screen, setting option name -->
++    <string name="account_settings_incoming_label">Incoming settings</string>
++    <!-- On Settings screen, setting option summary [CHAR LIMIT=64] -->
++    <string name="account_settings_incoming_summary">
++        Username, password, and other incoming server settings</string>
++    <!-- On Settings screen, setting option name -->
++    <string name="account_settings_outgoing_label">Outgoing settings</string>
++    <!-- On Settings screen, setting option summary [CHAR LIMIT=64] -->
++    <string name="account_settings_outgoing_summary">
++        Username, password, and other outgoing server settings</string>
++    <!-- On Settings screen, setting option name -->
++    <string name="account_settings_enforced_label">Policies enforced</string>
++    <!-- On Settings screen, setting option summary [CHAR LIMIT=64] -->
++    <string name="account_settings_enforced_summary">None</string>
++    <!-- On Settings screen, setting option name -->
++    <string name="account_settings_unsupported_label">Unsupported policies</string>
++    <!-- On Settings screen, setting option summary [CHAR LIMIT=64] -->
++    <string name="account_settings_unsupported_summary">None</string>
++    <!-- On Settings screen, label for button that attempts to sync the account -->
++    <string name="account_settings_retry_label">Attempt sync</string>
++    <!-- On Settings screen, summmary for button that attempts to sync an account [CHAR LIMIT=64] -->
++    <string name="account_settings_retry_summary">Touch here to sync this account</string>
++    <!-- On Settings screen, setting option name -->
++    <string name="account_settings_description_label">Account name</string>
++    <!-- On Settings screen, setting option name -->
++    <string name="account_settings_name_label">Your name</string>
++    <!-- On Settings screen, setting option name. Allows user to modify saved quick responses
++        for insertion in message body. [CHAR_LIMIT=24]-->
++    <string name="account_settings_edit_quick_responses_label">Quick responses</string>
++    <!-- On Settings screen, setting option summary [CHAR LIMIT=64] -->
++    <string name="account_settings_edit_quick_responses_summary">
++        Edit text that you frequently insert when composing email</string>
++    <!-- On Settings screen, section heading -->
++    <string name="account_settings_notifications">Notification settings</string>
++    <!-- On Settings screen, section heading for data usage [CHAR LIMIT=70] -->
++    <string name="account_settings_data_usage">Data usage</string>
++    <!-- On Settings screen, section heading -->
++    <string name="account_settings_policies">Security policies</string>
++
++    <string name="system_folders_title">System folders</string>
++    <string name="system_folders_trash_title">Trash folder</string>
++    <string name="system_folders_trash_summary">Select your server\'s trash folder</string>
++    <string name="system_folders_trash_dlg">Select your server\'s trash folder</string>
++    <string name="system_folders_sent_title">Sent items folder</string>
++    <string name="system_folders_sent_summary">Select your server\'s sent items folder</string>
++    <string name="system_folders_sent_dlg">Select your server\'s sent items folder</string>
++
++    <!-- On settings screen, dialog heading informing user to create or edit a quick response -->
++    <string name="edit_quick_response_dialog">Quick response</string>
++    <!-- On settings screen, edit quick response dialog's "save" button -->
++    <string name="save_action">Save</string>
++
++    <!-- On settings screen, sync contacts check box label [CHAR LIMIT=20]-->
++    <string name="account_settings_sync_contacts_enable">Sync contacts</string>
++    <!-- On settings screen, sync contacts summary text [CHAR LIMIT=35] -->
++    <string name="account_settings_sync_contacts_summary">Sync contacts for this account</string>
++    <!-- On settings screen, sync calendar check box label [CHAR LIMIT=20]-->
++        <string name="account_settings_sync_calendar_enable">Sync calendar</string>
++    <!-- On settings screen, sync calendar summary text [CHAR LIMIT=50] -->
++    <string name="account_settings_sync_calendar_summary">Sync calendar event for this account</string>
++    <!-- On settings screen, sync email check box label [CHAR LIMIT=20]-->
++    <string name="account_settings_sync_email_enable">Sync email</string>
++    <!-- On settings screen, sync email summary text [CHAR LIMIT=35] -->
++    <string name="account_settings_sync_email_summary">Sync email for this account</string>
++
++    <!-- On Settings screen, vibrate pop-up menu label -->
++    <string name="label_notification_vibrate_title">Vibrate</string>
++
++    <!-- On Settings screen, setting option name -->
++    <string name="account_settings_ringtone">Choose ringtone</string>
++    <!-- On Settings screen, section heading -->
++    <string name="account_settings_servers">Server settings</string>
++
++    <!-- Mailbox settings activity title [CHAR LIMIT=none] -->
++    <string name="mailbox_settings_activity_title">Sync options</string>
++    <!-- Mailbox settings activity title, with the target folder name [CHAR LIMIT=none] -->
++    <string name="mailbox_settings_activity_title_with_mailbox">Sync options (<xliff:g id="mailboxx_name" example="Family">%s</xliff:g>)</string>
++    <!-- On mailbox settings screen: Whether to sync this mailbox when the account syncs. -->
++    <string name="mailbox_settings_sync_enabled_label">Sync this folder</string>
++    <!-- On mailbox settings screen: Explanatory text for what it means to "sync this folder". -->
++    <string name="mailbox_settings_sync_enabled_summary">Messages will download when connected</string>
++    <!-- On mailbox settings screen: Mailbox sync window (the number of days to synchronize email for) setting label [CHAR LIMIT=none] -->
++    <string name="mailbox_settings_mailbox_sync_window_label">Days of mail to sync</string>
++
++    <!-- Message that appears when adding a T-Online account -->
++    <string name="provider_note_t_online">Before setting up this email account, visit the T-Online website and create a password for POP3 email access.</string>
++
++    <!-- Short name of Microsoft Exchange account type; used by AccountManager -->
++    <string name="exchange_eas_name" translatable="false">Exchange</string>
++    <!-- Long name of Microsoft Exchange account type; used by AccountManager -->
++    <string name="exchange_name_alternate">Microsoft Exchange ActiveSync</string>
++
++    <!-- Message that appears if the AccountManager cannot create the system Account -->
++    <string name="system_account_create_failed">Couldn\'t create the account. Try again.</string>
++
++    <!-- Strings that support the DeviceAdmin / DevicePolicyManager API -->
++    <!-- Name of the DeviceAdmin (seen in settings & in user confirmation screen) -->
++    <string name="device_admin_label">Email</string>
++    <!-- Long-form description of the DeviceAdmin (2nd line in settings & in user conf. screen) -->
++    <string name="device_admin_description">Enables server-specified security policies</string>
++
++    <!-- A policy disallowing the user of the device's camera [CHAR LIMIT=50] -->
++    <string name="policy_dont_allow_camera">Disallow use of the device\'s camera</string>
++    <!-- A policy requiring a device lock screen password [CHAR LIMIT=50] -->
++    <string name="policy_require_password">Require device password</string>
++    <!-- A policy disallowing the reuse of recent passwords [CHAR LIMIT=50] -->
++    <string name="policy_password_history">Restrict the reuse of recent passwords</string>
++    <!-- A policy that forces a password to expire after a set period of time [CHAR LIMIT=50] -->
++    <string name="policy_password_expiration">Require passwords to expire</string>
++    <!-- A policy requiring a maximum amount of time the device can sit idle before the lock screen
++        is activated [CHAR LIMIT=50] -->
++    <string name="policy_screen_timeout">Require an idle device to lock its screen</string>
++    <!-- A policy limiting the number of old calendar events synced [CHAR LIMIT=50] -->
++    <string name="policy_calendar_age">Limit the number of calendar events synced</string>
++    <!-- A policy limiting the number of emails synced [CHAR LIMIT=50] -->
++    <string name="policy_email_age">Limit the number of emails synced</string>
++
++    <!-- The four strings below represent "quick responses" which the user can insert into a
++        message being composed with just a couple of taps.  These four responses MUST be defined,
++        but need not include a string (i.e. they are optional).  Further, the responses can be
++        customized as necessary by the translator, in case one or more of these is inappropriate in
++        a particular locale or if there are better options available. -->
++    <!-- A "quick response", i.e. a quick reply to a received mail [CHAR LIMIT=NONE] -->
++    <string name="quick_1">Thanks!</string>
++    <!-- A "quick response", i.e. a quick reply to a received mail [CHAR LIMIT=NONE] -->
++    <string name="quick_2">Sounds good to me!</string>
++    <!-- A "quick response", i.e. a quick reply to a received mail [CHAR LIMIT=NONE] -->
++    <string name="quick_3">I\'ll read this later and get back to you.</string>
++    <!-- A "quick response", i.e. a quick reply to a received mail [CHAR LIMIT=NONE] -->
++    <string name="quick_4">Let\'s set up a meeting to discuss this.</string>
++
++    <!-- This is shown when a user responds to a meeting invitation [CHAR LIMIT=none]-->
++    <string name="confirm_response">Sending response&#8230;</string>
++
++    <!-- Used by AccountManager -->
++    <!-- Account type name as used by AccountManager UI (IMAP is not translatable) [CHAR LIMIT=30] -->
++    <string name="imap_name">Personal (IMAP)</string>
++    <!-- Account type name as used by AccountManager UI (POP3 is not translatable) [CHAR LIMIT=30] -->
++    <string name="pop3_name">Personal (POP3)</string>
++
++    <!-- Displayed when the user must pick his server's trash folder from a list [CHAR LIMIT 30]-->
++    <string name="trash_folder_selection_title">Select server trash folder for <xliff:g id="account">%s</xliff:g></string>
++    <!-- Displayed when the user must pick his server's sent items folder from a list [CHAR LIMIT 30]-->
++    <string name="sent_folder_selection_title">Select server sent items folder for <xliff:g id="account">%s</xliff:g></string>
++    <string name="account_waiting_for_folders_msg">Loading folder list&#8230;</string>
++
++    <!-- Feedback uri to be used when feedback is enabled -->
++    <string name="email_feedback_uri" translatable="false"></string>
++
++    <string name="account_manager_type_exchange" translatable="false">com.android.exchange</string>
++    <!-- M: Grant POP3 a different type with IMAP, then POP3 will be a separate category in system account list -->
++    <string name="account_manager_type_pop3" translatable="false">com.android.email.pop3</string>
++    <string name="account_manager_type_imap" translatable="false">com.android.email</string>
++    <string name="account_manager_type_legacy_imap" translatable="false">com.android.email</string>
++    <string name="intent_exchange_action" translatable="false">com.android.email.EXCHANGE_INTENT</string>
++    <string name="intent_exchange_cert_action" translatable="false">com.android.email.EXCHANGE_REQUEST_CERT</string>
++    <string name="intent_exchange_package" translatable="false">com.android.exchange</string>
++    <string name="intent_account_manager_entry" translatable="false">com.android.email.activity.setup.ACCOUNT_MANAGER_ENTRY</string>
++    <string name="intent_force_create_email_account" translatable="false">com.android.email.FORCE_CREATE_ACCOUNT</string>
++    <string name="intent_create_email_account" translatable="false">com.android.email.CREATE_NEW_ACCOUNT</string>
++    <string name="authority_email_provider" translatable="false">com.android.email.provider</string>
++    <string name="authority_conversation_provider" translatable="false">com.android.email.conversation.provider</string>
++    <string name="authority_account_cache_provider" translatable="false">com.android.email.accountcache</string>
++    <string name="protocol_legacy_imap" translatable="false">imap</string>
++    <string name="protocol_imap" translatable="false">imap</string>
++    <string name="protocol_pop3" translatable="false">pop3</string>
++    <string name="protocol_eas" translatable="false">eas</string>
++    <string name="application_mime_type" translatable="false">application/email-ls</string>
++
++    <!-- Content Provider Authority for Eml Attachments -->
++    <string name="eml_attachment_provider" translatable="false">com.android.email.provider.eml.attachment</string>
++
++    <!-- Provider name for widgets -->
++    <string name="widget_provider" translatable="false">com.android.email.provider.WidgetProvider</string>
++
++    <string name="print_job_name" translatable="false">Email - <xliff:g id="subject">%1$s</xliff:g></string>
++
++    <!-- This message indicates no quick responses exist to choose from -->
++    <string name="no_quick_responses">None available</string>
++
++    <!-- Activity name of the compose activity that should be reconciled -->
++    <string name="reconciliation_compose_activity_name" translatable="false">com.android.email.activity.ComposeActivityEmail</string>
++
++    <!-- Gmail name for redirecting during account setup -->
++    <string name="gmail_name">Gmail</string>
++
++    <!-- Name for preference entry which leads to the per-folder sync settings activity -->
++    <string name="folder_sync_settings_pref_title">Folder sync settings</string>
++	
++	<string name="account_settings_remove_account_label">Remove account</string>
++	
++	<string name="preferences_signature_summary_set_cable">Sent from my Alcatel 3X</string>
++</resources>

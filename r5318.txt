@@ -1,0 +1,27 @@
+Index: frameworks/base/media/java/android/media/RingtoneManager.java
+===================================================================
+--- frameworks/base/media/java/android/media/RingtoneManager.java	(revision 5317)
++++ frameworks/base/media/java/android/media/RingtoneManager.java	(revision 5318)
+@@ -817,11 +817,19 @@
+         final String uriString = Settings.System.getStringForUser(context.getContentResolver(),
+                 setting, context.getUserId());
+ 		Uri uri =  null;
+-         if(uriString != null){
+-           boolean isExist = isRingtoneExist(context,Uri.parse(uriString));
++        if(uriString != null){
++		    Cursor cursor = null;
++			boolean isExist = false;
++		    cursor = context.getContentResolver().query(Uri.parse(uriString),
++                            new String[] { MediaStore.Audio.Media.TITLE }, null, null, null);
++			if (cursor != null) {
++                if (cursor.moveToFirst()) {
++					isExist = true;
++			    }
++			}
+            if(!isExist){
+ 			   String ringtone = getDefaultUriForType(type);
+-			   Cursor cursor = context.getContentResolver().query(MediaStore.Audio.Media.INTERNAL_CONTENT_URI, INTERNAL_COLUMNS, null,
++			   cursor = context.getContentResolver().query(MediaStore.Audio.Media.INTERNAL_CONTENT_URI, INTERNAL_COLUMNS, null,
+ 						null, MediaStore.Audio.Media.DEFAULT_SORT_ORDER);
+ 				if(cursor.moveToFirst()){
+ 					while(cursor != null){

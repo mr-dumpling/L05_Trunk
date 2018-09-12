@@ -1,0 +1,228 @@
+Index: packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 1903)
++++ packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 1904)
+@@ -58,10 +58,10 @@
+ 	private static ColorTemperaturePreference manuallyPreference;
+ 	private PreferenceScreen schedulePlanPreference;
+     private boolean mPrefChangeFlag = false;
+-	
++
+ 	private final String NIGHT_MODE_ACTION_ON="android.intent.action.NIGHT_MODE_ACTION_ON";
+ 	private final String NIGHT_MODE_ACTION_OFF="android.intent.action.NIGHT_MODE_ACTION_OFF";
+-	
++
+ 	 @Override
+     protected int getMetricsCategory() {
+         return MetricsEvent.WALLPAPER_TYPE;
+@@ -77,10 +77,10 @@
+ 			String nightModeSwitch= Settings.System.getString(mContentResolver,NIGHT_MODE_SWITCH);
+ 			boolean mode= Boolean.parseBoolean(nightModeSwitch);
+ 			manuallyEnablePreference.setChecked(mode);
+-        	
++
+ 			if(mode&&!PictureQuality.isBlueLightEnabled()){
+ 				PictureQuality.enableBlueLight(true);
+-				
++
+ 			}
+ 			if(mode&&automateSchedulePreference.isChecked()){
+ 				automateSchedulePreference.setChecked(false);
+@@ -89,7 +89,7 @@
+ 				modePrenference.edit().putBoolean(SETTING_TIME,false).commit();
+ 			}
+ 			if(automateSchedulePreference.isChecked()){
+-				boolean checkoutTime = modePrenference.getBoolean(SETTING_TIME_PLAN, false);	
++				boolean checkoutTime = modePrenference.getBoolean(SETTING_TIME_PLAN, false);
+ 				boolean auto = modePrenference.getBoolean(SUNSET_TO_SUNRISE, false);
+ 				if(auto){
+ 					schedulePlanPreference.setSummary("22:00 to 7:00");
+@@ -104,7 +104,7 @@
+                             String nTimeOn=(deOnHour+12)+":"+deOnTime[1];
+                             //turn_on_at.setSummary(nTimeOn);
+                             Log.i("faker:", "nTimeOn:"+nTimeOn);
+-                            modePrenference.edit().putString(TIME_ON,nTimeOn).commit();     
++                            modePrenference.edit().putString(TIME_ON,nTimeOn).commit();
+                         }
+                         if(deOffHour<12){
+                              String nTimeOff=(deOffHour+12)+":"+deOffTime[1];
+@@ -116,7 +116,7 @@
+                             String nTimeOn=(deOnHour-12)+":"+deOnTime[1];
+                             //turn_on_at.setSummary(nTimeOn);
+                             Log.i("faker:", "nTimeOn:"+nTimeOn);
+-                            modePrenference.edit().putString(TIME_ON,nTimeOn).commit();     
++                            modePrenference.edit().putString(TIME_ON,nTimeOn).commit();
+                         }
+                         if(deOffHour>12){
+                              String nTimeOff=(deOffHour-12)+":"+deOffTime[1];
+@@ -124,7 +124,7 @@
+                              modePrenference.edit().putString(TIME_Off,nTimeOff).commit();
+                         }
+                     }
+-                    
++
+ 					String timeOns=modePrenference.getString(TIME_ON,timeOn);
+ 					String timeOffs=modePrenference.getString(TIME_Off,timeOff);
+ 					schedulePlanPreference.setSummary(timeOns+" to "+timeOffs);
+@@ -134,11 +134,14 @@
+ 			}else{
+ 				schedulePlanPreference.setSummary(R.string.sunset2sunrise_title);
+ 			}
+-			if(automateSchedulePreference.isChecked()||manuallyEnablePreference.isChecked()){
+-				manuallyPreference.setEnabled(true);
+-			}else{
+-				manuallyPreference.setEnabled(false);
+-			}
++
++            /*
++            if(automateSchedulePreference.isChecked()||manuallyEnablePreference.isChecked()){
++                manuallyPreference.setEnabled(true);
++            }else{
++                manuallyPreference.setEnabled(false);
++            }
++            */
+ 		 }
+ 
+    /*display attribute list*/
+@@ -147,15 +150,15 @@
+ 			super.onCreate(savedInstanceState);
+ 			final Activity activity = getActivity();
+ 			addPreferencesFromResource(R.xml.nightmode_settings);
+-			mContentResolver = getContext().getContentResolver();		
++			mContentResolver = getContext().getContentResolver();
+ 			initPreference();
+ 			IntentFilter filter = new IntentFilter(NIGHT_MODE_ACTION_ON);
+             filter.addAction(NIGHT_MODE_ACTION_OFF);
+-            activity.registerReceiver(manuallyNightReceiver,filter);		
++            activity.registerReceiver(manuallyNightReceiver,filter);
+ 	}
+-      private BroadcastReceiver manuallyNightReceiver = new BroadcastReceiver(){  
+-        @Override  
+-        public void onReceive(Context context, Intent intent) {  
++      private BroadcastReceiver manuallyNightReceiver = new BroadcastReceiver(){
++        @Override
++        public void onReceive(Context context, Intent intent) {
+             Log.d(TAG,"intent.getAction()="+intent.getAction());
+             if(intent.getAction().equals(NIGHT_MODE_ACTION_ON)){
+                 manuallyEnablePreference.setChecked(true);
+@@ -162,13 +165,13 @@
+             }else if(intent.getAction().equals(NIGHT_MODE_ACTION_OFF)){
+                 manuallyEnablePreference.setChecked(false);
+             }
+-        }  
++        }
+     };
+     @Override
+     public void onDestroy() {
+         super.onDestroy();
+         getActivity().unregisterReceiver(manuallyNightReceiver);
+-    }	
++    }
+    public void sendBroadcast(){
+    		Intent intent1=new Intent(getContext(),BootedReceiver.class);
+         getContext().sendBroadcast(intent1);
+@@ -184,9 +187,9 @@
+ 		 boolean automate_schedule = modePrenference.getBoolean(SETTING_TIME, false);
+ 		/*manuallyPreference.setSeekbarProgress(modePrenference.getInt(NIGHT_MODE_LEVEL,5));*/
+ 		Log.e("indexfargmen",modePrenference.getInt(NIGHT_MODE_LEVEL,5)+"");
+-		
+-		
+-		
++
++
++
+ 		schedulePlanPreference.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+             @Override
+             public boolean onPreferenceClick(Preference preference) {
+@@ -198,13 +201,13 @@
+         });
+ 		/*According to whether the user has opened the night mode to set whether the user can click the time to set the night mode*/
+         if(automate_schedule){
+-				
++
+             automateSchedulePreference.setChecked(true);
+ 			schedulePlanPreference.setEnabled(true);
+             schedulePlanPreference.setShouldDisableView(false);
+-            
++
+         }else{
+-        Log.e("automate_schedule------","false");	
++        Log.e("automate_schedule------","false");
+             automateSchedulePreference.setChecked(false);
+             schedulePlanPreference.setEnabled(false);
+             schedulePlanPreference.setShouldDisableView(true);
+@@ -213,26 +216,27 @@
+         automateSchedulePreference.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+             @Override
+             public boolean onPreferenceChange(Preference preference, Object newValue) {
+-            
++
+           	modePrenference.edit().putBoolean(SETTING_TIME,Boolean.parseBoolean(newValue.toString())).commit();
+ 				if(Boolean.parseBoolean(newValue.toString())){
+-					schedulePlanPreference.setEnabled(true);	
+-					manuallyPreference.setEnabled(true);
++					schedulePlanPreference.setEnabled(true);
++					//manuallyPreference.setEnabled(true);
+ 					if(manuallyEnablePreference.isChecked()){
+ 						manuallyEnablePreference.setChecked(false);
+ 						PictureQuality.enableBlueLight(false);
+-						
++
+ 						Settings.System.putString(mContentResolver,NIGHT_MODE_SWITCH,"false");
+ 						//modePrenference.edit().putBoolean(NIGHT_MODE_ON_OROFF,false).commit();
+ 					}
+ 				}else{
+ 					schedulePlanPreference.setEnabled(false);
+-					if(manuallyEnablePreference.isChecked()){
+-						manuallyPreference.setEnabled(true);
+-					}else{
+-						manuallyPreference.setEnabled(false);
+-					}
+-					
++                    /*
++                    if(manuallyEnablePreference.isChecked()){
++                        manuallyPreference.setEnabled(true);
++                    }else{
++                        manuallyPreference.setEnabled(false);
++                    }
++                    */
+ 				}
+ 				return true;
+             }
+@@ -250,19 +254,21 @@
+ 						automateSchedulePreference.setChecked(false);
+ 						schedulePlanPreference.setEnabled(false);
+ 						schedulePlanPreference.setShouldDisableView(true);
+-						modePrenference.edit().putBoolean(SETTING_TIME,false).commit();	
++						modePrenference.edit().putBoolean(SETTING_TIME,false).commit();
+ 						}
+ 					/*Settings.Secure.putIntForUser(mContentResolver, Secure.TWILIGHT_MODE, Secure.TWILIGHT_MODE_LOCKED_ON, mCurrentUser);
+-					*/manuallyPreference.setEnabled(true);
++					*///manuallyPreference.setEnabled(true);
+ 				}else{
+-					
++
+ 					PictureQuality.enableBlueLight(false);
+-					if(automateSchedulePreference.isChecked()){
+-						manuallyPreference.setEnabled(true);
++                    /*
++                    if (automateSchedulePreference.isChecked()) {
++                        manuallyPreference.setEnabled(true);
+ 
+-					}else{
+-						manuallyPreference.setEnabled(false);
+-					}
++                    } else {
++                        manuallyPreference.setEnabled(false);
++                    }
++                    */
+ 					/*manuallyPreference.setTitleColor();*/
+ 
+ 				}
+@@ -282,5 +288,5 @@
+ 		});
+ 
+     }
+-	
++
+ }

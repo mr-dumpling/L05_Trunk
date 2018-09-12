@@ -1,0 +1,33 @@
+Index: vendor/branch/5058A_Telcel/packages/services/Telecomm/src/com/android/server/telecom/Ringer.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/services/Telecomm/src/com/android/server/telecom/Ringer.java	(revision 4081)
++++ vendor/branch/5058A_Telcel/packages/services/Telecomm/src/com/android/server/telecom/Ringer.java	(revision 4082)
+@@ -74,7 +74,7 @@
+      * Call objects that are ringing or call-waiting. These are used only for logging purposes.
+      */
+     private Call mRingingCall;
+-    private Call mCallWaitingCall;
++    private int mCallWaitingCallPlayValue = 1;
+ 
+     /**
+      * Used to track the status of {@link #mVibrator} in the case of simultaneous incoming calls.
+@@ -188,7 +188,7 @@
+             mCallWaitingToneSoundPool.setOnLoadCompleteListener(new SoundPool.OnLoadCompleteListener() {
+                 @Override
+                 public void onLoadComplete(SoundPool soundPool, int sampleId, int status) {
+-                    mCallWaitingToneSoundPool.play(1,1,1,0,-1,1);
++                    mCallWaitingCallPlayValue = mCallWaitingToneSoundPool.play(1,1,1,0,-1,1);
+                 }  
+             }); 
+         }
+@@ -213,8 +213,8 @@
+     public synchronized void stopCallWaiting() {
+         Log.v(this, "stop call waiting.");
+         if (mCallWaitingToneSoundPool != null) {
+-            mCallWaitingToneSoundPool.stop(1);
+-            mCallWaitingToneSoundPool.unload(1);  
++            mCallWaitingToneSoundPool.stop(mCallWaitingCallPlayValue);
++            mCallWaitingToneSoundPool.unload(mCallWaitingCallPlayValue);  
+             mCallWaitingToneSoundPool.release();
+             mCallWaitingToneSoundPool = null;
+         }

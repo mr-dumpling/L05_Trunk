@@ -1,0 +1,68 @@
+Index: packages/apps/CarrierConfig/assets/carrier_config_33402.xml
+===================================================================
+--- packages/apps/CarrierConfig/assets/carrier_config_33402.xml	(revision 8262)
++++ packages/apps/CarrierConfig/assets/carrier_config_33402.xml	(revision 8263)
+@@ -3,7 +3,6 @@
+ <carrier_config>
+ <string name="carrier_data_call_retry_config_default_string"></string>
+ <int name="carrier_data_call_max_same_apn_retry_int" value="2" />
+-<string name="carrier_data_call_retry_config_strings"></string>
+ <boolean name="ims_keep_conf_call" value="false" />
+ </carrier_config>
+ </carrier_config_list>
+Index: packages/apps/CarrierConfig/assets/carrier_config_334020.xml
+===================================================================
+--- packages/apps/CarrierConfig/assets/carrier_config_334020.xml	(revision 8262)
++++ packages/apps/CarrierConfig/assets/carrier_config_334020.xml	(revision 8263)
+@@ -7,7 +7,6 @@
+ <int name="maxImageWidth" value="2592" />
+ <string name="carrier_data_call_retry_config_default_string"></string>
+ <int name="carrier_data_call_max_same_apn_retry_int" value="2" />
+-<string name="carrier_data_call_retry_config_strings"></string>
+ <boolean name="ims_keep_conf_call" value="false" />
+ </carrier_config>
+ </carrier_config_list>
+Index: vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/RetryManager.java
+===================================================================
+--- vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/RetryManager.java	(revision 8262)
++++ vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/RetryManager.java	(revision 8263)
+@@ -562,8 +562,10 @@
+      */
+     private int getMaxSameApnRetry() {
+ 		if (mModemSuggestedDelay == DcFailCauseManager.retryConfigForOp112.retryTime.getValue()) {
+-			if (mDcFcMgr != null && mDcFcMgr.isSpecificNetworkOperator(DcFailCauseManager.Operator.OP112)) {
+-				return DcFailCauseManager.retryConfigForOp112.maxRetryCount.getValue();
++			log("getMaxSameApnRetry" + mModemSuggestedDelay + " ms.");
++			if (mDcFcMgr != null&& mDcFcMgr.isSpecificNetworkOperator(DcFailCauseManager.Operator.OP112)) {
++				log("getMaxSameApnRetry CC33 mModemSuggestedDelay" + mModemSuggestedDelay + " ms.");
++				return MAX_SAME_APN_RETRY;
+ 			}
+ 		}
+         CarrierConfigManager configManager = (CarrierConfigManager)
+@@ -637,13 +639,19 @@
+             return NO_RETRY;
+         }
+ 
+-        if (mModemSuggestedDelay != NO_SUGGESTED_RETRY_DELAY &&
+-                mSameApnRetryCount < getMaxSameApnRetry()) {
+-            // If the modem explicitly suggests a retry delay, we should use it, even in fail fast
+-            // mode.
+-            log("Modem suggested retry in " + mModemSuggestedDelay + " ms.");
+-            return mModemSuggestedDelay;
+-        }
++        if (mModemSuggestedDelay != NO_SUGGESTED_RETRY_DELAY && mSameApnRetryCount < getMaxSameApnRetry()) {
++			// If the modem explicitly suggests a retry delay, we should use it, even in fail fast
++			// mode.
++			if (mModemSuggestedDelay == DcFailCauseManager.retryConfigForOp112.retryTime.getValue()) {
++				if (mDcFcMgr != null && mDcFcMgr.isSpecificNetworkOperator(DcFailCauseManager.Operator.OP112)
++						&& (mSameApnRetryCount >= DcFailCauseManager.retryConfigForOp112.maxRetryCount.getValue())) {
++					log("getDelayForNextApn CC33 not retry!");
++					return NO_RETRY;
++				}
++			}
++			log("Modem suggested retry in " + mModemSuggestedDelay + " ms.");
++			return mModemSuggestedDelay;
++		}
+ 
+         // In order to determine the delay to try next APN, we need to peek the next available APN.
+         // Case 1 - If we will start the next round of APN trying,

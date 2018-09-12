@@ -1,0 +1,266 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1160)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1161)
+@@ -958,7 +958,7 @@
+                 <category android:name="android.intent.category.VOICE_LAUNCH" />
+                 <category android:name="com.android.settings.SHORTCUT" />
+             </intent-filter>
+-            <intent-filter android:priority="10">
++            <intent-filter android:priority="12">
+                 <action android:name="com.android.settings.action.SETTINGS" />
+             </intent-filter>
+             <meta-data android:name="com.android.settings.category"
+@@ -3050,11 +3050,17 @@
+                   android:label="@string/gesture_preference_title"
+                   android:icon="@drawable/ic_settings_gestures"
+                   android:enabled="@bool/config_gesture_settings_enabled">
+-            <intent-filter>
++			<intent-filter android:priority="1">
++                <action android:name="com.android.settings.LAUNCHER_SETTINGS" />
++                <action android:name="android.settings.LAUNCHER_SETTINGS" />
++			</intent-filter>
++            <intent-filter >
+                 <action android:name="android.intent.action.MAIN" />
+                 <category android:name="com.android.settings.SHORTCUT" />
++				<category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.VOICE_LAUNCH" />
+             </intent-filter>
+-            <intent-filter>
++            <intent-filter android:priority="11">
+                 <action android:name="com.android.settings.action.SETTINGS" />
+             </intent-filter>
+             <meta-data android:name="com.android.settings.category"
+@@ -3063,7 +3069,33 @@
+                        android:value="com.android.settings.gestures.GestureSettings" />
+             <meta-data android:name="com.android.settings.summary"
+                        android:resource="@string/gesture_preference_summary" />
++			<meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
++                android:value="true" />
+         </activity>
++		<!--add by wqq for add LockScreen-->
++		<activity android:name="Settings$LockScreenSettingsActivity"
++                  android:label="@string/lock_screen_title"
++                  android:icon="@drawable/ic_sysbar_quicksettings">
++			<intent-filter android:priority="1">
++                <action android:name="com.android.settings.LAUNCHER_SETTINGS" />
++                <action android:name="android.settings.LAUNCHER_SETTINGS" />
++			</intent-filter>
++            <intent-filter >
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="com.android.settings.SHORTCUT" />
++				<category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.VOICE_LAUNCH" />
++            </intent-filter>
++            <intent-filter android:priority="10">
++                <action android:name="com.android.settings.action.SETTINGS" />
++            </intent-filter>
++            <meta-data android:name="com.android.settings.category"
++                       android:value="com.android.settings.category.device" />
++            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
++                       android:value="com.android.settings.LockScreenSettings" />
++			<meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
++                android:value="true" />
++        </activity>
+ 
+         <activity android:name="BackupSettingsActivity"
+                   android:label="@string/privacy_settings_title"
+Index: packages/apps/Settings/src/com/android/settings/Settings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/Settings.java	(revision 1160)
++++ packages/apps/Settings/src/com/android/settings/Settings.java	(revision 1161)
+@@ -190,4 +190,6 @@
+     public static class SmartCallFwdActivity extends SettingsActivity { /* empty */ }
+     /**@}*/
+ 	public static class RegulatorySaftySettingsActivity extends SettingsActivity { /* empty */ }
++	/**wqq:add for LockScreen*/
++	public static class LockScreenSettingsActivity extends SettingsActivity{/*empty*/}
+ }
+Index: packages/apps/Settings/src/com/android/settings/SettingsActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1160)
++++ packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1161)
+@@ -260,6 +260,7 @@
+             Settings.ManageApplicationsActivity.class.getName(),
+             Settings.PowerUsageSummaryActivity.class.getName(),
+             Settings.GestureSettingsActivity.class.getName(),
++            Settings.LockScreenSettingsActivity.class.getName(),
+             //personal_section
+             Settings.LocationSettingsActivity.class.getName(),
+             Settings.SecuritySettingsActivity.class.getName(),
+@@ -391,7 +392,9 @@
+             /// M: WifiGprsSelector setting fragment
+             WifiGprsSelector.class.getName(),
+             /// M: SmartCallForward setting fragment
+-            SmartCallFwdFragment.class.getName()
++            SmartCallFwdFragment.class.getName(),
++            //wqq:add for LockScreen
++            LockScreenSettings.class.getName(),
+     };
+ 
+ 
+Index: packages/apps/Settings/src/com/android/settings/LockScreenSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/LockScreenSettings.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/LockScreenSettings.java	(revision 1161)
+@@ -0,0 +1,94 @@
++/*
++ * Copyright (C) 2016 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings;
++
++import android.content.Context;
++import android.content.res.Resources;
++import android.os.Bundle;
++import android.support.v7.preference.Preference;
++import android.text.TextUtils;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++import com.android.settings.R;
++import com.android.settings.SettingsPreferenceFragment;
++
++import java.util.ArrayList;
++import java.util.List;
++import android.support.v7.preference.PreferenceGroup;
++import android.support.v7.preference.PreferenceScreen;
++import android.provider.Settings;
++/**
++ * Top level fragment for gesture settings.
++ * This will create individual switch preference for each gesture and handle updates when each
++ * preference is updated
++ */
++public class LockScreenSettings extends SettingsPreferenceFragment{
++
++    private static final String TAG = "LockScreenSettings";
++    private static final String PREF_KEY_FUNCTION_SETTINGS = "fun_setting";
++	private Preference mFunctionPreference;
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        addPreferencesFromResource(R.xml.lock_screen_settings);
++        PreferenceScreen root = getPreferenceScreen();
++		mFunctionPreference=(Preference)root.findPreference(PREF_KEY_FUNCTION_SETTINGS);
++		updateSummary();
++    }
++
++
++    @Override
++    public void onStart() {
++        super.onStart();
++        
++    }
++	
++	@Override
++    public void onResume() {
++        super.onResume();
++        updateSummary();
++    }
++	
++    @Override
++    public void onStop() {
++        super.onStop();
++        
++    }
++
++    
++    @Override
++    protected int getMetricsCategory() {
++        return MetricsEvent.SETTINGS_GESTURES;
++    }
++	private void updateSummary(){
++		String func_switch=Settings.System.getString(getContentResolver(),"func_switch");
++		if(func_switch==null){
++			func_switch="false";}
++		if(func_switch.equals("true")){
++			mFunctionPreference.setSummary("on");
++		
++		}else{
++			mFunctionPreference.setSummary("off");
++			
++		}
++		
++	}
++
++}
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1160)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1161)
+@@ -8008,4 +8008,5 @@
+ 	<string name="notifications_color_normal">Normal</string>
+ 	<string name="notifications_color_highlight">Highlighted in colour</string>
+ 	<!-- Add for bug_id 111336 by dongdongli 20171101 end -->
++    <string name="lock_screen_title">Lock screen</string>
+ </resources>
+Index: packages/apps/Settings/res/xml/lock_screen_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/lock_screen_settings.xml	(revision 0)
++++ packages/apps/Settings/res/xml/lock_screen_settings.xml	(revision 1161)
+@@ -0,0 +1,32 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2016 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:settings="http://schemas.android.com/apk/res-auto"
++    android:title="@string/lock_screen_title">
++	<PreferenceCategory android:key="func"
++            android:title="@string/fun_setting_titlte"
++            android:persistent="false">
++		<Preference android:key="fun_setting"
++					android:title="@string/fun_setting_titlte"
++					android:persistent="false">
++				<intent android:action="android.intent.action.MAIN"
++                    android:targetPackage="com.android.systemui"
++                    android:targetClass="com.android.systemui.funcsetting.FuncSettings"/>
++
++        </Preference>
++	</PreferenceCategory>
++</PreferenceScreen>
+\ No newline at end of file
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1160)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1161)
+@@ -3251,6 +3251,7 @@
+     <string name="regulartory_safety_title">"监管和安全"</string>
+ 	<string name="battery_percent_title">电池百分比显示</string>
+ 	<string name="battery_percent_title">电池百分比显示</string>
++	<string name="battery_percent_title">电池百分比显示</string>
+ 	<string name="battery_info_status_label" msgid="8109155295509700309">"电池状态："</string>
+     <string name="battery_info_power_label" msgid="7465140230991349382">"是否已插电："</string>
+     <string name="battery_info_scale_label" msgid="3649763192389778437">"电池电量："</string>
+@@ -3287,4 +3288,5 @@
+     <string name="battery_info_health_unspecified_failure" msgid="6347021103185471590">"未知错误"</string>
+     <string name="battery_info_health_cold" msgid="3835692786176707318">"电量低"</string>
+ 	<string name="testing_battery_info" msgid="4132685016148679403">"电池信息"</string>
++    <string name="lock_screen_title">"锁屏"</string>
+ </resources>

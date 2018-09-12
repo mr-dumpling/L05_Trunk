@@ -1,0 +1,382 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/QSTileHost.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/QSTileHost.java	(revision 1085)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/QSTileHost.java	(revision 1086)
+@@ -40,7 +40,9 @@
+ import com.android.systemui.qs.external.CustomTile;
+ import com.android.systemui.qs.external.TileLifecycleManager;
+ import com.android.systemui.qs.external.TileServices;
+-import com.android.systemui.qs.tiles.AirplaneModeTile;
++import com.android.systemui.qs.tiles.AirplaneModeTile;//AudioProfileTile
++import com.android.systemui.qs.tiles.AudioProfileTile;
++
+ import com.android.systemui.qs.tiles.BatteryTile;
+ import com.android.systemui.qs.tiles.BluetoothTile;
+ import com.android.systemui.qs.tiles.CastTile;
+@@ -456,6 +458,7 @@
+         IQuickSettingsPlugin quickSettingsPlugin = PluginManager
+                 .getQuickSettingsPlugin(mContext);
+         if (tileSpec.equals("wifi")) return new WifiTile(this);
++		else if (tileSpec.equals("night")) return new NightDisplayTile(this);
+         else if (tileSpec.equals("bt")) return new BluetoothTile(this);
+         else if (tileSpec.equals("cell")) return new CellularTile(this);
+         else if (tileSpec.equals("dnd")) return new DndTile(this);
+@@ -470,7 +473,8 @@
+         else if (tileSpec.equals("user")) return new UserTile(this);
+         else if (tileSpec.equals("battery")) return new BatteryTile(this);
+         else if (tileSpec.equals("saver")) return new DataSaverTile(this);
+-        else if (tileSpec.equals("night")) return new NightDisplayTile(this);
++		else if (tileSpec.equals("audioprofile"))return new AudioProfileTile(this);
++        //else if (tileSpec.equals("night")) return new NightDisplayTile(this);
+ 
+         /// M: Add extra tiles in quicksetting @{
+         else if (tileSpec.equals("hotknot") && SIMHelper.isMtkHotKnotSupport())
+@@ -502,6 +506,10 @@
+         // Intent tiles.
+         else if (tileSpec.startsWith(IntentTile.PREFIX)) return IntentTile.create(this,tileSpec);
+         else if (tileSpec.startsWith(CustomTile.PREFIX)) return CustomTile.create(this,tileSpec);
++		
++			
++
++		
+         else {
+             Log.w(TAG, "Bad tile spec: " + tileSpec);
+             return null;
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/AudioProfileTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/AudioProfileTile.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/AudioProfileTile.java	(revision 1086)
+@@ -0,0 +1,154 @@
++package com.android.systemui.qs.tiles;
++
++import android.content.BroadcastReceiver;
++import android.content.ContentResolver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.media.AudioManager;
++import android.os.Vibrator;
++import android.provider.Settings;
++import android.util.Log;
++import com.android.internal.logging.MetricsLogger;
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++
++import com.android.systemui.R;
++
++import com.android.systemui.qs.QSTile;
++import com.android.systemui.qs.QSTile.BooleanState;
++import com.android.systemui.qs.QSTile.ResourceIcon;
++
++public class AudioProfileTile extends QSTile<QSTile.BooleanState> {
++    public static final int QS_AUDIOPROFILE = 512;
++    private AudioManager mAudioManager;
++ 
++    public static final String ACTION_AUDIO_PROFILE = "android.settings.SOUND_SETTINGS";
++
++
++    public AudioProfileTile(Host host) {
++        super(host);
++        mAudioManager = (AudioManager) mContext
++                .getSystemService(Context.AUDIO_SERVICE);
++        registerVolumeModeReceiver();
++    }
++
++    @Override
++    public Intent getLongClickIntent() {
++     
++        return new Intent(ACTION_AUDIO_PROFILE);
++
++    }
++
++    @Override
++    public CharSequence getTileLabel() {
++        return mContext.getString(R.string.quick_settings_volume_label);
++    }
++
++    @Override
++    public int getMetricsCategory() {
++        //return MetricsEvent.QS_AUDIOPROFILE;;//MetricsLogger.QS_AUDIOPROFILE;
++       return MetricsEvent.QS_AUDIOPROFILE;
++    }
++
++    @Override
++    protected void handleDestroy() {
++        super.handleDestroy();
++        mContext.unregisterReceiver(mVolumeModeReceiver);
++    }
++
++    @Override
++    public void setListening(boolean listening) {
++    }
++
++    @Override
++    /*protected*/public BooleanState newTileState() {
++        return new BooleanState();
++    }
++
++    @Override
++    protected void handleClick() {
++        setAudioProfilModem();
++        boolean newState = !mState.value;
++        refreshState(newState);
++    }
++
++    @Override
++    protected void handleUpdateState(BooleanState state, Object arg) {
++//        state.visible = true;
++        state.label = mContext.getString(R.string.quick_settings_volume_label);
++        int ringerMode = mAudioManager.getRingerModeInternal();
++        if (AudioManager.RINGER_MODE_VIBRATE == ringerMode) {
++            state.icon = ResourceIcon.get(R.drawable.ic_qs_vibrate_on);
++        } else if (AudioManager.RINGER_MODE_SILENT == ringerMode) {
++            state.icon = ResourceIcon.get(R.drawable.ic_qs_silent_on);
++        } else {
++            state.icon = ResourceIcon.get(R.drawable.ic_qs_general_on);
++        }
++        state.label = mContext.getString(R.string.quick_settings_volume_label);
++    }
++
++    private void setAudioProfilModem() {
++        int ringerMode = mAudioManager.getRingerModeInternal();
++        ContentResolver mResolver = mContext.getContentResolver();
++        Vibrator vibrator = (Vibrator) mContext
++                .getSystemService(Context.VIBRATOR_SERVICE);
++        boolean hasVibrator = vibrator == null ? false : vibrator.hasVibrator();
++        if (AudioManager.RINGER_MODE_SILENT == ringerMode) {
++            if (hasVibrator) {
++                Settings.System.putInt(mResolver,
++                        Settings.System.SOUND_EFFECTS_ENABLED, 0);
++                mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_VIBRATE);
++
++                mAudioManager.setVibrateSetting(
++                        AudioManager.VIBRATE_TYPE_RINGER,
++                        AudioManager.VIBRATE_SETTING_ON);
++                mAudioManager.setVibrateSetting(
++                        AudioManager.VIBRATE_TYPE_NOTIFICATION,
++                        AudioManager.VIBRATE_SETTING_ON);
++            } else {
++                Settings.System.putInt(mResolver,
++                        Settings.System.SOUND_EFFECTS_ENABLED, 1);
++                mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
++            }
++        } else if (AudioManager.RINGER_MODE_VIBRATE == ringerMode) {
++            Settings.System.putInt(mResolver,
++                    Settings.System.SOUND_EFFECTS_ENABLED, 1);
++            mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
++        } else {
++            Settings.System.putInt(mResolver,
++                    Settings.System.SOUND_EFFECTS_ENABLED, 0);
++            mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_SILENT);
++
++            if (hasVibrator) {
++                mAudioManager.setVibrateSetting(
++                        AudioManager.VIBRATE_TYPE_RINGER,
++                        AudioManager.VIBRATE_SETTING_OFF);
++                mAudioManager.setVibrateSetting(
++                        AudioManager.VIBRATE_TYPE_NOTIFICATION,
++                        AudioManager.VIBRATE_SETTING_OFF);
++            }
++        }
++    }
++
++    private void registerVolumeModeReceiver() {
++        IntentFilter volumeFilter = new IntentFilter();
++        volumeFilter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
++        volumeFilter.addAction(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION);
++        mContext.registerReceiver(mVolumeModeReceiver, volumeFilter);
++    }
++
++    private BroadcastReceiver mVolumeModeReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++
++            if (action.equals(AudioManager.RINGER_MODE_CHANGED_ACTION) || action.equals(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION)) {
++                int ringerMode = mAudioManager.getRingerModeInternal();
++                Log.d(TAG, "mVolumeModeReceiver: action =" + action
++                        + " now ringMode=" + ringerMode);
++                boolean newState = !mState.value;
++                refreshState(newState);
++            }
++        }
++    };
++}
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_vibrate_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_vibrate_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_vibrate_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_vibrate_on.png	(revision 1086)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_vibrate_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_silent_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_silent_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_silent_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_silent_on.png	(revision 1086)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_silent_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_general_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_general_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_general_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_general_on.png	(revision 1086)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_qs_general_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_vibrate_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_vibrate_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_vibrate_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_vibrate_on.png	(revision 1086)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_vibrate_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_silent_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_silent_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_silent_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_silent_on.png	(revision 1086)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_silent_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_general_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_general_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_general_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_general_on.png	(revision 1086)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_qs_general_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_vibrate_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_vibrate_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_vibrate_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_vibrate_on.png	(revision 1086)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_vibrate_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_silent_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_silent_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_silent_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_silent_on.png	(revision 1086)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_silent_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_general_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_general_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_general_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_general_on.png	(revision 1086)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_qs_general_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 1085)
++++ frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 1086)
+@@ -1672,4 +1672,5 @@
+     <!-- Label that replaces other notification controls when the notification is from the system
+          and cannot be silenced (see @string/show_silently) or blocked (see @string/block) -->
+     <string name="cant_silence_or_block">Notifications can\'t be silenced or blocked</string>
++    <string name="quick_settings_volume_label">Audio Profile</string>
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values/config.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/config.xml	(revision 1085)
++++ frameworks/base/packages/SystemUI/res/values/config.xml	(revision 1086)
+@@ -100,13 +100,15 @@
+ 
+     <!-- The default tiles to display in QuickSettings -->
+     <!-- M: add hotknot tile -->
+-    <string name="quick_settings_tiles_default" translatable="false">
+-        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,hotknot
++
++    
++	<string name="quick_settings_tiles_default" translatable="false">
++       wifi,cell,battery,dnd,flashlight,rotation,bt,location,airplane,night,audioprofile
+     </string>
+ 
+     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
+     <string name="quick_settings_tiles_stock" translatable="false">
+-        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,hotknot,location,hotspot,inversion,saver,work,cast,night
++        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,hotknot,location,hotspot,inversion,saver,work,cast,night,audioprofile
+     </string>
+ 
+     <!-- The tiles to display in QuickSettings -->
+Index: frameworks/base/proto/src/metrics_constants.proto
+===================================================================
+--- frameworks/base/proto/src/metrics_constants.proto	(revision 1085)
++++ frameworks/base/proto/src/metrics_constants.proto	(revision 1086)
+@@ -2215,5 +2215,6 @@
+ 
+     // Add new aosp constants above this line.
+     // END OF AOSP CONSTANTS
++	QS_AUDIOPROFILE = 497;
+   }
+ }

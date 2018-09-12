@@ -1,0 +1,48 @@
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 2135)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 2136)
+@@ -729,7 +729,14 @@
+         mAccountName.setText(senderName);
+         mAccountName.setOnPreferenceChangeListener(this);
+ 
+-        final String accountSignature = mContext.getResources().getString(R.string.preferences_signature_content);
++        String defaultSignature;
++        if (null == mAccount.getSignature() || mAccount.getSignature().isEmpty() ) {
++            defaultSignature = mContext.getResources().getString(R.string.preferences_signature_content);
++        } else {
++            defaultSignature = mAccount.getSignature();
++        }
++
++        final String accountSignature = defaultSignature;
+         mAccountSignature = (EditTextPreference) findPreference(PREFERENCE_SIGNATURE);
+         mAccountSignature.setText(accountSignature);
+         mAccountSignature.setOnPreferenceChangeListener(this);
+Index: packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java
+===================================================================
+--- packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 2135)
++++ packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 2136)
+@@ -4226,7 +4226,11 @@
+     }
+ 
+     private void appendSignature() {
+-        final String newSignature = mCachedSettings != null ? mCachedSettings.signature : null;
++        String newSignature = mCachedSettings != null ? mCachedSettings.signature : null;
++        if (null == newSignature || newSignature.isEmpty()) {
++            newSignature = getResources().getString(R.string.preferences_signature_content);
++        }
++
+         final int signaturePos = getSignatureStartPosition(mSignature, mBodyView.getText().toString());
+         if (!TextUtils.equals(newSignature, mSignature) || signaturePos < 0) {
+             mSignature = newSignature;
+Index: vendor/branch/980CN1/packages/apps/Email/UnifiedEmail/res/values/strings.xml
+===================================================================
+--- vendor/branch/980CN1/packages/apps/Email/UnifiedEmail/res/values/strings.xml	(revision 2135)
++++ vendor/branch/980CN1/packages/apps/Email/UnifiedEmail/res/values/strings.xml	(revision 2136)
+@@ -1167,5 +1167,5 @@
+ 
+     <!-- activity name of the photoviewer -->
+     <string name="photo_view_activity" translatable="false">com.android.mail.photo.MailPhotoViewActivity</string>
+-    <string name="preferences_signature_content" msgid="4801741764511807065">"Sent from my ALCATEL Alcatel 3X"</string>
++    <string name="preferences_signature_content" msgid="4801741764511807065">"Sent from my TCL V760"</string>
+ </resources>

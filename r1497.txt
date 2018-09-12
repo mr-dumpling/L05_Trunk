@@ -1,0 +1,30 @@
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/ProximitySensor.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/ProximitySensor.java	(revision 1496)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/ProximitySensor.java	(revision 1497)
+@@ -35,6 +35,10 @@
+ import com.android.incallui.AudioModeProvider.AudioModeListener;
+ import com.android.incallui.InCallPresenter.InCallState;
+ import com.android.incallui.InCallPresenter.InCallStateListener;
++import android.content.ComponentName;
++import android.app.ActivityManager;
++
++
+ /**
+  * Class manages the proximity sensor for the in-call UI.
+  * We enable the proximity sensor while the user in a phone call. The Proximity sensor turns off
+@@ -279,9 +283,12 @@
+                     .add("aud", CallAudioState.audioRouteToString(audioMode))
+                     .toString());
+             Log.i(this, "isVideoCall: " + isVideoCall);
+-
++			//modified by zxp for bug 111938
++			ActivityManager activityManager = (ActivityManager)mContext.getSystemService(Context.ACTIVITY_SERVICE);
++            ComponentName topActivity = activityManager.getRunningTasks(1).get(0).topActivity;
++		
+             /// M: disable Proximity Sensor during VT Call
+-            if (mIsPhoneOffhook && !screenOnImmediately && !isVideoCall) {
++            if (mIsPhoneOffhook && !screenOnImmediately && !isVideoCall && topActivity.getPackageName().equals("com.android.dialer")) {
+                 Log.d(this, "Turning on proximity sensor");
+                 // Phone is in use!  Arrange for the screen to turn off
+                 // automatically when the sensor detects a close object.

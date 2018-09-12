@@ -1,0 +1,190 @@
+Index: vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/InCallTonePlayer.java
+===================================================================
+--- vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/InCallTonePlayer.java	(revision 13859)
++++ vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/InCallTonePlayer.java	(revision 13860)
+@@ -70,10 +70,14 @@
+     public static final int TONE_UNOBTAINABLE_NUMBER = 12;
+     public static final int TONE_VOICE_PRIVACY = 13;
+     public static final int TONE_VIDEO_UPGRADE = 14;
++    public static final int TONE_RING_BACK_HK = 15;//Added by tang.wei for XR5120537 on 2017/08/04
+ 
+     private static final int RELATIVE_VOLUME_EMERGENCY = 100;
+     private static final int RELATIVE_VOLUME_HIPRI = 80;
+     private static final int RELATIVE_VOLUME_LOPRI = 50;
++    //Added by bo-wang for Task  4952701 from Defect 4921901 on 2017/06/27 begin
++    private static final int RELATIVE_VOLUME_HIPRI_FOR_RING_BACK = 100;
++    //Added by bo-wang for Task  4952701 from Defect 4921901 on 2017/06/27 end
+ 
+     // Buffer time (in msec) to add on to the tone timeout value. Needed mainly when the timeout
+     // value for a tone is exact duration of the tone itself.
+@@ -211,6 +215,13 @@
+                     toneVolume = RELATIVE_VOLUME_HIPRI;
+                     toneLengthMillis = 4000;
+                     break;
++                //Begin Added by tang.wei for XR5120537 on 2017/08/04
++                case TONE_RING_BACK_HK:
++                    toneVolume = RELATIVE_VOLUME_HIPRI_FOR_RING_BACK;
++                    toneType = ToneGenerator.TONE_SUP_TONE_HK;
++                    toneLengthMillis = Integer.MAX_VALUE - TIMEOUT_BUFFER_MILLIS;
++                    break;
++                //End Added by tang.wei for XR5120537 on 2017/08/04
+                 default:
+                     throw new IllegalStateException("Bad toneId: " + mToneId);
+             }
+Index: vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/RingbackPlayer.java
+===================================================================
+--- vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/RingbackPlayer.java	(revision 13859)
++++ vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/RingbackPlayer.java	(revision 13860)
+@@ -18,6 +18,15 @@
+ 
+ import com.android.internal.util.Preconditions;
+ 
++//Begin Added by tang.wei for XR5120537 on 2017/08/04
++import android.telephony.TelephonyManager;
++import android.telephony.SubscriptionManager;
++import android.telecom.PhoneAccount;
++import android.telecom.PhoneAccountHandle;
++import android.telecom.TelecomManager;
++import android.content.Context;
++import android.os.SystemProperties;
++//End Added by tang.wei for XR5120537 on 2017/08/04
+ /**
+  * Plays ringback tones. Ringback is different from other tones because it operates as the current
+  * audio for a call, whereas most tones play as simple timed events. This means ringback must be
+@@ -38,6 +47,12 @@
+      */
+     private InCallTonePlayer mTonePlayer;
+ 
++    //Begin Added by tang.wei for XR5120537 on 2017/08/04
++    private TelephonyManager mTelephonyManager;
++    private TelecomManager mTelecomManager;
++    private SubscriptionManager mSubscriptionManager;
++    //End Added by tang.wei for XR5120537 on 2017/08/04
++
+     RingbackPlayer(InCallTonePlayer.Factory playerFactory) {
+         mPlayerFactory = playerFactory;
+     }
+@@ -64,7 +79,15 @@
+         mCall = call;
+         if (mTonePlayer == null) {
+             Log.d(this, "Playing the ringback tone for %s.", call);
+-            mTonePlayer = mPlayerFactory.createPlayer(InCallTonePlayer.TONE_RING_BACK);
++            //Begin Modified by tang.wei for XR5120537 on 2017/08/04
++            String netCountryIso = getNetworkCountryIsoForCall(call);
++            if ("true".equalsIgnoreCase(SystemProperties.get("ro.hk.style.ringbacktone", "false"))
++                    && "hk".equalsIgnoreCase(netCountryIso)) {
++                mTonePlayer = mPlayerFactory.createPlayer(InCallTonePlayer.TONE_RING_BACK_HK);
++            } else {
++                mTonePlayer = mPlayerFactory.createPlayer(InCallTonePlayer.TONE_RING_BACK);
++            }
++            //End Modified by tang.wei for XR5120537 on 2017/08/04
+             mTonePlayer.startTone();
+         }
+     }
+@@ -89,4 +112,41 @@
+             }
+         }
+     }
++
++    //Begin Added by tang.wei for XR5120537 on 2017/08/04
++    /**
++     *this function target for get networkcountryIso for current call
++     *@param call current need play ring back call
++     *@return networkcountry for current call
++     */
++     private String getNetworkCountryIsoForCall(Call call) {
++         Context context = call.getContext();
++         int subId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
++         mTelephonyManager = (TelephonyManager)context
++                    .getSystemService(Context.TELEPHONY_SERVICE);
++         if (TelephonyManager.getDefault().isMultiSimEnabled()) {
++             mTelecomManager = TelecomManager.from(context);
++             mSubscriptionManager = SubscriptionManager.from(context);
++             PhoneAccountHandle phoneAccountHandle =  call.getTargetPhoneAccount();
++             if (mTelecomManager != null && mTelephonyManager != null) {
++                 try {
++                     PhoneAccount phoneAccount = mTelecomManager.getPhoneAccount(phoneAccountHandle);
++                     if (phoneAccount != null) {
++                         subId = mTelephonyManager.getSubIdForPhoneAccount(phoneAccount);
++                     }
++                 } catch(Exception e) {
++                     e.printStackTrace();
++                     Log.d(this, "getSubIdForPhoneAccount error: " + e.toString());
++                 }
++             }
++             int phoneId = mSubscriptionManager.getPhoneId(subId);
++             String netCountryIso = mTelephonyManager.getNetworkCountryIsoForPhone(phoneId);
++             Log.d(this, "subId = " + subId + " ,phoneId = " + phoneId
++                     + " ,networkCountry iso = " + netCountryIso);
++             return netCountryIso;
++         } else {
++             return mTelephonyManager.getNetworkCountryIso();
++         }
++     }
++     //End Added by tang.wei for XR5120537 on 2017/08/04
+ }
+Index: vendor/branch/5058I_HK/device/ausshine/aus6739_66_n1/system.prop
+===================================================================
+--- vendor/branch/5058I_HK/device/ausshine/aus6739_66_n1/system.prop	(revision 13859)
++++ vendor/branch/5058I_HK/device/ausshine/aus6739_66_n1/system.prop	(revision 13860)
+@@ -96,4 +96,5 @@
+ # add api information
+ ro.product.first_api_level=25
+ 
+-persist.sys.timezone = Asia/Hong_Kong
+\ No newline at end of file
++persist.sys.timezone = Asia/Hong_Kong
++ro.hk.style.ringbacktone = true
+\ No newline at end of file
+Index: vendor/branch/5058I_HK/frameworks/av/include/media/ToneGenerator.h
+===================================================================
+--- vendor/branch/5058I_HK/frameworks/av/include/media/ToneGenerator.h	(revision 13859)
++++ vendor/branch/5058I_HK/frameworks/av/include/media/ToneGenerator.h	(revision 13860)
+@@ -150,6 +150,7 @@
+         //CDMA end
+ 		TCT_TONE_CALL_WAITING_LATAM, //added by wenping.ye for task731020
+ 		TONE_CMAS,// added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14
++        TONE_SUP_TONE_HK,//added by tang.wei for defect4539415
+         NUM_TONES,
+         NUM_SUP_TONES = LAST_SUP_TONE-FIRST_SUP_TONE+1
+     };
+Index: vendor/branch/5058I_HK/frameworks/av/media/libmedia/ToneGenerator.cpp
+===================================================================
+--- vendor/branch/5058I_HK/frameworks/av/media/libmedia/ToneGenerator.cpp	(revision 13859)
++++ vendor/branch/5058I_HK/frameworks/av/media/libmedia/ToneGenerator.cpp	(revision 13860)
+@@ -733,6 +733,15 @@
+          .repeatCnt = 0,
+          .repeatSegment = 0 },                    // TONE_CMAS
+         //added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end
++          //added by tang.wei for defect4539415 begin on 2017-04-07
++          { .segments = { { .duration = 400, .waveFreq = { 440, 480, 0 }, 0, 0 },
++                          { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                          { .duration = 400, .waveFreq = { 440, 480, 0 }, 0, 0 },
++                          { .duration = 3500, .waveFreq = { 0 }, 0, 0},
++                          { .duration = 0, .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                    // TONE_SUP_TONE_HK
++          //added by tang.wei for defect4539415 end on 2017-04-07
+         { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 350, 440, 0 }, 0, 0 },
+                         { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
+           .repeatCnt = ToneGenerator::TONEGEN_INF,
+Index: vendor/branch/5058I_HK/frameworks/base/media/java/android/media/ToneGenerator.java
+===================================================================
+--- vendor/branch/5058I_HK/frameworks/base/media/java/android/media/ToneGenerator.java	(revision 13859)
++++ vendor/branch/5058I_HK/frameworks/base/media/java/android/media/ToneGenerator.java	(revision 13860)
+@@ -750,8 +750,14 @@
+      */
+     public static final int TONE_CMAS = 100;
+     //added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end
+-
+     /**
++     *TONE_SUP_TONE_HK - tone:440Hz+480Hz 400ms on, 200ms OFF,
++     *                              440Hz+480Hz 400ms on, 3500ms OFF,
++     * @see #ToneGenerator(int, int)
++     * @hide
++     */
++    public static final int TONE_SUP_TONE_HK = 101;
++    /**
+      * ToneGenerator class contructor specifying output stream type and volume.
+      *
+      * @param streamType The streame type used for tone playback (e.g. STREAM_MUSIC).

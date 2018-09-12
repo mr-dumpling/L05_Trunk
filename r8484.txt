@@ -1,0 +1,152 @@
+Index: tools/svn_clear.sh
+===================================================================
+--- tools/svn_clear.sh	(revision 0)
++++ tools/svn_clear.sh	(revision 8484)
+@@ -0,0 +1,139 @@
++#!/usr/bin/perl 
++# ##########################################################
++# Author : javen
++# Date : 2018.1.30
++# ##########################################################
++#
++
++if(@ARGV < 1){
++	print "## Input Yes or No to Confirm to Do...\n## svn clear.sh -h for help\n## input now(Yes or No)?\n-- ";
++	$cnf_input = <STDIN>;
++	chomp($cnf_input);
++	if($cnf_input eq "Yes" || $cnf_input eq "Y" || $cnf_input eq "y" || $cnf_input eq "yes"){
++		print "-- Continue to do [$cnf_input]...\n";
++	}else{
++		print "-- Cancel By User!\n";
++		exit;
++	}
++}
++#for -h
++$idx_help = getCmdParam("-h");
++if($idx_help > 0){
++	Useage();
++	exit;
++}
++print "##################### BEGIN ######################\n";
++
++$idx_out = getCmdParam("-ex_out");
++$idx_dir = getCmdParam("-dir");
++$idx_show = getCmdParam("-show");
++$idx_cmd = getCmdParam("-cmd");
++$subdir = "../";
++if($idx_dir > 0){
++	if($ARGV[$idx_dir] =~ /\.\.\//){
++		$subdir = $ARGV[$idx_dir];
++	}else{
++		$subdir = "../".$ARGV[$idx_dir];
++	}
++}
++# variable define---
++$BRANCH = "vendor/branch/".$ARGV[0];
++$CMP_DIR = "";
++$MODIFY_FLAG = "M       ";
++$NEW_FLAG = "\\?       ";
++print "-- Search Path = [$subdir] --\n";
++
++## code
++my @same_list;
++my @flist = `svn st $subdir`;
++print "-" x 50;print "\n";
++
++#print @flist;
++foreach $file (@flist){
++	chomp($file);
++	if($file =~ /$MODIFY_FLAG/){
++		$file =~ s/$MODIFY_FLAG//g;
++		$cmd1 = "svn revert $file";
++		if($idx_show > 0){
++			print "-- REVERT $file\n";
++		}
++		$ret1 = `$cmd1`;
++		if($idx_cmd > 0){
++			print $ret1;
++		}
++		next;
++	}
++	if($file =~ /$NEW_FLAG/){
++		$file =~ s/$NEW_FLAG//g;
++		if($file =~ /\.sh/){
++			print "-- EXCEPT $file\n";
++			next;
++		}
++		if($idx_out > 0){
++			if("out/" eq substr($file,0,4)){
++				print "NOT DELETE $file\n";
++				next;
++			}
++		}
++		$cmd2 = "rm -rf $file";
++		if($idx_show > 0){
++			print "-- REMOVE $file\n";
++		}
++		$ret2 = `$cmd2`;
++		if($idx_cmd > 0){
++			print $ret2;
++		}
++		next;
++	}
++	#print "NOT DO[$file]\n";
++	push @same_list, "$file";
++}
++
++#show all not done item
++print "\nNOT DONE #:\n";
++foreach $ln (@same_list){
++	if($ln =~ /\//){
++		print "-- $ln\n";
++	}
++}
++print "\n";
++
++print "-" x 50;print "\n";
++print "##################### END ########################\n";
++exit;
++#######################################end###################		
++#no input param
++sub getCmdParam {  
++	my ($my_pa) = @_;
++	
++	$av_str = "";
++	foreach $my_b(@ARGV){
++		$av_str = $av_str.$my_b.",";
++	}
++	
++	my @my_av = split(",", $av_str);
++	my $mycount = 0;
++
++	foreach $my_la(@my_av){
++		$mycount++;
++		if($my_pa eq $my_la){
++			return $mycount;
++		}
++	}
++	return -1;
++} 
++
++sub Useage(){
++	print "-" x 50;print "\n";
++	print "Clear all code except the svn code.\n";
++	print "Useage: 
++	svn_clear.sh [-h]
++	-- -h show help information
++	-- -m only modify code do the work
++	-- -ex_out execput out directory not delete
++	-- -dir do work on directory
++	-- -show show removed and revert files
++	-- -cmd show cmd result
++	\n";
++	print "-" x 50;print "\n";
++}
+\ No newline at end of file
+
+Property changes on: tools/svn_clear.sh
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

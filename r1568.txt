@@ -1,0 +1,313 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1567)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1568)
+@@ -3476,6 +3476,14 @@
+            <intent-filter android:priority="1000">  
+                <action android:name="com.android.settings.RESET_FACTORY"/>  
+            </intent-filter>  
++		</receiver>
++        <receiver android:name="com.android.settings.PrefChangeBroadcast"
++			  android:enabled="true"
++			  exported = "true">  
++           <intent-filter android:priority="1000">  
++               <action android:name="com.android.settings.mTime24prefChange"/>  
++           </intent-filter>  
+ 		</receiver>  	
++        
+     </application>
+ </manifest>
+Index: packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java	(revision 1567)
++++ packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java	(revision 1568)
+@@ -25,8 +25,15 @@
+ import android.util.Log;
+ import android.widget.Toast;
+ import java.util.Calendar;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.support.v14.preference.SwitchPreference;
++import java.text.SimpleDateFormat;
++import android.content.BroadcastReceiver;
++import java.util.Date;
+ 
+ 
++
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ /**
+  * Created by Administrator on 2017/8/21.
+@@ -45,7 +52,7 @@
+ 	private static final String KEY_TIME_OFF = "turn_off_at";
+ 	private static final String KEY_SETTING_TIME = "custom_schedule";
+ 	private static final String KEY_SUNSET_SUNRISE = "sunset2sunrise";
+-	private final String timeOn="22:00";
++	private final String timeOn="10:00";
+ 	private final String timeOff="07:00";
+ 	 private final String OPEN="open_nightMode";
+     private final String CLOSE="close_nightMode";
+@@ -58,6 +65,8 @@
+ 	private TimePickerDialog.OnTimeSetListener timeOnListener;
+ 	private int startTime_Hour;
+ 	private int startTime_Min;
++    private boolean  mIs24HourBool;
++    private boolean mPrefChangeFlag = false;
+     @Override
+     protected int getMetricsCategory() {
+         return MetricsEvent.WALLPAPER_TYPE;
+@@ -72,6 +81,7 @@
+         super.onCreate(savedInstanceState);
+ 
+         addPreferencesFromResource(R.xml.schedule_plan_settings);
++        mIs24HourBool=is24Hour();
+ 		initListener();
+ 		initPreference();
+     }
+@@ -177,6 +187,7 @@
+                 }else{
+ 
+        				String timeon=modePrenference.getString(TIME_ON,timeOn);
++                    Log.d("faker:","timeon:"+timeon);
+ 					String[] hourMin=timeon.split(":");
+ 					TimePickerDialog timeOnDialog=new TimePickerDialog(getContext(),timeOnListener,
+ 							 Integer.parseInt(hourMin[0]),Integer.parseInt(hourMin[1]),
+@@ -224,9 +235,16 @@
+ 				}else{
+ 					min=""+minute;
+ 				}
+-
+-            	modePrenference.edit().putString(TIME_ON,hour+":"+min).commit();
+-
++                if(mIs24HourBool){
++                   modePrenference.edit().putString(TIME_ON,hour+":"+min).commit();
++                }else{
++                    int stHour=Integer.parseInt(hour);
++                    if(stHour>12){
++                        hour=(stHour-12)+"";
++                    }
++                   modePrenference.edit().putString(TIME_ON,hour+":"+min).commit();
++                   Log.d("faker:", "245lin");                   
++                }
+             	updateTimeDisplay();
+ 
+             }
+@@ -261,7 +279,16 @@
+ 					PictureQuality.enableBlueLight(true);
+ 
+ 				}
+-            	modePrenference.edit().putString(TIME_Off,hour+":"+min).commit();
++                if(mIs24HourBool){
++                   modePrenference.edit().putString(TIME_Off,hour+":"+min).commit();
++                }else{
++                    int stHour=Integer.parseInt(hour);
++                    if(stHour>12){
++                        hour=(stHour-12)+"";
++                    }
++                   modePrenference.edit().putString(TIME_Off,hour+":"+min).commit(); 
++                   Log.d("faker:", "288lin");
++                }
+                 updateTimeDisplay();
+ 				NightModeUtils.sendBroad(OPEN_ACTION,getContext(),OPEN,startTime_Hour,startTime_Min,0);
+ 				NightModeUtils.sendBroad(CLOSE_ACTION,getContext(),CLOSE,hourOfDay,minute,-1);
+@@ -271,8 +298,63 @@
+ 	}
+ 	/*Update the selected time to the page above */
+ 	public void updateTimeDisplay(){
+-		turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
+-		turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff));
+-
++    
++            mPrefChangeFlag =PrefChangeBroadcast.mPrefChangeFlag;
++            Log.d("faker:updateTimeDisplay:", ""+mPrefChangeFlag);
++            String[] deOnTime=modePrenference.getString(TIME_ON,timeOn).split(":");
++            String[] deOffTime=modePrenference.getString(TIME_Off,timeOff).split(":");
++            int deOnHour=Integer.parseInt(deOnTime[0]);
++            int deOffHour=Integer.parseInt(deOffTime[0]);
++            if(mPrefChangeFlag){
++                   if(deOnHour<12){
++                       String nTimeOn=(deOnHour+12)+":"+deOnTime[1];
++                       //turn_on_at.setSummary(nTimeOn);
++                       Log.i("faker:", "nTimeOn:"+nTimeOn);
++                       modePrenference.edit().putString(TIME_ON,nTimeOn).commit();
++                       //turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                   }
++                   /*
++                   else if(deOnHour>12){
++                        String nTimeOn=(deOnHour-12)+":"+deOnTime[1];
++                        modePrenference.edit().putString(TIME_ON,nTimeOn).commit();
++                        turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                   }
++                   */
++                   if(deOffHour<12){
++                       Log.i("faker:", "deOffHour"+deOffHour);  
++                       String nTimeOff=(deOffHour+12)+":"+deOffTime[1];
++                       //turn_off_at.setSummary(nTimeOff);
++                       Log.i("faker:", "nTimeOff:"+nTimeOff);
++                       modePrenference.edit().putString(TIME_Off,nTimeOff).commit();
++                       //turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff)); 
++                   }
++                   /*
++                   else if(deOffHour>12){
++                       String nTimeOff=(deOffHour-12)+":"+deOffTime[1];
++                       modePrenference.edit().putString(TIME_Off,nTimeOff).commit();
++                       turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff));
++                   }
++                   */
++                    turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                    turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff)); 
++            }else if(!mPrefChangeFlag){
++                    if(deOnHour>12){
++                        String nTimeOn=(deOnHour-12)+":"+deOnTime[1];
++                        modePrenference.edit().putString(TIME_ON,nTimeOn).commit();
++                        //turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                    }
++                    if(deOffHour>12){
++                       String nTimeOff=(deOffHour-12)+":"+deOffTime[1];
++                       modePrenference.edit().putString(TIME_Off,nTimeOff).commit();
++                       //turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff));
++                   }
++                       turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++                       turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff));
++                   
+ 	}
++    }
++     private boolean is24Hour() {
++        return DateFormat.is24HourFormat(getActivity());
++    }
++    
+ 	}
+Index: packages/apps/Settings/src/com/android/settings/DateTimeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DateTimeSettings.java	(revision 1567)
++++ packages/apps/Settings/src/com/android/settings/DateTimeSettings.java	(revision 1568)
+@@ -79,7 +79,7 @@
+ 
+     private static final int DIALOG_DATEPICKER = 0;
+     private static final int DIALOG_TIMEPICKER = 1;
+-
++    
+     // have we been launched from the setup wizard?
+     protected static final String EXTRA_IS_FIRST_RUN = "firstRun";
+ 
+@@ -373,6 +373,12 @@
+             showDialog(DIALOG_TIMEPICKER);
+         } else if (preference == mTime24Pref) {
+             final boolean is24Hour = ((SwitchPreference)mTime24Pref).isChecked();
++            
++            Intent mPfeceCgIntent=new Intent();
++            mPfeceCgIntent.setAction("com.android.settings.mTime24prefChange");  
++            mPfeceCgIntent.putExtra("24prefFlag",is24Hour+""); 
++            getActivity().sendBroadcast(mPfeceCgIntent);
++            
+             set24Hour(is24Hour);
+             updateTimeAndDateDisplay(getActivity());
+             timeUpdated(is24Hour);
+Index: packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 1567)
++++ packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 1568)
+@@ -53,6 +53,7 @@
+ 	private SwitchPreference automateSchedulePreference;
+ 	private static ColorTemperaturePreference manuallyPreference;
+ 	private PreferenceScreen schedulePlanPreference;
++    private boolean mPrefChangeFlag = false;
+ 	
+ 	 @Override
+     protected int getMetricsCategory() {
+@@ -86,6 +87,37 @@
+ 				if(auto){
+ 					schedulePlanPreference.setSummary("22:00 to 7:00");
+ 				}else if(checkoutTime){
++                    mPrefChangeFlag =PrefChangeBroadcast.mPrefChangeFlag;
++                    String[] deOnTime=modePrenference.getString(TIME_ON,timeOn).split(":");
++                    String[] deOffTime=modePrenference.getString(TIME_Off,timeOff).split(":");
++                    int deOnHour=Integer.parseInt(deOnTime[0]);
++                    int deOffHour=Integer.parseInt(deOffTime[0]);
++                    if(mPrefChangeFlag){
++                        if(deOnHour<12){
++                            String nTimeOn=(deOnHour+12)+":"+deOnTime[1];
++                            //turn_on_at.setSummary(nTimeOn);
++                            Log.i("faker:", "nTimeOn:"+nTimeOn);
++                            modePrenference.edit().putString(TIME_ON,nTimeOn).commit();     
++                        }
++                        if(deOffHour<12){
++                             String nTimeOff=(deOffHour+12)+":"+deOffTime[1];
++                             Log.i("faker:", "nTimeOff:"+nTimeOff);
++                             modePrenference.edit().putString(TIME_Off,nTimeOff).commit();
++                        }
++                    }else{
++                        if(deOnHour>12){
++                            String nTimeOn=(deOnHour-12)+":"+deOnTime[1];
++                            //turn_on_at.setSummary(nTimeOn);
++                            Log.i("faker:", "nTimeOn:"+nTimeOn);
++                            modePrenference.edit().putString(TIME_ON,nTimeOn).commit();     
++                        }
++                        if(deOffHour>12){
++                             String nTimeOff=(deOffHour-12)+":"+deOffTime[1];
++                             Log.i("faker:", "nTimeOff:"+nTimeOff);
++                             modePrenference.edit().putString(TIME_Off,nTimeOff).commit();
++                        }
++                    }
++                    
+ 					String timeOns=modePrenference.getString(TIME_ON,timeOn);
+ 					String timeOffs=modePrenference.getString(TIME_Off,timeOff);
+ 					schedulePlanPreference.setSummary(timeOns+" to "+timeOffs);
+Index: packages/apps/Settings/src/com/android/settings/PrefChangeBroadcast.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/PrefChangeBroadcast.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/PrefChangeBroadcast.java	(revision 1568)
+@@ -0,0 +1,41 @@
++/*
++ * Copyright (C) 2006 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings;
++
++import android.content.BroadcastReceiver;  
++import android.content.Context;  
++import android.content.Intent;  
++import android.util.Log;
++  
++public class PrefChangeBroadcast extends BroadcastReceiver {
++    
++    public static boolean  mPrefChangeFlag;
++  
++    @Override  
++    public void onReceive(Context context, Intent intent) {
++        if("com.android.settings.mTime24prefChange".equals(intent.getAction().toString())){
++            String prefFlag = intent.getExtras().getString("24prefFlag");
++            if(prefFlag.equals("true")){
++                mPrefChangeFlag =true ;
++            }else{
++                mPrefChangeFlag =false;
++        }  
++    }
++  
++}
++}
++
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1567)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1568)
+@@ -7921,7 +7921,7 @@
+ 	<string name="custom_schedule">"Custom schedule"</string>
+ 	<string name="keywords_custom_schedule">"Custom schedule"</string>
+ 	<string name="turn_on_at_title">"Turn on at"</string>
+-	<string name="turn_on_at_summary">"22:00"</string>
++	<string name="turn_on_at_summary">"10:00"</string>
+ 	<string name="keywords_turn_on_at">"Turn on at"</string>
+ 	<string name="turn_off_at_title">"Turn off at"</string>
+ 	<string name="turn_off_at_summary">"7:00"</string>

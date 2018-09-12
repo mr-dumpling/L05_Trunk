@@ -1,0 +1,50 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 3609)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 3610)
+@@ -5799,7 +5799,7 @@
+                     public void run() {
+                         startNavigationBarTipsAnimations();
+                     }
+-                }, 10000);
++                }, 13000);
+             }
+         }
+     };
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 3609)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 3610)
+@@ -138,7 +138,19 @@
+         }
+         /// @}
+         
+-        return mContext.getString(R.string.config_navBarLayout);
++        //CHG-S By Justin.Shen for Hide/Show navigation-bar
++        //return mContext.getString(R.string.config_navBarLayout);
++        int resId = R.string.config_navBarLayout;
++        int layoutIndex = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
++        if((0 == layoutIndex) || (2 == layoutIndex) || (4 == layoutIndex)) {
++            resId = R.string.config_navBarLayout;
++        } else if((1 == layoutIndex) || (3 == layoutIndex) || (5 == layoutIndex)) {
++            resId = R.string.config_navBarLayout_1;
++        } else {
++            resId = R.string.config_navBarLayout;
++        }
++        return mContext.getString(resId);
++        //CHG-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 
+     @Override
+Index: frameworks/base/packages/SystemUI/res/values/config.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/config.xml	(revision 3609)
++++ frameworks/base/packages/SystemUI/res/values/config.xml	(revision 3610)
+@@ -289,6 +289,7 @@
+     <string name="config_navBarLayout" translatable="false">space,back;home;recent,menu_ime</string>
+     -->
+     <string name="config_navBarLayout" translatable="false">nail,back;home;recent,menu_ime</string>
++    <string name="config_navBarLayout_1" translatable="false">nail,recent;home;back,menu_ime</string>
+     <!-- CHG-E By Justin.Shen for Hide/Show navigation-bar -->
+ 
+     <bool name="quick_settings_show_full_alarm">false</bool>

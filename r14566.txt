@@ -1,0 +1,51 @@
+Index: vendor/branch/5058Y_ALGB/packages/providers/TelephonyProvider/src/com/android/providers/telephony/TelephonyProvider.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/providers/TelephonyProvider/src/com/android/providers/telephony/TelephonyProvider.java	(revision 14565)
++++ vendor/branch/5058Y_ALGB/packages/providers/TelephonyProvider/src/com/android/providers/telephony/TelephonyProvider.java	(revision 14566)
+@@ -162,6 +162,8 @@
+         // authtype, type, protocol, roaming_protocol, sub_id, modem_cognitive, max_conns,
+         // wait_time, max_conns_time, mtu, bearer_bitmask, user_visible
+         CARRIERS_UNIQUE_FIELDS.add(NUMERIC);
++		CARRIERS_UNIQUE_FIELDS.add(NAME);
++		CARRIERS_UNIQUE_FIELDS.add(SPN);
+         CARRIERS_UNIQUE_FIELDS.add(MCC);
+         CARRIERS_UNIQUE_FIELDS.add(MNC);
+         CARRIERS_UNIQUE_FIELDS.add(APN);
+@@ -1319,13 +1321,13 @@
+             if (!"apn".equals(parser.getName())) {
+                 return null;
+             }
+-
++			
+             ContentValues map = new ContentValues();
+ 
+             String mcc = parser.getAttributeValue(null, "mcc");
+             String mnc = parser.getAttributeValue(null, "mnc");
+-            String numeric = mcc + mnc;
+-
++            String numeric = mcc + mnc;			
++			
+             map.put(NUMERIC, numeric);
+             map.put(MCC, mcc);
+             map.put(MNC, mnc);
+@@ -1542,7 +1544,7 @@
+             row = setDefaultValueWithSub(row, subId);
+ 
+             try {
+-                db.insertWithOnConflict(CARRIERS_TABLE, null, row, SQLiteDatabase.CONFLICT_ABORT);
++                db.insertWithOnConflict(CARRIERS_TABLE, null, row, SQLiteDatabase.CONFLICT_NONE);
+                 if (VDBG) log("dbh.insertAddingDefaults: db.insert returned >= 0; insert " +
+                         "successful for cv " + row);
+             } catch (SQLException e) {
+Index: vendor/branch/5058Y_ALGB/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 14565)
++++ vendor/branch/5058Y_ALGB/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 14566)
+@@ -4861,6 +4861,7 @@
+         return (first.canHandleType(PhoneConstants.APN_TYPE_DUN) == false &&
+                 second.canHandleType(PhoneConstants.APN_TYPE_DUN) == false &&
+                 Objects.equals(first.apn, second.apn) &&
++				Objects.equals(first.carrier, second.carrier) &&
+                 !apnTypeSameAny(first, second) &&
+                 xorEquals(first.proxy, second.proxy) &&
+                 xorEquals(first.port, second.port) &&

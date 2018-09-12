@@ -1,0 +1,93 @@
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 7472)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 7473)
+@@ -745,9 +745,14 @@
+ 		}
+         mAccountSignature.setText(accountSignature);
+         mAccountSignature.setOnPreferenceChangeListener(this);
++		boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
++		if(bFrBug119814){
++			SettingsUtils.updatePreferenceSummary(mAccountSignature, accountSignature,
++                R.string.preferences_signature_content_default);
++		}else{
+         SettingsUtils.updatePreferenceSummary(mAccountSignature, accountSignature,
+                 R.string.preferences_signature_summary_not_set);
+-
++		}
+         /** M: Insert oof preference to fragment when the account is EasAccount @{ */
+         boolean showOof = true;
+         showOof = protocol.equalsIgnoreCase("eas");
+Index: packages/apps/Email/res/values/strings.xml
+===================================================================
+--- packages/apps/Email/res/values/strings.xml	(revision 7472)
++++ packages/apps/Email/res/values/strings.xml	(revision 7473)
+@@ -614,5 +614,6 @@
+ 	<string name="preferences_signature_summary_set_telcel">Sent from my Alcatel Telcel</string>
+ 	<string name="preferences_signature_summary_set_claro_ecuador">Sent from my Alcatel Claro</string>
+ 	<string name="preferences_signature_summary_set_cnt">Sent from my ALCATEL 3X</string>
+-	<string name="preferences_signature_summary_set_israel">Sent from my Alcatel 3X</string>
++	<string name="preferences_signature_summary_set_israel">Sent from my Alcatel 3X</string>
++	<string name="preferences_signature_summary_set_default">Sent from my Alcatel 3X</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java
+===================================================================
+--- packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 7472)
++++ packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 7473)
+@@ -4228,7 +4228,12 @@
+     private void appendSignature() {
+         String newSignature = mCachedSettings != null ? mCachedSettings.signature : null;
+         if (null == newSignature || newSignature.isEmpty()) {
+-            newSignature = getResources().getString(R.string.preferences_signature_content);
++            boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
++			if(bFrBug119814){
++				newSignature = getResources().getString(R.string.preferences_signature_content_default);
++			}else{
++				newSignature = getResources().getString(R.string.preferences_signature_content);
++			}            
+         }
+ 
+         final int signaturePos = getSignatureStartPosition(mSignature, mBodyView.getText().toString());
+Index: packages/apps/Email/UnifiedEmail/res/values/strings.xml
+===================================================================
+--- packages/apps/Email/UnifiedEmail/res/values/strings.xml	(revision 7472)
++++ packages/apps/Email/UnifiedEmail/res/values/strings.xml	(revision 7473)
+@@ -1154,5 +1154,6 @@
+     <string name="preferences_signature_content_reference">"Sent from my Alcatel 3X"</string>
+     <string name="preferences_signature_content_Entel">"Sent from my Alcatel 3X"</string>
+ 	<string name="preferences_signature_content_claro_ecuador">Sent from my ALCATEL Claro</string>
+-	<string name="preferences_signature_content_israel">Sent from my Alcatel 3X</string>
++	<string name="preferences_signature_content_israel">Sent from my Alcatel 3X</string>
++	<string name="preferences_signature_content_default">Sent from my Alcatel 3X</string>
+ </resources>
+\ No newline at end of file
+Index: frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- frameworks/base/core/res/res/values/features.xml	(revision 7472)
++++ frameworks/base/core/res/res/values/features.xml	(revision 7473)
+@@ -17,6 +17,10 @@
+ 	<!-- feature for fmradio call music, BUG: 119814 -->
+ 	<bool name="FR_MUSIC_STOP_FM_DELETE_BUG">false</bool>
+ 	
++	<!-- feature for fmradio call music, BUG: 119848 -->
++	<bool name="FR_EMAIL_SAME_SIGNATURE_BUG">false</bool>
++	
+ 	<!-- feature for other -->
++	<bool name="FR_OTHER_TEST">false</bool>
+     
+ </resources>
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 7472)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 7473)
+@@ -2811,6 +2811,8 @@
+   <java-symbol type="bool" name="FR_DATEFORMAT" />
+   <java-symbol type="string" name="STR_DATEFORMAT" />
+   <java-symbol type="bool" name="FR_SMS_ENCODING" />
+-  <java-symbol type="bool" name="FR_MUSIC_STOP_FM_DELETE_BUG" />  
++  <java-symbol type="bool" name="FR_MUSIC_STOP_FM_DELETE_BUG" />
++  <java-symbol type="bool" name="FR_EMAIL_SAME_SIGNATURE_BUG" />
++  <java-symbol type="bool" name="FR_OTHER_TEST" />
+   <!-- feature techain end -->
+ </resources>

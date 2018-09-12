@@ -1,0 +1,141 @@
+Index: packages/apps/Settings/src/com/android/settings/LedIndicatorSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/LedIndicatorSettings.java	(revision 4425)
++++ packages/apps/Settings/src/com/android/settings/LedIndicatorSettings.java	(revision 4426)
+@@ -12,6 +12,8 @@
+ import android.support.v7.preference.Preference;
+ import android.support.v7.preference.PreferenceScreen;
+ import android.support.v14.preference.SwitchPreference;
++import android.support.v7.preference.Preference.OnPreferenceChangeListener;
++
+ import android.util.Log;
+ 
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+@@ -29,8 +31,10 @@
+ import android.os.SystemProperties;
+ import android.content.BroadcastReceiver;
+ import android.content.IntentFilter;
++import android.provider.Settings;
+ 
+-public class LedIndicatorSettings extends SettingsPreferenceFragment {
++
++public class LedIndicatorSettings extends SettingsPreferenceFragment implements Preference.OnPreferenceChangeListener {
+ 	private static final String TAG = "LedIndicatorSettings";
+ 	private static final String PREFERENCE_NAME = "com.android.settings";
+ 	private static final String KEY_LEDEVENT = "led_event";
+@@ -67,12 +71,57 @@
+      public void initPreference(){
+      	 PreferenceScreen root = getPreferenceScreen();
+ 		 mEventSwitchPreference=(SwitchPreference)root.findPreference(KEY_LEDEVENT);
+-		 mEventSwitchPreference.setChecked(true);
++		 mEventSwitchPreference.setOnPreferenceChangeListener(this);
+ 		 mChargeSwitchPreference=(SwitchPreference)root.findPreference(KEY_CHARGE);
+-		 mChargeSwitchPreference.setChecked(true);
++		 mChargeSwitchPreference.setOnPreferenceChangeListener(this);
+ 		 mBatterySwitchPreference=(SwitchPreference)root.findPreference(KEY_BATTERY);
+-		 mBatterySwitchPreference.setChecked(true);
++		 mBatterySwitchPreference.setOnPreferenceChangeListener(this);
++		 
+ 
+ 	}
+ 	
++	@Override    
++	public void onResume() { 
++		super.onResume();
++		ContentResolver contentResolver=getContentResolver();
++		int eventValue=Settings.Global.getInt(contentResolver,KEY_LEDEVENT,1);
++		if(eventValue==1){
++			mEventSwitchPreference.setChecked(true);
++		}else{
++			mEventSwitchPreference.setChecked(false);
++		}
++		int chargeValue=Settings.Global.getInt(contentResolver,KEY_CHARGE,1);
++		if(chargeValue==1){
++			mChargeSwitchPreference.setChecked(true);
++		}else{
++			mChargeSwitchPreference.setChecked(false);
++		}
++		int batteryValue=Settings.Global.getInt(contentResolver,KEY_BATTERY,1);
++		if(batteryValue==1){
++			mBatterySwitchPreference.setChecked(true);
++		}else{
++			mBatterySwitchPreference.setChecked(false);
++		}
++	}
++	
++	@Override    
++	public boolean onPreferenceChange(Preference preference, Object newValue) { 
++		 boolean autoEnabled = (boolean) newValue;
++		 String key =preference.getKey();
++		 if(KEY_LEDEVENT.equals(key)){
++			 Settings.Global.putInt(getContentResolver(), KEY_LEDEVENT, 
++			 	autoEnabled ? 1 : 0);
++			 
++		 }else if (KEY_CHARGE.equals(key)){
++			Settings.Global.putInt(getContentResolver(), KEY_CHARGE, 
++			 	autoEnabled ? 1 : 0);
++			
++		 }else{
++			Settings.Global.putInt(getContentResolver(), KEY_BATTERY, 
++			 	autoEnabled ? 1 : 0);
++			
++		 }
++		 return true;
++	}
++	
+ }
+Index: frameworks/base/services/core/java/com/android/server/notification/NotificationRecord.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/notification/NotificationRecord.java	(revision 4425)
++++ frameworks/base/services/core/java/com/android/server/notification/NotificationRecord.java	(revision 4426)
+@@ -24,6 +24,8 @@
+ 
+ import android.app.Notification;
+ import android.content.Context;
++import android.content.ContentResolver;
++
+ import android.content.pm.PackageManager.NameNotFoundException;
+ import android.content.res.Resources;
+ import android.graphics.Bitmap;
+@@ -36,7 +38,9 @@
+ 
+ import com.android.internal.annotations.VisibleForTesting;
+ import com.android.server.EventLogTags;
++import android.provider.Settings;
+ 
++
+ import java.io.PrintWriter;
+ import java.lang.reflect.Array;
+ import java.util.Arrays;
+@@ -100,6 +104,7 @@
+     private int mSuppressedVisualEffects = 0;
+     private String mUserExplanation;
+     private String mPeopleExplanation;
++	private static final String KEY_LEDEVENT = "led_event";
+ 
+     @VisibleForTesting
+     public NotificationRecord(Context context, StatusBarNotification sbn)
+@@ -147,10 +152,22 @@
+                 || n.sound != null
+                 || n.vibrate != null;
+         stats.isNoisy = isNoisy;
+-
++		ContentResolver contentResolver=mContext.getContentResolver();
++		int value=Settings.Global.getInt(contentResolver,KEY_LEDEVENT,1);
++		if(value==1){
++			if (!isNoisy && importance > IMPORTANCE_LOW && ((n.defaults & Notification.DEFAULT_LIGHTS)==0)) {
++            	importance = IMPORTANCE_LOW;
++        	}
++		}else{
++			if (!isNoisy && importance > IMPORTANCE_LOW ) {
++            	importance = IMPORTANCE_LOW;
++        	}
++		}
++		/*
+         if (!isNoisy && importance > IMPORTANCE_LOW && ((n.defaults & Notification.DEFAULT_LIGHTS)==0)) {
+             importance = IMPORTANCE_LOW;
+         }
++        */
+ 
+         if (isNoisy) {
+             if (importance < IMPORTANCE_DEFAULT) {

@@ -1,0 +1,24 @@
+Index: frameworks/base/core/java/android/preference/SeekBarVolumizer.java
+===================================================================
+--- frameworks/base/core/java/android/preference/SeekBarVolumizer.java	(revision 4051)
++++ frameworks/base/core/java/android/preference/SeekBarVolumizer.java	(revision 4052)
+@@ -159,6 +159,10 @@
+         } else {
+             mSeekBar.setProgress(mLastProgress > -1 ? mLastProgress : mOriginalStreamVolume);
+         }
++        mMuted = mAudioManager.isStreamMute(mStreamType);
++        if (mCallback != null) {
++            mCallback.onMuted(mMuted, isZenMuted());
++        }
+     }
+ 
+     @Override
+@@ -364,6 +368,8 @@
+ 					updateSilentSwitch(muted);
+                     if (muted != mMuted) {
+                         mMuted = muted;
++                        if(mStreamType == AudioManager.STREAM_ALARM || mStreamType == AudioManager.STREAM_MUSIC)
++			               mMuted = mAudioManager.isStreamMute(mStreamType);
+                         if (mCallback != null) {
+                             mCallback.onMuted(mMuted, isZenMuted());
+                         }

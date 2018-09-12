@@ -1,0 +1,163 @@
+Index: vendor/mediatek/proprietary/packages/apps/Exchange/AndroidManifest.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Exchange/AndroidManifest.xml	(revision 8725)
++++ vendor/mediatek/proprietary/packages/apps/Exchange/AndroidManifest.xml	(revision 8726)
+@@ -175,6 +175,10 @@
+             </intent-filter>
+         </activity>
+ 
++        <activity android:name=".PermissionCheckActivity"
++            android:configChanges="orientation|screenSize|keyboardHidden"
++            android:exported="false" />
++
+         <receiver android:name="ExchangeBroadcastReceiver">
+             <intent-filter>
+                 <action android:name="android.accounts.LOGIN_ACCOUNTS_CHANGED" />
+Index: vendor/mediatek/proprietary/packages/apps/Exchange/src/com/android/exchange/service/EasService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Exchange/src/com/android/exchange/service/EasService.java	(revision 8725)
++++ vendor/mediatek/proprietary/packages/apps/Exchange/src/com/android/exchange/service/EasService.java	(revision 8726)
+@@ -64,6 +64,7 @@
+ import com.android.exchange.eas.EasSyncCalendar;
+ import com.android.exchange.eas.EasSyncContacts;
+ import com.android.exchange.provider.GalResult;
++import com.android.exchange.utility.PermissionUtils;
+ import com.android.mail.utils.LogUtils;
+ import com.google.common.annotations.VisibleForTesting;
+ import com.mediatek.exchange.eas.EasItemOperations;
+@@ -105,6 +106,8 @@
+     private static boolean sProtocolLogging;
+     private static boolean sFileLogging;
+ 
++    private static int PERMISSION_DENIED = 20;
++
+     /**
+      * Implementation of the IEmailService interface.
+      * For the most part these calls should consist of creating the correct {@link EasOperation}
+@@ -172,6 +175,12 @@
+         public Bundle validate(final HostAuthCompat hostAuthCom) {
+             LogUtils.d(TAG, "IEmailService.validate");
+             final HostAuth hostAuth = hostAuthCom.toHostAuth();
++            if (!PermissionUtils.permissionsgranted(getApplicationContext())) {
++                Bundle bundle = new Bundle();
++                bundle.putInt(EmailServiceProxy.VALIDATE_BUNDLE_RESULT_CODE, PERMISSION_DENIED);
++                PermissionUtils.startPermisssionCheckActivity(getApplicationContext());
++                return bundle;
++            }
+             final EasFolderSync operation = new EasFolderSync(EasService.this, hostAuth);
+             doOperation(operation, "IEmailService.validate");
+             return operation.getValidationResult();
+Index: vendor/mediatek/proprietary/packages/apps/Exchange/src/com/android/exchange/utility/PermissionUtils.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Exchange/src/com/android/exchange/utility/PermissionUtils.java	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/Exchange/src/com/android/exchange/utility/PermissionUtils.java	(revision 8726)
+@@ -0,0 +1,63 @@
++package com.android.exchange.utility;
++
++import android.Manifest;
++import android.content.Context;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.os.Build;
++import android.util.Log;
++
++import com.android.exchange.PermissionCheckActivity;
++
++public class PermissionUtils {
++
++    private static final String TAG = "Exchange-->PermissionUtils";
++    private static final int SDK_VERSION_M = 23;
++    public static final String PERMISSION_READ_ATTACHMENT = "com.android.email.permission.READ_ATTACHMENT";
++
++    //Exchange dangerous permissions
++    public static final String[] PERMISSION_LIST = new String[] {
++            Manifest.permission.WRITE_EXTERNAL_STORAGE,
++            Manifest.permission.READ_PHONE_STATE,
++            Manifest.permission.READ_CALENDAR,
++            Manifest.permission.READ_CONTACTS,
++            PERMISSION_READ_ATTACHMENT
++    };
++
++    /**
++     * @return true if all the permissions are granted.
++     */
++    public static boolean permissionsgranted(Context context) {
++        if (getSDKVersion() >= SDK_VERSION_M) {
++            for (String permission : PERMISSION_LIST) {
++                if (!permissionGranted(permission, context)) {
++                    return false;
++                }
++            }
++        }
++        return true;
++    }
++
++    /**
++     * @return true if permission is granted or sdk version is less than 23.
++     */
++    public static boolean permissionGranted(String permission, Context context) {
++        return context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED;
++    }
++
++    /**
++     *  Start PermissionCheckActivity to check permissions.
++     */
++    public static void startPermisssionCheckActivity(Context context) {
++        if (context != null) {
++            Intent intent = new Intent(context, PermissionCheckActivity.class);
++            intent.setFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
++                    | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
++            context.startActivity(intent);
++        }
++    }
++
++    private static int getSDKVersion() {
++        return Integer.valueOf(Build.VERSION.SDK);
++    }
++}
+Index: vendor/mediatek/proprietary/packages/apps/Exchange/src/com/android/exchange/PermissionCheckActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Exchange/src/com/android/exchange/PermissionCheckActivity.java	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/Exchange/src/com/android/exchange/PermissionCheckActivity.java	(revision 8726)
+@@ -0,0 +1,41 @@
++package com.android.exchange;
++
++import android.app.Activity;
++import android.content.pm.PackageManager;
++import android.os.Bundle;
++
++import com.android.exchange.utility.PermissionUtils;
++import android.support.v4.app.ActivityCompat;
++import android.support.v4.content.ContextCompat;
++
++import java.util.ArrayList;
++
++public class PermissionCheckActivity extends Activity {
++
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        checkAndRequestForExchange(this);
++        finish();
++    }
++
++    public boolean checkAndRequestForExchange(Activity activity) {
++        // check status of permissions, get which permissions need to request
++        ArrayList<String> permissionsNeedRequest = new ArrayList<String>();
++        for (String permission : PermissionUtils.PERMISSION_LIST) {
++            if (ContextCompat.checkSelfPermission(activity, permission)
++                == PackageManager.PERMISSION_GRANTED) {
++                continue;
++            }
++            permissionsNeedRequest.add(permission);
++        }
++        // request permissions
++        if (permissionsNeedRequest.size() == 0) {
++            return true;
++        } else {
++            String[] permissions = new String[permissionsNeedRequest.size()];
++            permissions = permissionsNeedRequest.toArray(permissions);
++            ActivityCompat.requestPermissions(activity, permissions, 0);
++            return false;
++        }
++    }
++}

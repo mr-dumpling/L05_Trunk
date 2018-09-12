@@ -1,0 +1,153 @@
+Index: vendor/branch/5058A_Entel_Chile/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 6714)
++++ vendor/branch/5058A_Entel_Chile/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 6715)
+@@ -2015,6 +2015,7 @@
+                 if (ar != null && ar.exception == null && ar.result != null) {
+                    int[] cfuResult = (int[]) ar.result;
+                    log("handle EVENT_CFU_IND, setVoiceCallForwardingFlag:" + cfuResult[0]);
++                   mPhone.setVoiceCallForwardingFlag(1, (cfuResult[0] == 1), null);
+                 }
+                 break;
+             // MTK-END
+Index: vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 6714)
++++ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 6715)
+@@ -434,7 +434,7 @@
+      * Notes:for CMCC customization,whether to enable SL automatically lanuch.
+      * default set false
+      */
+-    private static boolean mSlAutoLanuchEnabled = false;
++    private static boolean mSlAutoLanuchEnabled = true;
+     public static boolean getSlAutoLanuchEnabled() {
+         return mSlAutoLanuchEnabled;
+     }
+Index: vendor/branch/5058A_Entel_Chile/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 6714)
++++ vendor/branch/5058A_Entel_Chile/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 6715)
+@@ -226,6 +226,7 @@
+                 ||handleInternalVersion(context, dialString)
+                 ||handleExternalVersion(context, dialString)
+                 ||handleCheckEfused(context, dialString)
++                ||handleCheckRoot2(context, dialString) 
+                 /// @}
+                 ) {
+             return true;
+@@ -540,8 +541,6 @@
+ 				if(!TextUtils.isEmpty(version)&& version!=null){
+ 					svnver = svnver + version; 
+ 				}
+-				int len=version.length();
+-    			String vers=version.substring(len-2, len);
+                 if (TelephonyManagerCompat.getPhoneCount(telephonyManager) > 1 &&
+                     CompatUtils.isMethodAvailable(TelephonyManagerCompat.TELEPHONY_MANAGER_CLASS,
+                             "getDeviceId", Integer.TYPE)) {
+@@ -551,13 +550,12 @@
+ 							deviceId="IMEI"+(slot+1)+":"+deviceId;
+                             deviceIds.add(deviceId);
+                         }
++                        String imeisv = telephonyManager.getDeviceSoftwareVersion(slot);
++                        if (!TextUtils.isEmpty(imeisv)) {
++                        	imeisv = "IMEISV" + (slot + 1) + ":" + imeisv;
++                        	deviceIds.add(imeisv);
++                        }
+                     }
+-					for(int slot = 0; slot < telephonyManager.getPhoneCount(); slot++){
+-						if (!TextUtils.isEmpty(vers)) {
+-					 	 	String vers1="IMEISV"+(slot+1)+":"+vers;
+-                         	deviceIds.add(vers1);
+-                     	}
+-					}
+                 } else {
+                    String deviceId = telephonyManager.getDeviceId(0);
+ 					/// M: Avoid null object be added
+@@ -565,9 +563,10 @@
+ 						deviceId="IMEI:"+deviceId;
+ 						deviceIds.add(deviceId);
+ 					}
+-					if (!TextUtils.isEmpty(vers)) {
+-					 	vers="IMEISV:"+vers;
+-                        deviceIds.add(vers);
++					String imeisv = telephonyManager.getDeviceSoftwareVersion();
++					if (!TextUtils.isEmpty(imeisv)) {
++					 	imeisv = "IMEISV:" + imeisv;
++                        deviceIds.add(imeisv);
+                     }
+                 }
+ 				deviceIds.add(svnver); 
+@@ -715,9 +714,17 @@
+ 			deviceIds.add(build);
+ 			String stringInfo =  new String(product_info, CU_REF_START, CU_REF_LENGTH);
+ 			boolean haseChar=false;
++			for(int i=0;i<CU_REF_LENGTH;i++){
++				if((product_info[i+CU_REF_START]^0)!=0){
++					haseChar=true;
++					break;
++				}
++			}
++			/*
+ 			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
+ 				haseChar=true;
+ 			}
++			*/
+ 			String su_ref=null;
+ 			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
+ 				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
+@@ -779,9 +786,17 @@
+ 			initProductInfo();
+ 			String stringInfo = new String(product_info, CU_REF_START, CU_REF_LENGTH);
+ 			boolean haseChar=false;
++			for(int i=0;i<CU_REF_LENGTH;i++){
++				if((product_info[i+CU_REF_START]^0)!=0){
++					haseChar=true;
++					break;
++				}
++			}
++			/*
+ 			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
+ 				haseChar=true;
+ 			}
++			*/
+ 			String su_ref=null;
+ 			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
+ 				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
+Index: vendor/branch/5058A_Entel_Chile/packages/apps/Dialer/src/com/android/dialer/dialpad/DialpadFragment.java
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/packages/apps/Dialer/src/com/android/dialer/dialpad/DialpadFragment.java	(revision 6714)
++++ vendor/branch/5058A_Entel_Chile/packages/apps/Dialer/src/com/android/dialer/dialpad/DialpadFragment.java	(revision 6715)
+@@ -1150,6 +1150,14 @@
+         final int id = view.getId();
+         if (id == R.id.deleteButton) {
+             digits.clear();
++			playTone(ToneGenerator.TONE_DTMF_0 , TONE_LENGTH_INFINITE);
++			Handler mHandler=new Handler();
++			mHandler.postDelayed(new Runnable() {
++				@Override
++				public void run() {
++					stopTone();
++				}
++			}, 1000);
+             return true;
+         } else if (id == R.id.one) {
+             if (isDigitsEmpty() || TextUtils.equals(mDigits.getText(), "1")) {
+Index: vendor/branch/5058A_Entel_Chile/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/device/mediatek/common/device.mk	(revision 6714)
++++ vendor/branch/5058A_Entel_Chile/device/mediatek/common/device.mk	(revision 6715)
+@@ -3215,6 +3215,14 @@
+ )
+ endif
+ 
++ifeq ($(strip $(MICROTRUST_IFAA_SUPPORT)), yes)
++  PRODUCT_PACKAGES += libmtee
++  PRODUCT_PACKAGES += libteeclientjni
++  PRODUCT_PACKAGES += libifaa_daemon
++  PRODUCT_PACKAGES += ifaad
++  PRODUCT_PACKAGES += libifaa_jni
++endif
++
+ ifeq ($(strip $(MTK_FULLSCREEN_SWITCH_SUPPORT)), yes)
+   PRODUCT_PROPERTY_OVERRIDES += ro.mtk_fullscreen_switch=1
+   PRODUCT_PACKAGES += FullscreenSwitchService

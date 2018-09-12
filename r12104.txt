@@ -1,0 +1,77 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java	(revision 12103)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java	(revision 12104)
+@@ -42,17 +42,59 @@
+ import android.os.RemoteException;
+ import android.os.ServiceManager;
+ import android.content.res.Resources;
++import android.content.IntentFilter;
++import android.content.SharedPreferences.Editor;
++import android.content.SharedPreferences;
+ 
+ /** Quick settings tile: Hotspot **/
+ public class NfcTile extends QSTile<QSTile.BooleanState> {
+    
+ 	//private final NfcAdapter mNfcAdapter;
+-	private static INfcAdapter sService; 
++	private static INfcAdapter sService;
++	private IntentFilter mIntentFilter;
++	private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++			SharedPreferences mNfcStatePreference=context.getSharedPreferences("NfcStateOn",Context.MODE_PRIVATE);
++			Editor mEditor = mNfcStatePreference.edit();
++            if (NfcAdapter.ACTION_ADAPTER_STATE_CHANGED.equals(action)) {
++                refreshState();
++            }
++			else if(Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(action)){
++            	boolean airplaneMode = getAirplaneMode(context);
++				NfcAdapter mNfcAdapter = NfcAdapter.getDefaultAdapter(context);
++				if (mNfcAdapter != null) {
++					int state = mNfcAdapter.getAdapterState();;
++					boolean switchState = mNfcStatePreference.getBoolean("NfcStateOn",false);
++					if(airplaneMode == true && state == NfcAdapter.STATE_ON){
++						mEditor.putBoolean("NfcStateOn",state==NfcAdapter.STATE_ON); 
++						mNfcAdapter.disable();
++					} else if(airplaneMode == false && switchState){
++						mNfcAdapter.enable();
++						mEditor.remove("NfcStateOn");
++					}
++					mEditor.commit();
++				}
++				refreshState();
++			}
++		}
++    };
++	
++	public boolean getAirplaneMode(Context context){  
++		int isAirplaneMode = Settings.Global.getInt(context.getContentResolver(),  
++	                          Settings.Global.AIRPLANE_MODE_ON, 0) ;  
++		return (isAirplaneMode == 1) ? true : false;  
++	}
+ 
+     public NfcTile(Host host) {
+         super(host);
+         IBinder bind = ServiceManager.getService("nfc");
+ 		sService = INfcAdapter.Stub.asInterface(bind);
++		mIntentFilter = new IntentFilter();
++        mIntentFilter.addAction(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
++		mIntentFilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
++		mContext.registerReceiver(mReceiver, mIntentFilter);
+     }
+ 
+     @Override
+@@ -136,6 +178,11 @@
+         }
+     }
+ 	
++	@Override
++	public void destroy() {
++		mContext.unregisterReceiver(mReceiver);
++    }
++	
+ 	private int getNfcState(){
+ 		int nfcMode = NfcAdapter.STATE_OFF;
+ 		try{

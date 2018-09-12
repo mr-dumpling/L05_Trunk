@@ -1,0 +1,34 @@
+Index: vendor/branch/5058A_Entel_Chile/packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java	(revision 7623)
++++ vendor/branch/5058A_Entel_Chile/packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java	(revision 7624)
+@@ -571,7 +571,7 @@
+         long accountedSize = 0;
+         long totalMiscSize = 0;
+         long totalDownloadsSize = 0;
+-
++     	StorageItemPreference mSystemitem = null;
+         for (int i = 0; i < mItemPoolIndex; ++i) {
+             StorageItemPreference item = mItemPreferencePool.get(i);
+             final int userId = item.userHandle;
+@@ -584,6 +584,7 @@
+             switch (itemTitleId) {
+                 case R.string.storage_detail_system: {
+                     updatePreference(item, mSystemSize);
++		            mSystemitem = item;
+                     accountedSize += mSystemSize;
+                     if (LOGV) Log.v(TAG, "mSystemSize: " + mSystemSize
+                             + " accountedSize: " + accountedSize);
+@@ -654,7 +655,11 @@
+         }
+         if (otherItem != null) {
+             final long usedSize = mTotalSize - details.availSize;
+-            final long unaccountedSize = usedSize - accountedSize;
++            long unaccountedSize = usedSize - accountedSize;
++	        if(unaccountedSize<0){
++                updatePreference(mSystemitem, mSystemSize + unaccountedSize);
++                unaccountedSize=0;
++            }
+             final long otherSize = totalMiscSize + totalDownloadsSize + unaccountedSize;
+             if (LOGV)
+                 Log.v(TAG, "Other items: \n\tmTotalSize: " + mTotalSize + " availSize: "

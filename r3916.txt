@@ -1,0 +1,51 @@
+Index: frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java
+===================================================================
+--- frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java	(revision 3915)
++++ frameworks/base/services/usb/java/com/android/server/usb/UsbDeviceManager.java	(revision 3916)
+@@ -72,6 +72,7 @@
+ import android.os.ServiceManager;
+ import android.os.RemoteException;
+ /* MD Direct Tethering */
++import android.telephony.TelephonyManager;
+ 
+ /**
+  * UsbDeviceManager manages USB state in device mode.
+@@ -1505,7 +1506,23 @@
+         public UsbAccessory getCurrentAccessory() {
+             return mCurrentAccessory;
+         }
+-
++		private boolean checkCmccCard(int simId) {
++            boolean isCmccCard = false;
++			Slog.d(TAG, "javen checkCmccCard simId = " + simId);
++			TelephonyManager telMgr = (TelephonyManager)mContext.getSystemService(Context.TELEPHONY_SERVICE);
++			int simState = telMgr.getSimState();
++			boolean result = true;
++			Slog.d(TAG, "javen checkCmccCard simState = " + simState);
++			switch (simState) {
++				case TelephonyManager.SIM_STATE_READY:
++					isCmccCard = true;
++					break;
++				default:
++					isCmccCard = false;
++					break;
++			}
++            return isCmccCard;
++        }
+         private void updateUsbNotification() {
+             if (mNotificationManager == null || !mUseUsbNotification
+                     || ("0".equals(SystemProperties.get("persist.charging.notify")))) return;
+@@ -1513,7 +1530,12 @@
+             if (mIsUsbSimSecurity) {
+                 if (!mIsUsbSimSecurityCheck) {
+                     String value = SystemProperties.get("persist.sys.usb.activation", "no");
+-                    if (value.equals("no")) return;
++                    if (value.equals("no")){
++						if(!checkCmccCard(0)){// && !checkCmccCard(1)
++							return;
++						}
++						mIsUsbSimSecurityCheck = true;
++					}
+                 }
+             }
+ 

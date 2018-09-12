@@ -1,0 +1,36 @@
+Index: vendor/mediatek/proprietary/packages/apps/JoyLauncherOverlay/res/values/isdm_JrdLauncher_defaults.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/JoyLauncherOverlay/res/values/isdm_JrdLauncher_defaults.xml	(revision 3897)
++++ vendor/mediatek/proprietary/packages/apps/JoyLauncherOverlay/res/values/isdm_JrdLauncher_defaults.xml	(revision 3898)
+@@ -64,4 +64,6 @@
+     <bool name="def_JrdLauncher_enable_old_folder_style">true</bool>
+     <bool name="def_JrdLauncher_enable_load_default_wallpaperlpaper">false</bool>
+     <bool name="def_JrdLauncher_mtk_drm_wallpaper_display">true</bool>
++	<!--double tap screen off-->
++	<bool name="def_JrdLauncher_doubletap_offscreen">true</bool>
+ </resources>
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 3897)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 3898)
+@@ -1790,6 +1790,7 @@
+         context.registerReceiver(mMultiuserReceiver, filter);
+ 		//register for three finger shotscreen 
+ 		filter.addAction("intent.action.SendKey");
++		filter.addAction("android.intent.action.LAUNCHER_D_TAP");
+ 		context.registerReceiver(mKeyReceiver, filter);
+         // monitor for system gestures
+         mSystemGestures = new SystemGesturesPointerEventListener(context,
+@@ -9290,6 +9291,12 @@
+ 						}
+ 						break;
+ 				}
++			}else if("android.intent.action.LAUNCHER_D_TAP".equals(action)){
++				boolean doubleTapScreenOff = Secure.getInt(context.getContentResolver(), Secure.DOUBLE_TAP_SCREEN_ENABLE, 0)==1;
++				if(doubleTapScreenOff && mPowerManager.isScreenOn()){
++					Log.d(TAG,"doubleTapScreenOff1111== "+doubleTapScreenOff);
++					mPowerManager.goToSleep(SystemClock.uptimeMillis());
++				}				
+ 			}
+ 		}
+ 	};

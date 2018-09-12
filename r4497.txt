@@ -1,0 +1,179 @@
+Index: frameworks/base/telephony/java/android/telephony/SignalStrength.java
+===================================================================
+--- frameworks/base/telephony/java/android/telephony/SignalStrength.java	(revision 4496)
++++ frameworks/base/telephony/java/android/telephony/SignalStrength.java	(revision 4497)
+@@ -737,12 +737,20 @@
+      * @hide
+      */
+     public int getGsmLevel() {
+-        int level;
++        int level = -1;
+ 
++        int dBm = getGsmDbm();
++        if (dBm < -106 || dBm == -1) level = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
++        else if (dBm >= -84) level = SIGNAL_STRENGTH_GREAT;
++        else if (dBm >= -93&&dBm < -84) level = SIGNAL_STRENGTH_GOOD;
++        else if (dBm >= -100&&dBm < -93)  level = SIGNAL_STRENGTH_MODERATE;
++        else if (dBm >= -106&&dBm < -100)  level = SIGNAL_STRENGTH_POOR;
++
+         // ASU ranges from 0 to 31 - TS 27.007 Sec 8.5
+         // asu = 0 (-113dB or less) is very weak
+         // signal, its better to show 0 bars to the user in such cases.
+         // asu = 99 is a special case, where the signal strength is unknown.
++/*
+         int asu = getGsmSignalStrength();
+ 
+         if (!IS_BSP_PACKAGE) {
+@@ -784,7 +792,7 @@
+                 level = SIGNAL_STRENGTH_POOR;
+             }
+         }
+-
++*/
+         if (DBG) {
+             log("getGsmLevel=" + level);
+         }
+@@ -969,6 +977,7 @@
+             threshRsrp = RSRP_THRESH_LENIENT;
+         }
+         //[ALPS01440836][ALPS01594704]-START: change level mapping rule of signal for CMCC
++/*
+         if (!IS_BSP_PACKAGE) {
+             IServiceStateExt ssExt = getPlugInInstance();
+             if (ssExt != null) {
+@@ -978,80 +987,27 @@
+                 log("[getLteLevel] null plug-in instance");
+             }
+         }
+-
++*/
+         if (mLteRsrp > -44) {
+-            rsrpIconLevel = -1;
+-        } else if (mLteRsrp >= -85) {
++            rsrpIconLevel = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
++        } else if (mLteRsrp >= -89) {
+             rsrpIconLevel = SIGNAL_STRENGTH_GREAT;
+-        } else if (mLteRsrp >= -95) {
++        } else if (mLteRsrp >= -99) {
+             rsrpIconLevel = SIGNAL_STRENGTH_GOOD;
+-        } else if (mLteRsrp >= -105) {
++        } else if (mLteRsrp >= -109) {
+             rsrpIconLevel = SIGNAL_STRENGTH_MODERATE;
+-        } else if (mLteRsrp >= -115) {
++        } else if (mLteRsrp >= -118) {
+             rsrpIconLevel = SIGNAL_STRENGTH_POOR;
+         } else if (mLteRsrp >= -140) {
+             rsrpIconLevel = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
+         }
+ 
+-        /*
+-         * Values are -200 dB to +300 (SNR*10dB) RS_SNR >= 13.0 dB =>4 bars 4.5
+-         * dB <= RS_SNR < 13.0 dB => 3 bars 1.0 dB <= RS_SNR < 4.5 dB => 2 bars
+-         * -3.0 dB <= RS_SNR < 1.0 dB 1 bar RS_SNR < -3.0 dB/No Service Antenna
+-         * Icon Only
+-         */
+-        if (mLteRssnr > 300) {
+-            snrIconLevel = -1;
+-        } else if (mLteRssnr >= 130) {
+-            snrIconLevel = SIGNAL_STRENGTH_GREAT;
+-        } else if (mLteRssnr >= 45) {
+-            snrIconLevel = SIGNAL_STRENGTH_GOOD;
+-        } else if (mLteRssnr >= 10) {
+-            snrIconLevel = SIGNAL_STRENGTH_MODERATE;
+-        } else if (mLteRssnr >= -30) {
+-            snrIconLevel = SIGNAL_STRENGTH_POOR;
+-        } else if (mLteRssnr >= -200) {
+-            snrIconLevel = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
+-        }
+-
+-        if (DBG) log("getLTELevel - rsrp:" + mLteRsrp + " snr:" + mLteRssnr + " rsrpIconLevel:"
+-                + rsrpIconLevel + " snrIconLevel:" + snrIconLevel);
+-
+-        /* Choose a measurement type to use for notification */
+-        if (snrIconLevel != -1 && rsrpIconLevel != -1) {
+-            /*
+-             * The number of bars displayed shall be the smaller of the bars
+-             * associated with LTE RSRP and the bars associated with the LTE
+-             * RS_SNR
+-             */
+-            return (rsrpIconLevel < snrIconLevel ? rsrpIconLevel : snrIconLevel);
+-        }
+-
+-        if (snrIconLevel != -1) {
+-            return snrIconLevel;
+-        }
+-
+-        if (rsrpIconLevel != -1) {
+-            return rsrpIconLevel;
+-        }
+-
+-        /* Valid values are (0-63, 99) as defined in TS 36.331 */
+-        if (mLteSignalStrength > 63) {
+-            rssiIconLevel = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
+-        } else if (mLteSignalStrength >= 12) {
+-            rssiIconLevel = SIGNAL_STRENGTH_GREAT;
+-        } else if (mLteSignalStrength >= 8) {
+-            rssiIconLevel = SIGNAL_STRENGTH_GOOD;
+-        } else if (mLteSignalStrength >= 5) {
+-            rssiIconLevel = SIGNAL_STRENGTH_MODERATE;
+-        } else if (mLteSignalStrength >= 0) {
+-            rssiIconLevel = SIGNAL_STRENGTH_POOR;
+-        }
+         if (DBG) {
+-            log("getLTELevel - rssi:" + mLteSignalStrength + " rssiIconLevel:"
+-                    + rssiIconLevel);
++            log("getLTELevel - rssi:" + " rsrpIconLevel:"
++                    + rsrpIconLevel);
+         }
+ 
+-        return rssiIconLevel;
++        return rsrpIconLevel;
+         //[ALPS01440836][ALPS01594704]-END: change level mapping rule of signal for CMCC
+     }
+     /**
+@@ -1116,6 +1072,7 @@
+         int level;
+ 
+         //[ALPS03252546]-START: change level mapping rule of signal for WCDMA
++/*
+         IServiceStateExt ssExt = getPlugInInstance();
+         if (ssExt != null) {
+             level = ssExt.mapUmtsSignalLevel(tdScdmaDbm);
+@@ -1123,13 +1080,13 @@
+         } else {
+             log("[getTdScdmaLevel] null plug-in instance");
+         }
+-
++*/
+         if ((tdScdmaDbm > -25) || (tdScdmaDbm == SignalStrength.INVALID))
+                 level = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
+-        else if (tdScdmaDbm >= -49) level = SIGNAL_STRENGTH_GREAT;
+-        else if (tdScdmaDbm >= -73) level = SIGNAL_STRENGTH_GOOD;
+-        else if (tdScdmaDbm >= -97) level = SIGNAL_STRENGTH_MODERATE;
+-        else if (tdScdmaDbm >= -110) level = SIGNAL_STRENGTH_POOR;
++        else if (tdScdmaDbm >= -85) level = SIGNAL_STRENGTH_GREAT;
++        else if (tdScdmaDbm >= -93) level = SIGNAL_STRENGTH_GOOD;
++        else if (tdScdmaDbm >= -100) level = SIGNAL_STRENGTH_MODERATE;
++        else if (tdScdmaDbm >= -105) level = SIGNAL_STRENGTH_POOR;
+         else level = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
+ 
+         if (DBG) log("getTdScdmaLevel = " + level);
+Index: vendor/branch/5058A/frameworks/base/telephony/java/android/telephony/SignalStrength.java
+===================================================================
+--- vendor/branch/5058A/frameworks/base/telephony/java/android/telephony/SignalStrength.java	(revision 4496)
++++ vendor/branch/5058A/frameworks/base/telephony/java/android/telephony/SignalStrength.java	(revision 4497)
+@@ -1003,11 +1003,11 @@
+         }
+ 
+         if (DBG) {
+-            log("getLTELevel - rssi:" + " rssiIconLevel:"
+-                    + rssiIconLevel);
++            log("getLTELevel - rssi:" + " rsrpIconLevel:"
++                    + rsrpIconLevel);
+         }
+ 
+-        return rssiIconLevel;
++        return rsrpIconLevel;
+         //[ALPS01440836][ALPS01594704]-END: change level mapping rule of signal for CMCC
+     }
+     /**

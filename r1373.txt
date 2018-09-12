@@ -1,0 +1,238 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java	(revision 1372)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java	(revision 1373)
+@@ -59,6 +59,7 @@
+ import android.view.WindowManager;
+ import android.view.animation.Interpolator;
+ import android.widget.ImageView;
++import android.widget.LinearLayout;
+ 
+ import com.android.systemui.R;
+ import com.android.systemui.SystemUI;
+@@ -259,7 +260,7 @@
+             values.put(MediaStore.Images.ImageColumns.HEIGHT, mImageHeight);
+             values.put(MediaStore.Images.ImageColumns.SIZE, new File(mImageFilePath).length());
+             Uri uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+-
++            GlobalScreenshot.mScreenshotUri = uri;
+             // Create a share intent
+             String subjectDate = DateFormat.getDateTimeInstance().format(new Date(mImageTime));
+             String subject = String.format(SCREENSHOT_SHARE_SUBJECT_TEMPLATE, subjectDate);
+@@ -393,7 +394,7 @@
+ 
+ class GlobalScreenshot {
+     static final String SCREENSHOT_URI_ID = "android:screenshot_uri_id";
+-
++    static Uri mScreenshotUri = null;
+     private static final int SCREENSHOT_FLASH_TO_PEAK_DURATION = 130;
+     private static final int SCREENSHOT_DROP_IN_DURATION = 430;
+     private static final int SCREENSHOT_DROP_OUT_DELAY = 500;
+@@ -423,7 +424,10 @@
+     private ImageView mBackgroundView;
+     private ImageView mScreenshotView;
+     private ImageView mScreenshotFlash;
+-
++    private ImageView mScreenshotCrop;
++    private ImageView mScreenshotShare;
++    private ImageView mScreenshotSave;
++    private LinearLayout mScreenshotbtnlayout;
+     private AnimatorSet mScreenshotAnimation;
+ 
+     private int mNotificationIconSize;
+@@ -450,6 +454,11 @@
+         mBackgroundView = (ImageView) mScreenshotLayout.findViewById(R.id.global_screenshot_background);
+         mScreenshotView = (ImageView) mScreenshotLayout.findViewById(R.id.global_screenshot);
+         mScreenshotFlash = (ImageView) mScreenshotLayout.findViewById(R.id.global_screenshot_flash);
++        mScreenshotbtnlayout = (LinearLayout) mScreenshotLayout.findViewById(R.id.global_screenshot_btnlayout);
++        mScreenshotCrop = (ImageView) mScreenshotLayout.findViewById(R.id.global_screenshot_crop);
++        mScreenshotSave = (ImageView) mScreenshotLayout.findViewById(R.id.global_screenshot_save);
++        mScreenshotShare = (ImageView) mScreenshotLayout.findViewById(R.id.global_screenshot_share);
++
+         mScreenshotSelectorView = (ScreenshotSelectorView) mScreenshotLayout.findViewById(
+                 R.id.global_screenshot_selector);
+         mScreenshotLayout.setFocusable(true);
+@@ -689,10 +698,11 @@
+ 
+         mWindowManager.addView(mScreenshotLayout, mWindowLayoutParams);
+         ValueAnimator screenshotDropInAnim = createScreenshotDropInAnimation();
++        ValueAnimator screenshotDropBTAnim = createScreenshotDropBettenAnimation();
+         ValueAnimator screenshotFadeOutAnim = createScreenshotDropOutAnimation(w, h,
+                 statusBarVisible, navBarVisible);
+         mScreenshotAnimation = new AnimatorSet();
+-        mScreenshotAnimation.playSequentially(screenshotDropInAnim, screenshotFadeOutAnim);
++        mScreenshotAnimation.playSequentially(screenshotDropInAnim, screenshotDropBTAnim, screenshotFadeOutAnim);
+         mScreenshotAnimation.addListener(new AnimatorListenerAdapter() {
+             @Override
+             public void onAnimationEnd(Animator animation) {
+@@ -778,6 +788,63 @@
+         });
+         return anim;
+     }
++
++    private ValueAnimator createScreenshotDropBettenAnimation() {
++        final ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f);
++        anim.setDuration(2500);
++        anim.addListener(new AnimatorListenerAdapter() {
++
++            @Override
++            public void onAnimationStart(Animator animation) {
++                mScreenshotSave.setVisibility(View.VISIBLE);
++                mBackgroundView.setAlpha(0.9f);
++                mScreenshotSave.setOnClickListener(new View.OnClickListener() {
++                    @Override
++                    public void onClick(View view) {
++                        anim.end();
++                    }
++                });
++                mScreenshotShare.setVisibility(View.VISIBLE);
++                mScreenshotShare.setOnClickListener(new View.OnClickListener() {
++                    @Override
++                    public void onClick(View view) {
++                        Intent shareIntent = new Intent(Intent.ACTION_SEND);
++                        shareIntent.setType("image/png");
++                        shareIntent.putExtra(Intent.EXTRA_STREAM, mScreenshotUri);
++                        Intent chooser = Intent.createChooser(shareIntent, "Share screen shot");
++                        if (shareIntent.resolveActivity(mContext.getPackageManager()) != null) {
++                            anim.end();
++                            mContext.startActivity(chooser);
++                        }
++                    }
++                });
++                mScreenshotCrop.setVisibility(View.VISIBLE);
++                mScreenshotCrop.setOnClickListener(new View.OnClickListener() {
++                    @Override
++                    public void onClick(View view) {
++                        //ͼ��򿪽ӿ�
++		              Intent intent = new Intent();
++		              intent.setAction(android.content.Intent.ACTION_VIEW);
++                        intent.setDataAndType(mScreenshotUri, "image/*");
++                        if (intent.resolveActivity(mContext.getPackageManager()) != null) {
++                            anim.end();
++                            mContext.startActivity(intent);
++                        }
++                    }
++                });
++            }
++
++            @Override
++            public void onAnimationEnd(android.animation.Animator animation) {
++                mScreenshotCrop.setVisibility(View.GONE);
++                mScreenshotShare.setVisibility(View.GONE);
++                mScreenshotSave.setVisibility(View.GONE);
++            }
++
++        });
++        return anim;
++    }
++
+     private ValueAnimator createScreenshotDropOutAnimation(int w, int h, boolean statusBarVisible,
+             boolean navBarVisible) {
+         ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f);
+Index: frameworks/base/packages/SystemUI/res/layout/global_screenshot.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/global_screenshot.xml	(revision 1372)
++++ frameworks/base/packages/SystemUI/res/layout/global_screenshot.xml	(revision 1373)
+@@ -19,7 +19,7 @@
+     <ImageView android:id="@+id/global_screenshot_background"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+-        android:src="@android:color/black"
++        android:background="@drawable/screenshot_background2"
+         android:visibility="gone" />
+     <ImageView android:id="@+id/global_screenshot"
+         android:layout_width="wrap_content"
+@@ -38,5 +38,35 @@
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+         android:visibility="gone"
+-        android:pointerIcon="crosshair"/>
++	android:pointerIcon="crosshair"/>
++    <LinearLayout android:id="@+id/global_screenshot_btnlayout"
++        android:layout_width="match_parent"
++        android:layout_height="90dp"
++        android:layout_gravity="bottom"
++        android:orientation="horizontal">
++        <ImageView android:id="@+id/global_screenshot_crop"
++            android:layout_width="0dp"
++            android:layout_height="wrap_content"
++            android:layout_gravity="center"
++            android:layout_marginStart="84dp"
++            android:layout_marginEnd="10dp"
++            android:layout_weight="1"
++            android:src="@drawable/screenshot_brush_white_24dp" />
++        <ImageView android:id="@+id/global_screenshot_share"
++            android:layout_width="0dp"
++            android:layout_height="wrap_content"
++            android:layout_gravity="center"
++            android:layout_marginStart="10dp"
++            android:layout_marginEnd="10dp"
++            android:layout_weight="1"
++            android:src="@drawable/screenshot_share_white_24dp" />
++        <ImageView android:id="@+id/global_screenshot_save"
++            android:layout_width="0dp"
++            android:layout_height="wrap_content"
++            android:layout_gravity="center"
++            android:layout_marginStart="10dp"
++            android:layout_marginEnd="84dp"
++            android:layout_weight="1"
++            android:src="@drawable/screenshot_save_white_24dp" />
++    </LinearLayout>
+ </FrameLayout>
+Index: frameworks/base/packages/SystemUI/res/drawable/screenshot_save_white_24dp.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/screenshot_save_white_24dp.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/screenshot_save_white_24dp.xml	(revision 1373)
+@@ -0,0 +1,9 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++        android:width="24dp"
++        android:height="24dp"
++        android:viewportWidth="24.0"
++        android:viewportHeight="24.0">
++    <path
++        android:fillColor="#FFF"
++        android:pathData="M17,3L5,3c-1.11,0 -2,0.9 -2,2v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2L21,7l-4,-4zM12,19c-1.66,0 -3,-1.34 -3,-3s1.34,-3 3,-3 3,1.34 3,3 -1.34,3 -3,3zM15,9L5,9L5,5h10v4z"/>
++</vector>
+Index: frameworks/base/packages/SystemUI/res/drawable/screenshot_share_white_24dp.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/screenshot_share_white_24dp.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/screenshot_share_white_24dp.xml	(revision 1373)
+@@ -0,0 +1,9 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++        android:width="24dp"
++        android:height="24dp"
++        android:viewportWidth="24.0"
++        android:viewportHeight="24.0">
++    <path
++        android:fillColor="#FFF"
++        android:pathData="M18,16.08c-0.76,0 -1.44,0.3 -1.96,0.77L8.91,12.7c0.05,-0.23 0.09,-0.46 0.09,-0.7s-0.04,-0.47 -0.09,-0.7l7.05,-4.11c0.54,0.5 1.25,0.81 2.04,0.81 1.66,0 3,-1.34 3,-3s-1.34,-3 -3,-3 -3,1.34 -3,3c0,0.24 0.04,0.47 0.09,0.7L8.04,9.81C7.5,9.31 6.79,9 6,9c-1.66,0 -3,1.34 -3,3s1.34,3 3,3c0.79,0 1.5,-0.31 2.04,-0.81l7.12,4.16c-0.05,0.21 -0.08,0.43 -0.08,0.65 0,1.61 1.31,2.92 2.92,2.92 1.61,0 2.92,-1.31 2.92,-2.92s-1.31,-2.92 -2.92,-2.92z"/>
++</vector>
+Index: frameworks/base/packages/SystemUI/res/drawable/screenshot_brush_white_24dp.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/screenshot_brush_white_24dp.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/screenshot_brush_white_24dp.xml	(revision 1373)
+@@ -0,0 +1,9 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++        android:width="24dp"
++        android:height="24dp"
++        android:viewportWidth="24.0"
++        android:viewportHeight="24.0">
++    <path
++        android:fillColor="#FFF"
++        android:pathData="M7,14c-1.66,0 -3,1.34 -3,3 0,1.31 -1.16,2 -2,2 0.92,1.22 2.49,2 4,2 2.21,0 4,-1.79 4,-4 0,-1.66 -1.34,-3 -3,-3zM20.71,4.63l-1.34,-1.34c-0.39,-0.39 -1.02,-0.39 -1.41,0L9,12.25 11.75,15l8.96,-8.96c0.39,-0.39 0.39,-1.02 0,-1.41z"/>
++</vector>
+Index: frameworks/base/packages/SystemUI/res/drawable/screenshot_background2.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/screenshot_background2.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/screenshot_background2.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/screenshot_background2.png	(revision 1373)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/screenshot_background2.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property

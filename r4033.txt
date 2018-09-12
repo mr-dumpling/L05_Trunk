@@ -1,0 +1,285 @@
+Index: packages/services/Telephony/res/values/strings.xml
+===================================================================
+--- packages/services/Telephony/res/values/strings.xml	(revision 4032)
++++ packages/services/Telephony/res/values/strings.xml	(revision 4033)
+@@ -1388,5 +1388,8 @@
+     <string name="change_pin_succeeded">Voicemail PIN updated</string>
+     <!-- The error message to show if the server reported an error while attempting to change the voicemail PIN -->
+     <string name="change_pin_system_error">Unable to set PIN</string>
+-	<string name="dialog_voicemail_not_ready_message">To set up voicemail, go to Menu &gt; Settings.</string>
++    <string name="dialog_voicemail_not_ready_message">To set up voicemail, go to Menu &gt; Settings.</string>
++    <string name="fdn_list_dialog_title">Office</string>
++    <string name="fdn_list_dialog_call">Call</string>
++    <string name="fdn_list_dialog_edit">Edit</string>
+ </resources>
+Index: vendor/branch/5058A/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnList.java
+===================================================================
+--- vendor/branch/5058A/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnList.java	(revision 0)
++++ vendor/branch/5058A/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnList.java	(revision 4033)
+@@ -0,0 +1,266 @@
++/*
++ * Copyright (C) 2007 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.phone.settings.fdn;
++
++import android.app.ActionBar;
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.content.res.Resources;
++import android.net.Uri;
++import android.os.Bundle;
++import android.view.Menu;
++import android.view.MenuItem;
++import android.view.View;
++import android.widget.ListView;
++
++import com.android.phone.ADNList;
++import com.android.phone.PhoneGlobals;
++import com.android.phone.R;
++import com.android.phone.SubscriptionInfoHelper;
++
++import android.telecom.PhoneAccountHandle;
++import com.android.phone.PhoneUtils;
++import android.content.DialogInterface;
++import android.app.AlertDialog;
++import android.telecom.PhoneAccount;
++import android.telecom.TelecomManager;
++
++/**
++ * Fixed Dialing Number (FDN) List UI for the Phone app. FDN is a feature of the service provider
++ * that allows a user to specify a limited set of phone numbers that the SIM can dial.
++ */
++public class FdnList extends ADNList implements PhoneGlobals.SubInfoUpdateListener {
++    private static final int MENU_ADD = 1;
++    private static final int MENU_EDIT = 2;
++    private static final int MENU_DELETE = 3;
++
++    private static final String INTENT_EXTRA_NAME = "name";
++    private static final String INTENT_EXTRA_NUMBER = "number";
++    private static final String INTENT_EXTRA_ADD = "addContact";
++
++    private static final Uri FDN_CONTENT_URI = Uri.parse("content://icc/fdn");
++    private static final String FDN_CONTENT_PATH_WITH_SUB_ID = "content://icc/fdn/subId/";
++    private SubscriptionInfoHelper mSubscriptionInfoHelper;
++
++    @Override
++    public void onCreate(Bundle icicle) {
++        super.onCreate(icicle);
++
++        ActionBar actionBar = getActionBar();
++        if (actionBar != null) {
++            // android.R.id.home will be triggered in onOptionsItemSelected()
++            actionBar.setDisplayHomeAsUpEnabled(true);
++        }
++
++        mSubscriptionInfoHelper = new SubscriptionInfoHelper(this, getIntent());
++        mSubscriptionInfoHelper.setActionBarTitle(
++                getActionBar(), getResources(), R.string.fdn_list_with_label);
++        ///M: Add for host swap
++        PhoneGlobals.getInstance().addSubInfoUpdateListener(this);
++
++        /// M: listen to SIM and PHB state change to update screen
++        final IntentFilter ifilter = new IntentFilter();
++        ifilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
++        registerReceiver(mReceiver, ifilter);
++    }
++
++    @Override
++    protected Uri resolveIntent() {
++        Intent intent = getIntent();
++        intent.setData(getContentUri(mSubscriptionInfoHelper));
++        return intent.getData();
++    }
++
++    @Override
++    public boolean onCreateOptionsMenu(Menu menu) {
++        super.onCreateOptionsMenu(menu);
++
++        Resources r = getResources();
++
++        // Added the icons to the context menu
++        menu.add(0, MENU_ADD, 0, r.getString(R.string.menu_add))
++                .setIcon(android.R.drawable.ic_menu_add);
++        menu.add(0, MENU_EDIT, 0, r.getString(R.string.menu_edit))
++                .setIcon(android.R.drawable.ic_menu_edit);
++        menu.add(0, MENU_DELETE, 0, r.getString(R.string.menu_delete))
++                .setIcon(android.R.drawable.ic_menu_delete);
++        return true;
++    }
++
++    @Override
++    public boolean onPrepareOptionsMenu(Menu menu) {
++        super.onPrepareOptionsMenu(menu);
++        boolean hasSelection = (getSelectedItemPosition() >= 0);
++
++        menu.findItem(MENU_ADD).setVisible(true);
++        menu.findItem(MENU_EDIT).setVisible(hasSelection);
++        menu.findItem(MENU_DELETE).setVisible(hasSelection);
++
++        return true;
++    }
++
++    @Override
++    public boolean onOptionsItemSelected(MenuItem item) {
++        switch (item.getItemId()) {
++            case android.R.id.home:  // See ActionBar#setDisplayHomeAsUpEnabled()
++                Intent intent = mSubscriptionInfoHelper.getIntent(FdnSetting.class);
++                intent.setAction(Intent.ACTION_MAIN);
++                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
++                startActivity(intent);
++                finish();
++                return true;
++
++            case MENU_ADD:
++                addContact();
++                return true;
++
++            case MENU_EDIT:
++                editSelected();
++                return true;
++
++            case MENU_DELETE:
++                deleteSelected();
++                return true;
++        }
++
++        return super.onOptionsItemSelected(item);
++    }
++
++    @Override
++    public void onListItemClick(ListView l, View v, int position, long id) {
++        // TODO: is this what we really want?
++        //editSelected(position);
++        showItemDialog(position);
++
++    }
++
++    private void showItemDialog(int positon) {
++        final String[] items = new String []{getResources().getString(R.string.fdn_list_dialog_call),
++                                            getResources().getString(R.string.fdn_list_dialog_edit)};
++        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(R.string.fdn_list_dialog_title)
++            .setItems(items, new DialogInterface.OnClickListener() {
++
++                @Override
++                public void onClick(DialogInterface dialog, int which) {
++                    switch(which) {
++                        case 0:
++                            callTheItem(positon);
++                            break;
++                        case 1:
++                            editSelected(positon);
++                            break;
++                    }
++                }
++            }).create();
++        dialog.show();
++    }
++
++    private void callTheItem (int position) {
++        if (mCursor.moveToPosition(position)) {
++            String name = mCursor.getString(NAME_COLUMN);
++            String number = mCursor.getString(NUMBER_COLUMN);
++
++            PhoneAccountHandle phoneAccountHandle = PhoneUtils.makePstnPhoneAccountHandle(mSubscriptionInfoHelper.getPhone());
++            Uri uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, number, null);
++            final Intent intent = new Intent(Intent.ACTION_CALL, uri);
++
++            final Bundle b = new Bundle();
++            b.putInt("com.android.dialer.EXTRA_CALL_INITIATION_TYPE", 2);
++            intent.putExtra(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, b);
++            intent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle);
++            startActivity(intent);
++        }
++
++    }
++
++    private void addContact() {
++        //If there is no INTENT_EXTRA_NAME provided, EditFdnContactScreen treats it as an "add".
++        Intent intent = mSubscriptionInfoHelper.getIntent(EditFdnContactScreen.class);
++        intent.putExtra(INTENT_EXTRA_ADD, true);
++        startActivity(intent);
++    }
++
++    /**
++     * Overloaded to call editSelected with the current selection
++     * by default.  This method may have a problem with touch UI
++     * since touch UI does not really have a concept of "selected"
++     * items.
++     */
++    private void editSelected() {
++        editSelected(getSelectedItemPosition());
++    }
++
++    /**
++     * Edit the item at the selected position in the list.
++     */
++    private void editSelected(int position) {
++        if (mCursor.moveToPosition(position)) {
++            String name = mCursor.getString(NAME_COLUMN);
++            String number = mCursor.getString(NUMBER_COLUMN);
++
++            Intent intent = mSubscriptionInfoHelper.getIntent(EditFdnContactScreen.class);
++            intent.putExtra(INTENT_EXTRA_NAME, name);
++            intent.putExtra(INTENT_EXTRA_NUMBER, number);
++            intent.putExtra(INTENT_EXTRA_ADD, false);
++            startActivity(intent);
++        }
++    }
++
++    private void deleteSelected() {
++        if (mCursor.moveToPosition(getSelectedItemPosition())) {
++            String name = mCursor.getString(NAME_COLUMN);
++            String number = mCursor.getString(NUMBER_COLUMN);
++
++            Intent intent = mSubscriptionInfoHelper.getIntent(DeleteFdnContactScreen.class);
++            intent.putExtra(INTENT_EXTRA_NAME, name);
++            intent.putExtra(INTENT_EXTRA_NUMBER, number);
++            startActivity(intent);
++        }
++    }
++
++    /**
++     * Returns the uri for updating the ICC FDN entry, taking into account the subscription id.
++     */
++    public static Uri getContentUri(SubscriptionInfoHelper subscriptionInfoHelper) {
++        return subscriptionInfoHelper.hasSubId()
++                ? Uri.parse(FDN_CONTENT_PATH_WITH_SUB_ID + subscriptionInfoHelper.getSubId())
++                : FDN_CONTENT_URI;
++    }
++
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++        PhoneGlobals.getInstance().removeSubInfoUpdateListener(this);
++    }
++
++    @Override
++    public void handleSubInfoUpdate() {
++        finish();
++    }
++
++    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            if (Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(intent.getAction())) {
++                log("AIRPLANE_MODE_CHANGED, so finish FDN Settings");
++                finish();
++            }
++        }
++    };
++}

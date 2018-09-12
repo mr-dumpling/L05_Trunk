@@ -1,0 +1,115 @@
+Index: vendor/branch/5058A_Cable_Bahamas/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 4515)
++++ vendor/branch/5058A_Cable_Bahamas/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 4516)
+@@ -21,10 +21,13 @@
+ import android.app.DialogFragment;
+ import android.app.KeyguardManager;
+ import android.app.ProgressDialog;
++import android.app.backup.BackupManager;
+ import android.content.ActivityNotFoundException;
+ import android.content.ContentResolver;
+ import android.content.Context;
+ import android.content.DialogInterface;
++import android.content.res.Configuration;
++
+ import android.content.Intent;
+ import android.database.Cursor;
+ import android.content.ComponentName;
+@@ -45,6 +48,7 @@
+ import android.view.WindowManager;
+ import android.widget.EditText;
+ import android.widget.Toast;
++import android.os.LocaleList;
+ import android.provider.Settings;
+ 
+ 
+@@ -71,6 +75,8 @@
+ import java.io.File;
+ import java.io.FileReader;
+ import java.io.IOException;
++import java.util.Locale;
++import java.lang.reflect.Method;
+ 
+ 
+ 
+@@ -124,6 +130,9 @@
+ 	private static final String MMI_CHECK_Efused= "*#9463*5#";
+ 	private static final String MMI_CHECK_ROOT2="*#7668#";
+ 	private static final String CUSTOMER_VERSION_FOR_TCL = "*#3228#";	
++	private static final String ENGINEER_MODE_TEST_TCL="*#*#82533284#*#*";
++	private static final String MMI_ENGLISH_LANGUAGE="*#0044#";
++	private static final String MMI_FRENCH_LANGUAGE="*#0033#";
+     /// @}
+ 
+     /**
+@@ -195,6 +204,9 @@
+         String dialString = PhoneNumberUtils.stripSeparators(input);
+ 
+         if (handleDeviceIdDisplay(context, dialString)
++				|| handleChangeFrench(context, dialString)
++				|| handleChangeEnglish(context, dialString)
++				|| handleEngineerModeTest2(context,  dialString)
+                 || handleRegulatoryInfoDisplay(context, dialString)
+                 || handlePinEntry(context, dialString)
+                 || handleAdnEntry(context, dialString, textField)
+@@ -401,6 +413,59 @@
+         activityIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+         context.startActivity(activityIntent);
+     }
++    
++    	static boolean handleChangeEnglish(Context context, String input) {
++        if (input.equals(MMI_ENGLISH_LANGUAGE)) {
++            Locale newLocaleEN = Locale.US;
++            final LocaleList localeListEN = new LocaleList(newLocaleEN);
++			changeSystemLanguage(localeListEN);
++            return true;
++        }
++        return false;
++    }
++	static boolean handleChangeFrench(Context context, String input) {
++        if (input.equals(MMI_FRENCH_LANGUAGE)) {
++            Locale newLocaleEN = Locale.FRANCE;
++            final LocaleList localeListEN = new LocaleList(newLocaleEN);
++			changeSystemLanguage(localeListEN);
++            return true;
++        }
++        return false;
++    }
++	private static void changeSystemLanguage(LocaleList locale){
++		if (locale != null) {
++            try {
++                Class classActivityManagerNative = Class.forName("android.app.ActivityManagerNative");
++                Method getDefault = classActivityManagerNative.getDeclaredMethod("getDefault");
++                Object objIActivityManager = getDefault.invoke(classActivityManagerNative);
++                Class classIActivityManager = Class.forName("android.app.IActivityManager");
++                Method getConfiguration = classIActivityManager.getDeclaredMethod("getConfiguration");
++                Configuration config = (Configuration) getConfiguration.invoke(objIActivityManager);
++                config.setLocales(locale);
++                Class clzConfig = Class.forName("android.content.res.Configuration");
++                java.lang.reflect.Field userSetLocale = clzConfig.getField("userSetLocale");
++                userSetLocale.set(config, true);
++                Class[] clzParams = {Configuration.class};
++                Method updateConfiguration = classIActivityManager.getDeclaredMethod("updatePersistentConfiguration", clzParams);
++                updateConfiguration.invoke(objIActivityManager, config);
++                BackupManager.dataChanged("com.android.providers.settings");
++            } catch (Exception e) {
++                Log.d(TAG, "changeSystemLanguage: " + e.getLocalizedMessage());
++            }
++        }
++	}
++	
++	private static boolean handleEngineerModeTest2(Context context, String input) {
++		Log.w("yujunjie", "SpecialCharSequenceMgr:handleEngineerModeTest2()..... input ="+input);
++		if(input!=null && input.equals(ENGINEER_MODE_TEST_TCL)) {	 
++			Intent intent = new Intent(Intent.ACTION_MAIN); 	   
++			intent.setComponent(new ComponentName("com.mediatek.engineermode","com.mediatek.engineermode.EngineerMode"));		
++			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 		
++			context.startActivity( intent); 				   
++			return true;	   
++		}		 
++		return false;  
++	}
+ 
+     private static void handleAdnQuery(QueryHandler handler, SimContactQueryCookie cookie,
+             Uri uri) {

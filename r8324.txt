@@ -1,0 +1,58 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 8323)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 8324)
+@@ -218,6 +218,7 @@
+ 	private static final String MUSIC="com.alcatel.music5";
+ 	private static final String TORCH="com.google.torch";
+ 	private static final String FUNC_SETTINGS="com.android.settings";
++	private final static String UNBIND_STOP_FACE_SERVICE = "unbind_stop_face_service";
+ 	
+ 	private int	mTorchIndex=-1;
+ 	private Camera.Parameters p ;
+@@ -1121,6 +1122,8 @@
+ 						}else{
+ 							startApp(mContext,packagerName);															
+ 						}
++						Intent intent =new Intent(UNBIND_STOP_FACE_SERVICE);
++						mContext.sendBroadcast(intent);
+                     }
+                 }
+             }
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 8323)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 8324)
+@@ -1825,6 +1825,10 @@
+ 		simPinKeyguardfilter.addAction(SIM_PIN_KEYGUARD_START);
+ 		simPinKeyguardfilter.addAction(SIM_PIN_KEYGUARD_STOP);
+ 		context.registerReceiver(mSimPINKeyguardReceiver, simPinKeyguardfilter);
++		// register for unbind_stop_face_service
++		IntentFilter unbindFaceServiceFilter = new IntentFilter();
++		unbindFaceServiceFilter.addAction(UNBIND_STOP_FACE_SERVICE);
++		context.registerReceiver(mUnbindFaceServiceReceiver, unbindFaceServiceFilter);
+ 		
+         // monitor for system gestures
+         mSystemGestures = new SystemGesturesPointerEventListener(context,
+@@ -6308,6 +6312,21 @@
+ 			}        
+ 		}    
+ 	};
++	private BroadcastReceiver mUnbindFaceServiceReceiver = new BroadcastReceiver() { 
++    	@Override        
++		public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++            if(action == UNBIND_STOP_FACE_SERVICE){
++				if ( mFaceVerifyConn!= null){
++					 Log.d(TAG,"*camera stop face service ** stopFaceIdentify start");
++					 exitFaceVerify();
++					 Log.d(TAG,"*Double click stop face service ** stopFaceIdentify end");
++				} else {
++					 Log.e(TAG,"errror when Double click stop face service **");
++				}
++			}
++        }         
++	};
+ 	/** {@inheritDoc} */
+ 	@Override
+     public int interceptKeyBeforeQueueing(KeyEvent event, int policyFlags) {

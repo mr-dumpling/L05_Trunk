@@ -1,0 +1,200 @@
+Index: packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1108)
++++ packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1109)
+@@ -29,6 +29,7 @@
+ import android.database.Cursor;
+ import android.net.Uri;
+ import android.os.Looper;
++import android.os.IBinder;
+ import android.os.PowerManager;
+ import android.os.ServiceManager;
+ import android.os.SystemProperties;
+@@ -59,7 +60,9 @@
+ import com.mediatek.dialer.ext.ExtensionManager;
+ import com.mediatek.dialer.util.DialerFeatureOptions;
+ import com.mediatek.telephony.TelephonyManagerEx;
++import com.mediatek.dialer.mmi.NvRAMAgent;
+ 
++
+ import java.util.ArrayList;
+ import java.util.List;
+ import java.io.File;
+@@ -83,7 +86,11 @@
+ 	private final static int kSystemRootStateDisable=0; 
+ 	private final static int kSystemRootStateEnable=1;
+ 	private static int systemRootState=kSystemRootStateUnknow;
+-
++	private static final int CU_REF = 166;
++	private static final int CU_REF_LENGTH = 20;
++	private static IBinder binder;
++	private static NvRAMAgent agent; 
++	private static byte[] product_info = null;
+     private static final String TAG_SELECT_ACCT_FRAGMENT = "tag_select_acct_fragment";
+ 
+     private static final String SECRET_CODE_ACTION = "android.provider.Telephony.SECRET_CODE";
+@@ -105,6 +112,7 @@
+ 	private static final String MMI_TEST_FOR_TCL = "*#458#";	
+ 	private static final String INTERNAL_VER_FOR_TCL = "*#208*#";	
+ 	private static final String MMI_CHECK_ROOT= "*#858#";
++	private static final String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
+     /// @}
+ 
+     /**
+@@ -435,6 +443,15 @@
+ 
+             List<String> deviceIds = new ArrayList<String>();
+             try {
++				String svnver ="SVN: ";
++				String version=SystemProperties.get("ro.def.software.version");
++				if(!TextUtils.isEmpty(version)&& version!=null){
++					svnver = svnver + version; 
++				}else{
++					svnver = svnver + "00000";
++				}
++				int len=version.length();
++    			String vers=version.substring(len-2, len);
+                 if (TelephonyManagerCompat.getPhoneCount(telephonyManager) > 1 &&
+                     CompatUtils.isMethodAvailable(TelephonyManagerCompat.TELEPHONY_MANAGER_CLASS,
+                             "getDeviceId", Integer.TYPE)) {
+@@ -443,6 +460,10 @@
+                         if (!TextUtils.isEmpty(deviceId)) {
+                             deviceIds.add(deviceId);
+                         }
++						if (!TextUtils.isEmpty(vers)) {
++					 	 	String vers1="IMEISV:"+vers;
++                         	deviceIds.add(vers1);
++                     	}
+                     }
+                 } else {
+                    String deviceId = telephonyManager.getDeviceId(0);
+@@ -452,14 +473,11 @@
+ 					}else{
+ 						deviceIds.add("00000000000");
+ 					}
++					if (!TextUtils.isEmpty(vers)) {
++					 	vers="IMEISV:"+vers;
++                        deviceIds.add(vers);
++                    }
+                 }
+-				String svnver ="SVN: ";
+-				String version=SystemProperties.get("ro.def.software.version");
+-				if(!TextUtils.isEmpty(version)&& version!=null){
+-					svnver = svnver + version; 
+-				}else{
+-					svnver = svnver + "00000";
+-				}
+ 				deviceIds.add(svnver); 
+ 
+                 /// M: Add single IMEI plugin. @{
+@@ -553,7 +571,7 @@
+ 	static boolean handleCustomerExternalVersion(Context context, String input) {	 
+ 		if (input.equals(CUSTOMER_VER_EXTERNAL)) {			
+ 			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.product.name");	
+-			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.incremental");		
++			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.custintid");		
+ 			String release_ver = commercial_name + "\n"+ sw_ver;		   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+ 				.setTitle("Android")								
+@@ -568,8 +586,10 @@
+ 	}  
+ 	static boolean handleCustomerInternalVersion(Context context, String input) {	 
+ 		if (input.equals(CUSTOMER_VERSION_INTERNAL)) {			
+-			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.product.name");	
+-			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.custintid");			
++			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.product.name");
++			String version=SystemProperties.get("ro.build.version.custintid");
++			String[] directory = version.split("_");
++			String sw_ver = "SW Version:\n"+ directory[2];			
+ 			String release_ver = commercial_name + "\n"+ sw_ver;		   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+ 				.setTitle("Android")								
+@@ -582,13 +602,30 @@
+ 		}				 
+ 		return false;	   
+ 	}  
+-	static boolean handleCustomerInternalVersion2(Context context, String input) {	  
+-		if (input.equals(INTERNAL_VER_FOR_TCL )) {			
+-			String release_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.incremental"); 		
+-			release_ver = release_ver + "\n"+ SystemProperties.get("ro.build.date");	   
++	static boolean handleCustomerInternalVersion2(Context context, String input) {
++		List<String> deviceIds = new ArrayList<String>();
++		if (input.equals(INTERNAL_VER_FOR_TCL )) {	
++			binder = ServiceManager.getService("NvRAMAgent");
++			agent = NvRAMAgent.Stub.asInterface(binder);
++			try {
++				product_info = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++			} catch (Exception e) {
++				e.printStackTrace();
++			}
++			String stringBuffer="";
++			if(product_info !=null){
++				stringBuffer =  new String(product_info, CU_REF, CU_REF_LENGTH);
++			}
++			String su_ref=stringBuffer.equals("") ?"00" : stringBuffer.toString().toUpperCase();
++			String SW_Version="SW Version: "+ SystemProperties.get("ro.build.version.custintid");
++			deviceIds.add(SW_Version);
++			String Build_Version="Build Version:"+ SystemProperties.get("ro.build.date");
++		    deviceIds.add(Build_Version);
++			su_ref="CU REF: "+su_ref;
++			deviceIds.add(su_ref);
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+ 				.setTitle("Android")								
+-				.setMessage(release_ver)							   
++				.setItems(deviceIds.toArray(new String[deviceIds.size()]), null)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+ 				.create();					
+Index: packages/apps/Dialer/src/com/mediatek/dialer/mmi/NvRAMAgent.java
+===================================================================
+--- packages/apps/Dialer/src/com/mediatek/dialer/mmi/NvRAMAgent.java	(revision 1108)
++++ packages/apps/Dialer/src/com/mediatek/dialer/mmi/NvRAMAgent.java	(revision 1109)
+@@ -151,10 +151,48 @@
+                 }
+                 return result;
+             }
++			     public byte[] readFileByName(String filename) throws android.os.RemoteException {
++				 	android.os.Parcel _data = android.os.Parcel.obtain();
++					android.os.Parcel _reply = android.os.Parcel.obtain();
++					byte[] _result;
++					try {
++						_data.writeInterfaceToken(DESCRIPTOR);
++						_data.writeString(filename);
++						mRemote.transact(Stub.TRANSACTION_READFILEBYNAME, _data, _reply, 0);
++						_reply.readException();
++						_result = _reply.createByteArray();
++						} finally {
++						_reply.recycle(); 
++						_data.recycle();
++						} 
++						return _result;
++						}
++				 public int writeFileByName(String filename, byte[] buff)
++				 	throws android.os.RemoteException {
++				 	android.os.Parcel _data = android.os.Parcel.obtain();
++					android.os.Parcel _reply = android.os.Parcel.obtain();
++					int _result;
++					try {
++						_data.writeInterfaceToken(DESCRIPTOR);
++						_data.writeString(filename);
++						_data.writeByteArray(buff);
++						mRemote.transact(Stub.TRANSACTION_WRITEFILEBYNAME, _data, _reply, 0);
++						_reply.readException();
++						_result = _reply.readInt();
++						} finally {
++						_reply.recycle();
++						_data.recycle();
++						}
++						return _result;
++						}
+         }
+         static final int TRANSACTION_READFILE = (IBinder.FIRST_CALL_TRANSACTION + 0);
+         static final int TRANSACTION_WRITEFILE = (IBinder.FIRST_CALL_TRANSACTION + 1);
++		static final int TRANSACTION_READFILEBYNAME = (IBinder.FIRST_CALL_TRANSACTION + 2);
++		static final int TRANSACTION_WRITEFILEBYNAME = (IBinder.FIRST_CALL_TRANSACTION + 3);
+     }
+     byte[] readFile(int fileLid) throws android.os.RemoteException;
+     int writeFile(int fileLid, byte[] buff) throws android.os.RemoteException;
++	public byte[] readFileByName(String filepath) throws android.os.RemoteException;
++	public int writeFileByName(String filepath, byte[] buff) throws android.os.RemoteException;
+ }

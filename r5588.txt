@@ -1,0 +1,73 @@
+Index: vendor/branch/5058A_Cable_Bahamas/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 5587)
++++ vendor/branch/5058A_Cable_Bahamas/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 5588)
+@@ -362,6 +362,15 @@
+     private final LocalLog mPhoneTypeLog = new LocalLog(10);
+     private final LocalLog mRatLog = new LocalLog(20);
+ 
++    /** Unknown network class. */
++    public static final int NETWORK_CLASS_UNKNOWN = 0;
++    /** Class of broadly defined "2G" networks. */
++    public static final int NETWORK_CLASS_2_G = 1;
++    /** Class of broadly defined "3G" networks. */
++    public static final int NETWORK_CLASS_3_G = 2;
++    /** Class of broadly defined "4G" networks. */
++    public static final int NETWORK_CLASS_4_G = 3;
++
+     private class SstSubscriptionsChangedListener extends OnSubscriptionsChangedListener {
+         public final AtomicInteger mPreviousSubId =
+                 new AtomicInteger(SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+@@ -617,7 +626,6 @@
+                                         "21413", "21414", "21415", "21416", "21417", "21418",
+                                         "21419", "21420", "21421"},
+                                        //ALPS02446235]
+-                                       {"73001", "73002","73003", "73004", "73006", "73007", "73008", "73009", "73010", "73011", "73014", "73099"},
+                                        /** ALPS02501839 treat 20815 as 20801's EPLMN @{ */
+                                        {"20815", "20801"}
+                                        /** @} */
+@@ -3200,7 +3208,20 @@
+                                 String strOperatorLong = null;
+                                 String strOperatorShort = null;
+                                 SpnOverride spnOverride = SpnOverride.getInstance();
+-
++								
++								if(opNames[2].equals("74810")){
++									if(/*(mNewSS.getRilVoiceRadioTechnology()== ServiceState.RIL_RADIO_TECHNOLOGY_GPRS ||
++									mNewSS.getRilVoiceRadioTechnology()== ServiceState.NETWORK_CLASS_3_G )*/
++                                            (getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_2_G)||
++                                                    (getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_3_G)       )
++									{
++									strOperatorLong = "Claro UY";
++									strOperatorShort = "Claro UY";
++									}else if(getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_4_G){
++										strOperatorLong = "Claro LTE";
++										strOperatorShort = "Claro LTE";
++									}
++								}else{		
+                                 strOperatorLong = mCi.lookupOperatorNameFromNetwork(
+                                         SubscriptionManager.getSubIdUsingPhoneId(
+                                                 mPhone.getPhoneId()), opNames[2], true);
+@@ -3243,6 +3264,7 @@
+                                 }
+                                 log("EVENT_POLL_STATE_OPERATOR_CDMA: "
+                                         + strOperatorLong + ", " + strOperatorShort);
++							}
+                                 mNewSS.setOperatorName(strOperatorLong, strOperatorShort,
+                                         opNames[2]);
+                                 /// @}
+@@ -3577,6 +3599,14 @@
+         else if (strNumPlmn != null && strNumPlmn.equals(mSimOperatorNumeric)) {
+             log("Home PLMN, get CPHS ons");
+             plmn = (simRecords != null) ? simRecords.getSIMCPHSOns() : "";
++            if(strNumPlmn.equals("74810")){
++                if((getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_2_G)||
++                    (getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_3_G)){
++                    plmn = "Claro UY";
++                } else if(mNewSS.getRilVoiceRadioTechnology() == NETWORK_CLASS_4_G){
++                    plmn = "Claro LTE";
++                }
++            }
+             if (strNumPlmn.equals("00101")) {
+                 if (plmn.equals("Operateur Name StrinRROR") || plmn.equals("Operateur Name StringFFFFFF")) {
+                 	plmn = "Operateur Name String";

@@ -1,0 +1,259 @@
+Index: vendor/mediatek/proprietary/external/nvram/libnvram_daemon_callback/libnvram_daemon_callback.c
+===================================================================
+--- vendor/mediatek/proprietary/external/nvram/libnvram_daemon_callback/libnvram_daemon_callback.c	(revision 4728)
++++ vendor/mediatek/proprietary/external/nvram/libnvram_daemon_callback/libnvram_daemon_callback.c	(revision 4729)
+@@ -60,18 +60,248 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
++#include <string.h>
++
++
++#include "libnvram_log.h"
++#include "libnvram.h"
++#include "libfile_op.h"
++
++#include "CFG_PRODUCT_INFO_File.h"
++#include "CFG_BT_File.h"
++#include "CFG_Wifi_File.h"
+ #include "libnvram_daemon_callback.h"
+ 
+ extern pfCallbackForDaemon callback_for_nvram_daemon;
+ 
+-int my_callback(void) {
+-	ALOGD("nvram daemon callback will run!!!");
+-	return 0;
++/* for bt wifi sync */
++extern int iFilePRODUCT_INFOLID;
++extern int iFileBTAddrLID;
++extern int iFileWIFILID;
++//modified by wzhang for task 5413506(update bt parameters) on 2017.10.18 begin
++static ap_nvram_btradio_mt6610_struct stBtDefault =
++{
++
++    {0x00, 0x00, 0x46, 0x03, 0x37, 0x01},
++    {0x60, 0x00}, //not used
++    {0x23, 0x10, 0x00, 0x00}, //not used
++    {0x07, 0x80, 0x00, 0x06, 0x05, 0x07},
++    {0x03, 0x40, 0x1F, 0x40, 0x1F, 0x00, 0x04},
++    {0x80, 0x00}, //not used
++    {0x04, 0xFF, 0x04},
++    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, //not used
++    ///////////// Reserved /////////////
++    {0x00, 0x00},
++    {0x00, 0x00},
++    {0x00, 0x00, 0x00, 0x00},
++    {0x00, 0x00, 0x00, 0x00},
++    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
++    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
++
++};
++
++//modified by wzhang for task 5413506(update bt parameters) on 2017.10.18 end
++
++char * NVM_GetData(int file_lid)
++{
++	F_ID FileID;
++	int result = 0;
++	int RecSize = 0;
++	int RecNum = 0;
++	bool IsRead = true;
++	char* Data = NULL;
++	FileID = NVM_GetFileDesc(file_lid, &RecSize, &RecNum, IsRead);
++	if(FileID.iFileDesc < 0){
++		//NVRAM_LOG("[NVRAM]: Open RAW Data error:%s\n",strerror(errno));
++		return Data;
++		}
++	
++	Data = (char *)malloc(RecSize);
++	if(Data == NULL){
++		//NVRAM_LOG("[NVRAM]: malloc pro_info failed,error:%s\n",strerror(errno));
++		NVM_CloseFileDesc(FileID);
++		return Data;
++		}
++	if(RecSize != read(FileID.iFileDesc,Data,RecSize)){
++		//NVRAM_LOG("[NVRAM]: read pro_info failed,error:%s\n",strerror(errno));
++		NVM_CloseFileDesc(FileID);
++		free(Data);
++		Data = NULL;
++		return Data;
++		}
++   	NVM_CloseFileDesc(FileID);
++	return Data;
+ }
++bool NVM_WriteData(int file_lid,char * Data)
++{
++	F_ID FileID;
++	int result = 0;
++	int RecSize = 0;
++	int RecNum = 0;
++	bool IsRead = false;
++	int index = 0;
++	if(Data == NULL){
++		NVRAM_LOG("[NVRAM]:NVM_WriteData NULL Pointer\n");
++		return false;
++		}
++	FileID = NVM_GetFileDesc(file_lid, &RecSize, &RecNum, IsRead);
++	if(FileID.iFileDesc < 0){
++		//NVRAM_LOG("[NVRAM]: Open RAW Data error:%s\n",strerror(errno));
++		free(Data);
++		return false;
++		}
++	for(index = 0;index < RecNum;++index){
++		if(RecSize != write(FileID.iFileDesc,Data,RecSize)){
++			//NVRAM_LOG("[NVRAM]: write Data failed:%s\n",strerror(errno));
++			NVM_CloseFileDesc(FileID);
++			free(Data);
++			return false;
++			}
++		}
++	free(Data);
++   	NVM_CloseFileDesc(FileID);
++	return true;
++}
++/********************************************************************************
++//FUNCTION:
++//		NVM_Sync_bt_wifi_address
++//DESCRIPTION:
++//		this function is called to the sync BT/WIFI address from Raw Data Region
++// 
++//
++//PARAMETERS:
++//		
++//		
++//RETURN VALUE:
++//		
++//
++//DEPENDENCY:
++//		None
++//
++//GLOBALS AFFECTED
++//		None
++********************************************************************************/
++static bool NVM_Sync_bt_wifi_address()
++{
++	struct timeval time_tv;
++	struct timezone time_tz;
++	PRODUCT_INFO* PRO_INFO = NULL;
++	struct _MT6620_CFG_PARAM_STRUCT *WIFI_INFO = NULL;
++	ap_nvram_btradio_mt6610_struct *BT_INFO =NULL;
++        unsigned char default_bt_addr[6] = {0x94,0x71,0xAC,0x91,0x65,0x00};   
++	unsigned char default_wifi_addr[6] = {0x00,0x66,0x65,0x2d,0xe4,0x00};
++	int index = 0;
++        int count = 0;
++	bool flag = 0;
++	NVRAM_LOG("[NvRAM]:sync BT/WIFI addres(in)\n");
++	PRO_INFO =(PRODUCT_INFO*) NVM_GetData(iFilePRODUCT_INFOLID);
++	if(PRO_INFO == NULL){
++		NVRAM_LOG("[NvRAM]:PRO_INFO NULL pointer!\n");
++		return false;
++		}
++	for(index = 0;index < 6 ;++index){
++		if(PRO_INFO->bt_addr[index] !=0xFF)
++			goto sync_bt;
++		}
++	NVRAM_LOG("[NvRAM]:No need to sync BT address!\n");
++	goto sync_wifi;
++	
++sync_bt:
++	
++	BT_INFO = (ap_nvram_btradio_mt6610_struct*) NVM_GetData(iFileBTAddrLID);
++	if(BT_INFO == NULL){
++	NVRAM_LOG("[NvRAM]:BT_INFO NULL pointer!\n");
++	free(PRO_INFO);
++	return false;
++	}
++	 memcpy(BT_INFO, &stBtDefault, sizeof(ap_nvram_btradio_mt6610_struct));
++	 
++        for(index = 0;index < 6 ;++index)
++        {
++            if(PRO_INFO->bt_addr[index] == 0x00)
++                ++count;
++        }
++        if(count == 6)
++        {
++	    for(index = 0;index < 6 ;++index)
++            {
++                if(index == 5)
++                {
++                    srand((unsigned) time(0));
++                    PRO_INFO->bt_addr[5] = 0 + (int)( 99.0 *rand()/(RAND_MAX + 1.0)); 
++                }
++                else
++                {
++                    PRO_INFO->bt_addr[index] = default_bt_addr[index];  
++                }		     
++            }
++        }
++	memcpy(BT_INFO->addr,PRO_INFO->bt_addr,6*sizeof(char));
++	if(true != NVM_WriteData(iFileBTAddrLID,(char *)BT_INFO))
++		NVRAM_LOG("[NvRAM]:sync BT address faile!\n");
++	
++sync_wifi:
++	for(index = 0;index < 6 ;++index){
++		if(PRO_INFO->wifi_addr[index] !=0xFF){
++			flag = 1;
++			break;
++			}
++		}
++	if(flag == 0){
++		NVRAM_LOG("[NvRAM]:No need to sync WIFI address!\n");
++		goto done;
++		}
++	WIFI_INFO = (struct _MT6620_CFG_PARAM_STRUCT *) NVM_GetData(iFileWIFILID);
++	if(WIFI_INFO == NULL){
++	NVRAM_LOG("[NvRAM]:WIFI_INFO NULL pointer!\n");
++	free(PRO_INFO);
++	return false;
++	}
++	count = 0;
++        for(index = 0;index < 6 ;++index)
++        {
++            if(PRO_INFO->wifi_addr[index] == 0x00)
++                ++count;
++        }
++	if(count == 6)
++        {
++	    for(index = 0;index < 6 ;++index)
++            {
++                if(index == 0)
++		{
++		    PRO_INFO->wifi_addr[index] = default_wifi_addr[index];	
++		}
++                else 
++                {
++		    gettimeofday( &time_tv, &time_tz );
++                    srand(time_tv.tv_usec);
++                    PRO_INFO->wifi_addr[index] = 0 + (int)( 99.0 *rand()/(RAND_MAX + 1.0));
++                }
++            }			     
++       }     
++	memcpy(WIFI_INFO->aucMacAddress,PRO_INFO->wifi_addr,6*sizeof(char));
++	if(true != NVM_WriteData(iFileWIFILID,(char *)WIFI_INFO))
++		NVRAM_LOG("[NvRAM]:sync WIFI address faile!\n");
++done:
++	free(PRO_INFO);
++	NVRAM_LOG("[NvRAM]:sync BT/WIFI addres(out)\n");
++	return true;
++}
+ 
+-int init_callback(void) {
++
++int my_callback(void)
++{
++    ALOGD("nvram daemon callback will run!!!");
++    NVM_Sync_bt_wifi_address();
++    return 0;
++}
++
++
++
++int init_callback(void)
++{
+ #ifdef MTK_PRODUCT_INFO_SUPPORT
+-	callback_for_nvram_daemon = my_callback;
++    callback_for_nvram_daemon = my_callback;
+ #endif
+-	return 0;
++    return 0;
+ }

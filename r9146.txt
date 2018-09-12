@@ -1,0 +1,61 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml	(revision 9145)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml	(revision 9146)
+@@ -580,8 +580,12 @@
+ 
+         <activity android:name="DateTimeSettingsSetupWizard"
+                   android:label="@string/date_and_time"
+-                  android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
++                  android:theme="@style/SetupWizardAccessibilityTheme"
+                   android:screenOrientation="behind">
++			<intent-filter android:priority="2">
++                <action android:name="com.android.setupwizard.DATE_TIME" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+             </intent-filter>
+@@ -3551,6 +3555,10 @@
+             android:name=".faceunlock.FaceUnlockMainActivity"
+             android:screenOrientation="portrait" 
+ 			android:exported="true">
++			<intent-filter android:priority="2">
++                <action android:name="com.android.setupwizard.Faceunlock" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
+             <intent-filter>
+                 <action android:name="android.settings.FaceUnlock_SETUP" />
+                 <category android:name="android.intent.category.DEFAULT" />
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/DateTimeSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/DateTimeSettings.java	(revision 9145)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/DateTimeSettings.java	(revision 9146)
+@@ -56,7 +56,7 @@
+ import java.util.Date;
+ import java.util.List;
+ import java.text.SimpleDateFormat;
+-
++import com.android.settings.R;
+ import com.mediatek.settingslib.RestrictedListPreference;
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+ 
+@@ -113,6 +113,9 @@
+ 
+     @Override
+     public void onCreate(Bundle icicle) {
++		if(Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0){
++			getActivity().setTheme(R.style.SetupWizardAccessibilityTheme);
++		}
+         super.onCreate(icicle);
+ 
+         addPreferencesFromResource(R.xml.date_time_prefs);
+@@ -170,7 +173,7 @@
+         mAutoTimeZonePref.setOnPreferenceChangeListener(this);
+         // Override auto-timezone if it's a wifi-only device or if we're still in setup wizard.
+         // TODO: Remove the wifiOnly test when auto-timezone is implemented based on wifi-location.
+-        if (Utils.isWifiOnly(getActivity()) || isFirstRun) {
++        if ((Utils.isWifiOnly(getActivity()) || isFirstRun )&& Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 1 ) {
+             getPreferenceScreen().removePreference(mAutoTimeZonePref);
+             autoTimeZoneEnabled = false;
+         }

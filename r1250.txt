@@ -1,0 +1,163 @@
+Index: packages/apps/Settings/src/com/android/settings/DisplaySettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 1249)
++++ packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 1250)
+@@ -323,9 +323,9 @@
+         String summary;
+         if (preference.isDisabledByAdmin()) {
+             summary = getString(R.string.disabled_by_policy_title);
+-        } else if (currentTimeout < 0) {
++        } else if (currentTimeout <= 0) {
+             // Unsupported value
+-            summary = "";
++            summary = getString(R.string.screen_timeout_never_summary);
+         } else {
+             final CharSequence[] entries = preference.getEntries();
+             final CharSequence[] values = preference.getEntryValues();
+@@ -335,7 +335,7 @@
+                 int best = 0;
+                 for (int i = 0; i < values.length; i++) {
+                     long timeout = Long.parseLong(values[i].toString());
+-                    if (currentTimeout >= timeout) {
++                    if (currentTimeout == timeout) {
+                         best = i;
+                     }
+                 }
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1249)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1250)
+@@ -967,6 +967,7 @@
+     <string name="screen_timeout" msgid="4351334843529712571">"休眠"</string>
+     <string name="screen_timeout_title" msgid="5130038655092628247">"屏幕关闭"</string>
+     <string name="screen_timeout_summary" msgid="327761329263064327">"无操作<xliff:g id="TIMEOUT_DESCRIPTION">%1$s</xliff:g>后"</string>
++    <string name="screen_timeout_never_summary">永不</string>
+     <string name="wallpaper_settings_title" msgid="5449180116365824625">"壁纸"</string>
+     <string name="wallpaper_suggestion_title" msgid="8583988696513822528">"更换壁纸"</string>
+     <string name="wallpaper_suggestion_summary" msgid="1579144009898110491">"对屏幕进行个性化设置"</string>
+Index: packages/apps/Settings/res/values-zh-rCN/arrays.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/arrays.xml	(revision 1249)
++++ packages/apps/Settings/res/values-zh-rCN/arrays.xml	(revision 1250)
+@@ -37,6 +37,7 @@
+     <item msgid="7489864775127957179">"5分钟"</item>
+     <item msgid="2314124409517439288">"10分钟"</item>
+     <item msgid="6864027152847611413">"30分钟"</item>
++	<item>永不</item>
+   </string-array>
+   <string-array name="dream_timeout_entries">
+     <item msgid="3149294732238283185">"永不"</item>
+Index: packages/apps/Settings/res/values-zh-rTW/arrays.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rTW/arrays.xml	(revision 1249)
++++ packages/apps/Settings/res/values-zh-rTW/arrays.xml	(revision 1250)
+@@ -37,6 +37,7 @@
+     <item msgid="7489864775127957179">"5 分鐘"</item>
+     <item msgid="2314124409517439288">"10 分鐘"</item>
+     <item msgid="6864027152847611413">"30 分鐘"</item>
++    <item>永不</item>
+   </string-array>
+   <string-array name="dream_timeout_entries">
+     <item msgid="3149294732238283185">"永不"</item>
+Index: packages/apps/Settings/res/values-zh-rTW/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rTW/strings.xml	(revision 1249)
++++ packages/apps/Settings/res/values-zh-rTW/strings.xml	(revision 1250)
+@@ -953,6 +953,7 @@
+     <string name="screen_timeout" msgid="4351334843529712571">"休眠"</string>
+     <string name="screen_timeout_title" msgid="5130038655092628247">"螢幕關閉時"</string>
+     <string name="screen_timeout_summary" msgid="327761329263064327">"閒置 <xliff:g id="TIMEOUT_DESCRIPTION">%1$s</xliff:g>後"</string>
++    <string name="screen_timeout_never_summary">永不</string>
+     <string name="wallpaper_settings_title" msgid="5449180116365824625">"桌布"</string>
+     <string name="wallpaper_suggestion_title" msgid="8583988696513822528">"變更桌布"</string>
+     <string name="wallpaper_suggestion_summary" msgid="1579144009898110491">"設定個人化螢幕"</string>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1249)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1250)
+@@ -2237,6 +2237,7 @@
+     <string name="screen_timeout_title">Screen turns off</string>
+     <!-- Sound & display settings screen, setting option summary to change screen timeout -->
+     <string name="screen_timeout_summary">After <xliff:g id="timeout_description">%1$s</xliff:g> of inactivity</string>
++    <string name="screen_timeout_never_summary">Never</string>
+     <!-- Wallpaper settings title [CHAR LIMIT=30] -->
+     <string name="wallpaper_settings_title">Wallpaper</string>
+     <!-- Wallpaper suggestion title [CHAR LIMIT=30] -->
+Index: packages/apps/Settings/res/values/arrays.xml
+===================================================================
+--- packages/apps/Settings/res/values/arrays.xml	(revision 1249)
++++ packages/apps/Settings/res/values/arrays.xml	(revision 1250)
+@@ -48,6 +48,7 @@
+         <item>5 minutes</item>
+         <item>10 minutes</item>
+         <item>30 minutes</item>
++		<item>Never</item>
+     </string-array>
+ 
+     <!-- Do not translate. -->
+@@ -66,6 +67,7 @@
+         <item>600000</item>
+         <!-- Do not translate. -->
+         <item>1800000</item>
++		<item>0</item>
+     </string-array>
+ 
+     <!-- Display settings.  The delay in inactivity before the dream is shown. These are shown in a list dialog. -->
+Index: packages/apps/Settings/res/values-zh-rHK/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rHK/strings.xml	(revision 1249)
++++ packages/apps/Settings/res/values-zh-rHK/strings.xml	(revision 1250)
+@@ -953,6 +953,7 @@
+     <string name="screen_timeout" msgid="4351334843529712571">"休眠"</string>
+     <string name="screen_timeout_title" msgid="5130038655092628247">"螢幕關閉時"</string>
+     <string name="screen_timeout_summary" msgid="327761329263064327">"閒置 <xliff:g id="TIMEOUT_DESCRIPTION">%1$s</xliff:g>後"</string>
++    <string name="screen_timeout_never_summary">永不</string>
+     <string name="wallpaper_settings_title" msgid="5449180116365824625">"桌布"</string>
+     <string name="wallpaper_suggestion_title" msgid="8583988696513822528">"變更桌布"</string>
+     <string name="wallpaper_suggestion_summary" msgid="1579144009898110491">"設定個人化螢幕"</string>
+Index: packages/apps/Settings/res/values-zh-rHK/arrays.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rHK/arrays.xml	(revision 1249)
++++ packages/apps/Settings/res/values-zh-rHK/arrays.xml	(revision 1250)
+@@ -37,6 +37,7 @@
+     <item msgid="7489864775127957179">"5 分鐘"</item>
+     <item msgid="2314124409517439288">"10 分鐘"</item>
+     <item msgid="6864027152847611413">"30 分鐘"</item>
++    <item>永不</item>
+   </string-array>
+   <string-array name="dream_timeout_entries">
+     <item msgid="3149294732238283185">"永不"</item>
+Index: frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java	(revision 1249)
++++ frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java	(revision 1250)
+@@ -2055,11 +2055,14 @@
+                     mUserActivitySummary = USER_ACTIVITY_SCREEN_DREAM;
+                     nextTimeout = -1;
+                 }
+-
++				if(mScreenOffTimeoutSetting !=0){
+                 if (mUserActivitySummary != 0 && nextTimeout >= 0) {
+                     Message msg = mHandler.obtainMessage(MSG_USER_ACTIVITY_TIMEOUT);
+                     msg.setAsynchronous(true);
+                     mHandler.sendMessageAtTime(msg, nextTimeout);
++                    }	
++				}else{
++					mUserActivitySummary |= USER_ACTIVITY_SCREEN_BRIGHT; 
+                 }
+             } else {
+                 mUserActivitySummary = 0;
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1249)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1250)
+@@ -7505,7 +7505,9 @@
+                 if (enable) {
+                     if (localLOGV) Log.v(TAG, "setting lockscreen timer");
+                     mHandler.removeCallbacks(mScreenLockTimeout); // remove any pending requests
++					    if(mLockScreenTimeout!=0){
+                     mHandler.postDelayed(mScreenLockTimeout, mLockScreenTimeout);
++						}
+                 } else {
+                     if (localLOGV) Log.v(TAG, "clearing lockscreen timer");
+                     mHandler.removeCallbacks(mScreenLockTimeout);

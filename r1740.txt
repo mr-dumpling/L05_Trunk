@@ -1,0 +1,49 @@
+Index: frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- frameworks/base/core/res/res/values/config.xml	(revision 1739)
++++ frameworks/base/core/res/res/values/config.xml	(revision 1740)
+@@ -1728,7 +1728,7 @@
+ 
+          Note that doze dreams are not subject to the same start conditions as ordinary dreams.
+          Doze dreams will run whenever the power manager is in a dozing state. -->
+-    <string name="config_dozeComponent" translatable="false"></string>
++    <string name="config_dozeComponent" translatable="false">com.android.systemui/com.android.systemui.doze.DozeService</string>
+ 
+     <!-- If true, the doze component is not started until after the screen has been
+          turned off and the screen off animation has been performed. -->
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 1739)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 1740)
+@@ -2316,10 +2316,11 @@
+         // Add the expanded view and icon.
+         mNotificationData.add(entry, ranking);
+         updateNotifications();
+-	if(!mPowerManager.isScreenOn() && entry.key!= null && (entry.key.contains("com.android.mms") || entry.key.contains("com.tencent.mm"))){
+-		mNotificationWakeLock.acquire(6000);
+-	}
+-	 
++		if (Settings.Secure.getInt(mContext.getContentResolver(),android.provider.Settings.Secure.DOZE_ENABLED,1)!=0) {
++			if(!mPowerManager.isScreenOn() && entry.key!= null && (entry.key.contains("com.android.mms") || entry.key.contains("com.tencent.mm"))){
++				mNotificationWakeLock.acquire(6000);
++			}
++		}
+ 	
+     }
+ 
+@@ -2567,10 +2568,11 @@
+         final RemoteViews bigContentView = entry.cachedBigContentView;
+         final RemoteViews headsUpContentView = entry.cachedHeadsUpContentView;
+         final RemoteViews publicContentView = entry.cachedPublicContentView;
+-
+-	 if(!mPowerManager.isScreenOn() && entry.key!= null && (entry.key.contains("com.android.mms") || entry.key.contains("com.tencent.mm"))){
+-		mNotificationWakeLock.acquire(6000);
+-	}
++		if (Settings.Secure.getInt(mContext.getContentResolver(),android.provider.Settings.Secure.DOZE_ENABLED,1)!=0) {
++			if(!mPowerManager.isScreenOn() && entry.key!= null && (entry.key.contains("com.android.mms") || entry.key.contains("com.tencent.mm"))){
++				mNotificationWakeLock.acquire(6000);
++			}
++		}
+         // Reapply the RemoteViews
+         contentView.reapply(mContext, entry.getContentView(), mOnClickHandler);
+         if (bigContentView != null && entry.getExpandedContentView() != null) {

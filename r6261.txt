@@ -1,0 +1,153 @@
+Index: diff_branch.sh
+===================================================================
+--- diff_branch.sh	(revision 0)
++++ diff_branch.sh	(revision 6261)
+@@ -0,0 +1,107 @@
++#!/usr/bin/perl 
++# ##########################################################
++# Author : javen
++# Date : 2018.1.18
++# ##########################################################
++# 
++
++if(@ARGV < 1){
++	print "PLEASE INPUT BRANCH NAME like 5058I_ALAV1\n";
++	print "Command: diff_branch.pl [branch_name] [save_file]\n";
++	exit;
++}
++
++print "##################### BEGIN ######################\n";
++
++if(!$save_f){
++	$save_f = "diff.txt";
++}else{
++	$save_f = $ARGV[1].".txt";
++}
++
++$BRANCH = "vendor/branch/".$ARGV[0];
++
++## code
++@flist = `find $BRANCH`;
++print "-" x 50;
++print "\n";
++
++#open a file
++open(FH, ">$save_f") or die $!;
++my @f_config = <FH>;
++
++#exit;
++
++#print @flist;
++foreach $file (@flist){
++	if($file =~ /\./){
++		$f_checked = 0;
++		chomp($file);
++		#print $file;
++		$r_len = length($BRANCH);
++		#root dir file $r_file
++		$r_file = substr($file, $r_len+1);
++		if(!(-e $r_file)){
++			#print "NO ROOT FILE: $r_file\n";
++			next;
++		}
++		$diff_path = "$BRANCH/diff.txt";
++		if($file =~ /$diff_path/){
++			#print "diff.txt ignore!\n";
++			next;
++		}
++		print FH $file.":\n";
++		#print $r_file;
++		$cmd = "diff $file $r_file";
++		#print "-" x 50;
++		#print "\n";
++		#print "[DIFF]:$file\n";
++		$diff_s = `$cmd`;
++		#print $diff_s;
++		@diff_a = split("\n", $diff_s);
++		
++		$l_count = 0;
++		foreach $d_line(@diff_a){
++			chomp($d_line);
++			#print "OLD: $d_line";
++			#print $l_count++.",";
++			#print FH $string;
++			
++			if($d_line){
++				$d_start_s = substr($d_line,0,1);
++				if($d_start_s eq ">"){
++					#print FH "$d_start_s\n";
++					print FH "$d_line\n";
++				}
++			}
++		}
++		print FH "\n";
++	}
++}
++#print "-" x 50;
++#print "\n";
++
++close(FH);
++
++# diff for the old one
++$brh_diff = "$BRANCH/$save_f";
++if(-f $brh_diff){
++	$cmd = "diff $brh_diff $save_f";
++	$ret = `$cmd`;
++	#print "$cmd\n";
++	if($ret eq ""){
++		$ret = "SUCCESSFULLY";
++	}else{
++		print "DIFF [ $ARGV[0] ] RESULT: ---[ ".$ret." ]---\n";
++	}
++}else{
++	$cmd = "cp $save_f $brh_diff";
++	$ret = `$cmd`;
++	#print "$cmd\n";
++	print "\nCP RESULT : $brh_diff ".$ret."\n\n";
++}
++print "-" x 50;
++print "\n";
++print "##################### END ########################\n";
++
++#######################################end###################
+
+Property changes on: diff_branch.sh
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: diff_all.sh
+===================================================================
+--- diff_all.sh	(revision 0)
++++ diff_all.sh	(revision 6261)
+@@ -0,0 +1,22 @@
++#!/usr/bin/perl 
++# ##########################################################
++# Author : javen
++# Date : 2018.1.18
++# ##########################################################
++# 
++
++$BRANCH="vendor/branch";
++
++@flist = `ls -F $BRANCH`;
++foreach $file (@flist){
++	#print "FIND: $file \n";
++	chomp($file);
++	$file =~ s/\///g;
++	if(-d $BRANCH."/".$file){
++		$cmd = "./diff_branch.sh $file";
++		#print $cmd."\n";
++		print `$cmd`;
++	}
++}
++
++#######################################end###################
+
+Property changes on: diff_all.sh
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

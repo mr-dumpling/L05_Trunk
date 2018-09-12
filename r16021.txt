@@ -1,0 +1,46 @@
+Index: vendor/branch/5058Y_ALGB/frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 16020)
++++ vendor/branch/5058Y_ALGB/frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 16021)
+@@ -785,7 +785,7 @@
+         @Override
+         public void onReceive(Context context, Intent intent) {
+             String action = intent.getAction();
+-
++			Log.d(TAG,"onReceive action = " + action);
+             if (action.equals(Intent.ACTION_SCREEN_ON)) {
+                 // Keep track of screen on/off state, but do not turn off the notification light
+                 // until user passes through the lock screen or views the notification.
+@@ -798,6 +798,23 @@
+                 mInCall = TelephonyManager.EXTRA_STATE_OFFHOOK
+                         .equals(intent.getStringExtra(TelephonyManager.EXTRA_STATE));
+                 updateNotificationPulse();
++				String state = intent.getStringExtra(TelephonyManager.EXTRA_STATE);
++				Log.d(TAG,"onReceive() state = " + intent.getStringExtra(TelephonyManager.EXTRA_STATE));
++				// Add begin
++				long identity = Binder.clearCallingIdentity();
++				if (TelephonyManager.EXTRA_STATE_RINGING.equals(state)) {
++					try {
++						final IRingtonePlayer player = mAudioManager.getRingtonePlayer();
++						if (player != null) {
++							Log.e(TAG, "listenForCallState() player.stopAsync()");
++							player.stopAsync();
++							}
++						} catch (RemoteException e) {
++						} finally {
++							Binder.restoreCallingIdentity(identity);
++						}
++				}
++				 // add end
+             } else if (action.equals(Intent.ACTION_USER_STOPPED)) {
+                 int userHandle = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1);
+                 if (userHandle >= 0) {
+@@ -3756,7 +3773,7 @@
+ 
+     // lock on mNotificationList
+     void updateLightsLocked()
+-    {
++	{		
+         // handle notification lights
+         NotificationRecord ledNotification = null;
+         while (ledNotification == null && !mLights.isEmpty()) {

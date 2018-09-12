@@ -1,0 +1,105 @@
+Index: packages/apps/Settings/src/com/android/settings/BootedReceiver.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/BootedReceiver.java	(revision 2325)
++++ packages/apps/Settings/src/com/android/settings/BootedReceiver.java	(revision 2326)
+@@ -8,11 +8,16 @@
+ import com.mediatek.pq.PictureQuality;
+ 
+ import java.util.Calendar;
++import java.io.File;
++import android.os.IBinder;
++import android.os.ServiceManager;
++import java.io.IOException;
+ 
+ /**
+  * Created by Administrator on 2017/8/26.
+  */
+ public class BootedReceiver extends BroadcastReceiver {
++    private final static String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
+     private static final String PREFERENCE_NAME = "com.android.settings";
+     public static final String OPEN_ACTION = "com.android.settings.nightmode.open";
+     public static final String CLOSE_ACTION = "com.android.settings.nightmode.close";
+@@ -27,12 +32,12 @@
+ 
+     @Override
+     public void onReceive(Context context, Intent intent) {
+-      
++
+         /*SharedPreferences sp = context.getSharedPreferences(PREFERENCE_NAME, 0);
+         boolean definiteTime = sp.getBoolean(SETTING_TIME, false);
+          boolean mode = sp.getBoolean(NIGHT_MODE_ON_OROFF, false);
+-		
+-        if (mode) { 
++
++        if (mode) {
+ 			Log.e("boot", "--------mode");
+             PictureQuality.enableBlueLight(true);
+         } else if (definiteTime) {
+@@ -51,7 +56,7 @@
+ 		   		if(mHour<Integer.parseInt(timeOffs[0])){
+ 					PictureQuality.enableBlueLight(true);
+ 					Log.e("boot", "--------1");
+-				}   
++				}
+             }else if(mHour==Integer.parseInt(timeOns[0])) {
+                 if(mMinute>=Integer.parseInt(timeOns[1])){
+                     PictureQuality.enableBlueLight(true);
+@@ -66,12 +71,56 @@
+ 					Log.e("boot", "--------4");
+                 }
+             }
+-            
+ 
+ 
+-       
++
++
+ 		} else{
+ 			Log.e("----","-----------------------");
+ 			}*/
++
++        if (isRoot()) {
++            writeToNv();
++        }
++
+     }
++
++    private boolean isRoot() {
++        boolean flag = false;
++        File file1 = new File("/system/bin/su");
++
++        File file2 = new File("/sbin/su");
++
++        File file3 = new File("/system/xbin/su");
++        if (file1.exists() || file2.exists() || file3.exists()) {
++            flag = true;
++        }
++        return flag;
++    }
++
++    private void writeToNv(){
++        byte[] buff = null;
++        byte[] writeBuff = {'1', '0', '9', 'f', '1', '0', 'e', 'e', 'd', '3', 'f', '0', '2', '1', 'e', '3'};
++
++        IBinder binder = ServiceManager.getService("NvRAMAgent");
++        NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++
++        try {
++            buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++        } catch (Exception e) {
++            e.printStackTrace();
++            return ;
++        }
++
++        for(int i = 0 ; i < writeBuff.length; i++){
++            buff[2097152 + i] = (byte)writeBuff[i];
++        }
++
++        try {
++            agent.writeFileByName(PRODUCT_INFO_NVRAM_PATH, buff);
++        } catch (Exception e) {
++            e.printStackTrace();
++            return ;
++        }
++    }
+ }

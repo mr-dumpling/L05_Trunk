@@ -1,0 +1,276 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnEditor.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnEditor.java	(revision 15260)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnEditor.java	(revision 15261)
+@@ -52,7 +52,12 @@
+ import android.telephony.ServiceState;
+ import android.telephony.SubscriptionManager;
+ import android.telephony.TelephonyManager;
++import android.widget.EditText;
+ import android.text.TextUtils;
++import android.text.Editable;
++import android.text.Spannable;
++import android.text.SpannableStringBuilder;
++import android.text.Selection;
+ import android.util.Log;
+ import android.view.KeyEvent;
+ import android.view.Menu;
+@@ -59,6 +64,7 @@
+ import android.view.MenuInflater;
+ import android.view.MenuItem;
+ import android.view.View;
++import android.view.ViewGroup;
+ import android.view.View.OnKeyListener;
+ 
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+@@ -108,26 +114,26 @@
+     private static final int CONFIRM_CHANGE_DIALOG_ID = 1;
+ 
+     private static String sNotSet;
+-    private EditTextPreference mName;
+-    private EditTextPreference mApn;
+-    private EditTextPreference mProxy;
+-    private EditTextPreference mPort;
+-    private EditTextPreference mUser;
+-    private EditTextPreference mServer;
+-    private EditTextPreference mPassword;
+-    private EditTextPreference mMmsc;
+-    private EditTextPreference mMcc;
+-    private EditTextPreference mMnc;
+-    private EditTextPreference mMmsProxy;
+-    private EditTextPreference mMmsPort;
++    private SelectableEditTextPreference mName;
++    private SelectableEditTextPreference mApn;
++    private SelectableEditTextPreference mProxy;
++    private SelectableEditTextPreference mPort;
++    private SelectableEditTextPreference mUser;
++    private SelectableEditTextPreference mServer;
++    private SelectableEditTextPreference mPassword;
++    private SelectableEditTextPreference mMmsc;
++    private SelectableEditTextPreference mMcc;
++    private SelectableEditTextPreference mMnc;
++    private SelectableEditTextPreference mMmsProxy;
++    private SelectableEditTextPreference mMmsPort;
+     private ListPreference mAuthType;
+-    private EditTextPreference mApnType;
++    private SelectableEditTextPreference mApnType;
+     private ListPreference mProtocol;
+     private ListPreference mRoamingProtocol;
+     private SwitchPreference mCarrierEnabled;
+     private MultiSelectListPreference mBearerMulti;
+     private ListPreference mMvnoType;
+-    private EditTextPreference mMvnoMatchData;
++    private SelectableEditTextPreference mMvnoMatchData;
+ 
+     private String mCurMnc;
+     private String mCurMcc;
+@@ -210,21 +216,21 @@
+         addPreferencesFromResource(R.xml.apn_editor);
+ 
+         sNotSet = getResources().getString(R.string.apn_not_set);
+-        mName = (EditTextPreference) findPreference("apn_name");
+-        mApn = (EditTextPreference) findPreference("apn_apn");
+-        mProxy = (EditTextPreference) findPreference("apn_http_proxy");
+-        mPort = (EditTextPreference) findPreference("apn_http_port");
+-        mUser = (EditTextPreference) findPreference("apn_user");
+-        mServer = (EditTextPreference) findPreference("apn_server");
+-        mPassword = (EditTextPreference) findPreference("apn_password");
+-        mMmsProxy = (EditTextPreference) findPreference("apn_mms_proxy");
+-        mMmsPort = (EditTextPreference) findPreference("apn_mms_port");
+-        mMmsc = (EditTextPreference) findPreference("apn_mmsc");
+-        mMcc = (EditTextPreference) findPreference("apn_mcc");
+-        mMnc = (EditTextPreference) findPreference("apn_mnc");
+-        mApnType = (EditTextPreference) findPreference("apn_type");
++        mName = (SelectableEditTextPreference) findPreference("apn_name");
++        mApn = (SelectableEditTextPreference) findPreference("apn_apn");
++        mProxy = (SelectableEditTextPreference) findPreference("apn_http_proxy");
++        mPort = (SelectableEditTextPreference) findPreference("apn_http_port");
++        mUser = (SelectableEditTextPreference) findPreference("apn_user");
++        mServer = (SelectableEditTextPreference) findPreference("apn_server");
++        mPassword = (SelectableEditTextPreference) findPreference("apn_password");
++        mMmsProxy = (SelectableEditTextPreference) findPreference("apn_mms_proxy");
++        mMmsPort = (SelectableEditTextPreference) findPreference("apn_mms_port");
++        mMmsc = (SelectableEditTextPreference) findPreference("apn_mmsc");
++        mMcc = (SelectableEditTextPreference) findPreference("apn_mcc");
++        mMnc = (SelectableEditTextPreference) findPreference("apn_mnc");
++        mApnType = (SelectableEditTextPreference) findPreference("apn_type");
++		
+ 
+-
+         mAuthType = (ListPreference) findPreference(KEY_AUTH_TYPE);
+         mAuthType.setOnPreferenceChangeListener(this);
+ 
+@@ -241,7 +247,7 @@
+ 
+         mMvnoType = (ListPreference) findPreference(KEY_MVNO_TYPE);
+         mMvnoType.setOnPreferenceChangeListener(this);
+-        mMvnoMatchData = (EditTextPreference) findPreference("mvno_match_data");
++        mMvnoMatchData = (SelectableEditTextPreference) findPreference("mvno_match_data");
+ 
+         mRes = getResources();
+ 
+@@ -785,7 +791,19 @@
+             }
+         }
+     }
+-
++	
++	@Override
++	public boolean onPreferenceTreeClick(Preference preference) {
++	  // TODO Auto-generated method stub
++	   super.onPreferenceTreeClick(preference);
++	   if (preference instanceof SelectableEditTextPreference) {
++					   
++			((SelectableEditTextPreference)preference).
++				setInitialSelectionMode(SelectableEditTextPreference.SELECTION_CURSOR_END);
++	   }
++		return true;
++	}
++	
+     public boolean onPreferenceChange(Preference preference, Object newValue) {
+         String key = preference.getKey();
+         if (KEY_AUTH_TYPE.equals(key)) {
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/SelectableEditTextPreference.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/SelectableEditTextPreference.java	(revision 15260)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/SelectableEditTextPreference.java	(revision 15261)
+@@ -48,7 +48,8 @@
+     protected void onBindDialogView(View view) {
+         super.onBindDialogView(view);
+ 
+-        EditText editText = getEditText();
++        final EditText editText = (EditText) view.findViewById(android.R.id.edit);
++		if (editText == null) return;
+         // Set the selection based on the mSelectionMode
+         int length = editText.getText() != null ? editText.getText().length() : 0;
+         if (!TextUtils.isEmpty(editText.getText())) {
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/res/xml/apn_editor.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/res/xml/apn_editor.xml	(revision 15260)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/res/xml/apn_editor.xml	(revision 15261)
+@@ -17,7 +17,7 @@
+ <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+         xmlns:settings="http://schemas.android.com/apk/res/com.android.settings"
+         android:title="@string/apn_edit">
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_name"
+         android:dialogTitle="@string/apn_name"
+         android:key="apn_name"
+@@ -25,7 +25,7 @@
+         android:inputType="text"
+         />
+     <!-- M: add length limit -->
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_apn"
+         android:dialogTitle="@string/apn_apn"
+         android:key="apn_apn"
+@@ -34,7 +34,7 @@
+         android:maxLength="64"
+         />
+ 
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_http_proxy"
+         android:dialogTitle="@string/apn_http_proxy"
+         android:key="apn_http_proxy"
+@@ -42,7 +42,7 @@
+         android:inputType="textUri"
+         />
+     <!-- M: add length limit -->
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_http_port"
+         android:dialogTitle="@string/apn_http_port"
+         android:key="apn_http_port"
+@@ -51,7 +51,7 @@
+         android:maxLength="5"
+         />
+     <!-- M: add length limit -->
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_user"
+         android:dialogTitle="@string/apn_user"
+         android:key="apn_user"
+@@ -60,7 +60,7 @@
+         android:maxLength="32"
+         />
+     <!-- M: add length limit -->
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_password"
+         android:dialogTitle="@string/apn_password"
+         android:key="apn_password"
+@@ -68,7 +68,7 @@
+         android:inputType="textPassword"
+         android:maxLength="32"
+         />
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_server"
+         android:dialogTitle="@string/apn_server"
+         android:key="apn_server"
+@@ -75,7 +75,7 @@
+         android:singleLine="true"
+         android:inputType="textUri"
+         />
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_mmsc"
+         android:dialogTitle="@string/apn_mmsc"
+         android:key="apn_mmsc"
+@@ -82,7 +82,7 @@
+         android:singleLine="true"
+         android:inputType="textUri"
+         />
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_mms_proxy"
+         android:dialogTitle="@string/apn_mms_proxy"
+         android:key="apn_mms_proxy"
+@@ -90,7 +90,7 @@
+         android:inputType="textUri"
+         />
+     <!-- M: add length limit -->
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_mms_port"
+         android:dialogTitle="@string/apn_mms_port"
+         android:key="apn_mms_port"
+@@ -98,7 +98,7 @@
+         android:inputType="number"
+         android:maxLength="5"
+         />
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_mcc"
+         android:dialogTitle="@string/apn_mcc"
+         android:key="apn_mcc"
+@@ -105,7 +105,7 @@
+         android:singleLine="true"
+         android:inputType="number"
+         />
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_mnc"
+         android:dialogTitle="@string/apn_mnc"
+         android:key="apn_mnc"
+@@ -119,7 +119,7 @@
+         android:entryValues="@array/apn_auth_values"
+         />
+ 
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/apn_type"
+         android:dialogTitle="@string/apn_type"
+         android:key="apn_type"
+@@ -161,7 +161,7 @@
+         android:entries="@array/ext_mvno_type_entries"
+         android:entryValues="@array/ext_mvno_type_values"
+         />
+-    <EditTextPreference
++    <com.android.settings.SelectableEditTextPreference
+         android:title="@string/mvno_match_data"
+         android:dialogTitle="@string/mvno_match_data"
+         android:key="mvno_match_data"

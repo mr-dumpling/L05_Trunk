@@ -1,0 +1,147 @@
+Index: ov_check.sh
+===================================================================
+--- ov_check.sh	(revision 0)
++++ ov_check.sh	(revision 12652)
+@@ -0,0 +1,135 @@
++#!/usr/bin/perl 
++# ##########################################################
++# Author : javen
++# Date : 2018.3.20
++# ##########################################################
++# 
++
++$BRANCH="vendor/branch";
++$MODIFY_FLAG = "M       ";
++$revision = $ARGV[0];
++$pre_rev = ($revision - 1);
++@modify_list = {};
++
++if($revision eq ""){
++	Usage();
++	exit;
++}
++
++# do work
++$svn_path = getUrl();
++print "####################################\n";
++#print "revision = [$pre_rev,$revision]\n";
++print "PATH = [$svn_path], revision = [$revision]\n";
++
++#test dir
++#$svn_path = $svn_path."/packages/services/Telephony";
++
++
++$cmd_list = "svn diff -r $pre_rev:$revision --summarize $svn_path";
++#print "$cmd_list\n";
++@ar_list = `$cmd_list`;
++#print "ar_list = \n".@ar_list;
++
++
++foreach $m_file (@ar_list){
++	if($m_file =~ m/$MODIFY_FLAG/){
++		chomp($m_file);
++		$m_file =~ s/$MODIFY_FLAG//g;
++		$m_file =~ s/$svn_path\///g;
++		push @modify_list, $m_file;
++		if(getCmdParam("-src") > 0){
++			print "-- $m_file\n";
++		}
++	}
++}
++$mycount = 0;
++print "####################################\n\n";
++print "Maybe CONFLICT files:\n";
++$idx_br = getCmdParam("-b");
++if($idx_br > 0){
++	for($i = 0; $i < 10; $i++){
++		if("" ne $ARGV[$idx_br + $i]){
++			push @flist,$ARGV[$idx_br + $i];
++		}
++	}
++}else{
++	@flist = `ls -F $BRANCH`;
++}
++foreach $file (@flist){
++	#print "FIND: $file \n";
++	chomp($file);
++	$file =~ s/\///g;
++	if(-d $BRANCH."/".$file){
++		$cmd = $BRANCH."/".$file;
++		#print $cmd."\n";
++		foreach $ov_file (@modify_list){
++			$m_ov_f = $BRANCH."/".$file."/".$ov_file;
++			#print "m_ov_f = [$m_ov_f]\n";
++			if(-f $m_ov_f){
++				$idx_match_f = getCmdParam("-f");
++				if($idx_match_f > 0){
++					$sub_match = $ARGV[$idx_match_f];
++					if($m_ov_f =~ /$sub_match/){
++						print "-- ".$m_ov_f."\n";
++						$mycount++;
++					}
++				}else{
++					print "-- ".$m_ov_f."\n";
++					$mycount++;
++				}
++			}
++		}
++	}
++}
++print "\n---FINISHED!---($mycount)---\n\n";
++
++#######################################end###################	
++#no input param
++sub getCmdParam {  
++	my ($my_pa) = @_;
++	
++	$av_str = "";
++	foreach $my_b(@ARGV){
++		$av_str = $av_str.$my_b.",";
++	}
++	
++	my @my_av = split(",", $av_str);
++	my $mycount = 0;
++
++	#print "PARAMS: $av_str/$my_pa\n";
++	foreach $my_la(@my_av){
++		$mycount++;
++		#print "getCmdParam my_la: $my_la\n";
++		if($my_pa eq $my_la){
++			return $mycount;
++		}
++	}
++	return -1;
++} 
++sub getUrl(){
++	$cmd_url = "svn info";
++	@ar_svn = `$cmd_url`;
++	#print @ar_svn;
++	foreach $svn_p (@ar_svn){
++		chomp($svn_p);
++		if($svn_p =~ m/URL\:/){
++			$svn_path = $svn_p;
++			$svn_path =~ s/URL\://g;
++			$svn_path =~ s/ //g;
++			#print "### JAVEN $svn_path\n";
++			return $svn_path; 
++		}
++	}
++}
++sub Usage(){
++	print "-" x 50;print "\n";
++	print "-- Useage: ov_check.sh revision [-src] [-m filename] [-b br1 br2]--- \n";
++	print "-- -src: Show revision files list --- \n";
++	print "-- -m Match String(filename) for search \n";
++	print "-- -b search branchs, must be last one \n";
++}
++#####
++#
++#
++#
+
+Property changes on: ov_check.sh
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

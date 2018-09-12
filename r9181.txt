@@ -1,0 +1,20 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/recents/Recents.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/recents/Recents.java	(revision 9180)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/recents/Recents.java	(revision 9181)
+@@ -428,7 +428,14 @@
+         boolean screenPinningActive = ssp.isScreenPinningActive();
+         boolean isRunningTaskInHomeStack = runningTask != null &&
+                 SystemServicesProxy.isHomeStack(runningTask.stackId);
+-        if (runningTask != null && !isRunningTaskInHomeStack && !screenPinningActive) {
++		String packageName=runningTask.topActivity.getPackageName();
++		String className=runningTask.topActivity.getClassName();
++		if("com.android.systemui".equals(packageName) && "com.face.scanner.FaceActivity".equals(className)){
++			EventBus.getDefault().send(new ShowUserToastEvent(
++             R.string.recents_incompatible_app_message, Toast.LENGTH_SHORT));
++            return false;
++		}
++		if (runningTask != null && !isRunningTaskInHomeStack && !screenPinningActive) {
+             logDockAttempt(mContext, runningTask.topActivity, runningTask.resizeMode);
+             if (runningTask.isDockable) {
+                 if (metricsDockAction != -1) {

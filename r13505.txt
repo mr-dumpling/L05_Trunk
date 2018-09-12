@@ -1,0 +1,99 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/settings/DialerSettingsActivity.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/settings/DialerSettingsActivity.java	(revision 13504)
++++ vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/settings/DialerSettingsActivity.java	(revision 13505)
+@@ -104,25 +104,7 @@
+         // primary user and there are multiple SIMs. In N+, "Calling accounts" is shown whenever
+         // "Call Settings" is not shown.
+         boolean isPrimaryUser = isPrimaryUser();
+-        if (isPrimaryUser
+-                && TelephonyManagerCompat.getPhoneCount(telephonyManager) <= 1) {
+-            Header callSettingsHeader = new Header();
+-            Intent callSettingsIntent = new Intent(TelecomManager.ACTION_SHOW_CALL_SETTINGS);
+-            callSettingsIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+-
+-            callSettingsHeader.titleRes = R.string.call_settings_label;
+-            callSettingsHeader.intent = callSettingsIntent;
+-            target.add(callSettingsHeader);
+-        } else if (BuildCompat.isAtLeastN() || isPrimaryUser) {
+-            Header phoneAccountSettingsHeader = new Header();
+-            Intent phoneAccountSettingsIntent =
+-                    new Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS);
+-            phoneAccountSettingsIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+-
+-            phoneAccountSettingsHeader.titleRes = R.string.phone_account_settings_label;
+-            phoneAccountSettingsHeader.intent = phoneAccountSettingsIntent;
+-            target.add(phoneAccountSettingsHeader);
+-        }
++        
+         if (FilteredNumberCompat.canCurrentUserOpenBlockSettings(this) &&
+             /// M: For OP01, do not use BlockedNumberProvider @{
+             ExtensionManager.getInstance().getCallLogExtension()
+@@ -154,6 +136,25 @@
+             target.add(othersHeader);
+         }
+         /// @}
++		if (isPrimaryUser
++                && TelephonyManagerCompat.getPhoneCount(telephonyManager) <= 1) {
++            Header callSettingsHeader = new Header();
++            Intent callSettingsIntent = new Intent(TelecomManager.ACTION_SHOW_CALL_SETTINGS);
++            callSettingsIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
++
++            callSettingsHeader.titleRes = R.string.call_settings_label_algb;
++            callSettingsHeader.intent = callSettingsIntent;
++            target.add(callSettingsHeader);
++        } else if (BuildCompat.isAtLeastN() || isPrimaryUser) {
++            Header phoneAccountSettingsHeader = new Header();
++            Intent phoneAccountSettingsIntent =
++                    new Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS);
++            phoneAccountSettingsIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
++
++            phoneAccountSettingsHeader.titleRes = R.string.phone_account_settings_label;
++            phoneAccountSettingsHeader.intent = phoneAccountSettingsIntent;
++            target.add(phoneAccountSettingsHeader);
++        }
+     }
+ 
+     /**
+Index: vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/SubscriptionInfoHelper.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/SubscriptionInfoHelper.java	(revision 13504)
++++ vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/SubscriptionInfoHelper.java	(revision 13505)
+@@ -121,9 +121,9 @@
+             return;
+         }
+ 
+-        if (!TelephonyManager.from(mContext).isMultiSimEnabled()) {
++        /* if (!TelephonyManager.from(mContext).isMultiSimEnabled()) {
+             return;
+-        }
++        } */
+ 
+         String title = String.format(res.getString(resId), mSubLabel);
+         actionBar.setTitle(title);
+Index: vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/CallFeaturesSetting.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/CallFeaturesSetting.java	(revision 13504)
++++ vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/CallFeaturesSetting.java	(revision 13505)
+@@ -724,7 +724,11 @@
+         boolean hasSubId = SubscriptionManager.isValidSubscriptionId(mPhone.getSubId());
+         log("updateScreenStatus, hasSubId: " + hasSubId + " isAirplaneModeEnabled: " +
+                  isAirplaneModeEnabled);
+-
++		if(hasSubId){
++            TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++            String spn = tm.getNetworkOperatorName()/*tm.getSimOperatorName(mPhone.getSubId())*/;
++            getActionBar().setTitle(getResources().getString(R.string.call_settings)+"("+spn+")");
++        }
+         for (int i = 0; i < pres.getPreferenceCount(); i++) {
+             Preference pref = pres.getPreference(i);
+             pref.setEnabled(!isAirplaneModeEnabled && hasSubId);
+@@ -774,6 +778,8 @@
+         if (prefIp != null) {
+             prefIp.setIntent(intent);
+         }
++		PreferenceScreen prefSet = getPreferenceScreen();
++		prefSet.removePreference(prefIp);
+     }
+ 
+     private BroadcastReceiver mReceiver = new BroadcastReceiver() {

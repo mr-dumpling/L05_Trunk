@@ -1,0 +1,182 @@
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 7480)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 7481)
+@@ -283,8 +283,7 @@
+         }	
+ 		
+ 		
+-		if ((CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) && 
+-				CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), cbm.getServiceCategory())) {
++		if (CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), cbm.getServiceCategory())) {
+ 			Log.e(TAG, "received CMAS Chile/Pure emergency cb message");
+ 			return;
+ 		}
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 7480)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 7481)
+@@ -49,6 +49,8 @@
+     private static boolean sIsCellAreaInChile = false;
+ 	// For Pure CMAS
+ 	private static boolean sIsCellAreaInPeru = false;
++	// For Brizal CMAS
++	private static boolean sIsCellAreaInBrizal = false;
+ 	
+     @Override
+     public void onCreate() {
+@@ -74,21 +76,45 @@
+                         Log.d(TAG, "empty iso! It maybe test in lab so ignore this change");
+                     } else if (mcc.equals("466")) {
+                         sIsCellAreaInTw = true;
++						sIsCellAreaInChile = false;
++						sIsCellAreaInPeru = false;
++						sIsCellAreaInBrizal = false;
+                     } else if (mcc.equals("730")) {
++						sIsCellAreaInTw = false;
+                         sIsCellAreaInChile = true;
++						sIsCellAreaInPeru = false;
++						sIsCellAreaInBrizal = false;
+                     } else if (mcc.equals("001")) {
++						sIsCellAreaInTw = false;
++						sIsCellAreaInPeru = false;
+                         sIsCellAreaInChile = true;
++						sIsCellAreaInBrizal = false;
+                     } else if (mcc.equals("732")) {
++						sIsCellAreaInTw = false;
++						sIsCellAreaInPeru = false;
+                         sIsCellAreaInChile = true;
++						sIsCellAreaInBrizal = false;
+                     } else if (mcc.equals("716")) {
++						sIsCellAreaInTw = false;
++						sIsCellAreaInChile = false;
+ 						sIsCellAreaInPeru = true;
++						sIsCellAreaInBrizal = false;
++					} else if (mcc.equals("724")) {
++						sIsCellAreaInTw = false;
++						sIsCellAreaInChile = false;
++						sIsCellAreaInPeru = false;
++						sIsCellAreaInBrizal = true;
+ 					} else {
+                         sIsCellAreaInTw = false;
+                         sIsCellAreaInChile = false;
++						sIsCellAreaInPeru = false;
++						sIsCellAreaInBrizal = false;
+                     }
+                 } else {
+                     sIsCellAreaInTw = false;
+                     sIsCellAreaInChile = false;
++					sIsCellAreaInPeru = false;
++					sIsCellAreaInBrizal = false;
+                 }
+             }
+         }
+@@ -112,8 +138,15 @@
+      * @return true if in Pure
+      */
+     public static boolean isCellAreaInPeru() {
+-        return sIsCellAreaInPeru;
++    return sIsCellAreaInPeru;
+     }
++	/**
++     * Check if user in Brizal or any other region.
++     * @return true if in brizal
++     */
++    public static boolean isCellAreaInBrizal() {
++        return sIsCellAreaInBrizal;
++    }
+ 
+     /** Set Cell area basedon MCC.
+      * @param mcc mcc from SIM Operator
+@@ -125,6 +158,8 @@
+             sIsCellAreaInChile = true;
+ 		} else if (mcc.equals("716")) {
+ 			sIsCellAreaInPeru = true;
++		} else if (mcc.equals("724")) {
++			sIsCellAreaInBrizal = true;
+ 		}
+     }
+     // For Taiwan PWS-END
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 7480)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 7481)
+@@ -44,6 +44,8 @@
+     private static boolean sIsCellAreaInChile = false;
+ 	// For Peru CMAS
+ 	private static boolean sIsCellAreaInPeru = false;
++	// For Brizal CMAS
++	private static boolean sIsCellAreaInBrizal = false;
+ 
+     @Override
+     public void onCreate() {
+@@ -77,21 +79,45 @@
+                         Log.d(TAG, "empty iso! It maybe test in lab so ignore this change");
+                     } else if (mcc.equals("466")) {
+                         sIsCellAreaInTw = true;
++						sIsCellAreaInChile = false;
++						sIsCellAreaInPeru = false;
++						sIsCellAreaInBrizal = false;
+                     } else if (mcc.equals("730")) {
++						sIsCellAreaInTw = false;
+                         sIsCellAreaInChile = true;
++						sIsCellAreaInPeru = false;
++						sIsCellAreaInBrizal = false;
+                     } else if (mcc.equals("001")) {
++						sIsCellAreaInTw = false;
++						sIsCellAreaInPeru = false;
+                         sIsCellAreaInChile = true;
++						sIsCellAreaInBrizal = false;
+                     } else if (mcc.equals("732")) {
++						sIsCellAreaInTw = false;
++						sIsCellAreaInPeru = false;
+                         sIsCellAreaInChile = true;
++						sIsCellAreaInBrizal = false;
+                     } else if (mcc.equals("716")) {
++						sIsCellAreaInTw = false;
++						sIsCellAreaInChile = false;
+ 						sIsCellAreaInPeru = true;
++						sIsCellAreaInBrizal = false;
++					} else if (mcc.equals("724")) {
++						sIsCellAreaInTw = false;
++						sIsCellAreaInChile = false;
++						sIsCellAreaInPeru = false;
++						sIsCellAreaInBrizal = true;
+ 					} else {
+                         sIsCellAreaInTw = false;
+                         sIsCellAreaInChile = false;
++						sIsCellAreaInPeru = false;
++						sIsCellAreaInBrizal = false;
+                     }
+                 } else {
+                     sIsCellAreaInTw = false;
+                     sIsCellAreaInChile = false;
++					sIsCellAreaInPeru = false;
++					sIsCellAreaInBrizal = false;
+                 }
+             }
+         }
+@@ -117,6 +143,14 @@
+     public static boolean isCellAreaInPeru() {
+         return sIsCellAreaInPeru;
+     }
++	
++	/**
++     * Check if user in Brizal or any other region.
++     * @return true if in brizal
++     */
++    public static boolean isCellAreaInBrizal() {
++        return sIsCellAreaInBrizal;
++    }
+ 
+     /** Set Cell area basedon MCC.
+      * @param mcc mcc from SIM Operator
+@@ -128,6 +162,8 @@
+             sIsCellAreaInChile = true;
+         } else if (mcc.equals("716")) {
+ 			sIsCellAreaInPeru = true;
++		} else if (mcc.equals("724")) {
++			sIsCellAreaInBrizal = true;
+ 		}
+     }
+     // For Taiwan PWS-END

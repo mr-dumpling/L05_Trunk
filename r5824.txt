@@ -1,0 +1,33 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/BatteryControllerImpl.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/BatteryControllerImpl.java	(revision 5823)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/BatteryControllerImpl.java	(revision 5824)
+@@ -54,6 +54,7 @@
+     protected boolean mPowerSave;
+     private boolean mTestmode = false;
+     private boolean mHasReceivedBattery = false;
++    private boolean mIsPowerSaveBeforePlugin = false;
+ 
+     public BatteryControllerImpl(Context context) {
+         mContext = context;
+@@ -120,6 +121,20 @@
+                     BatteryManager.BATTERY_STATUS_UNKNOWN);
+             mCharged = status == BatteryManager.BATTERY_STATUS_FULL;
+             mCharging = mCharged || status == BatteryManager.BATTERY_STATUS_CHARGING;
++            // We set power save mode to false in the follow case
++            if (mCharging && mPowerManager.isPowerSaveMode()) {
++                if (mPowerManager.setPowerSaveMode(false)) {
++                    mIsPowerSaveBeforePlugin = true;
++                    updatePowerSave();
++                } else {
++                    if (DEBUG) Log.e(TAG, "Set power save mode failed.");
++                }
++            } else if (!mCharging && !mPowerManager.isPowerSaveMode()
++                    && mIsPowerSaveBeforePlugin) {
++                mPowerManager.setPowerSaveMode(true);
++                mIsPowerSaveBeforePlugin = false;
++                updatePowerSave();
++            }
+ 
+             fireBatteryLevelChanged();
+         } else if (action.equals(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)) {

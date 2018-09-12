@@ -1,0 +1,259 @@
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertDialog.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertDialog.java	(revision 5353)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertDialog.java	(revision 5354)
+@@ -49,6 +49,7 @@
+ 
+ import java.util.ArrayList;
+ import java.util.concurrent.atomic.AtomicInteger;
++import android.os.SystemProperties;
+ 
+ /**
+  * Custom alert dialog with optional flashing warning icon.
+@@ -247,6 +248,7 @@
+                 new Button.OnClickListener() {
+                     @Override
+                     public void onClick(View v) {
++						SystemProperties.set("persist.sys.cmasalert", "0");
+                         dismiss();
+                     }
+                 });
+@@ -408,6 +410,7 @@
+      */
+     void dismiss() {
+         Log.d(TAG, "dismiss");
++		SystemProperties.set("persist.sys.cmasalert", "0");
+         // Stop playing alert sound/vibration/speech (if started)
+         stopService(new Intent(this, CellBroadcastAlertAudio.class));
+ 
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 5353)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 5354)
+@@ -53,6 +53,7 @@
+ import java.util.ArrayList;
+ import java.util.HashSet;
+ import java.util.Locale;
++import android.os.SystemProperties;
+ 
+ /**
+  * This service manages the display and animation of broadcast messages.
+@@ -208,6 +209,10 @@
+                 Log.w(TAG, "ETWS info is not available.");
+             }
+         }
++		
++		if (CellBroadcastReceiverApp.isCmasDefaultChannel(message.getServiceCategory())) {
++			SystemProperties.set("persist.sys.cmasalert", "1");
++		}
+ 
+         // Check for duplicate message IDs according to CMAS carrier requirements. Message IDs
+         // are stored in volatile memory. If the maximum of 65535 messages is reached, the
+@@ -273,8 +278,9 @@
+             return;
+         }	
+ 		
+-		if (CellBroadcastReceiverApp.isCellAreaInChile() && cbm.getServiceCategory() == 4370) {
+-			Log.e(TAG, "received CMAS Chile message 4370");
++		
++		if (CellBroadcastReceiverApp.isCellAreaInChile() && CellBroadcastReceiverApp.isCmasDefaultChannel(cbm.getServiceCategory())) {
++			Log.e(TAG, "received CMAS Chile emergency cb message");
+ 			return;
+ 		}
+ 
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 5353)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 5354)
+@@ -137,4 +137,17 @@
+     static CellBroadcastMessage getLatestAreaInfo() {
+         return sLatestAreaInfo;
+     }
++	
++	public static boolean isCmasDefaultChannel(int channelId) {
++        if ((channelId == 4356) || (channelId == 4355) || (channelId == 4352) || (channelId == 4353) 
++				|| (channelId == 4354) || (channelId == 4370) || (channelId == 4371) || (channelId == 4372)
++				|| (channelId == 4373) || (channelId == 4374) || (channelId == 4375) || (channelId == 4376)
++				|| (channelId == 4377) || (channelId == 4378) || (channelId == 4379) || (channelId == 4383)
++				|| (channelId == 4384) || (channelId == 4385) || (channelId == 4386) || (channelId == 4387)
++				|| (channelId == 4388) || (channelId == 4389) || (channelId == 4390) || (channelId == 4391)
++				|| (channelId == 4392) || (channelId == 919) || (channelId == 921) || (channelId == 4411)) {
++            return true;
++        }
++        return false;
++    }
+ }
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 5354)
+@@ -162,7 +162,7 @@
+                 Log.i(TAG, "ok button is clicked, msgRowId = " + msgRowId);
+                 clearNotification(bAutoStart);
+                 //clearViewFlag(view);
+-                dismissAndMarkRead(view, message, msgRowId);
++				dismissAndMarkRead(view, message, msgRowId);
+                 ((Button) view.findViewById(R.id.dismissButton)).setOnClickListener(null);
+ 				SystemProperties.set("persist.sys.cmasalert", "0");
+                 rmViewByRowId(msgRowId);
+@@ -249,7 +249,7 @@
+         Message msg = new Message();
+         msg.what = CLEAR_SCREEN_FLAG;
+         msg.obj = vInfo;
+-		if (message.getServiceCategory() == 4370 && CellBroadcastReceiverApp.isCellAreaInChile()) {
++		if (CellBroadcastReceiverApp.isCmasDefaultChannel(message.getServiceCategory()) && CellBroadcastReceiverApp.isCellAreaInChile()) {
+ 			mScreenOffHandler.sendMessageDelayed(msg, 24*60*60*1000);
+ 		} else {	
+ 			mScreenOffHandler.sendMessageDelayed(msg, ALERT_TIME_LENGTH);
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 5354)
+@@ -128,4 +128,17 @@
+     static void clearNewMessageList() {
+         sNewMessageList.clear();
+     }
++	
++	public static boolean isCmasDefaultChannel(int channelId) {
++        if ((channelId == 4356) || (channelId == 4355) || (channelId == 4352) || (channelId == 4353) 
++				|| (channelId == 4354) || (channelId == 4370) || (channelId == 4371) || (channelId == 4372)
++				|| (channelId == 4373) || (channelId == 4374) || (channelId == 4375) || (channelId == 4376)
++				|| (channelId == 4377) || (channelId == 4378) || (channelId == 4379) || (channelId == 4383)
++				|| (channelId == 4384) || (channelId == 4385) || (channelId == 4386) || (channelId == 4387)
++				|| (channelId == 4388) || (channelId == 4389) || (channelId == 4390) || (channelId == 4391)
++				|| (channelId == 4392) || (channelId == 919) || (channelId == 921) || (channelId == 4411)) {
++            return true;
++        }
++        return false;
++    }
+ }
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 5354)
+@@ -210,6 +210,10 @@
+         final Intent alertIntent = new Intent(SHOW_NEW_ALERT_ACTION);
+         alertIntent.setClass(this, CMASPresentationService.class);
+         alertIntent.putExtra("message", cbm);
++		
++		if (CellBroadcastReceiverApp.isCmasDefaultChannel(cbm.getServiceCategory()) && CellBroadcastReceiverApp.isCellAreaInChile() && isMessageEnabledByUser(cbm)) {
++			SystemProperties.set(PROPERTY_CMAS_ALERT, "1");
++		}
+ 
+         // write to database on a background thread
+         new CellBroadcastContentProvider.AsyncCellBroadcastTask(getContentResolver())
+@@ -369,12 +373,14 @@
+             }
+             return true;
+         }
++		
++		if (message.getServiceCategory() == 4411 && CellBroadcastReceiverApp.isCellAreaInChile()) {
++			return true;
++		}
+ 
+         if (message.isCmasMessage()) {
+             //Log.d(TAG, "in isMessageEnabledByUser , CMASMessageClass " + message.getCmasMessageClass());
+-            if (message.getServiceCategory() == 4370 && CellBroadcastReceiverApp.isCellAreaInChile()) {
+-				SystemProperties.set(PROPERTY_CMAS_ALERT, "1");
+-			}
++			
+ 			switch (message.getCmasMessageClass()) {
+                 case SmsCbCmasInfo.CMAS_CLASS_PRESIDENTIAL_LEVEL_ALERT:
+                 if (CellBroadcastReceiverApp.isCellAreaInTw() &&
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 5354)
+@@ -440,7 +440,7 @@
+                     (mMessageId == 919 || mMessageId == 911)) {
+                 final long[] sVibratePattern919 = {0, 2000, 500, 500};
+                 mVibrator.vibrate(sVibratePattern919, -1);
+-            } else if(CellBroadcastReceiverApp.isCellAreaInChile() && (mMessageId == 4370)){
++            } else if(CellBroadcastReceiverApp.isCellAreaInChile() && CellBroadcastReceiverApp.isCmasDefaultChannel(mMessageId)){
+ 				final long[] sVibratePattern4370 = {0, 2000, 500, 1000, 500, 1000, 500};
+ 				mVibrator.vibrate(sVibratePattern4370, 1);
+ 			}else {
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/strings.xml	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/strings.xml	(revision 5354)
+@@ -8,7 +8,7 @@
+     <string name="sms_cb_settings">Alerts Switch Settings</string>
+ 
+     <!-- Text for dismiss button in broadcast message view dialog. [CHAR LIMIT=25] -->
+-    <string name="button_dismiss">OK</string>
++    <string name="button_dismiss">Hide</string>
+ 
+     <!-- Text for list view when empty (no broadcasts). [CHAR LIMIT=200] -->
+     <string name="no_cell_broadcasts">There are no active alerts in your area. You can change the Alert settings using the Settings menu option.</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-fr-rFR/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-fr-rFR/strings.xml	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-fr-rFR/strings.xml	(revision 5354)
+@@ -8,7 +8,7 @@
+     <string name="sms_cb_settings">Paramètres d’activation des alertes</string>
+ 
+     <!-- Text for dismiss button in broadcast message view dialog. [CHAR LIMIT=25] -->
+-    <string name="button_dismiss">OK</string>
++    <string name="button_dismiss">Hide</string>
+ 
+     <!-- Text for list view when empty (no broadcasts). [CHAR LIMIT=200] -->
+     <string name="no_cell_broadcasts">Aucune alerte n’est active pour la région où vous vous trouvez. Vous pouvez modifier les paramètres d’alerte par l’option de menu Paramètres.</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pt-rBR/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pt-rBR/strings.xml	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pt-rBR/strings.xml	(revision 5354)
+@@ -8,7 +8,7 @@
+     <string name="sms_cb_settings">Configurações de alternância de alertas</string>
+ 
+     <!-- Text for dismiss button in broadcast message view dialog. [CHAR LIMIT=25] -->
+-    <string name="button_dismiss">OK</string>
++    <string name="button_dismiss">Hide</string>
+ 
+     <!-- Text for list view when empty (no broadcasts). [CHAR LIMIT=200] -->
+     <string name="no_cell_broadcasts">Não há alertas ativos em sua área. É possível alterar as configurações de alerta usando a opção de menu Configurações.</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-en-rUS/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-en-rUS/strings.xml	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-en-rUS/strings.xml	(revision 5354)
+@@ -8,7 +8,7 @@
+     <string name="sms_cb_settings">Alerts Switch Settings</string>
+ 
+     <!-- Text for dismiss button in broadcast message view dialog. [CHAR LIMIT=25] -->
+-    <string name="button_dismiss">OK</string>
++    <string name="button_dismiss">Hide</string>
+ 
+     <!-- Text for list view when empty (no broadcasts). [CHAR LIMIT=200] -->
+     <string name="no_cell_broadcasts">There are no active alerts in your area. You can change the Alert settings using the Settings menu option.</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/strings.xml	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/strings.xml	(revision 5354)
+@@ -8,7 +8,7 @@
+     <string name="sms_cb_settings">Ajustes cambio de alerta</string>
+ 
+     <!-- Text for dismiss button in broadcast message view dialog. [CHAR LIMIT=25] -->
+-    <string name="button_dismiss">Aceptar</string>
++    <string name="button_dismiss">"Ocultar"</string>
+ 
+     <!-- Text for list view when empty (no broadcasts). [CHAR LIMIT=200] -->
+     <string name="no_cell_broadcasts">No hay alertas activas en su área. Puede cambiar los ajustes de alertas con la opción de menú Ajustes.</string>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessageReceiverService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessageReceiverService.java	(revision 5353)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessageReceiverService.java	(revision 5354)
+@@ -265,8 +265,13 @@
+             // Screen will be light up 
+         	if (cbPopupAndToneVibrateForChile919And921 || poweronScreenEnable ||isCmasOrEmerOrEtws) { 
+ 			// modified by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14
+-                int screenOffTimeout = android.provider.Settings.System.getInt(
++                int screenOffTimeout = 0;
++				if (message.getServiceCategory() == 919 || message.getServiceCategory() == 921){
++					screenOffTimeout = 24*60*60*1000;
++				} else {
++					screenOffTimeout = android.provider.Settings.System.getInt(
+                         getContentResolver(), android.provider.Settings.System.SCREEN_OFF_TIMEOUT, 10000);
++				}
+                 MmsLog.i(TAG, "CBMessageReceiverService_handleCBMessage_screenOffTimeout: " + screenOffTimeout);
+                 PowerManager pm = (PowerManager) this.getSystemService(Context.POWER_SERVICE);
+                 PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK

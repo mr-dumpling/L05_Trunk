@@ -1,0 +1,35 @@
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/tracability/Tracability.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/tracability/Tracability.java	(revision 2769)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/tracability/Tracability.java	(revision 2770)
+@@ -8,6 +8,7 @@
+ import android.net.wifi.WifiInfo;
+ import android.net.wifi.WifiManager;
+ import android.os.Bundle;
++import android.os.SystemProperties;
+ import android.telephony.TelephonyManager;
+ import android.text.TextUtils;
+ import android.view.View;
+@@ -208,7 +209,21 @@
+         
+         if(type == STRING){
+             String stringBuffer =  new String(product_info, start, length);
+-            return stringBuffer.equals("") ? null : stringBuffer.toString().toUpperCase();
++			String su_ref=null;
++			if(start ==CU_REF){
++				boolean haseChar=false;
++				if(stringBuffer.startsWith("50") || stringBuffer .startsWith("98")){
++					haseChar=true;
++				}
++				if(!TextUtils.isEmpty(stringBuffer) && haseChar){
++				 	su_ref=stringBuffer.toString().toUpperCase().trim();
++				}else{
++					su_ref=SystemProperties.get("ro.tct.curef.default");
++				}
++				return su_ref;
++			}else{
++				return stringBuffer.equals("") ? null : stringBuffer.toString().toUpperCase();
++			}
+         }else{
+             StringBuffer stringBuffer = new StringBuffer();
+             for (int i = 0; i < length; i++) {

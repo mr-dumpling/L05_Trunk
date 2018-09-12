@@ -1,0 +1,215 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 1853)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 1854)
+@@ -31,9 +31,9 @@
+         this.data = data;
+         mContext = context;
+     }
+-	public List<AppInfo> getData() {
+-		  return data;
+-	  }
++    public List<AppInfo> getData() {
++          return data;
++      }
+ 
+     @Override
+     public int getItemViewType(int position) {
+@@ -80,7 +80,11 @@
+                 });
+             }
+         } else {
+-            holder.app_name.setText(info.getAppName());
++            if(info.getPackerName().equals("com.android.settings")){
++                holder.app_name.setText(mContext.getResources().getString(R.string.func_settings_switch));
++            }else{
++                holder.app_name.setText(info.getAppName());
++            }
+             holder.app_icon.setImageDrawable(info.getDrawable());
+             if (viewType == AppUtils.DEFAULT_APPS) {
+                 holder.right_icon.setImageResource(R.mipmap.remove);
+@@ -101,40 +105,40 @@
+                         }
+                     } else if (viewType == AppUtils.APPS) {
+                         if (FuncSettings.defaultNum == 5) {
+-							String msg=mContext.getResources().getString(R.string.func_max_num);
++                            String msg=mContext.getResources().getString(R.string.func_max_num);
+                             AppUtils.showDialog(mContext,msg);
+                         } else {
+-							// modify for 110918 by dongdongli 20171115 start {
++                            // modify for 110918 by dongdongli 20171115 start {
+                             if (isInDefaultAppInfoList(data.get(position).getPackerName())) {
+-								String msg=mContext.getResources().getString(R.string.func_add_exist_app);
+-								AppUtils.showDialog(mContext,msg);
+-								data.remove(position);
+-								notifyDataSetChanged();
+-							} else {
+-								addData(position);
+-							}
+-							// modify for 110918 by dongdongli 20171115 end }
++                                String msg=mContext.getResources().getString(R.string.func_add_exist_app);
++                                AppUtils.showDialog(mContext,msg);
++                                data.remove(position);
++                                notifyDataSetChanged();
++                            } else {
++                                addData(position);
++                            }
++                            // modify for 110918 by dongdongli 20171115 end }
+                         }
+                     }
+                     
+                 }
+             });
+-			holder.item.setOnClickListener(new View.OnClickListener() {
+-				@Override
++            holder.item.setOnClickListener(new View.OnClickListener() {
++                @Override
+                 public void onClick(View v) {
+                 if(viewType == AppUtils.DEFAULT_APPS||viewType == AppUtils.APPS){
+-					Log.i("content",info.getPackerName());
++                    Log.i("content",info.getPackerName());
+ 
+-				}
+-                	if (viewType == AppUtils.DEFAULT_APPS) {
+-						if(info.getPackerName().equals(AppUtils.CONTACTS)){
+-							AppUtils.startContactApp(mContext);
+-						}else if(info.getPackerName().equals(AppUtils.MUSIC)){
+-							AppUtils.startMusicApp(mContext);
+-						}
+-                	}
+-				}
+-			});
++                }
++                    if (viewType == AppUtils.DEFAULT_APPS) {
++                        if(info.getPackerName().equals(AppUtils.CONTACTS)){
++                            AppUtils.startContactApp(mContext);
++                        }else if(info.getPackerName().equals(AppUtils.MUSIC)){
++                            AppUtils.startMusicApp(mContext);
++                        }
++                    }
++                }
++            });
+         }
+ 
+     }
+@@ -168,13 +172,13 @@
+ 
+     public void deleteData(int pos) {
+         AppInfo info = data.get(pos);
+-		// modify for 110918 by dongdongli 20171115 start {
+-		if(!isInAvailabelAppInfoList(info.getPackerName())){
+-			data.add(data.size()-1 , info);
+-		}
+-		info.setIndex(AppUtils.APPS);
++        // modify for 110918 by dongdongli 20171115 start {
++        if(!isInAvailabelAppInfoList(info.getPackerName())){
++            data.add(data.size()-1 , info);
++        }
++        info.setIndex(AppUtils.APPS);
+         data.remove(pos);
+-		// modify for 110918 by dongdongli 20171115 end }
++        // modify for 110918 by dongdongli 20171115 end }
+         FuncSettings.defaultNum--;
+         notifyDataSetChanged();
+     }
+@@ -187,26 +191,26 @@
+         FuncSettings.defaultNum++;
+         notifyDataSetChanged();
+     }
+-	
+-	private boolean isInDefaultAppInfoList(String packageName) {
+-		ArrayList<AppInfo> defaultInfoList = new ArrayList<>();
+-		for(AppInfo appinfo:data) {
+-			if(appinfo.getIndex() == AppUtils.DEFAULT_APPS && packageName.equals(appinfo.getPackerName())) {
+-				return true;
+-			}
+-		}
+-		return false;
+-	}
+-	
+-	private boolean isInAvailabelAppInfoList(String packageName) {
+-		ArrayList<AppInfo> defaultInfoList = new ArrayList<>();
+-		for(AppInfo appinfo:data) {
+-			if(appinfo.getIndex() == AppUtils.APPS && packageName.equals(appinfo.getPackerName())) {
+-				return true;
+-			}
+-		}
+-		return false;
+-	}
++    
++    private boolean isInDefaultAppInfoList(String packageName) {
++        ArrayList<AppInfo> defaultInfoList = new ArrayList<>();
++        for(AppInfo appinfo:data) {
++            if(appinfo.getIndex() == AppUtils.DEFAULT_APPS && packageName.equals(appinfo.getPackerName())) {
++                return true;
++            }
++        }
++        return false;
++    }
++    
++    private boolean isInAvailabelAppInfoList(String packageName) {
++        ArrayList<AppInfo> defaultInfoList = new ArrayList<>();
++        for(AppInfo appinfo:data) {
++            if(appinfo.getIndex() == AppUtils.APPS && packageName.equals(appinfo.getPackerName())) {
++                return true;
++            }
++        }
++        return false;
++    }
+ 
+     public class AppInfoHodler extends RecyclerView.ViewHolder {
+         public TextView title;
+@@ -220,8 +224,8 @@
+             if (viewType == AppUtils.DEFAULT_APPS_TITLE_INDEX || viewType == AppUtils.APPS_TITLE_INDEX
+                     || viewType == AppUtils.FOOTER_INDEX) {
+                 title = (TextView) itemView.findViewById(R.id.title);
+-				if( viewType == AppUtils.FOOTER_INDEX){
+-					title.setGravity(Gravity.LEFT);}
++                if( viewType == AppUtils.FOOTER_INDEX){
++                    title.setGravity(Gravity.LEFT);}
+             } else {
+                 app_name = (TextView) itemView.findViewById(R.id.app_name);
+                 right_icon = (ImageView) itemView.findViewById(R.id.right_icon);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1853)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1854)
+@@ -1017,17 +1017,17 @@
+     }
+ 	
+ 	public void startFunc(String packageName){
+-        Intent intent = new Intent(packageName)
+-				.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+-		intent.setAction("start_func");
+-        AsyncTask.execute(new Runnable() {
++		Intent intent = new Intent("com.android.systemui.SYSTEMUI_FUNC_SETTING");
++		intent.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
++		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++		mActivityStarter.startActivity(intent, false /* dismissShade */);
++       /*AsyncTask.execute(new Runnable() {
+             @Override
+             public void run() {
+                 mContext.startActivityAsUser(intent,
+                         new UserHandle(UserHandle.USER_CURRENT));
+             }
+-        });
++        });*/
+     }
+ 	
+ 	public void startApp(Context mContext,String packageName){
+Index: frameworks/base/packages/SystemUI/AndroidManifest.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 1853)
++++ frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 1854)
+@@ -533,8 +533,9 @@
+ 		<activity android:name=".funcsetting.FuncSettings"
+ 			android:theme="@style/FuncTheme">
+ 			<intent-filter >
+-			  
++			    <action android:name="android.intent.action.MAIN" />
+ 				<action  android:name="com.android.systemui.SYSTEMUI_FUNC_SETTING" />
++			    <category android:name="android.intent.category.DEFAULT" />
+ 			</intent-filter>
+ 		</activity>
+ 		<activity android:name=".funcsetting.AppListActivity" 

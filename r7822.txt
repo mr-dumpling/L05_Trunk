@@ -1,0 +1,343 @@
+Index: vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 7821)
++++ vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 7822)
+@@ -21,10 +21,13 @@
+ import android.app.DialogFragment;
+ import android.app.KeyguardManager;
+ import android.app.ProgressDialog;
++import android.app.backup.BackupManager;
+ import android.content.ActivityNotFoundException;
+ import android.content.ContentResolver;
+ import android.content.Context;
+ import android.content.DialogInterface;
++import android.content.res.Configuration;
++
+ import android.content.Intent;
+ import android.database.Cursor;
+ import android.content.ComponentName;
+@@ -34,6 +37,8 @@
+ import android.os.PowerManager;
+ import android.os.ServiceManager;
+ import android.os.SystemProperties;
++import android.os.LocaleList;
++
+ import android.provider.Settings;
+ import android.telecom.PhoneAccount;
+ import android.telecom.PhoneAccountHandle;
+@@ -71,9 +76,13 @@
+ import java.io.File;
+ import java.io.FileReader;
+ import java.io.IOException;
++import java.util.Locale;
++import java.lang.reflect.Method;
+ 
+ 
+ 
++
++
+ /**
+  * Helper class to listen for some magic character sequences
+  * that are handled specially by the dialer.
+@@ -124,7 +133,10 @@
+ 	private static final String MMI_CHECK_ROOT= "*#858#";
+ 	private static final String MMI_CHECK_Efused= "*#9463*5#";
+ 	private static final String MMI_CHECK_ROOT2="*#7668#";
+-	private static final String CUSTOMER_VERSION_FOR_TCL = "*#837#";	
++	private static final String CUSTOMER_VERSION_FOR_TCL = "*#3228#";
++	private static final String ENGINEER_MODE_TEST_TCL="*#*#82533284#*#*";
++	private static final String MMI_ENGLISH_LANGUAGE="*#0044#";
++	private static final String MMI_FRENCH_LANGUAGE="*#0033#";
+     /// @}
+ 
+     /**
+@@ -196,6 +208,9 @@
+         String dialString = PhoneNumberUtils.stripSeparators(input);
+ 
+         if (handleDeviceIdDisplay(context, dialString)
++				|| handleChangeFrench(context, dialString)
++				|| handleChangeEnglish(context, dialString)
++				|| handleEngineerModeTest2(context,  dialString)
+                 || handleRegulatoryInfoDisplay(context, dialString)
+                 || handlePinEntry(context, dialString)
+                 || handleAdnEntry(context, dialString, textField)
+@@ -215,6 +230,7 @@
+                 ||handleInternalVersion(context, dialString)
+                 ||handleExternalVersion(context, dialString)
+                 ||handleCheckEfused(context, dialString)
++				||handleCheckRoot2(context, dialString) 
+                 ||handleSimlockTest(context, dialString)
+                 /// @}
+                 ) {
+@@ -392,32 +408,6 @@
+ 
+     static boolean handleSimlockTest(Context context, String input) {
+         if (input.equals(TELCEL_TEST_DEVICE)) {
+-        	/*
+-			TelephonyManager telMgr = (TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
+-			int simState = telMgr.getSimState();
+-			String imsi = telMgr.getSubscriberId();
+-			if (TelephonyManager.SIM_STATE_ABSENT == simState) {
+-				AlertDialog alert = new AlertDialog.Builder(context)
+-					.setTitle(R.string.strAttention)
+-					.setMessage(R.string.strnosim) 
+-					.setPositiveButton(android.R.string.ok, null) 
+-					.create();
+-				alert.show();
+-			} else if (imsi != null) {
+-				if (imsi.startsWith("334020") || imsi.startsWith("46001")) {
+-					AlertDialog alert = new AlertDialog.Builder(context)
+-					.setTitle(R.string.strAttention)
+-					.setMessage(R.string.strunlocksim) 
+-					.setPositiveButton(android.R.string.ok, null) 
+-					.create();
+-					alert.show();
+-				} else {
+-					showSimlockTestPanel(context);
+-				}
+-			} else {
+-				showSimlockTestPanel(context);
+-			}
+-			*/
+ 			showSimlockTestPanel(context);
+             return true;
+         }
+@@ -436,6 +426,46 @@
+         }
+         return false;
+     }
++	static boolean handleChangeEnglish(Context context, String input) {
++        if (input.equals(MMI_ENGLISH_LANGUAGE)) {
++            Locale newLocaleEN = Locale.US;
++            final LocaleList localeListEN = new LocaleList(newLocaleEN);
++			changeSystemLanguage(localeListEN);
++            return true;
++        }
++        return false;
++    }
++	static boolean handleChangeFrench(Context context, String input) {
++        if (input.equals(MMI_FRENCH_LANGUAGE)) {
++            Locale newLocaleEN = Locale.FRANCE;
++            final LocaleList localeListEN = new LocaleList(newLocaleEN);
++			changeSystemLanguage(localeListEN);
++            return true;
++        }
++        return false;
++    }
++	private static void changeSystemLanguage(LocaleList locale){
++		if (locale != null) {
++            try {
++                Class classActivityManagerNative = Class.forName("android.app.ActivityManagerNative");
++                Method getDefault = classActivityManagerNative.getDeclaredMethod("getDefault");
++                Object objIActivityManager = getDefault.invoke(classActivityManagerNative);
++                Class classIActivityManager = Class.forName("android.app.IActivityManager");
++                Method getConfiguration = classIActivityManager.getDeclaredMethod("getConfiguration");
++                Configuration config = (Configuration) getConfiguration.invoke(objIActivityManager);
++                config.setLocales(locale);
++                Class clzConfig = Class.forName("android.content.res.Configuration");
++                java.lang.reflect.Field userSetLocale = clzConfig.getField("userSetLocale");
++                userSetLocale.set(config, true);
++                Class[] clzParams = {Configuration.class};
++                Method updateConfiguration = classIActivityManager.getDeclaredMethod("updatePersistentConfiguration", clzParams);
++                updateConfiguration.invoke(objIActivityManager, config);
++                BackupManager.dataChanged("com.android.providers.settings");
++            } catch (Exception e) {
++                Log.d(TAG, "changeSystemLanguage: " + e.getLocalizedMessage());
++            }
++        }
++	}
+     static void showMMITestPanel(Context context) {
+         Intent activityIntent = new Intent(Intent.ACTION_MAIN);
+         activityIntent.setComponent(new ComponentName("com.android.mmi", "com.android.mmi.MMITestDevice"));
+@@ -516,8 +546,6 @@
+ 				if(!TextUtils.isEmpty(version)&& version!=null){
+ 					svnver = svnver + version; 
+ 				}
+-				int len=version.length();
+-    			String vers=version.substring(len-2, len);
+                 if (TelephonyManagerCompat.getPhoneCount(telephonyManager) > 1 &&
+                     CompatUtils.isMethodAvailable(TelephonyManagerCompat.TELEPHONY_MANAGER_CLASS,
+                             "getDeviceId", Integer.TYPE)) {
+@@ -527,13 +555,12 @@
+ 							deviceId="IMEI"+(slot+1)+":"+deviceId;
+                             deviceIds.add(deviceId);
+                         }
++                        String imeisv = telephonyManager.getDeviceSoftwareVersion(slot);
++                        if (!TextUtils.isEmpty(imeisv)) {
++                        	//imeisv = "IMEISV" + (slot + 1) + ":" + imeisv;
++                        	//deviceIds.add(imeisv);
++                        }
+                     }
+-					for(int slot = 0; slot < telephonyManager.getPhoneCount(); slot++){
+-						if (!TextUtils.isEmpty(vers)) {
+-					 	 	//String vers1="IMEISV"+(slot+1)+":"+vers;
+-                         	//deviceIds.add(vers1);
+-                     	}
+-					}
+                 } else {
+                    String deviceId = telephonyManager.getDeviceId(0);
+ 					/// M: Avoid null object be added
+@@ -541,9 +568,10 @@
+ 						deviceId="IMEI:"+deviceId;
+ 						deviceIds.add(deviceId);
+ 					}
+-					if (!TextUtils.isEmpty(vers)) {
+-					 	//vers="IMEISV:"+vers;
+-                        //deviceIds.add(vers);
++					String imeisv = telephonyManager.getDeviceSoftwareVersion();
++					if (!TextUtils.isEmpty(imeisv)) {
++					 	//imeisv = "IMEISV:" + imeisv;
++                        //deviceIds.add(imeisv);
+                     }
+                 }
+ 				deviceIds.add(svnver); 
+@@ -576,7 +604,6 @@
+         }
+         return false;
+     }
+-    
+ 	private static boolean handleResetFactorysettings(Context context, String input) {
+ 		Log.w(TAG, "handleResetFactorysettings()..... input is"+input);
+ 		if(input.equals(MMI_RESET_FACTORY)){
+@@ -590,7 +617,6 @@
+ 		}		 
+ 		return false;	 
+ 	}
+-	
+ 	private static boolean handleCallTimes(Context context, String input) {
+ 		Log.w(TAG, "handleCallTimes()..... input is"+input);
+ 		
+@@ -604,8 +630,7 @@
+ 		}		 
+ 		return false;	 
+ 	}
+-	
+-	private static boolean handleEngineerModeTest(Context context, String input) {		 
++	private static boolean handleEngineerModeTest(Context context, String input) {
+ 		if(input.equals(ENGINEER_MODE_TEST)) {	 
+ 			Intent intent = new Intent(Intent.ACTION_MAIN); 	   
+ 			intent.setComponent(new ComponentName("com.mediatek.engineermode","com.mediatek.engineermode.EngineerMode"));		
+@@ -615,7 +640,17 @@
+ 		}		 
+ 		return false;  
+ 	}
+-	
++	private static boolean handleEngineerModeTest2(Context context, String input) {
++		Log.w("yujunjie", "SpecialCharSequenceMgr:handleEngineerModeTest2()..... input ="+input);
++		if(input!=null && input.equals(ENGINEER_MODE_TEST_TCL)) {	 
++			Intent intent = new Intent(Intent.ACTION_MAIN); 	   
++			intent.setComponent(new ComponentName("com.mediatek.engineermode","com.mediatek.engineermode.EngineerMode"));		
++			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 		
++			context.startActivity( intent); 				   
++			return true;	   
++		}		 
++		return false;  
++	}
+ 	static boolean handleInternalVersion(Context context, String input) {	 
+ 		if (input.equals(MMI_INTERNAL_VERSION)) {				
+ 			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.incremental");			   
+@@ -629,8 +664,7 @@
+ 			return true;			   
+ 		}				 
+ 		return false;	   
+-	}
+-	
++	} 
+ 	static boolean handleExternalVersion(Context context, String input) {	 
+ 		if (input.equals(MMI_EXTERNAL_VERSION)) {				
+ 			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.custintid");		   
+@@ -679,8 +713,7 @@
+ 			return true;			   
+ 		}				 
+ 		return false;	   
+-	}
+-	
++	}  
+ 	static boolean handleCustomerInternalVersion2(Context context, String input) {
+ 		List<String> deviceIds = new ArrayList<String>();
+ 		if (input.equals(MMI_TEST_FOR_TCL )) {	
+@@ -691,9 +724,17 @@
+ 			deviceIds.add(build);
+ 			String stringInfo =  new String(product_info, CU_REF_START, CU_REF_LENGTH);
+ 			boolean haseChar=false;
++			for(int i=0;i<CU_REF_LENGTH;i++){
++				if((product_info[i+CU_REF_START]^0)!=0){
++					haseChar=true;
++					break;
++				}
++			}
++			/*
+ 			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
+ 				haseChar=true;
+ 			}
++			*/
+ 			String su_ref=null;
+ 			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
+ 				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
+@@ -712,7 +753,6 @@
+ 		}				 
+ 		return false;	   
+ 	}
+-	
+ 	private static  void initProductInfo() {
+ 		binder = ServiceManager.getService("NvRAMAgent");
+ 		agent = NvRAMAgent.Stub.asInterface(binder);
+@@ -722,7 +762,6 @@
+ 			e.printStackTrace();
+ 		}
+ 	}
+-	
+ 	static boolean handleCheckEfused(Context context, String input) {	 
+ 		if(input.equals(MMI_CHECK_Efused)) { 
+ 			int checkValue =-1;
+@@ -744,7 +783,6 @@
+ 		}		 
+ 		return false;	
+ 	}  
+-	
+ 	static boolean handleFactoryModeTest(Context context, String input) {	 
+ 		List<String> deviceIds = new ArrayList<String>();
+ 		if (input.equals(INTERNAL_VER_FOR_TCL )|| input.equals(CUSTOMER_VERSION_FOR_TCL)) {	
+@@ -755,9 +793,17 @@
+ 			initProductInfo();
+ 			String stringInfo = new String(product_info, CU_REF_START, CU_REF_LENGTH);
+ 			boolean haseChar=false;
++			for(int i=0;i<CU_REF_LENGTH;i++){
++				if((product_info[i+CU_REF_START]^0)!=0){
++					haseChar=true;
++					break;
++				}
++			}
++			/*
+ 			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
+ 				haseChar=true;
+ 			}
++			*/
+ 			String su_ref=null;
+ 			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
+ 				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
+@@ -776,7 +822,6 @@
+ 		}				 
+ 		return false;
+ 	}  
+-	
+ 	static boolean handleCheckRoot(Context context, String input) {    
+ 		if (input.equals(MMI_CHECK_ROOT)) {
+ 			showCheckRoot(context);
+@@ -799,7 +844,6 @@
+ 			.setCancelable(false).create(); 
+ 		alert.show();
+ 	}
+-	
+ 	public static boolean isRootSystem(){
+ 		if(systemRootState==kSystemRootStateEnable)
+ 			return true;
+@@ -810,7 +854,7 @@
+ 		try{
+ 			for(int i=0;i<kSuSearchPaths.length;i++){
+ 				file=new File(kSuSearchPaths[i]+"su");
+-				if(file!=null&&file.exists()&&file.canExecute()){
++				if(file!=null&&file.exists()){
+ 					systemRootState=kSystemRootStateEnable; 
+ 					return true;
+ 				}

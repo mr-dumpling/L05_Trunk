@@ -1,0 +1,160 @@
+Index: vendor/branch/5058A_Claro_Ecuador/vendor/mediatek/proprietary/packages/apps/BrowserOverlay/res/values/isdm_BrowserRes_defaults.xml
+===================================================================
+--- vendor/branch/5058A_Claro_Ecuador/vendor/mediatek/proprietary/packages/apps/BrowserOverlay/res/values/isdm_BrowserRes_defaults.xml	(revision 0)
++++ vendor/branch/5058A_Claro_Ecuador/vendor/mediatek/proprietary/packages/apps/BrowserOverlay/res/values/isdm_BrowserRes_defaults.xml	(revision 5535)
+@@ -0,0 +1,30 @@
++<?xml version="1.0" encoding ="utf-8" ?>
++<!--
++/**
++* Copyright (c) 2009, The Android Open Source Project
++*
++* Licensed under the Apache License, Version 2.0 (the "License");
++* you may not use this file except in compliance with the License. 
++* You may obtain a copy of the License at 
++*
++*     http://www.apache.org/licenses/LICENSE-2.0 
++*
++* Unless required by applicable law or agreed to in writing, software 
++* distributed under the License is distributed on an "AS IS" BASIS, 
++* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
++* See the License for the specific language governing permissions and 
++* limitations under the License.
++*/
++-->
++<!--
++TOOLS: prd2h-v5.7
++USER: xqhe
++DATE: 2013-07-09
++TIME: 07:48:22 (G7T)
++-->
++<resources>
++    <string name="def_browser_homepage_base">"http://www.clarosva.com/ec"</string>
++    <string name="def_browser_bookmark1_value">0</string>
++    <string name="def_browser_bookmark2_value">0</string>
++    
++</resources>
+Index: vendor/branch/5058A_Claro_Ecuador/packages/apps/ChromeCustomizations/src/com/techain/chromecustomizations/BrowserCustomizationsProvider.java
+===================================================================
+--- vendor/branch/5058A_Claro_Ecuador/packages/apps/ChromeCustomizations/src/com/techain/chromecustomizations/BrowserCustomizationsProvider.java	(revision 0)
++++ vendor/branch/5058A_Claro_Ecuador/packages/apps/ChromeCustomizations/src/com/techain/chromecustomizations/BrowserCustomizationsProvider.java	(revision 5535)
+@@ -0,0 +1,103 @@
++// Copyright 2015 The Chromium Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Package path can be changed, but should match <manifest package="..."> in AndroidManifest.xml.
++package com.techain.chromecustomizations;
++
++import android.content.ContentProvider;
++import android.content.ContentValues;
++import android.content.UriMatcher;
++import android.database.Cursor;
++import android.database.MatrixCursor;
++import android.net.Uri;
++
++/**
++ * A sample ContentProvider demonstrating the various partner configurations: adding a homepage,
++ * disabling incognito mode, and adding default bookmarks.
++ *
++ * This class name can be changed, but should match <provider android:name="..."> in
++ * AndroidManifest.xml.
++ */
++public class BrowserCustomizationsProvider extends ContentProvider {
++    // "http://www.android.com/" is just an example. Please replace this to actual homepage.
++    // Other strings in this class must remain as it is.
++    private static final String HOMEPAGE_URI = "http://www.clarosva.com/ec";
++    private static final int URI_MATCH_HOMEPAGE = 0;
++    private static final int URI_MATCH_DISABLE_INCOGNITO_MODE = 1;
++    private static final int URI_MATCH_DISABLE_BOOKMARKS_EDITING = 2;
++    private static final UriMatcher URI_MATCHER = new UriMatcher(UriMatcher.NO_MATCH);
++    static {
++        URI_MATCHER.addURI("com.android.partnerbrowsercustomizations", "homepage",
++                URI_MATCH_HOMEPAGE);
++        URI_MATCHER.addURI("com.android.partnerbrowsercustomizations", "disableincognitomode",
++                URI_MATCH_DISABLE_INCOGNITO_MODE);
++        URI_MATCHER.addURI("com.android.partnerbrowsercustomizations", "disablebookmarksediting",
++                URI_MATCH_DISABLE_BOOKMARKS_EDITING);
++    }
++
++    @Override
++    public boolean onCreate() {
++        return true;
++    }
++
++    @Override
++    public String getType(Uri uri) {
++        // In fact, Chrome does not call this.
++        // Just a recommaned ContentProvider practice in general.
++        switch (URI_MATCHER.match(uri)) {
++            case URI_MATCH_HOMEPAGE:
++                return "vnd.android.cursor.item/partnerhomepage";
++            case URI_MATCH_DISABLE_INCOGNITO_MODE:
++                return "vnd.android.cursor.item/partnerdisableincognitomode";
++            case URI_MATCH_DISABLE_BOOKMARKS_EDITING:
++                return "vnd.android.cursor.item/partnerdisablebookmarksediting";
++            default:
++                return null;
++        }
++    }
++
++    @Override
++    public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
++            String sortOrder) {
++        switch (URI_MATCHER.match(uri)) {
++            case URI_MATCH_HOMEPAGE:
++            {
++                MatrixCursor cursor = new MatrixCursor(new String[] { "homepage" }, 1);
++                cursor.addRow(new Object[] { HOMEPAGE_URI });
++                return cursor;
++            }
++            case URI_MATCH_DISABLE_INCOGNITO_MODE:
++            {
++                MatrixCursor cursor = new MatrixCursor(new String[] { "disableincognitomode" }, 1);
++                cursor.addRow(new Object[] { 1 });
++                return cursor;
++            }
++            case URI_MATCH_DISABLE_BOOKMARKS_EDITING:
++            {
++                MatrixCursor cursor = new MatrixCursor(
++                        new String[] { "disablebookmarksediting" }, 1);
++                cursor.addRow(new Object[] { 1 });
++                return cursor;
++            }
++            default:
++                return null;
++        }
++    }
++
++    @Override
++    public Uri insert(Uri uri, ContentValues values) {
++        throw new UnsupportedOperationException();
++    }
++
++    @Override
++    public int delete(Uri uri, String selection, String[] selectionArgs) {
++        throw new UnsupportedOperationException();
++    }
++
++    @Override
++    public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
++        throw new UnsupportedOperationException();
++    }
++
++}
+\ No newline at end of file
+Index: vendor/branch/5058A_Claro_Ecuador/packages/apps/ChromeCustomizations/res/values/strings.xml
+===================================================================
+--- vendor/branch/5058A_Claro_Ecuador/packages/apps/ChromeCustomizations/res/values/strings.xml	(revision 0)
++++ vendor/branch/5058A_Claro_Ecuador/packages/apps/ChromeCustomizations/res/values/strings.xml	(revision 5535)
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright 2016 The Chromium Authors. All rights reserved.
++     Use of this source code is governed by a BSD-style license that can be
++     found in the LICENSE file. -->
++
++<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <string name="bookmarks_folder_name" translatable="false">Chrome Bookmarks</string>
++    <string-array name="bookmarks">
++    </string-array>
++</resources>
+\ No newline at end of file

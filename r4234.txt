@@ -1,0 +1,171 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 4233)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 4234)
+@@ -6420,7 +6420,8 @@
+ 		//add by dongdongli for 111401 20171122 start
+ 		if (keyCode == 141) {
+ 			Date dt= new Date();
+-			if (mPowerManager.isScreenOn() && !keyguardOn()) {
++			int isFpBackToHome = Settings.System.getInt(mContext.getContentResolver(), Settings.System.FP_BACK_TO_HOME, 0);
++			if (mPowerManager.isScreenOn() && !keyguardOn() && isFpBackToHome == 1) {
+ 				if (down) {
+ 					fingerprintDown = dt.getTime();
+ 				} else {
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 4233)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 4234)
+@@ -3893,6 +3893,12 @@
+ 		public static final String FP_CAMERA = "tct_private_fingerprint_take_photo";
+ 		
+ 		/*
++		*add for back to home screen by touch fingerprint sensor
++		*
++		*/
++		public static final String FP_BACK_TO_HOME = "fingerprint_back_to_home";
++		
++		/*
+ 		*add for unlock device by touch fingerprint sensor
+ 		*
+ 		*/
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 4233)
++++ frameworks/base/api/test-current.txt	(revision 4234)
+@@ -32761,6 +32761,7 @@
+     field public static final java.lang.String FINGERPRINTS_FUNCTION_SETTING = "fingerprint_function_setting";
+     field public static final java.lang.String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
++    field public static final java.lang.String FP_BACK_TO_HOME = "fingerprint_back_to_home";
+     field public static final java.lang.String FP_CAMERA = "tct_private_fingerprint_take_photo";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 4233)
++++ frameworks/base/api/current.txt	(revision 4234)
+@@ -32681,6 +32681,7 @@
+     field public static final java.lang.String FINGERPRINTS_FUNCTION_SETTING = "fingerprint_function_setting";
+     field public static final java.lang.String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
++    field public static final java.lang.String FP_BACK_TO_HOME = "fingerprint_back_to_home";
+     field public static final java.lang.String FP_CAMERA = "tct_private_fingerprint_take_photo";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 4233)
++++ frameworks/base/api/system-current.txt	(revision 4234)
+@@ -35440,6 +35440,7 @@
+     field public static final java.lang.String FINGERPRINTS_FUNCTION_SETTING = "fingerprint_function_setting";
+     field public static final java.lang.String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
++    field public static final java.lang.String FP_BACK_TO_HOME = "fingerprint_back_to_home";
+     field public static final java.lang.String FP_CAMERA = "tct_private_fingerprint_take_photo";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerPrintManagerSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerPrintManagerSettings.java	(revision 4233)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerPrintManagerSettings.java	(revision 4234)
+@@ -56,9 +56,11 @@
+ 			
+ 		private static final String KEY_FINGERPRINT_MANAGER = "fingerprint_manager";
+ 		private static final String KEY_FINGERPRINT_TAKE_PHOTO = "fingerprint_take_photo_or_video";
++		private static final String KEY_FINGERPRINT_BACK_TO_HOME_SCREEN = "fingerprint_back_to_home_screen";
+ 		private static final int DEVICE_FINGEPRINT_SWITCH_OPEN=1;
+ 		private static final int DEVICE_FINGEPRINT_SWITCH_CLOSE=0;
+ 		private SwitchPreference mTakePhotoePreference;
++		private SwitchPreference mBackToHomePreference;
+ 		private Preference mFingerprintManager;	
+ 		private Intent mIntent;
+ 		private int mUserId;
+@@ -85,6 +87,12 @@
+                         Settings.System.FP_CAMERA, 0)==1);
+ 				mTakePhotoePreference.setOnPreferenceChangeListener(this);
+ 			}
++			if(mBackToHomePreference == null) {
++				mBackToHomePreference = (SwitchPreference) findPreference(KEY_FINGERPRINT_BACK_TO_HOME_SCREEN);
++				mBackToHomePreference.setChecked(Settings.System.getInt(mContext.getContentResolver(),
++                        Settings.System.FP_BACK_TO_HOME, 0)==1);
++				mBackToHomePreference.setOnPreferenceChangeListener(this);
++			}
+         }	
+ 		
+ 		@Override
+@@ -113,6 +121,10 @@
+                 boolean onOrOff = (Boolean) objValue;
+             	Settings.System.putInt(preference.getContext().getContentResolver(),
+                         Settings.System.FP_CAMERA, onOrOff ? DEVICE_FINGEPRINT_SWITCH_OPEN: DEVICE_FINGEPRINT_SWITCH_CLOSE);
++			} else if (preference == mBackToHomePreference) {
++				boolean onOrOff = (Boolean) objValue;
++				Settings.System.putInt(preference.getContext().getContentResolver(),
++                        Settings.System.FP_BACK_TO_HOME, onOrOff ? 1: 0);
+ 			}
+ 			return true;
+ 		}
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 4233)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 4234)
+@@ -3402,4 +3402,6 @@
+ 	<string name="keywords_turn_off_at">关闭</string>
+ 	<string name="setting_time_error">设置时间错误</string>
+ 	<string name="auto_time_night_mode">22:00 to 7:00</string>
++	<string name="fingerprint_manager_back_to_home_title">返回主界面</string>
++	<string name="fingerprint_manager_back_to_home_summary">在任意界面触摸指纹传感器返回主界面。</string>
+ </resources>
+Index: packages/apps/Settings/res/xml/security_settings_fingerprint_manager.xml
+===================================================================
+--- packages/apps/Settings/res/xml/security_settings_fingerprint_manager.xml	(revision 4233)
++++ packages/apps/Settings/res/xml/security_settings_fingerprint_manager.xml	(revision 4234)
+@@ -29,7 +29,11 @@
+ 			android:key="fingerprint_take_photo_or_video"
+ 			android:title="@string/fingerprint_manager_take_photo_title"
+ 			android:summary="@string/fingerprint_manager_take_photo_summary" />
+-
++			
++		<SwitchPreference
++			android:key="fingerprint_back_to_home_screen"
++			android:title="@string/fingerprint_manager_back_to_home_title"
++			android:summary="@string/fingerprint_manager_back_to_home_summary" />
+     </PreferenceCategory>
+ 
+ </PreferenceScreen>
+Index: packages/apps/Settings/res/values-zh-rTW/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rTW/strings.xml	(revision 4233)
++++ packages/apps/Settings/res/values-zh-rTW/strings.xml	(revision 4234)
+@@ -3319,4 +3319,7 @@
+     <string name="navigationbar_button_layout_type_hide">"隱藏導航欄"</string>
+     <string name="navigationbar_background_color_title">"背景色"</string>
+     <string name="navigationbar_background_color_summary">"改變導航欄的背景色，但不一定適用於所有的應用。"</string>
++	
++	<string name="fingerprint_manager_back_to_home_title">返回主界面</string>
++	<string name="fingerprint_manager_back_to_home_summary">在任意界面觸摸指紋傳感器返回主界面。</string>
+ </resources>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 4233)
++++ packages/apps/Settings/res/values/strings.xml	(revision 4234)
+@@ -8103,4 +8103,7 @@
+ 	<string name="fingerprint_function_dialog_ok_button">RESET</string>
+ 	<string name="fingerprint_preference_unclock_summary">Unclock device</string>
+ 	<string name="fingerprint_preference_trigger_summary">Trigger </string>
++	
++	<string name="fingerprint_manager_back_to_home_title">Back to home screen</string>
++	<string name="fingerprint_manager_back_to_home_summary">Touch the fingerprint sensor to go back to home screen.</string>
+ </resources>
+Index: packages/apps/Settings/res/values-zh-rHK/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rHK/strings.xml	(revision 4233)
++++ packages/apps/Settings/res/values-zh-rHK/strings.xml	(revision 4234)
+@@ -3322,4 +3322,7 @@
+     <string name="navigationbar_button_layout_type_hide">"隱藏導航欄"</string>
+     <string name="navigationbar_background_color_title">"背景色"</string>
+     <string name="navigationbar_background_color_summary">"改變導航欄的背景色，但不一定適用於所有的應用。"</string>
++	
++	<string name="fingerprint_manager_back_to_home_title">返回主界面</string>
++	<string name="fingerprint_manager_back_to_home_summary">在任意界面觸摸指紋傳感器返回主界面。</string>
+ </resources>

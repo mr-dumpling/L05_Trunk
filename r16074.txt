@@ -1,0 +1,156 @@
+Index: vendor/branch/5058A_Bitel_Peru/vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 16073)
++++ vendor/branch/5058A_Bitel_Peru/vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 16074)
+@@ -30,6 +30,12 @@
+ 
+ import java.util.ArrayList;
+ 
++import android.app.Service;
++import android.telephony.TelephonyManager;
++import android.telephony.SubscriptionManager;
++import android.telephony.SubscriptionInfo;
++import java.util.List;
++
+ /**
+  * The application class loads the default preferences at first start,
+  * and remembers the time of the most recently received broadcast.
+@@ -63,10 +69,95 @@
+         }
+ 
+         // For PWS
+-        IntentFilter plmnFliter = new IntentFilter();
+-        plmnFliter.addAction(TelephonyIntents.ACTION_LOCATED_PLMN_CHANGED);
+-        registerReceiver(mPLMNChangedBroadcastReceiver, plmnFliter);
++        //IntentFilter plmnFliter = new IntentFilter();
++        //plmnFliter.addAction(TelephonyIntents.ACTION_LOCATED_PLMN_CHANGED);
++        //registerReceiver(mPLMNChangedBroadcastReceiver, plmnFliter);
++		
++		// For Peru
++		IntentFilter simStatesChangeFliter = new IntentFilter();
++        simStatesChangeFliter.addAction("android.intent.action.SIM_STATE_CHANGED");
++        registerReceiver(mSimCardStateChangeReceiver, simStatesChangeFliter);
+     }
++	
++	private final BroadcastReceiver mSimCardStateChangeReceiver = new BroadcastReceiver() {
++		public void onReceive(Context context, Intent intent) {
++			if (intent.getAction().equals("android.intent.action.SIM_STATE_CHANGED")) {
++				TelephonyManager tm = (TelephonyManager)context.getSystemService(Service.TELEPHONY_SERVICE);
++				int state = tm.getSimState();
++				switch(state) {
++					case TelephonyManager.SIM_STATE_READY:
++						SubscriptionManager subscriptionManager = SubscriptionManager.from(context);
++						List<SubscriptionInfo> subList = subscriptionManager.getActiveSubscriptionInfoList();
++						if(subList != null && subList.size() > 0) {
++							for (int i = 0;i < subList.size(); i++) {
++								SubscriptionInfo info = subList.get(i);
++								if(info != null) {
++									int mcc = info.getMcc();
++									Log.i("cbapp","mcc = " + mcc);
++									if (mcc == 466) {
++										sIsCellAreaInTw = true;
++										sIsCellAreaInChile = false;
++										sIsCellAreaInPeru = false;
++										sIsCellAreaInBrizal = false;
++										sIsCellAreaInNetherlands = false;
++									} else if (mcc == 730) {
++										sIsCellAreaInTw = false;
++										sIsCellAreaInChile = true;
++										sIsCellAreaInPeru = false;
++										sIsCellAreaInBrizal = false;
++										sIsCellAreaInNetherlands = false;			 
++									} else if (mcc == 732) {
++										sIsCellAreaInTw = false;
++										sIsCellAreaInPeru = false;
++										sIsCellAreaInChile = true;
++										sIsCellAreaInBrizal = false;
++										sIsCellAreaInNetherlands = false;
++									} else if (mcc == 716) {
++										sIsCellAreaInTw = false;
++										sIsCellAreaInChile = false;
++										sIsCellAreaInPeru = true;
++										sIsCellAreaInBrizal = false;
++										sIsCellAreaInNetherlands = false;
++									} else if (mcc == 724) {
++										sIsCellAreaInTw = false;
++										sIsCellAreaInChile = false;
++										sIsCellAreaInPeru = false;
++										sIsCellAreaInBrizal = true;
++										sIsCellAreaInNetherlands = false;
++									} else if (mcc == 204) {
++										sIsCellAreaInTw = false;
++										sIsCellAreaInChile = false;
++										sIsCellAreaInPeru = false;
++										sIsCellAreaInBrizal = false;
++										sIsCellAreaInNetherlands = true;
++									}else {
++										sIsCellAreaInTw = false;
++										sIsCellAreaInChile = false;
++										sIsCellAreaInPeru = false;
++										sIsCellAreaInBrizal = false;
++										sIsCellAreaInNetherlands = false;
++									}
++								} else {
++									sIsCellAreaInTw = false;
++									sIsCellAreaInChile = false;
++									sIsCellAreaInPeru = false;
++									sIsCellAreaInBrizal = false;
++									sIsCellAreaInNetherlands = false;
++								}
++							} 				
++						}
++						break;
++					case TelephonyManager.SIM_STATE_UNKNOWN:
++					case TelephonyManager.SIM_STATE_ABSENT:
++					case TelephonyManager.SIM_STATE_PIN_REQUIRED:
++					case TelephonyManager.SIM_STATE_PUK_REQUIRED:
++					case TelephonyManager.SIM_STATE_NETWORK_LOCKED:		
++					default:
++						break;	
++				}
++			}
++		}
++	};
+ 
+     // For Taiwan PWS-START
+     private final BroadcastReceiver mPLMNChangedBroadcastReceiver = new BroadcastReceiver() {
+Index: vendor/branch/5058A_Bitel_Peru/vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastListActivity.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastListActivity.java	(revision 16073)
++++ vendor/branch/5058A_Bitel_Peru/vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastListActivity.java	(revision 16074)
+@@ -186,16 +186,16 @@
+ 
+     @Override
+     public boolean onCreateOptionsMenu(Menu menu) {
+-        menu.add(0, MENU_DELETE_ALL, 0, R.string.menu_delete_all).setIcon(
++        /**menu.add(0, MENU_DELETE_ALL, 0, R.string.menu_delete_all).setIcon(
+                 android.R.drawable.ic_menu_delete);
+         menu.add(0, MENU_PREFERENCES, 0, R.string.menu_preferences).setIcon(
+-                android.R.drawable.ic_menu_preferences);
++                android.R.drawable.ic_menu_preferences); **/
+         return super.onCreateOptionsMenu(menu);
+     }
+ 
+     @Override
+     public boolean onOptionsItemSelected(MenuItem item) {
+-        switch(item.getItemId()) {
++        /**switch(item.getItemId()) {
+             case MENU_DELETE_ALL:
+                 confirmDeleteThread(true, null);
+                 break;
+@@ -207,13 +207,13 @@
+ 
+             default:
+                 return true;
+-        }
++        } **/
+         return super.onOptionsItemSelected(item);
+     }
+ 
+     @Override
+     public boolean onPrepareOptionsMenu(Menu menu) {
+-        menu.findItem(MENU_DELETE_ALL).setVisible(!mListAdapter.isEmpty());
++        //menu.findItem(MENU_DELETE_ALL).setVisible(!mListAdapter.isEmpty());
+         return super.onPrepareOptionsMenu(menu);
+     }
+ 

@@ -1,0 +1,697 @@
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/AndroidManifest.xml	(revision 15247)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/AndroidManifest.xml	(revision 15248)
+@@ -3051,7 +3051,21 @@
+             <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                 android:value="com.android.settings.applications.DrawOverlayDetails" />
+         </activity>
++        <activity android:name=".sim.SetupWizardMultiSimSettings"
++                android:label="@string/data_usage_enable_mobile_algb"
++                android:theme="@style/SetupWizardAccessibilityTheme"
++                android:exported="true"
++                 >
++            <intent-filter android:priority="100">
++                    <action android:name="com.android.setupwizard.SIM_SETUP_CHECK" />
++                    <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>	  
++            <intent-filter>
++                    <action android:name="android.intent.action.MAIN" />		
++            </intent-filter>
++        </activity>
+ 
++
+         <activity android:name="Settings$WriteSettingsActivity"
+                 android:label="@string/write_settings_title"
+                 android:taskAffinity="">
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java	(revision 0)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java	(revision 15248)
+@@ -0,0 +1,179 @@
++/*
++ * Copyright (C) 2008 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings.sim;
++
++import android.app.Activity;
++import android.app.AlarmManager;
++import android.content.Context;
++import android.os.Bundle;
++import android.provider.Settings;
++import android.content.Intent;
++import android.support.v14.preference.PreferenceFragment;
++import android.support.v7.preference.Preference;
++import android.util.Log;
++import android.view.View;
++import android.view.View.OnClickListener;
++import android.view.Window;
++import android.telecom.PhoneAccountHandle;
++import android.widget.Button;
++import android.telecom.TelecomManager;
++
++import com.android.settings.R;
++import android.widget.CompoundButton;
++import android.telephony.SubscriptionInfo;
++import com.android.setupwizardlib.util.WizardManagerHelper;
++import android.telephony.TelephonyManager;
++import android.telephony.SubscriptionManager;
++import java.util.List;
++import android.widget.Switch;
++import android.telecom.PhoneAccount;
++import java.util.Iterator;
++public class SetupWizardMultiSimSettings extends Activity
++        implements OnClickListener{
++
++	Context mContext;
++	TelephonyManager tm;
++	SubscriptionManager subscriptionManager;
++	Switch dataSwitch,roaming_switch;
++	boolean isDataOpen = false;
++   
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        requestWindowFeature(Window.FEATURE_NO_TITLE);
++		mContext = getBaseContext();	
++		tm = TelephonyManager.from(mContext);
++		if(!hasIccCard()){
++			Intent intent = WizardManagerHelper.getNextIntent(getIntent(), Activity.RESULT_OK);
++			startActivityForResult(intent, 1000);
++			finish();
++		}
++        super.onCreate(savedInstanceState);
++		subscriptionManager = SubscriptionManager.from(mContext);
++		setDefault();
++        setContentView(R.layout.sim_settings_setupwizard);
++        findViewById(R.id.next_button_1).setOnClickListener(this);    
++    }
++	
++    boolean hasIccCard() {
++        if (tm != null) {
++            return tm.hasIccCard();
++        }
++        return false;
++    }
++	
++    @Override
++    public void onResume() {
++        super.onResume();
++    }
++
++	private void setDefault(){
++		setDefaultData();
++		setDefaultSms();
++		setDefaultCalls();
++	}
++	
++	private void setDefaultData(){
++		if(SubscriptionManager.getDefaultDataSubscriptionId()!=-1){	
++			return;
++		}
++		if(tm.hasIccCard(0) && !tm.hasIccCard(1)){
++			int[] subid = SubscriptionManager.getSubId(0);
++			if(subscriptionManager.isActiveSubId(subid[0]) && (SubscriptionManager.getDefaultDataSubscriptionId() != subid[0])){
++				subscriptionManager.setDefaultDataSubId(subid[0]);
++				tm.setDataEnabled(subid[0], false);
++			}
++		}else if(tm.hasIccCard(1) && !tm.hasIccCard(0)){
++			int[] subid = SubscriptionManager.getSubId(1);
++			if(subscriptionManager.isActiveSubId(subid[0]) && (SubscriptionManager.getDefaultDataSubscriptionId() != subid[0])){
++				subscriptionManager.setDefaultDataSubId(subid[0]);
++				tm.setDataEnabled(subid[0], false);
++			}
++		}
++	}
++	
++	private void setDefaultSms(){
++		if(SubscriptionManager.getDefaultSmsSubscriptionId()!=-1){			
++			return;
++		}
++		if(tm.hasIccCard(0) && !tm.hasIccCard(1) ){
++			int[] subid = SubscriptionManager.getSubId(0);
++			if(subscriptionManager.isActiveSubId(subid[0]) && SubscriptionManager.getDefaultSmsSubscriptionId() != subid[0]){
++				subscriptionManager.setDefaultSmsSubId(subid[0]);
++			}
++		}else if(tm.hasIccCard(1) && !tm.hasIccCard(0)){
++			int[] subid = SubscriptionManager.getSubId(1);
++			if(subscriptionManager.isActiveSubId(subid[0]) && SubscriptionManager.getDefaultSmsSubscriptionId() != subid[0]){
++				subscriptionManager.setDefaultSmsSubId(subid[0]);
++			}
++		}
++	}
++	
++	private void setDefaultCalls(){
++		if(SubscriptionManager.getDefaultVoiceSubscriptionId()!=-1){
++			return;
++		}
++		
++		PhoneAccountHandle phoneAccountHandle;
++		TelecomManager telecomManager = TelecomManager.from(mContext);
++		if(tm.hasIccCard(0)&& !tm.hasIccCard(1)){			
++			int[] subid = SubscriptionManager.getSubId(0);
++			if(subscriptionManager.isActiveSubId(subid[0]) && SubscriptionManager.getDefaultVoiceSubscriptionId() != subid[0]){
++				phoneAccountHandle = subscriptionIdToPhoneAccountHandle(subid[0]);
++				telecomManager.setUserSelectedOutgoingPhoneAccount(phoneAccountHandle);
++			}
++		}else if(tm.hasIccCard(1)  && !tm.hasIccCard(0)){
++			int[] subid = SubscriptionManager.getSubId(1);
++			if(subscriptionManager.isActiveSubId(subid[0]) && SubscriptionManager.getDefaultVoiceSubscriptionId() != subid[0]){
++				phoneAccountHandle = subscriptionIdToPhoneAccountHandle(subid[0]);
++				telecomManager.setUserSelectedOutgoingPhoneAccount(phoneAccountHandle);
++			}
++		}
++	}
++	private PhoneAccountHandle subscriptionIdToPhoneAccountHandle(final int subId) {
++        final TelecomManager telecomManager = TelecomManager.from(this);
++        final TelephonyManager telephonyManager = TelephonyManager.from(this);
++        final Iterator<PhoneAccountHandle> phoneAccounts =
++                telecomManager.getCallCapablePhoneAccounts().listIterator();
++
++        while (phoneAccounts.hasNext()) {
++            final PhoneAccountHandle phoneAccountHandle = phoneAccounts.next();
++            final PhoneAccount phoneAccount = telecomManager.getPhoneAccount(phoneAccountHandle);
++            if (subId == telephonyManager.getSubIdForPhoneAccount(phoneAccount)) {
++                return phoneAccountHandle;
++            }
++        }
++
++        return null;
++    }
++
++    @Override
++    public void onPause() {
++        super.onPause();
++    }
++
++    @Override
++    public void onClick(View view) {
++        switch (view.getId()) {
++        case R.id.next_button_1: 
++			Intent intent = WizardManagerHelper.getNextIntent(getIntent(), Activity.RESULT_OK);
++			startActivityForResult(intent, 1000);
++			overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
++			break;    
++        }
++    }
++
++}
+
+Property changes on: vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 0)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 15248)
+@@ -0,0 +1,200 @@
++/*
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings.sim;
++
++import android.app.AlertDialog;
++import android.content.BroadcastReceiver;
++import android.content.DialogInterface;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.content.res.Resources;
++import android.graphics.drawable.BitmapDrawable;
++import android.os.Bundle;
++import android.os.SystemProperties;
++import android.os.RemoteException;
++import android.os.ServiceManager;
++import android.provider.SearchIndexableResource;
++import android.support.v7.preference.CheckBoxPreference;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.PreferenceScreen;
++import android.support.v7.preference.PreferenceCategory;
++import android.telecom.PhoneAccountHandle;
++import android.telecom.TelecomManager;
++import android.telephony.PhoneNumberUtils;
++import android.provider.Settings;
++import android.telephony.PhoneStateListener;
++import android.telephony.ServiceState;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.telecom.PhoneAccount;
++import android.widget.Toast;
++import com.android.internal.telephony.PhoneFactory;
++
++import android.text.TextUtils;
++import android.util.Log;
++
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++import com.android.internal.telephony.TelephonyProperties;
++import com.android.settings.R;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.settings.RestrictedSettingsFragment;
++import com.android.settings.Utils;
++import com.android.settings.search.BaseSearchIndexProvider;
++import com.android.settings.search.Indexable;
++
++import com.mediatek.internal.telephony.ITelephonyEx;
++import com.mediatek.settings.FeatureOption;
++import com.mediatek.settings.UtilsExt;
++import com.mediatek.settings.cdma.CdmaUtils;
++import com.mediatek.settings.ext.ISettingsMiscExt;
++import com.mediatek.settings.ext.ISimManagementExt;
++import com.mediatek.settings.sim.RadioPowerController;
++import com.mediatek.settings.sim.RadioPowerPreference;
++import com.mediatek.settings.sim.SimHotSwapHandler;
++import com.mediatek.settings.sim.TelephonyUtils;
++import com.mediatek.settings.sim.SimHotSwapHandler.OnSimHotSwapListener;
++import com.mediatek.telecom.TelecomManagerEx;
++import com.android.internal.telephony.Phone;
++
++import java.util.ArrayList;
++import java.util.List;
++import android.support.v7.preference.ListPreference;
++import android.support.v14.preference.SwitchPreference;
++import android.support.v7.preference.Preference.OnPreferenceChangeListener;
++import android.provider.Settings.SettingNotFoundException;
++
++public class SimSettings extends RestrictedSettingsFragment implements Indexable {
++    private static final String TAG = "SimSettings";
++    private static final boolean DBG = true;
++
++    private static final String DISALLOW_CONFIG_SIM = "no_config_sim";
++    private static final String MOBILE_DATA_ENABLE_KEY = "mobile_data_enable";
++    private static final String MOBILE_DATA_LIST_KEY = "mobile_data_roaming_opt";
++    public static final String EXTRA_SLOT_ID = "slot_id";
++
++
++    private Context mContext;
++    private TelephonyManager tm;
++    private CheckBoxPreference mChkbox;
++    private ListPreference mList;
++
++    public SimSettings() {
++        super(DISALLOW_CONFIG_SIM);
++    }
++
++    @Override
++    protected int getMetricsCategory() {
++        return MetricsEvent.SIM;
++    }
++
++    @Override
++    public void onCreate(final Bundle bundle) {
++        super.onCreate(bundle);
++        mContext = getActivity();
++
++        tm = (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
++        addPreferencesFromResource(R.xml.sim_settings);
++        initDefault();
++    }
++	
++	private void initDefault(){
++		mChkbox = (CheckBoxPreference)findPreference(MOBILE_DATA_ENABLE_KEY);
++		boolean bData = tm.getDataEnabled();
++		if(mChkbox != null){
++			mChkbox.setChecked(bData);
++		}
++		mList = (ListPreference)findPreference(MOBILE_DATA_LIST_KEY);
++		
++		mChkbox.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
++			@Override
++			public boolean onPreferenceChange(Preference preference, Object newValue) {
++				boolean val = (Boolean) newValue;
++				Log.d(TAG, "javen initDefault mChkbox newValue = " + newValue);
++				tm.setDataEnabled(val);
++				return true;
++			}
++		});
++		
++		mList.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
++			@Override
++			public boolean onPreferenceChange(Preference preference, Object newValue) {
++				//Log.d(TAG, "javen initDefault mList newValue = " + newValue);
++				CharSequence[] arV = mList.getEntries();
++				int idx=mList.findIndexOfValue((String)newValue);
++				mList.setSummary(arV[idx]);
++				android.provider.Settings.Global.putInt(mContext.getContentResolver(), android.provider.Settings.Global.DATA_ROAMING, idx);
++                setRoamType(idx);
++				return true;
++			}
++		});
++
++		if(mList != null){
++			CharSequence[] arV = mList.getEntries();
++			Log.d(TAG, "javen initDefault mList = " + mList + ", arV = " + arV);
++			int nDataRoamingMode = -1;
++			try {
++				nDataRoamingMode = TelephonyManager.getIntWithSubId(mContext.getContentResolver(),android.provider.Settings.Global.DATA_ROAMING, 0);
++				int idx=mList.findIndexOfValue(Integer.toString(nDataRoamingMode));
++				Log.d(TAG, "javen initDefault nDataRoamingMode = " + nDataRoamingMode + ", idx = " + idx);
++				if(idx >=0 && idx < arV.length){
++					mList.setValue(Integer.toString(nDataRoamingMode));
++					mList.setSummary(arV[idx]);
++				}
++			} catch (SettingNotFoundException snfe) {
++				Log.e(TAG, "initDefault: SettingNotFoundException snfe=" + snfe);
++			}			
++		}
++	}
++
++	private void setRoamType(int nRoam){
++		android.provider.Settings.Global.putInt(mContext.getContentResolver(), android.provider.Settings.Global.DATA_ROAMING + 0, nRoam);
++	}
++
++
++    @Override
++    public boolean onPreferenceTreeClick(final Preference preference) {
++        final Context context = mContext;
++        return true;
++    }
++
++    /**
++     * For search
++     */
++    public static final SearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
++            new BaseSearchIndexProvider() {
++                @Override
++                public List<SearchIndexableResource> getXmlResourcesToIndex(Context context,
++                        boolean enabled) {
++                    ArrayList<SearchIndexableResource> result =
++                            new ArrayList<SearchIndexableResource>();
++
++                    if (Utils.showSimCardTile(context)) {
++                        SearchIndexableResource sir = new SearchIndexableResource(context);
++                        sir.xmlResId = R.xml.sim_settings;
++                        result.add(sir);
++                    }
++
++                    return result;
++                }
++            };
++
++
++
++     ///----------------------------------------MTK-----------------------------------------------
++}
+
+Property changes on: vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/res/layout-land/sim_settings_setupwizard.xml
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/res/layout-land/sim_settings_setupwizard.xml	(revision 0)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/res/layout-land/sim_settings_setupwizard.xml	(revision 15248)
+@@ -0,0 +1,87 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2008 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++        android:id="@+id/layout_root"
++        android:layout_height="fill_parent"
++        android:layout_width="fill_parent"
++        android:orientation="vertical">
++		
++	
++    <View
++        android:id="@+id/simcards_dropdown_anchor"
++        android:layout_width="match_parent"
++        android:layout_marginStart="20dip"
++        android:layout_marginEnd="20dip"
++        android:layout_height="0px" />
++		
++	<ImageView android:id="@+id/imageView"
++        android:layout_width="fill_parent"
++        android:layout_height="0dp"
++        android:src="@drawable/mobile_data" />	
++	<TextView
++        android:id="@+id/column2"
++	    android:layout_marginTop="10dp"
++	    android:layout_marginLeft="15dp"
++	    android:textSize="20dp"
++	    style="@style/TextAppearance.SuggestionTitle"
++		android:textColor="@color/black"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++	    android:text="@string/data_usage_enable_mobile_algb"
++        >
++    </TextView>
++	<TextView
++        android:id="@+id/mobile_data_tip"
++	    android:layout_marginTop="10dp"
++	    android:layout_marginLeft="15dp"
++	    android:textSize="18dp"
++	    style="@style/TextAppearance"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++	    android:text="@string/mobile_data_tip"
++        >
++    </TextView>
++    <LinearLayout android:layout_height="0px"
++                  android:layout_weight="1"
++                  android:layout_width="fill_parent"
++				  android:layout_marginTop="0dp"
++                  android:orientation="vertical">
++        <fragment android:id="@+id/sim_settings_fragment"
++                  class="com.android.settings.sim.SimSettings"
++                  android:layout_width="fill_parent"
++                  android:layout_height="fill_parent" />
++    </LinearLayout>
++	
++    <RelativeLayout android:layout_height="wrap_content"
++        android:layout_weight="0"
++        android:padding="10dip"
++        android:layout_width="wrap_content">
++
++        <Button android:id="@+id/next_button_1"
++            style="@style/SetupWizardButton.Positive"
++            android:layout_width="wrap_content"
++            android:textColor="#FFFFFF"
++	        android:textSize="15dp"
++            android:background="#4285F4"
++            android:layout_height="35dp"
++            android:layout_alignParentEnd="true"
++            android:text="@string/next_label"
++        />
++
++    </RelativeLayout>
++
++</LinearLayout>
+
+Property changes on: vendor/branch/5058Y_ALIE/packages/apps/Settings/res/layout-land/sim_settings_setupwizard.xml
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/res/layout/sim_settings_setupwizard.xml
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/res/layout/sim_settings_setupwizard.xml	(revision 0)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/res/layout/sim_settings_setupwizard.xml	(revision 15248)
+@@ -0,0 +1,87 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2008 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++        android:id="@+id/layout_root"
++        android:layout_height="fill_parent"
++        android:layout_width="fill_parent"
++        android:orientation="vertical">
++		
++	
++    <View
++        android:id="@+id/simcards_dropdown_anchor"
++        android:layout_width="match_parent"
++        android:layout_marginStart="20dip"
++        android:layout_marginEnd="20dip"
++        android:layout_height="0px" />
++		
++	<ImageView android:id="@+id/imageView"
++        android:layout_width="fill_parent"
++        android:layout_height="wrap_content"
++        android:src="@drawable/mobile_data" />	
++	<TextView
++        android:id="@+id/column2"
++	    android:layout_marginTop="-50dp"
++	    android:layout_marginLeft="15dp"
++	    android:textSize="20dp"
++	    style="@style/TextAppearance.SuggestionTitle"
++		android:textColor="@color/white"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++	    android:text="@string/data_usage_enable_mobile_algb"
++        >
++    </TextView>
++	<TextView
++        android:id="@+id/mobile_data_tip"
++	    android:layout_marginTop="30dp"
++	    android:layout_marginLeft="15dp"
++	    android:textSize="18dp"
++	    style="@style/TextAppearance"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++	    android:text="@string/mobile_data_tip"
++        >
++    </TextView>
++    <LinearLayout android:layout_height="0px"
++                  android:layout_weight="1"
++                  android:layout_width="fill_parent"
++				  android:layout_marginTop="-40dp"
++                  android:orientation="vertical">
++        <fragment android:id="@+id/sim_settings_fragment"
++                  class="com.android.settings.sim.SimSettings"
++                  android:layout_width="fill_parent"
++                  android:layout_height="fill_parent" />
++    </LinearLayout>
++	
++    <RelativeLayout android:layout_height="wrap_content"
++        android:layout_weight="0"
++        android:padding="10dip"
++        android:layout_width="wrap_content">
++
++        <Button android:id="@+id/next_button_1"
++            style="@style/SetupWizardButton.Positive"
++            android:layout_width="wrap_content"
++            android:textColor="#FFFFFF"
++	        android:textSize="15dp"
++            android:background="#4285F4"
++            android:layout_height="35dp"
++            android:layout_alignParentEnd="true"
++            android:text="@string/next_label"
++        />
++
++    </RelativeLayout>
++
++</LinearLayout>
+
+Property changes on: vendor/branch/5058Y_ALIE/packages/apps/Settings/res/layout/sim_settings_setupwizard.xml
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/res/xml/sim_settings.xml
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/res/xml/sim_settings.xml	(revision 0)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/res/xml/sim_settings.xml	(revision 15248)
+@@ -0,0 +1,39 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2014 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
++    android:key="sim_cards"
++    android:title="@string/data_usage_enable_mobile_algb">
++
++    <PreferenceCategory
++            android:key="sim_activities"
++            android:title="@null" >
++        <CheckBoxPreference
++            android:key="mobile_data_enable"
++            android.defaultValue="true"
++            android:title="Data Enabled"
++            android:summary="Enable data access to mobile network" />
++        <ListPreference
++            android:key="mobile_data_roaming_opt"
++            android:title="@string/roaming"
++            android:summary="@string/preferred_roaming_mode_summary"
++            android:entries="@array/preferred_roaming_mode_choices_alie"
++            android:entryValues="@array/preferred_roaming_mode_values"
++            android:dialogTitle="@string/preferred_roaming_mode_dialogtitle" />
++
++    </PreferenceCategory>
++
++</PreferenceScreen>
+
+Property changes on: vendor/branch/5058Y_ALIE/packages/apps/Settings/res/xml/sim_settings.xml
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/res/drawable-xxhdpi/mobile_data.jpg
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/res/drawable-xxhdpi/mobile_data.jpg
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/res/drawable-xxhdpi/mobile_data.jpg	(revision 0)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/res/drawable-xxhdpi/mobile_data.jpg	(revision 15248)
+
+Property changes on: vendor/branch/5058Y_ALIE/packages/apps/Settings/res/drawable-xxhdpi/mobile_data.jpg
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property

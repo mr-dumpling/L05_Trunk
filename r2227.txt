@@ -1,0 +1,416 @@
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/fingerprint/Fingerprint.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/fingerprint/Fingerprint.java	(revision 2226)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/fingerprint/Fingerprint.java	(revision 2227)
+@@ -22,11 +22,55 @@
+ 
+ import android.content.ComponentName;
+ 
++import android.annotation.Nullable;
++import android.content.Intent;
++import android.hardware.fingerprint.FingerprintManager;
++import android.os.CancellationSignal;
++import android.os.Handler;
++import android.os.UserHandle;
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++import android.os.CancellationSignal;
++import android.os.Handler;
++import android.os.Message;
++import java.io.BufferedReader;
++import java.io.FileNotFoundException;
++import java.io.FileReader;
++import java.io.IOException;
+ public class Fingerprint extends Activity implements OnClickListener{
+ 	private static final int PROGRESS_BAR_MAX = 10000;
+-	//private Button succesButton ;
+-	//private Button failButton ;
++	private boolean result4Flag = false;
++	private boolean result5Flag = false;
++	private boolean result6Flag = false;
++	private boolean result1Flag = false;
++	private boolean result2Flag = false;
++	private boolean result3Flag = false;
++	TextView result1,result2,result3,result4,result5,result6;
+ 	Button bt_base_left, bt_base_right;
++	int remain;
++	int i =0;
++	private FingerprintManager mFingerprintManager;
++	protected byte[] token;
++	private CancellationSignal mEnrollmentCancel;
++	Handler handler = new Handler() {
++			public void handleMessage(Message msg) {
++					result4.setText("pass");
++					result4Flag=true;
++					if(i==1){
++						result5.setText("pass");
++						result5Flag=true;
++					}else if(i==2){
++						result6.setText("pass");
++						result6Flag=true;
++						}
++					i++;
++				
++				super.handleMessage(msg);
++				if(result4Flag == true && result5Flag == true && result6Flag == true 
++					&& result1Flag == true && result2Flag == true && result3Flag == true){
++					bt_base_left.setEnabled(true);
++				}
++			}
++		};
+ 	@Override
+ 	protected void onCreate(Bundle savedInstanceState) {
+ 		// TODO Auto-generated method stub
+@@ -34,12 +78,13 @@
+ 		//getWindow().addFlags(WindowManager.LayoutParams.FLAG_HOMEKEY_DISPATCHED);
+ 		setContentView(R.layout.activity_fingerprint);
+ 
++		mFingerprintManager = this.getSystemService(FingerprintManager.class);
+         Intent i = new Intent(Intent.ACTION_MAIN);
+         i.setComponent(new ComponentName("com.android.settings","com.android.settings.fingerprint.FingerprintEnrollFindSensor"));
+-        byte[] token = new byte[69];
++        token = new byte[69];
+         i.putExtra("hw_auth_token", token);
+         i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+-        startActivity(i);
++     //  startActivity(i);
+ 
+ 		
+ 		bt_base_left = (Button) findViewById(R.id.bt_base_left);
+@@ -50,24 +95,27 @@
+ 		bt_base_right.setText(R.string.bt_fail);
+ 		bt_base_right.setOnClickListener(this);
+ 		
+-	/*	
+-		IntentFilter mfilter = new IntentFilter();
+-		mfilter.addAction("intent.action.finger_FACTORY_MODE_TEST");
+-		registerReceiver(new BroadcastReceiver() {
+-			@Override
+-			public void onReceive(Context context, Intent intent) {
+-				Log.v("Finger", "finger_FACTORY_MODE_TEST");
+-				int progress = intent.getIntExtra("progress", 0);
+-				if (progress > 0) {
+-				    bt_base_left.setEnabled(true);
+-				}
+-				if (progress >= PROGRESS_BAR_MAX) {
+-				    testFinish();
+-			  }
+-			}
+-        }, mfilter);*/
+-		bt_base_left.setEnabled(true);
++		result1= (TextView) findViewById(R.id.result1);
++		result2= (TextView) findViewById(R.id.result2);
++		result3= (TextView) findViewById(R.id.result3);
++		
++		result4= (TextView) findViewById(R.id.result4);
++		result5= (TextView) findViewById(R.id.result5);
++		result6= (TextView) findViewById(R.id.result6);
++	
++		bt_base_left.setEnabled(false);
++	if(getFingerflag().equalsIgnoreCase("0x1")){
++			result1.setText("pass");
++			result1Flag=true;
++			result2.setText("pass");
++			result2Flag=true;
++			result3.setText("pass");
++			result3Flag=true;
+ 	}
++	mEnrollmentCancel = new CancellationSignal();
++	mFingerprintManager.enroll(token, mEnrollmentCancel,
++                0 /* flags */, 0, mEnrollmentCallback);
++	}
+ 	
+ 	
+ 	public void testFinish() {
+@@ -130,4 +178,50 @@
+ 		}
+ 		return super.onKeyUp(keyCode, event);
+ 	}
++	   private FingerprintManager.EnrollmentCallback mEnrollmentCallback
++            = new FingerprintManager.EnrollmentCallback() {
++        @Override
++        public void onEnrollmentProgress(int remaining) {
++		  	Message message = new Message();
++			message.what = remaining;
++			handler.sendMessage(message);
++        }
++        @Override
++        public void onEnrollmentHelp(int helpMsgId, CharSequence helpString) {
++            Log.i("tag","helpString  "+helpString);
++        }
++        @Override
++        public void onEnrollmentError(int errMsgId, CharSequence errString) {
++        Log.i("tag","errString  "+errString);
++    }};
++	private static String getFingerflag() {
++		String filePath = "/proc/finger_flag";
++        String tpFwVersion = "unknow";
++        try {
++            BufferedReader reader = new BufferedReader(new FileReader(filePath), 256);
++            if (reader != null) {
++                try {
++                    int version = reader.read();
++                    tpFwVersion = "0x" + Integer.toHexString(version);
++                } catch (IOException e) {
++                    Log.e("TAG", "getFingerflag readLine failed!");
++                }
++            }
++        } catch (FileNotFoundException e) {
++            Log.e("TAG", "getFingerflag new BufferedReader failed!");
++        }
++        return tpFwVersion;
++    }
++	protected void delay() {
++	 	new Thread(new Runnable()
++        {  
++            public void run()
++            {  
++                try {
++                Thread.sleep(3000);
++                } catch (InterruptedException e) {
++                e.printStackTrace();
++                }  
++            }  
++        }).start();}
+ }
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/res/values/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/res/values/strings.xml	(revision 2226)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/res/values/strings.xml	(revision 2227)
+@@ -97,4 +97,11 @@
+ 	<string name="compass_title">Compass</string>
+ 	<string name="battery_level_name">Battery level</string>
+ 	<string name="power_off">power off</string>
++	<string name="not_test">Not Test</string>
++	<string name="auto_test">Auto test</string>
++	<string name="reset_test">Reset test</string>
++	<string name="spi_test">SPI test</string>
++	<string name="finger_down_test">Finger down test</string>
++	<string name="scene_test">Scene test</string>
++	<string name="image_quality_test">Image quality test</string>
+ </resources>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/res/layout/activity_fingerprint.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/res/layout/activity_fingerprint.xml	(revision 2226)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/res/layout/activity_fingerprint.xml	(revision 2227)
+@@ -1,19 +1,212 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<LinearLayout
++<RelativeLayout
+ 	android:orientation="vertical"
+ 	android:layout_width="fill_parent"
+ 	android:layout_height="fill_parent"
+   xmlns:android="http://schemas.android.com/apk/res/android">
+   
+-    <TextView 
+-		android:textSize="22.0dip"
+-		android:id="@+id/finger_tips"
+-		android:layout_width="wrap_content"
+-		android:layout_height="wrap_content"
+-		android:text="@string/finger_tips" />
++   <LinearLayout 
++        android:orientation="vertical"
++		android:layout_width="fill_parent"
++		android:layout_height="fill_parent"
++        >
++	<LinearLayout 
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal"
++       android:layout_margin="20dp"
++        >
++        <TextView
++        android:id="@+id/finger_tips"
++        android:layout_width="0dp"
++         android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/auto_test"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++         <TextView
++        android:id="@+id/result1"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/bt_fail"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++    </LinearLayout>
++<Button
++        android:layout_width="match_parent"
++        android:layout_height="2dp"
++        android:background="#4D4D4D"
++        />
++    <LinearLayout 
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal"
++       android:layout_margin="20dp"
++        >
++        <TextView
++        android:id="@+id/textView1"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/reset_test"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++        <TextView
++        android:id="@+id/result2"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/bt_fail"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++    </LinearLayout>
++    <Button
++        android:layout_width="match_parent"
++        android:layout_height="2dp"
++        android:background="#4D4D4D"
++        />
++    <LinearLayout 
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal"
++       android:layout_margin="20dp"
++        >
++        <TextView
++        android:id="@+id/textView1"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/spi_test"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++         <TextView
++        android:id="@+id/result3"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/bt_fail"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++    </LinearLayout>
++    <Button
++        android:layout_width="match_parent"
++        android:layout_height="2dp"
++        android:background="#4D4D4D"
++        />
++    <LinearLayout 
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal"
++    android:layout_margin="20dp"
++        >
++        <TextView
++        android:id="@+id/textView1"
++        android:layout_width="0dp"
++         android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/finger_down_test"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++         <TextView
++        android:id="@+id/result4"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/not_test"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++    </LinearLayout>
++    <Button
++        android:layout_width="match_parent"
++        android:layout_height="2dp"
++        android:background="#4D4D4D"
++        />
++    <LinearLayout 
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal"
++        android:layout_margin="20dp"
++        >
++        <TextView
++        android:id="@+id/textView1"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/scene_test"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++         <TextView
++        android:id="@+id/result5"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/not_test"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++    </LinearLayout>
++    <Button
++        android:layout_width="match_parent"
++        android:layout_height="2dp"
++        android:background="#4D4D4D"
++        />
++    
++    <LinearLayout 
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal"
++        android:layout_margin="20dp"
++        >
++        <TextView
++        android:id="@+id/textView1"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/image_quality_test"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++         <TextView
++        android:id="@+id/result6"
++        android:layout_width="0dp"
++        android:layout_weight="1"
++        android:layout_height="wrap_content"
++        android:text="@string/not_test"
++        android:gravity="center"
++        android:textSize="20dp"
++        />
++        
++    </LinearLayout>
++    <Button
++        android:layout_width="match_parent"
++        android:layout_height="2dp"
++        android:background="#4D4D4D"
++        />
++    </LinearLayout>
+     <include
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+         android:layout_alignParentBottom="true"
+         layout="@layout/base_button" />
+-</LinearLayout>
++</RelativeLayout>

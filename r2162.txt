@@ -1,0 +1,716 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListAdapter.java	(revision 2161)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListAdapter.java	(revision 2162)
+@@ -41,7 +41,7 @@
+         final AppInfo info = data.get(position);
+         holder.app_name.setText(info.getAppName());
+         holder.app_icon.setImageDrawable(info.getDrawable());
+-        holder.right_icon.setImageResource(R.mipmap.add);
++        holder.right_icon.setImageResource(R.drawable.func_add);
+         if(info.isContanin()){
+             holder.app_name.setTextColor(Color.GRAY);
+ 			holder.right_icon.setVisibility(View.GONE);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 2161)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 2162)
+@@ -25,6 +25,8 @@
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Set;
++import java.util.Timer;
++import java.util.TimerTask;
+ 
+ /**
+  * Created by Administrator on 2017/9/1.
+@@ -198,15 +200,22 @@
+     }
+     
+     public static void showDialog(final Context context, String content){
+-        AlertDialog.Builder dialog=new AlertDialog.Builder(context,R.style.Theme_AppCompat_Light_Dialog_Alert_Self);
+-        dialog.setMessage(content);
+-        dialog.setPositiveButton(null/*context.getResources().getString(R.string.func_dialog_button)*/, new DialogInterface.OnClickListener() {
++        AlertDialog.Builder builder=new AlertDialog.Builder(context,R.style.Theme_AppCompat_Light_Dialog_Alert_Self);
++        builder.setMessage(content);
++        builder.setPositiveButton(null/*context.getResources().getString(R.string.func_dialog_button)*/, new DialogInterface.OnClickListener() {
+             @Override
+             public void onClick(DialogInterface dialog, int which) {
+             }
+         });
+-        dialog.setCancelable(true);
+-        dialog.show();
++        builder.setCancelable(true);
++        AlertDialog dialog = builder.show();
++		final Timer t = new Timer();
++	    t.schedule(new TimerTask() {
++	        public void run() {
++	            dialog.dismiss(); // when the task active then close the dialog
++	            t.cancel(); // also just top the timer thread, otherwise, you may receive a crash report
++			}
++	    }, 2000);
+     }
+     public  static Intent startApp(Context context,String packagename) {
+         Intent intent=null;
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 2161)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 2162)
+@@ -87,10 +87,19 @@
+             }
+             holder.app_icon.setImageDrawable(info.getDrawable());
+             if (viewType == AppUtils.DEFAULT_APPS) {
+-                holder.right_icon.setImageResource(R.mipmap.remove);
++                holder.right_icon.setImageResource(R.drawable.func_remove);
+             } else if (viewType == AppUtils.APPS) {
+-                holder.right_icon.setImageResource(R.mipmap.add);
++                holder.right_icon.setImageResource(R.drawable.func_add);
+             }
++			if (viewType == AppUtils.DEFAULT_APPS) {
++				if(info.getPackerName().equals(AppUtils.CONTACTS)){
++                    holder.edit_icon.setVisibility(View.VISIBLE);
++                }else if(info.getPackerName().equals(AppUtils.MUSIC)){
++                    holder.edit_icon.setVisibility(View.VISIBLE);
++                } else {
++					holder.edit_icon.setVisibility(View.INVISIBLE);
++				}
++			}
+             holder.right_icon.setOnClickListener(new View.OnClickListener() {
+                 @Override
+                 public void onClick(View v) {
+@@ -125,21 +134,20 @@
+                     
+                 }
+             });
+-            holder.item.setOnClickListener(new View.OnClickListener() {
++            holder.edit_icon.setOnClickListener(new View.OnClickListener() {
+                 @Override
+                 public void onClick(View v) {
+-                if(viewType == AppUtils.DEFAULT_APPS||viewType == AppUtils.APPS){
+-                    Log.i("content",info.getPackerName());
+-
++					if(viewType == AppUtils.DEFAULT_APPS||viewType == AppUtils.APPS){
++						Log.i("content",info.getPackerName());
++					}
++					if (viewType == AppUtils.DEFAULT_APPS) {
++						if(info.getPackerName().equals(AppUtils.CONTACTS)){
++							AppUtils.startContactApp(mContext);
++						}else if(info.getPackerName().equals(AppUtils.MUSIC)){
++							AppUtils.startMusicApp(mContext);
++						}
++					}
+                 }
+-                    if (viewType == AppUtils.DEFAULT_APPS) {
+-                        if(info.getPackerName().equals(AppUtils.CONTACTS)){
+-                            AppUtils.startContactApp(mContext);
+-                        }else if(info.getPackerName().equals(AppUtils.MUSIC)){
+-                            AppUtils.startMusicApp(mContext);
+-                        }
+-                    }
+-                }
+             });
+         }
+ 
+@@ -218,6 +226,7 @@
+         public TextView title;
+         public TextView app_name;
+         public ImageView app_icon;
++		public ImageView edit_icon;
+         public ImageView right_icon;
+         public RelativeLayout item;
+ 
+@@ -231,6 +240,7 @@
+             } else {
+                 app_name = (TextView) itemView.findViewById(R.id.app_name);
+                 right_icon = (ImageView) itemView.findViewById(R.id.right_icon);
++				edit_icon = (ImageView) itemView.findViewById(R.id.edit_icon);
+                 app_icon = (ImageView) itemView.findViewById(R.id.app_icon);
+                 item = (RelativeLayout) itemView.findViewById(R.id.item);
+             }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListActivity.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListActivity.java	(revision 2161)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListActivity.java	(revision 2162)
+@@ -81,32 +81,30 @@
+         mAppsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+ 		initListener();
+     }
+-	private void initListener() {
++	private void initListener() {}
+ 	
+-	   }
+-	   public void searchData(){
+-		   if (list != null && list.size() > 0) {
+-			   if (searchList == null) {
+-				   searchList = new ArrayList<AppInfo>();
+-			   }
+-			   if (searchList.size() > 0) {
+-				   searchList.clear();
+-			   }
+-			   for (AppInfo info : list) {
+-				   if (info.getPackerName().contains(searchContent) ||
+-						   info.getAppName().contains(searchContent)
+-						   || info.getIntroduction().contains(searchContent)) {
+-					   searchList.add(info);
+-				   }
+-	
+-			   }
+-			   if (searchList.size() > 0 && adapter != null) {
+-				   adapter.updateData(searchList);
+-			   }else{
+-				   Toast.makeText(AppListActivity.this,"no search",0).show();
+-			   }
+-		   }
+-	   }
++	public void searchData(){
++		if (list != null && list.size() > 0) {
++			if (searchList == null) {
++				searchList = new ArrayList<AppInfo>();
++			}
++			if (searchList.size() > 0) {
++				searchList.clear();
++			}
++			for (AppInfo info : list) {
++				if (info.getPackerName().contains(searchContent) ||
++						info.getAppName().contains(searchContent)
++						|| info.getIntroduction().contains(searchContent)) {
++					searchList.add(info);
++				}
++			}
++			if (searchList.size() > 0 && adapter != null) {
++				adapter.updateData(searchList);
++			} else {
++				Toast.makeText(AppListActivity.this,"no search",0).show();
++			}
++		}
++	}
+ 
+     private void initData() {
+         dialog = new ProgressDialog(this);
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_add.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_add.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_add.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_add.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_add.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_reorder.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_reorder.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_reorder.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_reorder.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_reorder.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_remove.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_remove.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_remove.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_remove.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_remove.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_edit.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_edit.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_edit.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_edit.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/func_edit.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/layout/func_item_title.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/func_item_title.xml	(revision 2161)
++++ frameworks/base/packages/SystemUI/res/layout/func_item_title.xml	(revision 2162)
+@@ -7,8 +7,9 @@
+     <TextView
+         android:id="@+id/title"
+         android:layout_width="match_parent"
+-        android:layout_height="25dp"
++        android:layout_height="30dp"
+         android:layout_gravity="center_vertical"
+-        android:textSize="20dp"
+-        android:textColor="#479392"/>
++        android:textSize="15sp"
++        android:textColor="#479392"
++		android:textStyle="bold"/>
+ </LinearLayout>
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/res/layout/activity_func_setting.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/activity_func_setting.xml	(revision 2161)
++++ frameworks/base/packages/SystemUI/res/layout/activity_func_setting.xml	(revision 2162)
+@@ -15,47 +15,46 @@
+             android:background="?attr/colorPrimary"
+             app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />   
+          
+-       <LinearLayout
+-        	android:layout_width="match_parent"
+-        	android:layout_height="?attr/actionBarSize"
+-        	android:paddingLeft="8dp"
+-            android:paddingRight="8dp">
+-            <TextView
+-        	    android:layout_weight="1"
+-            	android:id="@+id/func_switch"
+-           		android:textSize="18sp"
+-            	android:layout_width="0dp"
+-            	android:layout_height="wrap_content"
+-            	android:layout_marginLeft="20dp"
+-            	android:layout_gravity="center_vertical"/>
++    <LinearLayout
++		android:layout_width="match_parent"
++        android:layout_height="?attr/actionBarSize"
++		android:background="#37474F"
++        android:paddingLeft="8dp"
++        android:paddingRight="8dp"
++		app:elevation="2dp">
++        <TextView
++        	android:layout_weight="1"
++			android:id="@+id/func_switch"
++           	android:textSize="20sp"
++            android:layout_width="0dp"
++            android:layout_height="wrap_content"
++            android:layout_marginLeft="20dp"
++            android:layout_gravity="center_vertical"/>
+             		
+-      		<Switch
+-        		android:id="@+id/func_setting_switch"
+-        		android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-        	    android:showText="false" 
+-				android:layout_gravity="center_vertical"	
+-    			/>
+-            	
+-       
+-            		
+-        </LinearLayout>
++      	<Switch
++        	android:id="@+id/func_setting_switch"
++        	android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++        	android:showText="false" 
++			android:layout_gravity="center_vertical"	
++    	/>  		
++    </LinearLayout>
+ 
+-    	<RelativeLayout
+-        	android:layout_width="match_parent"
+-        	android:layout_height="match_parent">
+-        	<TextView
+-            	android:id="@+id/switch_off"
+-            	android:layout_width="match_parent"
+-            	android:layout_height="match_parent"
+-            	android:layout_centerInParent="true"
+-            	android:gravity="center"
+-            	android:textSize="20sp"
+-            	android:text="@string/func_off_content" />
+-        <android.support.v7.widget.RecyclerView
+-            android:id="@+id/func_setting_recycler"
++	<RelativeLayout
++        android:layout_width="match_parent"
++        android:layout_height="match_parent">
++		<TextView
++            android:id="@+id/switch_off"
+             android:layout_width="match_parent"
+             android:layout_height="match_parent"
+-            android:visibility="gone"/>
+-    </RelativeLayout>
++            android:layout_centerInParent="true"
++            android:gravity="center"
++            android:textSize="20sp"
++            android:text="@string/func_off_content" />
++		<android.support.v7.widget.RecyclerView
++			android:id="@+id/func_setting_recycler"
++			android:layout_width="match_parent"
++			android:layout_height="match_parent"
++			android:visibility="gone"/>
++		</RelativeLayout>
+ </LinearLayout>
+Index: frameworks/base/packages/SystemUI/res/layout/func_app_item.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/func_app_item.xml	(revision 2161)
++++ frameworks/base/packages/SystemUI/res/layout/func_app_item.xml	(revision 2162)
+@@ -8,6 +8,12 @@
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+         android:padding="10dp">
++		<ImageView
++            android:id="@+id/default_icon"
++            android:layout_width="20dp"
++            android:layout_height="20dp"
++			android:layout_marginRight="10dp"
++            android:layout_gravity="center_vertical"/>
+         <ImageView
+             android:id="@+id/app_icon"
+             android:layout_width="20dp"
+@@ -21,11 +27,18 @@
+             android:layout_marginLeft="10dp"
+             android:textColor="#666666"
+             android:layout_gravity="center_vertical"/>
++		<ImageView
++            android:id="@+id/edit_icon"
++            android:layout_width="20dp"
++            android:layout_height="20dp"
++			android:src="@drawable/func_edit"
++			android:visibility="invisible"
++			android:layout_marginRight="20dp"/>
+         <ImageView
+             android:id="@+id/right_icon"
+             android:layout_width="20dp"
+             android:layout_height="20dp"
+-            android:layout_gravity="center_vertical"/>
++			android:layout_marginRight="10dp"/>
+     </LinearLayout>
+     <View
+         android:layout_below="@id/layout"
+Index: frameworks/base/packages/SystemUI/res/layout/func_default_item.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/func_default_item.xml	(revision 2161)
++++ frameworks/base/packages/SystemUI/res/layout/func_default_item.xml	(revision 2162)
+@@ -8,6 +8,13 @@
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+         android:padding="10dp">
++		<ImageView
++            android:id="@+id/default_icon"
++            android:layout_width="20dp"
++            android:layout_height="20dp"
++			android:layout_marginRight="10dp"
++            android:layout_gravity="center_vertical"
++			android:src="@drawable/func_recoder" />
+         <ImageView
+             android:id="@+id/app_icon"
+             android:layout_width="20dp"
+@@ -21,11 +28,17 @@
+             android:layout_marginLeft="10dp"
+             android:textColor="#666666"
+             android:layout_gravity="center_vertical"/>
++		<ImageView
++            android:id="@+id/edit_icon"
++            android:layout_width="20dp"
++            android:layout_height="20dp"
++			android:src="@drawable/func_edit"
++			android:layout_marginRight="20dp"/>
+         <ImageView
+             android:id="@+id/right_icon"
+             android:layout_width="20dp"
+             android:layout_height="20dp"
+-            android:layout_gravity="center_vertical"/>
++			android:layout_marginRight="10dp"/>
+     </LinearLayout>
+     <View
+         android:layout_below="@id/layout"
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_add.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_add.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-mdpi/func_add.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-mdpi/func_add.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_add.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_recoder.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_recoder.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-mdpi/func_recoder.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-mdpi/func_recoder.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_recoder.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_edit.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_edit.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-mdpi/func_edit.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-mdpi/func_edit.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_edit.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_remove.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_remove.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-mdpi/func_remove.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-mdpi/func_remove.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-mdpi/func_remove.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_reorder.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_reorder.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_reorder.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_reorder.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_reorder.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_edit.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_edit.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_edit.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_edit.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_edit.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_add.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_add.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_add.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_add.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_add.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_remove.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_remove.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_remove.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_remove.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/func_remove.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_edit.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_edit.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/func_edit.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/func_edit.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_edit.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_add.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_add.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/func_add.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/func_add.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_add.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_remove.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_remove.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/func_remove.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/func_remove.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_remove.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_recoder.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_recoder.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/func_recoder.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/func_recoder.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/func_recoder.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/values/styles.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/styles.xml	(revision 2161)
++++ frameworks/base/packages/SystemUI/res/values/styles.xml	(revision 2162)
+@@ -361,11 +361,12 @@
+         <item name="android:colorBackground">?android:attr/colorSecondary</item>
+     </style>
+ 	<!--add funcSetting-->
+-<style name="Theme.AppCompat.Light.Dialog.Alert.Self"
++	<style name="Theme.AppCompat.Light.Dialog.Alert.Self"
+         parent="@style/Theme.AppCompat.Light.Dialog.Alert">
+         
+         <item name="colorAccent">#479392</item>
+     </style>
++	
+ 	<style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+         <!-- Customize your theme here. -->
+         <item name="colorPrimary">@color/colorPrimary</item>
+@@ -373,9 +374,9 @@
+         <item name="colorAccent">@color/colorAccent</item>
+     </style>
+   
+-    <style name="FuncTheme" parent="Theme.AppCompat.Light.NoActionBar">
++    <style name="FuncTheme" parent="Theme.AppCompat.NoActionBar">
+         <!-- Customize your theme here. -->
+-        <item name="colorPrimary">#008080</item>
++        <item name="colorPrimary">#263238</item>
+         <item name="colorPrimaryDark">#000000</item>
+         <item name="colorAccent">#008080</item>
+     </style>
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_reorder.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_reorder.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_reorder.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_reorder.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_reorder.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_edit.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_edit.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_edit.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_edit.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_edit.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_remove.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_remove.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_remove.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_remove.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_remove.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_add.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_add.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_add.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_add.png	(revision 2162)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/func_add.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: vendor/branch/980CN1/frameworks/base/packages/SystemUI/assets/app_info_db.db
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/980CN1/frameworks/base/packages/SystemUI/assets/app_info_db.db
+===================================================================
+--- vendor/branch/980CN1/frameworks/base/packages/SystemUI/assets/app_info_db.db	(revision 0)
++++ vendor/branch/980CN1/frameworks/base/packages/SystemUI/assets/app_info_db.db	(revision 2162)
+
+Property changes on: vendor/branch/980CN1/frameworks/base/packages/SystemUI/assets/app_info_db.db
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property

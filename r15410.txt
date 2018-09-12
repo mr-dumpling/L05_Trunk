@@ -1,0 +1,46 @@
+Index: vendor/branch/5058A_Argentina_OpenMarket/packages/providers/ContactsProvider/src/com/android/providers/contacts/ContactsDatabaseHelper.java
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/packages/providers/ContactsProvider/src/com/android/providers/contacts/ContactsDatabaseHelper.java	(revision 15409)
++++ vendor/branch/5058A_Argentina_OpenMarket/packages/providers/ContactsProvider/src/com/android/providers/contacts/ContactsDatabaseHelper.java	(revision 15410)
+@@ -5906,34 +5906,16 @@
+      * @param number The phone number to search for.
+      */
+     public void buildFallbackPhoneLookupAndContactQuery(SQLiteQueryBuilder qb, String number) {
+-        final String minMatch = PhoneNumberUtils.toCallerIDMinMatch(number);
+-        final StringBuilder sb = new StringBuilder();
+-        // Append lookup tables.
+-        sb.append(Tables.RAW_CONTACTS);
+-        sb.append(" JOIN " + Views.CONTACTS + " as contacts_view"
+-                + " ON (contacts_view._id = " + Tables.RAW_CONTACTS
+-                + "." + RawContacts.CONTACT_ID + ")" +
+-                " JOIN (SELECT " + PhoneLookupColumns.DATA_ID + "," +
+-                PhoneLookupColumns.NORMALIZED_NUMBER + " FROM "+ Tables.PHONE_LOOKUP + " "
+-                + "WHERE (" + Tables.PHONE_LOOKUP + "." + PhoneLookupColumns.MIN_MATCH + " = '");
+-        sb.append(minMatch);
+-        sb.append("')) AS lookup " +
+-                "ON lookup." + PhoneLookupColumns.DATA_ID + "=" + Tables.DATA + "." + Data._ID
+-                + " JOIN " + Tables.DATA + " "
+-                + "ON " + Tables.DATA + "." + Data.RAW_CONTACT_ID + "=" + Tables.RAW_CONTACTS + "."
+-                + RawContacts._ID);
++	
++		String minMatch = PhoneNumberUtils.toCallerIDMinMatch(number);
++        StringBuilder sb = new StringBuilder();
++        appendPhoneLookupTables(sb, minMatch, true);
+ 
+-        /**
+-         * M: append this table for some query(fix ALPS00532279) @{
+-         */
++          /**M: append this table for some query */
+         appendPresenceAndStautsTable(sb);
+-        /** @} */
+         qb.setTables(sb.toString());
+-
+-        sb.setLength(0);
+-        sb.append("PHONE_NUMBERS_EQUAL(" + Tables.DATA + "." + Phone.NUMBER + ", ");
+-        DatabaseUtils.appendEscapedSQLString(sb, number);
+-        sb.append(mUseStrictPhoneNumberComparison ? ", 1)" : ", 0)");
++        sb = new StringBuilder();
++        appendPhoneLookupSelection(sb, null, null);
+         qb.appendWhere(sb.toString());
+     }
+     /** @} */

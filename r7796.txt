@@ -1,0 +1,200 @@
+Index: system/sepolicy/app.te
+===================================================================
+--- system/sepolicy/app.te	(revision 7795)
++++ system/sepolicy/app.te	(revision 7796)
+@@ -278,7 +278,7 @@
+ neverallow { appdomain -bluetooth } self:capability2 *;
+ 
+ # Block device access.
+-neverallow { appdomain -shell } dev_type:blk_file { read write };
++neverallow appdomain dev_type:blk_file { read write };
+ 
+ # Access to any of the following character devices.
+ neverallow appdomain {
+Index: system/core/toolbox/suid.c
+===================================================================
+--- system/core/toolbox/suid.c	(revision 7795)
++++ system/core/toolbox/suid.c	(revision 7796)
+@@ -1,72 +0,0 @@
+-#include <cutils/properties.h>
+-#include <errno.h>
+-#include <string.h>
+-#include "../../../vendor/mediatek/proprietary/external/nvram/libnvram/libnvram.h"
+-#include "../../../vendor/mediatek/proprietary/custom/aus6739_66_n1/cgen/cfgfileinc/CFG_PRODUCT_INFO_File.h"
+-
+-int suid_main(int argc, char *argv[]) {
+-    F_ID suid_nvram_id;
+-    PRODUCT_INFO product_info;
+-    int PRODUCT_INFO_LID = 61;
+-    int rec_size;
+-    int rec_num;
+-    int result;
+-    char suid[32];
+-
+-    property_set("debug.tcl.adb.command", "1");
+-    usleep(200000);
+-
+-    if (argc != 2){
+-        ALOGD("suid_main, argc: %d\n", argc);
+-        fprintf(stderr, "please enter suid\n");
+-        return -1;
+-    }
+-    if (strlen(argv[1]) != 32) {
+-        ALOGD("suid_main, argv[1]: %s\n", argv[1]);
+-        fprintf(stderr, "please enter 32 bits of suid\n");
+-        return -1;
+-    }
+-
+-    memset(&product_info, 0, sizeof(product_info));
+-    ALOGD("suid_main, PRODUCT_INFO_LID: %d\n", PRODUCT_INFO_LID);
+-    suid_nvram_id = NVM_GetFileDesc(PRODUCT_INFO_LID, &rec_size, &rec_num, true);
+-    ALOGD("suid_main, rec_size: %d, rec_num: %d\n", rec_size, rec_num);
+-    ALOGD("suid_main, suid_nvram_id.iFileDesc: %d\n", suid_nvram_id.iFileDesc);
+-    if (suid_nvram_id.iFileDesc > 0) {
+-        int result = read(suid_nvram_id.iFileDesc, &product_info, rec_size * rec_num);
+-        ALOGD("suid_main, result: %d\n", result);
+-        if (result < 0) {
+-            ALOGD("read NVRAM error, %s\n", strerror(errno));
+-            return -1;
+-        } else {
+-            NVM_CloseFileDesc(suid_nvram_id);
+-        }
+-    } else {
+-        ALOGD("suid_main, read NVRAM suid_nvram_id.iFileDesc == %d \n", suid_nvram_id.iFileDesc);
+-        return -1;
+-    }
+-
+-    for (int i = 0; i < 32; i++) {
+-        product_info.suid[i] = argv[1][i];
+-    }
+-
+-    suid_nvram_id = NVM_GetFileDesc(PRODUCT_INFO_LID, &rec_size, &rec_num, false);
+-    ALOGD("suid_main, rec_size: %d, rec_num: %d\n", rec_size, rec_num);
+-    ALOGD("suid_main, suid_nvram_id.iFileDesc: %d\n", suid_nvram_id.iFileDesc);
+-    if (suid_nvram_id.iFileDesc > 0) {
+-        int result = write(suid_nvram_id.iFileDesc, &product_info, rec_size * rec_num);
+-        ALOGD("suid_main, result: %d\n", result);
+-        if (result < 0) {
+-            ALOGD("write NVRAM error, %s\n", strerror(errno));
+-        } else {
+-            NVM_CloseFileDesc(suid_nvram_id);
+-            fprintf(stderr, "successfully\n");
+-        }
+-    } else {
+-        ALOGD("suid_main, write NVRAM suid_nvram_id.iFileDesc == %d \n", suid_nvram_id.iFileDesc);
+-    }
+-
+-    property_set("debug.tcl.adb.command", "0");
+-
+-    return 0;
+-}
+Index: system/core/toolbox/getpcbid.c
+===================================================================
+--- system/core/toolbox/getpcbid.c	(revision 7795)
++++ system/core/toolbox/getpcbid.c	(revision 7796)
+@@ -1,56 +0,0 @@
+-#include <cutils/properties.h>
+-#include <errno.h>
+-#include <string.h>
+-#include "../../../vendor/mediatek/proprietary/external/nvram/libnvram/libnvram.h"
+-#include "../../../vendor/mediatek/proprietary/custom/aus6739_66_n1/cgen/cfgfileinc/CFG_PRODUCT_INFO_File.h"
+-
+-int getpcbid_main(int argc, char *argv[]) {
+-    F_ID pcbid_nvram_id;
+-    PRODUCT_INFO product_info;
+-    int PRODUCT_INFO_LID = 61;
+-    int rec_size;
+-    int rec_num;
+-    int result;
+-    char pcbid[15];
+-
+-    property_set("debug.tcl.adb.command", "1");
+-    usleep(200000);
+-
+-    memset(&product_info, 0, sizeof(product_info));
+-    ALOGD("getpcbid_main, PRODUCT_INFO_LID: %d\n", PRODUCT_INFO_LID);
+-    pcbid_nvram_id = NVM_GetFileDesc(PRODUCT_INFO_LID, &rec_size, &rec_num, true);
+-    ALOGD("getpcbid_main, rec_size: %d, rec_num: %d\n", rec_size, rec_num);
+-    ALOGD("getpcbid_main, pcbid_nvram_id.iFileDesc: %d\n", pcbid_nvram_id.iFileDesc);
+-    if (pcbid_nvram_id.iFileDesc > 0) {
+-        int result = read(pcbid_nvram_id.iFileDesc, &product_info, rec_size * rec_num);
+-        ALOGD("getpcbid_main, result: %d\n", result);
+-        if (result < 0) {
+-            ALOGD("read NVRAM error, %s\n", strerror(errno));
+-        } else {
+-            NVM_CloseFileDesc(pcbid_nvram_id);
+-
+-            pcbid[0] = product_info.trace_nvram_data.short_code[0];
+-            pcbid[1] = product_info.trace_nvram_data.short_code[1];
+-            pcbid[2] = product_info.trace_nvram_data.short_code[2];
+-            pcbid[3] = product_info.trace_nvram_data.short_code[3];
+-            pcbid[4] = product_info.trace_nvram_data.ics[0];
+-            pcbid[5] = product_info.trace_nvram_data.ics[1];
+-            pcbid[6] = product_info.trace_nvram_data.site_fac_pcba;
+-            pcbid[7] = product_info.trace_nvram_data.line_fac_pcba;
+-            pcbid[8] = product_info.trace_nvram_data.date_prod_pcba[0];
+-            pcbid[9] = product_info.trace_nvram_data.date_prod_pcba[1];
+-            pcbid[10] = product_info.trace_nvram_data.date_prod_pcba[2];
+-            pcbid[11] = product_info.trace_nvram_data.sn_pcba[0];
+-            pcbid[12] = product_info.trace_nvram_data.sn_pcba[1];
+-            pcbid[13] = product_info.trace_nvram_data.sn_pcba[2];
+-            pcbid[14] = product_info.trace_nvram_data.sn_pcba[3];
+-            fprintf(stderr, "%s\n", pcbid);
+-        }
+-    } else {
+-        ALOGD("getpcbid_main, read NVRAM pcbid_nvram_id.iFileDesc == %d \n", pcbid_nvram_id.iFileDesc);
+-    }
+-
+-    property_set("debug.tcl.adb.command", "0");
+-
+-    return 0;
+-}
+Index: system/core/toolbox/Android.mk
+===================================================================
+--- system/core/toolbox/Android.mk	(revision 7795)
++++ system/core/toolbox/Android.mk	(revision 7796)
+@@ -43,8 +43,6 @@
+     start \
+     stop \
+     top \
+-    getpcbid \
+-    suid \
+ 
+ ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
+ 
+@@ -59,7 +57,6 @@
+ LOCAL_SHARED_LIBRARIES := \
+     libcutils \
+     libselinux \
+-    libnvram \
+ 
+ LOCAL_WHOLE_STATIC_LIBRARIES := $(patsubst %,libtoolbox_%,$(BSD_TOOLS))
+ 
+Index: device/mediatek/common/sepolicy/basic/shell.te
+===================================================================
+--- device/mediatek/common/sepolicy/basic/shell.te	(revision 7795)
++++ device/mediatek/common/sepolicy/basic/shell.te	(revision 7796)
+@@ -6,7 +6,3 @@
+ # Purpose : allow shell to switch aee mode
+ allow shell debuggerd_socket:unix_stream_socket connectto;
+ allow shell stp_dump3_exec:file rx_file_perms;
+-allow shell nvdata_file:dir search;
+-allow shell nvdata_file:file { read getattr open };
+-allow shell nvram_device:blk_file { read write open };
+-allow shell sysfs:file { read open };
+Index: device/mediatek/mt6739/init.mt6739.rc
+===================================================================
+--- device/mediatek/mt6739/init.mt6739.rc	(revision 7795)
++++ device/mediatek/mt6739/init.mt6739.rc	(revision 7796)
+@@ -599,11 +599,6 @@
+ 	chmod 0664 /sys/bus/i2c/drivers/fts_ts/0-0070/fts_glove_mode
+ 	# add by dejin tech end }
+ 
+-on property:debug.tcl.adb.command=0
+-	chown root system /dev/block/mmcblk0p13
+-on property:debug.tcl.adb.command=1
+-	chown root shell /dev/block/mmcblk0p13
+-
+ on boot
+     write /proc/bootprof "INIT:boot"
+ 

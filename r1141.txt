@@ -1,0 +1,63 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java	(revision 1140)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java	(revision 1141)
+@@ -797,7 +797,7 @@
+         final boolean isSystemStream = row.stream == AudioManager.STREAM_SYSTEM;
+         final boolean isAlarmStream = row.stream == AudioManager.STREAM_ALARM;
+         final boolean isMusicStream = row.stream == AudioManager.STREAM_MUSIC;
+-        final boolean isRingVibrate = isRingStream
++        final boolean isRingVibrate = (isRingStream || isNotificationStream)
+                 && mState.ringerModeInternal == AudioManager.RINGER_MODE_VIBRATE;
+         final boolean isRingSilent = isRingStream
+                 && mState.ringerModeInternal == AudioManager.RINGER_MODE_SILENT;
+@@ -824,7 +824,7 @@
+         row.icon.setEnabled(iconEnabled);
+         row.icon.setAlpha(iconEnabled ? 1 : 0.5f);
+         final int iconRes =(mAudioManager.getRingerModeInternal()==AudioManager.RINGER_MODE_SILENT && isRingStream) ? row.iconMuteRes:
+-                isRingVibrate ? R.drawable.ic_volume_ringer_vibrate
++                isRingVibrate && isRingStream ? R.drawable.ic_volume_ringer_vibrate
+                 : isRingSilent || zenMuted ? row.cachedIconRes
+                 : ss.routedToBluetooth ?
+                         (ss.muted ? R.drawable.ic_volume_media_bt_mute
+@@ -878,7 +878,12 @@
+         }
+ 
+         // update slider
+-        final boolean enableSlider = !zenMuted;
++        boolean enableSlider = !zenMuted;
++		if (isRingVibrate && isNotificationStream) {
++			enableSlider = false;
++		} else {
++			enableSlider = !zenMuted;
++		}
+         final int vlevel = row.ss.muted && (isRingVibrate || !isRingStream && !zenMuted) ? 0
+                 : row.ss.level;
+         updateVolumeRowSliderH(row, enableSlider, vlevel);
+Index: frameworks/base/packages/SystemUI
+===================================================================
+--- frameworks/base/packages/SystemUI	(revision 1140)
++++ frameworks/base/packages/SystemUI	(revision 1141)
+
+Property changes on: frameworks/base/packages/SystemUI
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages/SystemUI:r915
+Index: frameworks/base/packages
+===================================================================
+--- frameworks/base/packages	(revision 1140)
++++ frameworks/base/packages	(revision 1141)
+
+Property changes on: frameworks/base/packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages:r915
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1140)
++++ frameworks/base	(revision 1141)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r915

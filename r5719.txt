@@ -1,0 +1,193 @@
+Index: packages/services/Telephony/res/values-ru/strings.xml
+===================================================================
+--- packages/services/Telephony/res/values-ru/strings.xml	(revision 5718)
++++ packages/services/Telephony/res/values-ru/strings.xml	(revision 5719)
+@@ -594,4 +594,14 @@
+     <string name="change_pin_succeeded" msgid="2022852286442211151">"PIN-код голосовой почты обновлен"</string>
+     <string name="change_pin_system_error" msgid="8308462387154257840">"Не удалось установить PIN-код"</string>
+     <string name="dialog_voicemail_not_ready_message">"Чтобы настроить голосовую почту, выберите \"Меню &gt; Настройки\"."</string>
++	
++	<string name="attention_dialog_title">Предупреждение о выборе режима «Только LTE»</string>
++	<string name="attention_dialog_text">Вы уверены, что хотите выбрать режим «Только LTE»? \n В данном режиме вам будет доступна ТОЛЬКО передача данных. Вы НЕ сможете: \n • совершать экстренные вызовы, \n  • совершать и принимать голосовые вызовы, \n • отправлять и получать SMS, \n • отправлять USSD-команды. \n Для выбора режима «Только LTE» нажмите кнопку «ОК». Если вы не хотите менять режим сети, нажмите кнопку «Отмена».</string>
++	<string name="attention_dialog_ok">OK</string>
++	<string name="attention_dialog_cancel">Отмена</string>
++	
++	<string name="attention_Notification_panel_title">Выбран режим «Только LTE»</string>
++	<string name="attention_Notification_panel_text">В данном режиме доступна ТОЛЬКО передача данных. Вы НЕ можете совершать экстренные вызовы, совершать и принимать голосовые вызовы, отправлять и получать SMS, а также отправлять USSD-команды. Для выхода из режима «Только LTE» коснитесь данного сообщения.</string>
++	
++	
+ </resources>
+Index: packages/services/Telephony/res/values/strings.xml
+===================================================================
+--- packages/services/Telephony/res/values/strings.xml	(revision 5718)
++++ packages/services/Telephony/res/values/strings.xml	(revision 5719)
+@@ -617,6 +617,7 @@
+     <string name="network_2G_telcel" translatable="false">2G only</string>
+     <string name="network_2G" translatable="false">2G only</string>
+ 	<string name="network_GSM_alru" translatable="false">GSM only</string>
++	<string name="network_lte_only_alru">LTE only</string>
+     <string name="network_1x" translatable="false">1x</string>
+     <string name="network_global">Global</string>
+ 
+@@ -681,12 +682,20 @@
+         <item>@string/network_4G</item>
+         <item>@string/network_3G</item>
+         <item>@string/network_GSM_alru</item>
++		<item>@string/network_lte_only_alru</item>
+     </string-array>
+ 	<string-array name="nabled_networks_4g_choices_Alru" translatable="false">
+         <item>@string/network_4G</item>
+         <item>@string/network_3G</item>
+         <item>@string/network_GSM_alru</item>
++		<item>@string/network_lte_only_alru</item>
+     </string-array>
++	<string-array name="enabled_networks_values_Alru" translatable="false">
++        <item>"9"</item>
++        <item>"0"</item>
++        <item>"1"</item>
++        <item>"11"</item>
++	</string-array>
+  <string-array name="enabled_networks_choices_telcel" translatable="false">
+         <item>@string/network_lte_telcel</item>
+         <item>@string/network_3G_auto_telcel</item>
+@@ -1417,4 +1426,13 @@
+     <string name="fdn_list_dialog_edit">Edit contact</string>
+     <string name="fdn_list_dialog_send">Send message to contact</string>
+     <string name="menu_sendSMS">Text contact</string>
++	
++	<string name="attention_dialog_title">Attention. LTE only mode is going to be activated</string>
++	<string name="attention_dialog_text">Are you sure you want to select LTE only network mode? \n In this mode ONLY data services will be available and you will NOT be able to: \n • make emergency calls, \n • make and receive voice calls, \n • send and receive SMS, \n • send USSD. \n If you want to select LTE only network mode, tap OK, if you prefer to keep current network mode, tap Cancel.</string>
++	<string name="attention_dialog_ok">OK</string>
++	<string name="attention_dialog_cancel">Cancel</string>
++	
++	<string name="attention_Notification_panel_title">LTE only mode is activated</string>
++	<string name="attention_Notification_panel_text">ONLY data services are available for your device. You CANNOT make emergency calls, make and receive voice calls, send and receive SMS and send USSD. If you want to deactivate this mode, just tap this message.</string>
++	
+ </resources>
+\ No newline at end of file
+Index: vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 5718)
++++ vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 5719)
+@@ -47,6 +47,11 @@
+ import android.app.ActionBar;
+ import android.app.AlertDialog;
+ import android.app.Dialog;
++import android.app.Notification;
++import android.app.PendingIntent;
++import android.graphics.BitmapFactory;
++import android.app.NotificationManager;
++import android.support.v4.app.NotificationCompat;
+ import android.content.BroadcastReceiver;
+ import android.content.Context;
+ import android.content.DialogInterface;
+@@ -145,10 +150,13 @@
+     private static final String iface = "rmnet0"; //TODO: this will go away
+     private List<SubscriptionInfo> mActiveSubInfos;
+ 
++	private boolean OnInit = true;
++	
+     private UserManager mUm;
+     private Phone mPhone;
+     private MyHandler mHandler;
+     private boolean mOkClicked;
++	
+ 
+     // We assume the the value returned by mTabHost.getCurrentTab() == slotId
+     private TabHost mTabHost;
+@@ -860,7 +868,7 @@
+                                 R.array.enabled_networks_values_c2k);
+                     } else {
+                         mButtonEnabledNetworks.setEntryValues(
+-                                R.array.enabled_networks_values);
++                                R.array.enabled_networks_values_Alru);
+                     }
+                     /// @}
+                 }
+@@ -1442,7 +1450,6 @@
+                     controlGsmOptions(true);
+                     break;
+                 }
+-            case Phone.NT_MODE_LTE_ONLY:
+             case Phone.NT_MODE_LTE_WCDMA:
+                 if (!mIsGlobalCdma) {
+                     mButtonEnabledNetworks.setValue(
+@@ -1564,6 +1571,18 @@
+                     }
+                 }
+                 break;
++				case Phone.NT_MODE_LTE_ONLY:
++					if (!mIsGlobalCdma) {
++						showAttentionDialog();
++						mButtonEnabledNetworks.setValue(
++                            Integer.toString(Phone.NT_MODE_LTE_ONLY));
++						mButtonEnabledNetworks.setSummary(R.string.network_lte_only_alru);
++					} else {
++						mButtonEnabledNetworks.setValue(
++                            Integer.toString(Phone.NT_MODE_LTE_CDMA_EVDO_GSM_WCDMA));
++						mButtonEnabledNetworks.setSummary(R.string.network_global);
++					}
++				break;
+             default:
+                 String errMsg = "Invalid Network Mode (" + NetworkMode + "). Ignore.";
+                 loge(errMsg);
+@@ -1916,7 +1935,7 @@
+                         : R.array.enabled_networks_choices_Alru;
+                 mButtonEnabledNetworks.setEntries(select);
+                 mButtonEnabledNetworks.setEntryValues(isC2kLteSupport() ?
+-                        R.array.enabled_networks_values_c2k : R.array.enabled_networks_values);
++                        R.array.enabled_networks_values_c2k : R.array.enabled_networks_values_Alru);
+                 if (DBG) {
+                     log("updateNetworkModeForLwDsds mShow4GForLTE = " + mShow4GForLTE);
+                 }
+@@ -2434,4 +2453,50 @@
+             updateEnhanced4GLteSwitchPreference();
+         }
+     };
++	
++	private void showAttentionDialog(){
++        AlertDialog.Builder normalDialog = new AlertDialog.Builder(this);
++        normalDialog.setIcon(R.drawable.icon_dialog_attention);
++        normalDialog.setTitle(getString(R.string.attention_dialog_title));
++        normalDialog.setMessage(getString(R.string.attention_dialog_text));
++        normalDialog.setPositiveButton(R.string.attention_dialog_ok, 
++            new DialogInterface.OnClickListener() {
++            @Override
++            public void onClick(DialogInterface dialog, int which) {
++               dialog.dismiss();
++			   sendNotification();
++            }
++        });
++        normalDialog.setNegativeButton(R.string.attention_dialog_cancel, 
++            new DialogInterface.OnClickListener() {
++            @Override
++            public void onClick(DialogInterface dialog, int which) {
++				dialog.dismiss();
++            }
++        });
++        Dialog d =  normalDialog.create();
++		if(!OnInit){
++			d.show();
++		}else{
++			OnInit = false;
++		}
++    }
++	
++	public static final int DEFAULT_NOTIFICATION_ID = 1;
++    private NotificationManager mNotificationManager;
++	
++	private void sendNotification() {
++		Intent mainIntent = new Intent(this, MobileNetworkSettings.class);
++		PendingIntent mainPendingIntent = PendingIntent.getActivity(this, 0, mainIntent, PendingIntent.FLAG_UPDATE_CURRENT);
++		mNotificationManager = (NotificationManager) this.getSystemService(Context.NOTIFICATION_SERVICE);
++		NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
++			builder.setSmallIcon(R.mipmap.icon_dialog_attention);
++			builder.setContentTitle(getString(R.string.attention_Notification_panel_title));
++		NotificationCompat.BigTextStyle textStyle =  new NotificationCompat.BigTextStyle(builder);  
++            textStyle.bigText(getString(R.string.attention_Notification_panel_text)); 
++			builder.setContentIntent(mainPendingIntent);
++			//builder.setLargeIcon(BitmapFactory.decodeResource(getResources(),R.drawable.icon_dialog_attention));
++		Notification notification = builder.build();
++			notification.flags |= Notification.FLAG_NO_CLEAR;
++        mNotificationManager.notify(DEFAULT_NOTIFICATION_ID, notification);
+ }

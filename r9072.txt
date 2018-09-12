@@ -1,0 +1,303 @@
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 9071)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 9072)
+@@ -56,7 +56,7 @@
+ import android.content.ComponentName;
+ 
+ @TargetApi(23)
+-public class FaceUnlockMainActivity extends FragmentActivity implements OnClickListener, OnCheckedChangeListener {
++public class FaceUnlockMainActivity extends FragmentActivity implements OnClickListener/*, OnCheckedChangeListener */{
+ 
+ 	private static final String TAG = "FaceUnlockMainActivity";
+ 	private static final int START_ENTRY_BTN_NUM = 1;
+@@ -66,6 +66,8 @@
+ 	private static final int DEMONSTRATION_MODEL_SWITCH_NUM = 5;
+ 	private static final int FACE_MANAGER_LAYOUT_NUM = 6;
+ 	private static final int ACTIONBAR_BACK_NUM = 7;
++	private static final int SCREEN_TURN_ON_MODEL_NUM = 8;
++	private static final int SCREEN_TURN_ON_MODEL_SWITCH_NUM = 9;
+ 
+ 	private static final int REMOVE_FACEUNLOCK_BTN_NUM = 10;
+ 	private static final int CHOOSE_LOCK_GENERIC_REQUEST = 227;
+@@ -83,9 +85,9 @@
+ 	public static Handler handler;
+ 	private TextView mDialogTitle,mDialogHint,myactionbar_title,face_unlock_demonstration_model_title,face_unlock_private_model_title;
+ 	private ImageView circle_01, circle_03;
+-	private Switch private_model_switch, demonstration_model_switch;
++	private Switch private_model_switch, demonstration_model_switch,screen_turn_on_switch;
+ 	private RelativeLayout private_model_layout, demonstration_model_layout, face_unlock_manager_layout,
+-			face_unlock_main_layout,circle_layout;
++			face_unlock_main_layout,circle_layout,face_unlock_turn_on_layout;
+ 	private ViewPager mPager;
+ 	public AlertDialog mAlertDialog;
+ 
+@@ -130,6 +132,8 @@
+ 					face_unlock_manager_title.setVisibility(View.GONE);
+ 					face_unlock_manager_layout.setVisibility(View.GONE);
+ 					face_unlock_main_layout.setVisibility(View.VISIBLE);
++					demonstration_model_switch.setChecked(false);
++				    screen_turn_on_switch.setChecked(false);
+ 					if (faceIsDelSuccess == true) {
+ 						Toast.makeText(mcontext,R.string.delete_success,Toast.LENGTH_SHORT).show();
+ 						faceIsDelSuccess = false;
+@@ -241,9 +245,14 @@
+ 		demonstration_model_layout.setTag(DEMONSTRATION_MODEL_LAYOUT_NUM);
+ 		demonstration_model_layout.setOnClickListener(this);
+ 		demonstration_model_switch = (Switch) findViewById(R.id.face_unlock_demonstration_model_switch);
+-		demonstration_model_switch.setTag(DEMONSTRATION_MODEL_SWITCH_NUM);
+-		demonstration_model_switch.setOnCheckedChangeListener(this);
++
++		face_unlock_turn_on_layout = (RelativeLayout) findViewById(R.id.face_unlock_screen_turn_on);
++		face_unlock_turn_on_layout.setTag(SCREEN_TURN_ON_MODEL_NUM);
++		face_unlock_turn_on_layout.setOnClickListener(this);
+ 		
++		screen_turn_on_switch = (Switch) findViewById(R.id.face_unlock_turn_on_items_switch);
++
++		
+ 		/**IUV:add-start for faceLock use by yunlong.shen on 2017/07/01 */
+ 		if(Settings.System.getInt(getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0) == 1){
+ 			demonstration_model_switch.setChecked(true);
+@@ -251,6 +260,12 @@
+ 		}else{
+ 			demonstration_model_switch.setChecked(false);
+ 		}
++		if(Settings.System.getInt(getContentResolver(),Settings.System.FACE_STATE_TURN_ON, 0) == 1 &&
++			Settings.System.getInt(getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0) == 1){
++			screen_turn_on_switch.setChecked(true);
++		}else{
++			screen_turn_on_switch.setChecked(false);
++		}
+ 		if (isExistFaceData()) {
+ 			face_unlock_manager_title.setVisibility(View.VISIBLE);
+ 			face_unlock_manager_layout.setVisibility(View.VISIBLE);
+@@ -260,6 +275,8 @@
+ 			face_unlock_manager_title.setVisibility(View.GONE);
+ 			face_unlock_manager_layout.setVisibility(View.GONE);
+ 			face_unlock_main_layout.setVisibility(View.VISIBLE);
++			Settings.System
++					.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
+ 		}
+ 	}
+ 	
+@@ -341,6 +358,7 @@
+ 		case DEMONSTRATION_MODEL_LAYOUT_NUM:
+ 			if(demonstration_model_switch.isChecked() && isExistFaceData()){
+ 				demonstration_model_switch.setChecked(false);
++				screen_turn_on_switch.setChecked(false);
+ 				Settings.System
+ 						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);//IUV:add for faceLock use by yunlong.shen on 2017/07/01
+ 			}else{
+@@ -352,6 +370,19 @@
+ 				}
+ 			}
+ 			break;
++		case SCREEN_TURN_ON_MODEL_NUM:
++			if(screen_turn_on_switch.isChecked() && isExistFaceData()){
++				screen_turn_on_switch.setChecked(false);
++				Settings.System
++						.putInt(getContentResolver(), Settings.System.FACE_STATE_TURN_ON, 0);
++			}else{
++				if(isExistFaceData()&&Settings.System.getInt(getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0) == 1){
++					screen_turn_on_switch.setChecked(true);				
++					Settings.System
++						.putInt(getContentResolver(), Settings.System.FACE_STATE_TURN_ON, 1);
++				}
++			}
++			break;
+ 		case FACE_MANAGER_LAYOUT_NUM:
+ 			hintDialogShow(REMOVE_FACEUNLOCK_BTN_NUM);
+ 			break;
+@@ -437,27 +468,7 @@
+ 			startActivityForResult(intent,request);
+     }
+ 
+-	@Override
+-	public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+-		if (isChecked && isExistFaceData()) {
+-			if (((int) buttonView.getTag()) == PRIVATE_MODEL_SWITCH_NUM) {
+-				mPager.setVisibility(View.GONE);
+-			} else {
+-				Settings.System
+-						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 1);
+-				face_unlock_demonstration_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
+-			}
+-		} else {
+-			if(!isExistFaceData()){
+-				buttonView.setChecked(false);
+-				updateStatus();
+-			}
+ 
+-				Settings.System
+-						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
+-		}
+-	}
+-
+ 	public boolean  verifypassword(){
+ 		ChooseLockSettingsHelper helper = new ChooseLockSettingsHelper(this);
+         final double passwordQuality = helper.utils().getActivePasswordQuality(UserHandle.myUserId());
+@@ -617,59 +628,7 @@
+         }
+     }
+ 	
+-	/*added by luyang*/	
+-	private void mUpdateUi(){
+-		/*if(Settings.System.getInt(getContentResolver(),Settings.System.PRIVACY_PROTECTION_ENABLED, 0) == 1){
+-			private_model_switch.setChecked(true);
+-			face_unlock_private_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
+-		}else{
+-			private_model_switch.setChecked(false);
+-			//face_unlock_private_model_title.setTextColor(getColor(R.color.items_summary_color));
+-		}zxp*/private_model_switch.setChecked(false);
+-		/**IUV:add-start for faceLock use by yunlong.shen on 2017/07/01 */
+-		if(Settings.System.getInt(getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0) == 1){
+-			demonstration_model_switch.setChecked(true);
+-			face_unlock_demonstration_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
+-		}else{
+-			demonstration_model_switch.setChecked(false);
+-			//face_unlock_demonstration_model_title.setTextColor(getColor(R.color.items_summary_color));
+-		}
+-		/**IUV:add-end*/
+-	}
+ 	
+-	private final class PrivacyObserver extends ContentObserver {
+-       /* private final Uri PRIVACY_PROTECTION_ENABLED_URI =
+-                Settings.System.getUriFor(Settings.System.PRIVACY_PROTECTION_ENABLED);zxp*/
+-		private final Uri FACE_STATE_ENABLED_URI =
+-				Settings.System.getUriFor(Settings.System.FACE_STATE_ENABLED);
+-
+-        public PrivacyObserver() {
+-            super(new Handler());
+-        }
+-
+-        public void register(boolean register) {
+-            final ContentResolver cr = mcontext.getContentResolver();
+-            /*if (register) {
+-                cr.registerContentObserver(PRIVACY_PROTECTION_ENABLED_URI, false, this);
+-				cr.registerContentObserver(FACE_STATE_ENABLED_URI, false, this);
+-            } else {
+-                cr.unregisterContentObserver(this);
+-            }zxp*/
+-        }
+-
+-        @Override
+-        public void onChange(boolean selfChange, Uri uri) {
+-            super.onChange(selfChange, uri);
+-            /*if (PRIVACY_PROTECTION_ENABLED_URI.equals(uri)) {
+-                mUpdateUi();
+-            }zxp*/
+-			if (FACE_STATE_ENABLED_URI.equals(uri)) {
+-				updateStatus();
+-			}
+-        }
+-    }
+-	/*end by iuv luyang*/
+-	
+ 	/**IUV:add-start for faceLock use by yunlong.shen on 2017/06/30 */
+ 	class MyFaceMainOnClick implements OnClickListener {
+ 
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/res/layout/face_unlock_main.xml
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/res/layout/face_unlock_main.xml	(revision 9071)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/res/layout/face_unlock_main.xml	(revision 9072)
+@@ -285,6 +285,7 @@
+             android:id="@+id/face_unlock_demonstration_model_switch"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
++			android:clickable= "false"
+             android:layout_centerVertical="true"
+             android:layout_alignParentRight="true"
+             android:layout_marginRight="12dp" />
+@@ -300,9 +301,9 @@
+         android:layout_marginRight="16dp"
+         android:background="#DBDBDB"
+         android:minHeight="80dp" />
+-<!-- 
++
+     <RelativeLayout
+-        android:id="@+id/face_unlock_private_model_layout"
++        android:id="@+id/face_unlock_screen_turn_on"
+         android:layout_width="match_parent"
+         android:layout_height="60dp"
+         android:background="@drawable/layout_background_selector" >
+@@ -314,18 +315,18 @@
+             android:orientation="vertical" >
+ 
+             <TextView
+-                android:id="@+id/face_unlock_private_model_title"
++                android:id="@+id/face_unlock_turn_on_title"
+                 android:layout_width="wrap_content"
+                 android:layout_height="wrap_content"
+                 android:layout_marginLeft="16dp"
+                 android:layout_marginTop="10dp"
+                 android:gravity="center_vertical"
+-                android:text="@string/ic_default_face_scan_private_title"
++                android:text="@string/ic_default_face_turn_on_title"
+                 android:textColor="@color/ic_default_title_text_color"
+                 android:textSize="@dimen/ic_default_settings_title_size" />
+ 
+             <TextView
+-                android:id="@+id/face_unlock_private_model_summary"
++                android:id="@+id/face_unlock_turn_on_summary"
+                 android:layout_width="wrap_content"
+                 android:layout_height="wrap_content"
+                 android:layout_marginBottom="8dp"
+@@ -332,20 +333,22 @@
+                 android:layout_marginLeft="16dp"
+                 android:layout_marginRight="50dp"
+                 android:gravity="center_vertical"
+-                android:text="@string/ic_default_face_scan_private_summary"
++				android:visibility="gone"
++                android:text="@string/ic_default_face_turn_on_summary"
+                 android:textColor="@color/items_summary_color"
+                 android:textSize="@dimen/ic_default_settings_summary_size" />
+         </LinearLayout>
+ 
+         <Switch
+-            android:id="@+id/face_unlock_private_model_items_switch"
++            android:id="@+id/face_unlock_turn_on_items_switch"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
++	    android:clickable= "false"
+             android:layout_alignParentRight="true"
+             android:layout_centerVertical="true"
+             android:layout_marginRight="12dp" />
+     </RelativeLayout>
+-
++<!-- 
+     <View
+         android:layout_width="match_parent"
+         android:layout_height="1px"
+Index: vendor/branch/5058I_ALWE/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 9071)
++++ vendor/branch/5058I_ALWE/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 9072)
+@@ -7337,7 +7337,10 @@
+         if (DEBUG_WAKEUP) Slog.i(TAG, "Screen turning on...");
+ 		Log.d(TAG,"exitFaceVerify when screenTurnedon ");
+         updateScreenOffSleepToken(false);
+-		startFaceVerify();
++		String faceTurnOn = Settings.System.getStringForUser(mContext.getContentResolver(), Settings.System.FACE_STATE_TURN_ON, 0);
++		if("1".equals(faceTurnOn)){
++			startFaceVerify();
++		}
+         synchronized (mLock) {
+             mScreenOnEarly = true;
+             mScreenOnFully = false;
+Index: vendor/branch/5058I_ALWE/frameworks/base/core/java/android/provide/Settings.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/base/core/java/android/provide/Settings.java	(revision 9071)
++++ vendor/branch/5058I_ALWE/frameworks/base/core/java/android/provide/Settings.java	(revision 9072)
+@@ -3093,6 +3093,12 @@
+          * @hide
+          */
+         public static final String FACE_STATE_ENABLED = "face_state_enabled";
++		       /**
++         * 
++         * 
++         * @hide
++         */
++        public static final String FACE_STATE_TURN_ON = "face_state_turn_on";
+         /**
+          *
+          *

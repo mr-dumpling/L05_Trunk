@@ -1,0 +1,49 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 14007)
++++ vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 14008)
+@@ -553,11 +553,14 @@
+ 						deviceId="IMEI:"+deviceId;
+ 						deviceIds.add(deviceId);
+ 					}
+-					String imeisv = telephonyManager.getDeviceSoftwareVersion();
+-					if (!TextUtils.isEmpty(imeisv)) {
+-					 	imeisv = "IMEISV:" + imeisv;
+-                        deviceIds.add(imeisv);
+-                    }
++					//String imeisv = telephonyManager.getDeviceSoftwareVersion();
++					if (!TextUtils.isEmpty(version)) {
++						String imeisv = version.substring(version.length()-2, version.length());
++						if (!TextUtils.isEmpty(imeisv)) {
++							imeisv = "IMEISV:" + imeisv;
++							deviceIds.add(imeisv);
++						}
++					}
+                 }
+ 				deviceIds.add(svnver); 
+ 				/*
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/SimStatus.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/SimStatus.java	(revision 14007)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/SimStatus.java	(revision 14008)
+@@ -26,6 +26,7 @@
+ import android.os.PersistableBundle;
+ import android.os.UserHandle;
+ import android.os.UserManager;
++import android.os.SystemProperties;
+ import android.provider.Settings;
+ import android.support.v7.preference.Preference;
+ import android.telephony.CarrierConfigManager;
+@@ -477,7 +478,11 @@
+         String deviceId = (mPhone.getPhoneType() != TelephonyManager.PHONE_TYPE_CDMA) ? mPhone
+                 .getImei() : mPhone.getMeid();
+         setSummaryText(KEY_IMEI, deviceId);
+-        setSummaryText(KEY_IMEI_SV, mPhone.getDeviceSvn());
++		String version = SystemProperties.get("ro.def.software.version");
++		if (!TextUtils.isEmpty(version)) {
++			String imeisv = version.substring(version.length()-2, version.length());
++			setSummaryText(KEY_IMEI_SV, imeisv/*mPhone.getDeviceSvn()*/);
++		}		
+ 
+         if (!mShowICCID) {
+             removePreferenceFromScreen(KEY_ICCID);

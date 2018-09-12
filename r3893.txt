@@ -1,0 +1,1058 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/Android.mk
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/Android.mk	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/Android.mk	(revision 3893)
+@@ -58,8 +58,7 @@
+     libphonenumber \
+     glide \
+     com.android.browser.provider \
+-    com.mediatek.omadrm.common \
+-    libcmccsdk
++    com.mediatek.omadrm.common
+ 
+ 
+ LOCAL_SRC_FILES := $(call all-java-files-under, $(src_dirs))
+@@ -88,10 +87,8 @@
+ 
+ include $(BUILD_PACKAGE)
+ include $(CLEAR_VARS)
+-LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES := apachecommons:libs/commons-io.jar \
+-                                    libcmccsdk:libs/sms-plus-5.8.jar 
++LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES := apachecommons:libs/commons-io.jar
+ include $(BUILD_MULTI_PREBUILT)
+ 
+-
+ # This finds and builds the test apk as well, so a single make does both.
+ include $(call all-makefiles-under,$(LOCAL_PATH))
+Index: vendor/mediatek/proprietary/packages/apps/Mms/AndroidManifest.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/AndroidManifest.xml	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/AndroidManifest.xml	(revision 3893)
+@@ -101,14 +101,6 @@
+             android:icon="@mipmap/ic_launcher_smsmms"
+             android:taskAffinity="android.task.mms"
+             android:allowTaskReparenting="true">
+-
+-        <meta-data
+-            android:name="cn.cmcc.online.smsapi.API_KEY"
+-            android:value="20041980fc7b4164acc1f11cfecb209b" />
+-            <service android:name="cn.cmcc.online.smsapi.CacheService"/>
+-            <service android:name="cn.cmcc.online.smsapi.DaService"/>
+-
+-
+         <service android:name=".transaction.MmsPushReceiveService"
+                  android:exported="false" />
+         <service android:name=".transaction.TransactionService"
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 3893)
+@@ -44,7 +44,6 @@
+ 
+ import org.xmlpull.v1.XmlPullParser;
+ import org.xmlpull.v1.XmlPullParserException;
+-import android.os.SystemProperties;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
+@@ -751,14 +750,4 @@
+         return mOpConfigExt.getMmsServiceConfig();
+     }
+     /// @}
+-
+-    public static boolean isCmccFeature() {
+-        String optr = SystemProperties.get("ro.operator.optr");
+-        String config = SystemProperties.get("gsm.sim.operator.alpha");
+-        Log.d(TAG, "zly --> isCmccFeature optr:" + optr + " config:" + config);
+-        if ((optr != null && optr.equals("OP01") || (config != null && config.equals("CMCC")))) {
+-                return true;
+-        }
+-        return false;
+-    }
+ }
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsApp.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsApp.java	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsApp.java	(revision 3893)
+@@ -66,7 +66,6 @@
+ 
+ import java.util.HashMap;
+ import java.util.Locale;
+-import cn.cmcc.online.smsapi.SmsPlus;
+ 
+ public class MmsApp extends Application implements IMmsAppCallback {
+     public static final String LOG_TAG = "Mms";
+@@ -96,10 +95,6 @@
+     private static HandlerThread mToastthread = null;
+     private static ToastHandler mToastHandler = null;
+ 
+-    public static final String DUOQU_SDK_CHANNEL = "XHXXOaoQGOME";
+-    private static final String DUOQU_SDK_CHANNEL_SECRETKEY = "MIICdwIBADANBgkqhkiG9w0BAQEFAASCAmEwggJdAgEAAoGBAIEeLeS4MmuoCngZ3+2pqj/NrXBKDcyArm7CYjIslBsV4hQ14swkzDMwa3xBFX7/crAJevAxUunzwrDha43WuKgxkLH4F2e/HEXtNWlvVRuqoKdXbeIBDpVY+vw4hU3jMVzKs4OmUyuGQPGW1/Lp37O1uKsv3vrvFrblVcddc5qhAgMBAAECgYBklYwO92df8oJlWVLWpCualLGeHjJts3kvk4JHr+6Yww1hzTCm86uX3Qp+u3zxeDJx7JC2+NWsp1Zt0M2mqzUhxmZAkl/7jkhy+eF+MluV/+t2qLkWieRHkuNvpuMxbMwdBF7C7etNBoWsNcsf2DpgTcLR8Dte4UnF7unbXochmQJBALa1/DrBrvA3Shg9CXyeMAoDiaD48eGqcra05KGLyPKB+bazQMkdoMT0vAsR7kNcv4dJ8ICBEgER1ZFbHoLmepMCQQC06OVAfv/9ZaTxR1HMapnbUFWPoJieQkLo+vmprHzyiu8a4bpFbNhRLzudsBuE1ZtbftOe8YZ3N47/9eol4jJ7AkBLrXsotxqHgs8c1QM966OIMkjqNNKzHs9e3/Qm+WglEjLlOr/lzXDOw3OzvhyLKDpohfaos01KxiFIkI5Ft8MjAkEAnMJCBEUH5Lay2i+Gfa7RauyNd0sdc+TOvbrbo17HVhN1ZMG7+nR6bL6U1erHra66U+ntzYhTj/Igg0K/hdwfCQJBAICTMd+VGrwD5hTW8tlU0DXzp1Y0QjOdf0pm2u4J4S0g9U1si8mb0AzmHmuMU61n36OjUKrmOZn2JDW+F1QQfF0=";
+-    private static final String DUOQU_SDK_RSAPRVKEY = "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCKVX50AXOWStSxDRL278RIG5ETAWcI+UehA/dqCYeSxvNKhJCVdUdqex0SqRapF00yRQxokb1/SsGbJfrrXANByuJSN1yRDOm2sPdamBCJ+iX0xidbQiYWK14ESyeMIpB80hssu7nn0mE9qeaSSrlR/mijNbHr7ryUY9aADfMCNQamybVIOCvSpxAdZCtlaQXTnTzHGOfH5DquWlD3Vs+8pEDMjNnO5fNNTVi1A363T0YqYuWyTtHnlHEcKwjWoVlTfFUjyoc6Jx/l2FoB3DsrFcEteTC/YwukX4GL/JpYOBXGJ0++cvfwmK3RR8V7di4t4EbT360EpFgffxyUTOjxAgMBAAECggEAYr1xnGYo1h8lwBbf8YjlJr8eh11Z6UrduO223WZd8gO2RvtmpHfo+PVVpCszdJCgVoB4we89Pq3ikdbDStoLrRue/iZsGVEJRZD9jhm6vHHkQ9po3zfRLcPYwOHQIbPORHpIUV7R7Mn7BOPQI53Yt9ELaWv7SrfGvXih9BeA3JJfgEzGzC561u2OKWW7XiqT2AL1v2r3OoKFamHF+Wf8BpSS0oOrG/9qqrwzfWnTDXjw1dkMz/hzc6f72mFRUED/ZhxxUY95A+nyEKBcnupmPhzkcs7Z314V7CPi2RSeK4OMjmt42EJJn0svqd71aaYdL3W0sSlxicgWuc1yPVjpjQKBgQDrU1+r+EtOc/4SFRU0nX3zlBQgw8mGv0saXCqkjA1iMRWLL6ReWx3C3sutmSjNfKhaj69frJ7XFaEt3VUu6ojWwxfWtsdwxi1kF7kp1GJq44SBFPokf7D2GIyoaketsA1CHTKBIYWZzFCXBlo1Admql83lHP0MXzHxcRZX37TfDwKBgQCWfLbFlZKgvLyF+HuBm+GJvk13LCXSjxC5PD2EYCJOzYPEgjoQPzy7+D16s2i6xCC1xaaAMDlayp7AvshNjGa0Hgc74ptvQ8jXkHGnDl6rPntzPmLytnYBSR1JJjgSkIFshOiTEr6tOksPlF5q5EuySSZ+EX+1H5AuDVGPIWG3/wKBgQC04+TR402346+0pKIlTL7JotUKDpX1z0vi2mApFkMfbI2b7SZTJYUuC2bTbb0Qn7clzfdH+wAqY0T/ZXiaVMyVEWhcsymBxcSUgSvjPI/ejD+Jnd9eeQ1FTr+oofGxUHgQjzMIUgVJoOV+AfMLdf2khYZOjMbzYKWaa4x6RcrZ/wKBgFvbnKVW+73p9xm/54Ph5vXxl8+avyub8JVhVButosN/Z2NYKqEoOKZ0jPKM+OyoM19BWrT8usXU0LrOue28OiTP/5JqbH6qXbpXjUhv2RGmfiyGdFe7UKTQQHQaRDfwxU+8gUrlMkcDQjYsVsXgvOQDCuABRncE4Tl7H8HCmqd5AoGBALc+FIJVZ39XMrpo9YP55SJ35RwCYRsrwsLiwicp7zYhVVXVZx2K3arbcBtFFFB14hZ7g/Up1Qqaq0us8dVy5u6Os3Xl5xuWeXyPWqBdyrvpeys0Y1iy8im14B03FDzogCG/SUtnWRNZe5RMig9iXLv1ubnLnkpHtJS8Uc1XvZIL";
+-
+     @Override
+     public void onCreate() {
+         super.onCreate();
+@@ -158,10 +153,6 @@
+         MmsSystemEventReceiver.delayWakeupService(this);
+         /// @}
+ 
+-        if(MmsConfig.isCmccFeature()) {
+-            SmsPlus.init(this);
+-        }
+-
+         PDebug.End("MmsApp onCreate");
+     }
+ 
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageListItem.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageListItem.java	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageListItem.java	(revision 3893)
+@@ -114,19 +114,6 @@
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
+ 
+-import cn.cmcc.online.smsapi.CardView;
+-import cn.cmcc.online.smsapi.Menu;
+-import cn.cmcc.online.smsapi.NCardViewHelper;
+-import cn.cmcc.online.smsapi.SmsCardData;
+-import cn.cmcc.online.smsapi.SmsPortData;
+-import cn.cmcc.online.smsapi.TerminalApi;
+-import android.widget.FrameLayout;
+-import android.os.Handler;
+-import android.os.HandlerThread;
+-import android.os.Looper;
+-import android.os.Message;
+-import java.util.List;
+-
+ /// @}
+ /**
+  * This class provides view of a message in the messages list.
+@@ -249,18 +236,6 @@
+ 
+     IOpMessageListItemExt mOpMessageListItemExt;
+ 
+-
+-    private LinearLayout mCardContainer;
+-    private LinearLayout mItemContainer;
+-    private FrameLayout messageContentOrCardContainer;
+-
+-    private Handler mUIHandler;
+-    private Handler mWorkHandler;
+-    private HandlerThread mHandlerThread;
+-
+-
+-
+-
+     public MessageListItem(Context context, View view) {
+         super(context);
+         addView(view);
+@@ -273,11 +248,6 @@
+         }
+         initPlugin(this.getContext());
+         onFinishInflateView();
+-
+-        mUIHandler = new Handler(Looper.getMainLooper());
+-        mHandlerThread = new HandlerThread("MessageListIem-Thread");
+-        mHandlerThread.start();
+-        mWorkHandler = new LoadDataHandler(mHandlerThread.getLooper(), mContext);
+     }
+ 
+     public View findView(int id) {
+@@ -405,9 +375,6 @@
+         mSubDivider = (View) findView(sim_divider);
+         mExpireText = (TextView) findView(text_expire);
+         mOpMessageListItemExt.onFinishInflateView(mExpireText, mSelectedBox, mBodyTextView);
+-
+-        mCardContainer = (LinearLayout) findViewById(R.id.cardContainer);
+-        mItemContainer = (LinearLayout) findViewById(R.id.mms_layout_view_parent);
+     }
+ 
+     public void bind(MessageItem msgItem,
+@@ -531,111 +498,6 @@
+         mHandler = handler;
+     }
+ 
+-    //-------------------------------
+-
+-
+-    private static class LoadDataHandler extends Handler {
+-        private Object[] param;
+-        private Context context;
+-
+-        public LoadDataHandler(Looper looper, Context context) {
+-            super(looper);
+-            this.context = context;
+-        }
+-
+-        @Override
+-        public void handleMessage(Message msg) {
+-            param = (Object[]) msg.obj;
+-            log("handleMessage");
+-            int id = (int) param[0];
+-            String serverport = (String) param[1];
+-            String smsText = (String) param[2];
+-            long smsDate = (long) param[3];
+-            LoadCardDatacallback loadCardDatacallback = (LoadCardDatacallback) param[4];
+-            SmsCardData cardData = NCardViewHelper.getInstance().getCardData(context, id, serverport, smsText, smsDate);
+-            loadCardDatacallback.load(id, cardData);
+-        }
+-    }
+-
+-    private interface LoadMessageCallback {
+-        void load(List<MessageItem> mItems);
+-    }
+-
+-    private interface LoadMenuCallback {
+-        void load(List<Menu> menuList);
+-    }
+-
+-    private interface LoadCardDatacallback {
+-        void load(int id, SmsCardData cardData);
+-    }
+-
+-    private void loadCardDataAsync(int id, String port, String smsText, long smsDate, LoadCardDatacallback callback) {
+-        Message message = mWorkHandler.obtainMessage(1);
+-        message.obj = new Object[]{id, port, smsText, smsDate, callback};
+-        mWorkHandler.sendMessage(message);
+-    }
+-
+-    public void getCardInfo () {
+-        new Thread(){
+-           @Override
+-           public void run() {
+-                Log.d(TAG, "zly --> getCardInfo mMsgId:" + mMessageItem.mMsgId + " mAddress:" +
+-                        mMessageItem.mAddress + " mSmsDate:" + mMessageItem.mSmsDate + " mBody:" + mMessageItem.mBody);
+-                if (null == mMessageItem) {
+-                    return;
+-                }
+-
+-                loadCardDataAsync((int)mMessageItem.mMsgId, mMessageItem.mAddress, mMessageItem.mBody, mMessageItem.mSmsDate, new LoadCardDatacallback() {
+-                    @Override
+-                    public void load(int id, final SmsCardData cardData) {
+-                        if (null != mMessageItem) {
+-                            log("id:" + id + " mMsgId:" + mMessageItem.mMsgId);
+-                        }
+-
+-                        if (null == mMessageItem || id != mMessageItem.mMsgId || cardData == null || !cardData.isMatched()) {
+-                            Log.d(TAG, "zly --> getCardInfo load failed");
+-                            return;
+-                        }
+-
+-                        mUIHandler.post(new Runnable() {
+-                            @Override
+-                            public void run() {
+-                                int cardType = NCardViewHelper.getInstance().getCardType(cardData);
+-                                CardView cardView = NCardViewHelper.getInstance().obtainCardView(mContext, cardType, null);
+-
+-                                if (cardView.onUpdate(cardData)) {
+-                                    //cardView.setShadow(false);
+-                                    mCardContainer.removeAllViews();
+-                                    mCardContainer.addView(cardView);
+-                                    mItemContainer.setVisibility(View.GONE);
+-                                    mCardContainer.setVisibility(View.VISIBLE);
+-                                    log("cardView onupdate sucess");
+-                                } else {
+-                                    log("cardView onupdate failed");
+-                                    mItemContainer.setVisibility(View.VISIBLE);
+-                                    mCardContainer.setVisibility(View.GONE);
+-                                }
+-                            }
+-                        });
+-                    }
+-                });
+-           }
+-        }.start();
+-
+-
+-    }
+-
+-    public void clearCache() {
+-        if(NCardViewHelper.getInstance() != null && mHandlerThread != null) {
+-            NCardViewHelper.getInstance().destroy();
+-            mHandlerThread.quitSafely();
+-        }
+-    }
+-
+-    private static void log(String str) {
+-        Log.d(TAG, "zly --> " + str);
+-    }
+-
+     private void bindNotifInd() {
+         showMmsView(false);
+         // add for vcard
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageUtils.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageUtils.java	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageUtils.java	(revision 3893)
+@@ -166,11 +166,6 @@
+ import java.util.Locale;
+ import java.util.Map;
+ import java.util.concurrent.ConcurrentHashMap;
+-import android.util.LruCache;
+-import android.webkit.WebView;
+-//import android.webkit.WebView;
+-import cn.cmcc.online.smsapi.CardView;
+-import cn.cmcc.online.smsapi.SmsPortData;
+ 
+ /**
+  * An utility class for managing messages.
+@@ -180,121 +175,11 @@
+         void onResizeResult(PduPart part, boolean append);
+     }
+ 
+-    public static final int  CMCC_CARD_CACHE_SIZE = 200;
+-    private static final LruCache<String,CmccCard> mCmccDataCache = new LruCache<String,CmccCard>(CMCC_CARD_CACHE_SIZE);
+-    private static final LruCache<String,String> mJisonCache = new LruCache<String,String>(CMCC_CARD_CACHE_SIZE);
+-    private static final LruCache<String,SmsPortData> mSmsPortDateCache = new LruCache<String,SmsPortData>(CMCC_CARD_CACHE_SIZE);
+-
+     private static final String TAG = LogTag.TAG;
+ 
+     private static String sLocalNumber;
+-
+     private static String[] sNoSubjectStrings;
+-        public static class CmccCard {
+-            public int mWifiState;
+-            public int mCardType;
+-            public CardView mCardView;
+-            public CmccCard(int wifiState, CardView cardView) {
+-                    mWifiState = wifiState;
+-                    mCardView = cardView;
+-            }
+-        }
+ 
+-        /**
+-        * save bitmap to cache
+-        */
+-        public static void addCardToMemoryCache(String key, CmccCard card) {
+-        if (mCmccDataCache != null) {
+-                synchronized (mCmccDataCache){
+-                        if(getCardFromMemCache(key) != null) {
+-                                mCmccDataCache.remove(key);
+-                        }
+-                mCmccDataCache.put(key, card);
+-                }
+-        }
+-        }
+-        /**
+-        * get bitmap from cache
+-        */
+-        public static CmccCard getCardFromMemCache(String key) {
+-                if (mCmccDataCache != null) {
+-                        return mCmccDataCache.get(key);
+-                }
+-                return null;
+-        }
+-        /**
+-        * save JISON to cache
+-        */
+-        public static void addSmsPortDataToMemoryCache(String key, SmsPortData Portdata) {
+-            if (mSmsPortDateCache != null) {
+-                synchronized (mSmsPortDateCache) {
+-                    mSmsPortDateCache.put(key, Portdata);
+-                }
+-            }
+-        }
+-
+-
+-        /**
+-        * get SmsPortData from cache
+-        */
+-        public static SmsPortData getSmsPortDataFromMemCache(String key) {
+-            Log.d("yunlong",TAG+"--getSmsPortDataFromMemCache--->key="+key+"----->mSmsPortDateCache="+mSmsPortDateCache);
+-            if (mSmsPortDateCache != null) {
+-                return mSmsPortDateCache.get(key);
+-            }
+-            return null;
+-        }
+-
+-
+-
+-        /**
+-     * cache for CMCC-cache
+-     */
+-    public static void clearCmccCache(){
+-        if(mCmccDataCache != null){
+-            mCmccDataCache.evictAll();
+-        }
+-
+-        if(mSmsPortDateCache != null){
+-            mSmsPortDateCache.evictAll();
+-        }
+-    }
+-
+-   /**
+-    ** check if it is WIFI and WIFI is available. CMCC LOGO down only when WLAN is available
+-   */
+-   public static boolean isWifiNetwork(Context context) {
+-        ConnectivityManager connManager = (ConnectivityManager) context
+-                .getSystemService(Context.CONNECTIVITY_SERVICE);
+-
+-        if (null == connManager) {
+-           Log.w(TAG, "connectivity manager is null when checking active network");
+-            return false;
+-        }
+-
+-        NetworkInfo info = connManager.getActiveNetworkInfo();
+-        if (info == null) {
+-            Log.w(TAG, "no active network when checking active network");
+-            return false;
+-        }
+-
+-        if (!info.isConnected()) {
+-            Log.w(TAG, "current network is not connected when checking active network");
+-            return false;
+-        }
+-
+-        if (!info.isAvailable()) {
+-            Log.w(TAG, "current network is not available when checking active network");
+-            return false;
+-        }
+-
+-        if (ConnectivityManager.TYPE_WIFI == info.getType()) {
+-            return true;
+-        }
+-        return false;
+-    }
+-
+-
+     // Cache of both groups of space-separated ids to their full
+     // comma-separated display names, as well as individual ids to
+     // display names.
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationList.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationList.java	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationList.java	(revision 3893)
+@@ -134,19 +134,6 @@
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.HashSet;
+-
+-import android.util.LruCache;
+-import android.graphics.Bitmap;
+-import java.io.ByteArrayInputStream;
+-import java.io.InputStream;
+-import java.security.MessageDigest;
+-import java.security.cert.CertificateFactory;
+-import java.security.cert.X509Certificate;
+-import android.content.pm.PackageInfo;
+-import android.content.pm.PackageManager;
+-import android.content.pm.Signature;
+-
+-
+ /**
+  * This activity provides a list view of existing conversations.
+  */
+@@ -279,10 +266,6 @@
+     // add for mutli user
+     private boolean isUserHasPerUsingMms = true;
+ 
+-    public static final int HAVE_STICKTOPED_CONVERSATIONS_TOKEN  = 1804;
+-    private LruCache<String, Bitmap> mLogoIconCache;
+-
+-
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
+@@ -367,22 +350,6 @@
+         mIpConvList = IpMessageUtils.getIpMessagePlugin(this).getIpConversationList();
+         mIpConvList.onIpConversationListCreate(this, mIpConvListCallback,
+                 mListView, mIpEmptyView, mNetworkStatusBar, networkStatusTextView);
+-
+-
+-        Log.e(TAG, "getCertificateSHA1Fingerprint -->" + getCertificateSHA1Fingerprint(this));
+-        if(MmsConfig.isCmccFeature()) {
+-            final int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
+-            // Use 1/16th of the available memory for this memory cache.
+-            final int cacheSize = maxMemory / 16;
+-
+-            mLogoIconCache = new LruCache<String, Bitmap>(cacheSize) {
+-                    @Override
+-                    protected int sizeOf(String key, Bitmap bitmap) {
+-                        // The cache size will be measured in kilobytes rather than number of items.
+-                        return bitmap.getByteCount() / 1024;
+-                    }
+-                    };
+-        }
+     }
+ 
+     private void setupActionBar() {
+@@ -947,76 +914,6 @@
+         return false;
+     }
+ 
+-
+-    /**IUV:add-start for CMCC-cardview by yunlong.shen on 2017/11/07 */
+-    /**
+-    * save bitmap to cache
+-    */
+-    public void addBitmapToMemoryCache(String key, Bitmap bitmap) {
+-        if (mLogoIconCache != null && getBitmapFromMemCache(key) == null) {
+-            synchronized (mLogoIconCache){
+-                mLogoIconCache.put(key, bitmap);
+-            }
+-        }
+-    }
+-
+-    /**
+-    * get bitmap from cache
+-    */
+-    public Bitmap getBitmapFromMemCache(String key) {
+-        if (mLogoIconCache != null) {
+-                return mLogoIconCache.get(key);
+-        }
+-        return null;
+-    }
+-
+-    protected static String getCertificateSHA1Fingerprint(Context context) {
+-            String value = null;
+-
+-        PackageManager pm = context.getPackageManager();
+-
+-        try {
+-            PackageInfo packageInfo = pm.getPackageInfo(context.getPackageName(), PackageManager.GET_SIGNATURES);
+-
+-            Signature[] signatures = packageInfo.signatures;
+-            byte[] cert = signatures[0].toByteArray();
+-            InputStream in = new ByteArrayInputStream(cert);
+-
+-            CertificateFactory cf = CertificateFactory.getInstance("X509");
+-            X509Certificate x509Certificate = (X509Certificate) cf.generateCertificate(in);
+-
+-            MessageDigest messageDigest = MessageDigest.getInstance("SHA1");
+-            byte[] publicKey = messageDigest.digest(x509Certificate.getEncoded());
+-
+-            value = bytesToHexStringWithSemi(publicKey);
+-        } catch (Exception e) {
+-
+-        }
+-
+-        return value;
+-    }
+-
+-    protected static String bytesToHexStringWithSemi(byte[] bytes) {
+-        StringBuilder stringBuilder = new StringBuilder("");
+-        if (bytes == null || bytes.length <= 0) {
+-            return null;
+-        }
+-        for (int i = 0; i < bytes.length; i++) {
+-            int v = bytes[i] & 0xFF;
+-            String hv = Integer.toHexString(v);
+-            if (hv.length() < 2) {
+-                stringBuilder.append(0);
+-            }
+-            stringBuilder.append(hv.toUpperCase());
+-
+-            if (i < bytes.length - 1) {
+-                stringBuilder.append(':');
+-            }
+-        }
+-        return stringBuilder.toString();
+-    }
+-
+-
+     @Override
+     protected void onListItemClick(ListView l, View v, int position, long id) {
+         // Note: don't read the thread id data from the ConversationListItem view passed in.
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 3893)
+@@ -4234,9 +4234,6 @@
+         /// @}
+ 
+         super.onDestroy();
+-        if (mMsgListView.getChildCount() > 0) {
+-            ((MessageListItem)mMsgListView.getChildAt(0)).clearCache();
+-        }
+     }
+ 
+     @Override
+Index: vendor/mediatek/proprietary/packages/apps/Mms/libs/sms-plus-5.8.jar
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/layout/message_list_item_recv.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/layout/message_list_item_recv.xml	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/layout/message_list_item_recv.xml	(revision 3893)
+@@ -24,20 +24,6 @@
+     android:layout_width="match_parent"
+     android:layout_height="wrap_content"
+     android:orientation="vertical">
+-
+-    <FrameLayout
+-        android:id="@+id/messageContentOrCardContainer"
+-        android:layout_width="match_parent"
+-        android:layout_height="match_parent">
+-
+-    <LinearLayout
+-        android:id="@+id/cardContainer"
+-        android:orientation="vertical"
+-        android:layout_width="match_parent"
+-        android:layout_height="match_parent" >
+-    </LinearLayout>
+-
+-
+ <include android:id="@+id/sim_divider"
+     layout="@layout/sim_divider_item" />
+ <include android:id="@+id/time_divider"
+@@ -128,7 +114,7 @@
+             android:maxWidth="246dp"
+             android:adjustViewBounds="true"
+             android:textColor="#555555"
+-            android:textSize="14sp"
++            android:textSize="14sp" 
+             android:visibility="gone"
+          ></TextView>
+         <!-- file attachment view -->
+@@ -234,17 +220,6 @@
+                 android:layout_gravity="left"
+                 android:visibility="gone" />
+         </LinearLayout>
+-        <LinearLayout
+-            android:background="@drawable/textview_border"
+-            android:id="@+id/serverMenu"
+-            android:orientation="horizontal"
+-            android:divider="@drawable/divider_vertical"
+-            android:showDividers="middle"
+-            android:layout_alignParentBottom="true"
+-            android:layout_width="match_parent"
+-            android:layout_height="48dp"
+-            android:visibility="gone">
+-        </LinearLayout>
+     </LinearLayout>
+ </LinearLayout>
+  <ViewStub android:id="@+id/mms_downloading_view_stub"
+@@ -255,5 +230,4 @@
+ </LinearLayout>
+ <include android:id="@+id/on_line_divider"
+     layout="@layout/on_line_divider_item" />
+-    </FrameLayout>
+ </LinearLayout>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/layout/compose_message_activity.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/layout/compose_message_activity.xml	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/layout/compose_message_activity.xml	(revision 3893)
+@@ -427,17 +427,6 @@
+                     android:background="@drawable/sim_sms_multidel_button_selector"></ImageButton>
+             </LinearLayout>
+         </LinearLayout>
+-        <LinearLayout
+-            android:background="@drawable/textview_border"
+-            android:id="@+id/serverMenu"
+-            android:orientation="horizontal"
+-            android:divider="@drawable/divider_vertical"
+-            android:showDividers="middle"
+-            android:layout_alignParentBottom="true"
+-            android:layout_width="match_parent"
+-            android:layout_height="48dp"
+-            android:visibility="gone">
+-        </LinearLayout>
+     </LinearLayout>
+     </com.android.mms.ui.HeightChangedLinearLayout>
+ 	</RelativeLayout>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/layout/message_list_item_send.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/layout/message_list_item_send.xml	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/layout/message_list_item_send.xml	(revision 3893)
+@@ -24,178 +24,164 @@
+     android:layout_width="match_parent"
+     android:layout_height="wrap_content"
+     android:orientation="vertical">
+-
+-    <FrameLayout
+-        android:id="@+id/messageContentOrCardContainer"
+-        android:layout_width="match_parent"
+-        android:layout_height="match_parent">
+-
+-        <LinearLayout
+-            android:id="@+id/cardContainer"
++<include android:id="@+id/sim_divider"
++    layout="@layout/sim_divider_item" />
++<include android:id="@+id/time_divider"
++    layout="@layout/time_divider_item" />
++<LinearLayout
++    android:layout_width="fill_parent"
++    android:layout_height="wrap_content"
++    android:orientation="horizontal" >
++    <CheckBox android:id="@+id/select_check_box"
++        android:layout_width="wrap_content"
++        android:layout_height="match_parent"
++        android:layout_gravity="center_vertical"
++        android:focusable="false"
++        android:clickable="false"
++        android:gravity="center_vertical"
++        android:visibility="gone" />
++    <LinearLayout
++        android:layout_width="0dip"
++        android:layout_height="wrap_content"
++        android:layout_weight="1">
++        <View
++            android:layout_width="0dip"
++            android:layout_height="wrap_content"
++            android:layout_weight="1" />
++        <LinearLayout android:id="@+id/mms_layout_view_parent"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
+             android:orientation="vertical"
+-            android:layout_width="match_parent"
+-            android:layout_height="match_parent" >
+-        </LinearLayout>
++            android:background="@drawable/listitem_background_send"
++            android:layout_marginLeft="45dp"
++            android:layout_marginRight="10dp"
++            android:paddingLeft="12dp"
++            android:paddingRight="22dp"
++            android:paddingTop="10dp"
++            android:paddingBottom="10dp"
++            android:gravity="left">
++            <TextView android:id="@+id/text_view"
++                android:autoLink="all"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:linksClickable="false"
++                android:textAppearance="?android:attr/textAppearanceSmall"
++                android:adjustViewBounds="true"
++                android:textColor="#222222"
++                android:paddingLeft="5dp"
++                android:textSize="14sp" />
+ 
+-        <include android:id="@+id/sim_divider"
+-            layout="@layout/sim_divider_item" />
+-        <include android:id="@+id/time_divider"
+-            layout="@layout/time_divider_item" />
+-        <LinearLayout
+-            android:layout_width="fill_parent"
+-            android:layout_height="wrap_content"
+-            android:orientation="horizontal" >
+-            <CheckBox android:id="@+id/select_check_box"
++            <ViewStub android:id="@+id/mms_layout_view_stub"
++                android:layout="@layout/mms_layout_view"
+                 android:layout_width="wrap_content"
+-                android:layout_height="match_parent"
+-                android:layout_gravity="center_vertical"
+-                android:focusable="false"
+-                android:clickable="false"
+-                android:gravity="center_vertical"
+-                android:visibility="gone" />
+-            <LinearLayout
+-                android:layout_width="0dip"
+                 android:layout_height="wrap_content"
+-                android:layout_weight="1">
+-                <View
+-                    android:layout_width="0dip"
+-                    android:layout_height="wrap_content"
+-                    android:layout_weight="1" />
+-                <LinearLayout android:id="@+id/mms_layout_view_parent"
+-                    android:layout_width="wrap_content"
+-                    android:layout_height="wrap_content"
+-                    android:orientation="vertical"
+-                    android:background="@drawable/listitem_background_send"
+-                    android:layout_marginLeft="45dp"
+-                    android:layout_marginRight="10dp"
+-                    android:paddingLeft="12dp"
+-                    android:paddingRight="22dp"
+-                    android:paddingTop="10dp"
+-                    android:paddingBottom="10dp"
+-                    android:gravity="left">
+-                    <TextView android:id="@+id/text_view"
+-                        android:autoLink="all"
++                android:layout_gravity="center_horizontal"
++                android:paddingLeft="@dimen/message_item_text_padding_left_right"
++                android:paddingRight="@dimen/message_item_text_padding_left_right" />
++            <!-- file attachment view -->
++            <ViewStub android:id="@+id/mms_file_attachment_view_stub"
++                android:layout="@layout/file_attachment_view"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="3dip"
++                android:layout_marginLeft="6dp"
++                android:layout_marginRight="8dp"
++                android:layout_gravity="left" />
++            <LinearLayout android:id="@+id/status_panel"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:orientation="horizontal"
++                android:layout_marginTop="6dip" >
++                    <TextView
++                        android:id="@+id/sim_status"
+                         android:layout_width="wrap_content"
+                         android:layout_height="wrap_content"
++                        android:maxWidth="66dip"
++                        android:ellipsize="middle"
++                        android:singleLine="true"
++                        android:textColor="#555555"
++                        android:textSize="14sp"
++                        android:layout_marginBottom="4dip"
+                         android:linksClickable="false"
+-                        android:textAppearance="?android:attr/textAppearanceSmall"
+-                        android:adjustViewBounds="true"
+-                        android:textColor="#222222"
+-                        android:paddingLeft="5dp"
+-                        android:textSize="14sp" />
+-
+-                    <ViewStub android:id="@+id/mms_layout_view_stub"
+-                        android:layout="@layout/mms_layout_view"
+-                        android:layout_width="wrap_content"
+-                        android:layout_height="wrap_content"
+-                        android:layout_gravity="center_horizontal"
+-                        android:paddingLeft="@dimen/message_item_text_padding_left_right"
+-                        android:paddingRight="@dimen/message_item_text_padding_left_right" />
+-                    <!-- file attachment view -->
+-                    <ViewStub android:id="@+id/mms_file_attachment_view_stub"
+-                        android:layout="@layout/file_attachment_view"
+-                        android:layout_width="wrap_content"
+-                        android:layout_height="wrap_content"
+-                        android:layout_marginTop="3dip"
+-                        android:layout_marginLeft="6dp"
+-                        android:layout_marginRight="8dp"
+                         android:layout_gravity="left" />
+-                    <LinearLayout android:id="@+id/status_panel"
+-                        android:layout_width="wrap_content"
+-                        android:layout_height="wrap_content"
+-                        android:orientation="horizontal"
+-                        android:layout_marginTop="6dip" >
+-                            <TextView
+-                                android:id="@+id/sim_status"
+-                                android:layout_width="wrap_content"
+-                                android:layout_height="wrap_content"
+-                                android:maxWidth="66dip"
+-                                android:ellipsize="middle"
+-                                android:singleLine="true"
+-                                android:textColor="#555555"
+-                                android:textSize="10sp"
+-                                android:layout_marginBottom="4dip"
+-                                android:linksClickable="false"
+-                                android:layout_gravity="left" />
+-                        <TextView android:id="@+id/date_view"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:textColor="#555555"
+-                            android:textSize="10sp"
+-                            android:paddingLeft="4dip"
+-                            android:paddingTop="3dip"
+-                            android:layout_gravity="left" />
++                <TextView android:id="@+id/date_view"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:textColor="#555555"
++                    android:textSize="10sp"
++                    android:paddingLeft="4dip"
++                    android:paddingTop="3dip"
++                    android:layout_gravity="left" />
+ 
+-                        <ImageView android:id="@+id/delivered_sending"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:src="@drawable/im_meg_status_sending"
+-                            android:paddingLeft="4dip"
+-                            android:paddingTop="3dip"
+-                            android:layout_gravity="left"
+-                            android:visibility="gone" />
+-                         <TextView android:id="@+id/delivered_sending_txt"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"></TextView>
++                <ImageView android:id="@+id/delivered_sending"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:src="@drawable/im_meg_status_sending"
++                    android:paddingLeft="4dip"
++                    android:paddingTop="3dip"
++                    android:layout_gravity="left"
++                    android:visibility="gone" />
++                 <TextView android:id="@+id/delivered_sending_txt"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"></TextView>
+ 
+-                        <ImageView android:id="@+id/delivered_success"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:src="@drawable/im_meg_status_out"
+-                            android:paddingLeft="4dip"
+-                            android:paddingTop="3dip"
+-                            android:layout_gravity="left"
+-                            android:visibility="gone" />
+-                         <TextView android:id="@+id/delivered_success_txt"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"></TextView>
++                <ImageView android:id="@+id/delivered_success"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:src="@drawable/im_meg_status_out"
++                    android:paddingLeft="4dip"
++                    android:paddingTop="3dip"
++                    android:layout_gravity="left"
++                    android:visibility="gone" />
++                 <TextView android:id="@+id/delivered_success_txt"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"></TextView>
+ 
+-                        <ImageView android:id="@+id/delivered_failed"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:src="@drawable/ic_list_alert_sms_failed"
+-                            android:paddingLeft="4dip"
+-                            android:paddingTop="3dip"
+-                            android:layout_gravity="left"
+-                            android:visibility="gone" />
+-                         <TextView android:id="@+id/delivered_failed_txt"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"></TextView>
++                <ImageView android:id="@+id/delivered_failed"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:src="@drawable/ic_list_alert_sms_failed"
++                    android:paddingLeft="4dip"
++                    android:paddingTop="3dip"
++                    android:layout_gravity="left"
++                    android:visibility="gone" />
++                 <TextView android:id="@+id/delivered_failed_txt"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"></TextView>
+ 
+-                        <ImageView android:id="@+id/delivered_indicator"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:src="@drawable/ic_sms_mms_delivered"
+-                            android:paddingLeft="4dip"
+-                            android:paddingTop="3dip"
+-                            android:layout_gravity="left"
+-                            android:visibility="gone" />
+-                        <ImageView android:id="@+id/details_indicator"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:src="@drawable/ic_sms_mms_details"
+-                            android:paddingLeft="4dip"
+-                            android:paddingTop="3dip"
+-                            android:layout_gravity="left"
+-                            android:visibility="gone" />
+-                        <ImageView android:id="@+id/locked_indicator"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:src="@drawable/ic_lock_message_sms"
+-                            android:paddingLeft="4dip"
+-                            android:paddingTop="1dip"
+-                            android:layout_gravity="left"
+-                            android:visibility="gone" />
+-                    </LinearLayout>
+-                </LinearLayout>
++                <ImageView android:id="@+id/delivered_indicator"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:src="@drawable/ic_sms_mms_delivered"
++                    android:paddingLeft="4dip"
++                    android:paddingTop="3dip"
++                    android:layout_gravity="left"
++                    android:visibility="gone" />
++                <ImageView android:id="@+id/details_indicator"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:src="@drawable/ic_sms_mms_details"
++                    android:paddingLeft="4dip"
++                    android:paddingTop="3dip"
++                    android:layout_gravity="left"
++                    android:visibility="gone" />
++                <ImageView android:id="@+id/locked_indicator"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:src="@drawable/ic_lock_message_sms"
++                    android:paddingLeft="4dip"
++                    android:paddingTop="1dip"
++                    android:layout_gravity="left"
++                    android:visibility="gone" />
+             </LinearLayout>
+-            <ViewStub android:id="@+id/mms_downloading_view_stub"
+-                android:layout="@layout/mms_downloading_view"
+-                android:layout_gravity="center_vertical"
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"/>
+         </LinearLayout>
+-        <include android:id="@+id/on_line_divider"
+-            layout="@layout/on_line_divider_item" />
+-    </FrameLayout>
++    </LinearLayout>
++    <ViewStub android:id="@+id/mms_downloading_view_stub"
++        android:layout="@layout/mms_downloading_view"
++        android:layout_gravity="center_vertical"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"/>
+ </LinearLayout>
++<include android:id="@+id/on_line_divider"
++    layout="@layout/on_line_divider_item" />
++</LinearLayout>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/list_divider_menu.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/list_divider_menu.xml	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/list_divider_menu.xml	(revision 3893)
+@@ -1,10 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<inset xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:insetLeft="4dp"
+-    android:insetRight="4dp">
+-
+-    <shape android:shape="rectangle" >
+-        <!--<solid android:color="@color/background_color_divider_line" /> -->
+-    </shape>
+-
+-</inset>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/textview_border.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/textview_border.xml	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/textview_border.xml	(revision 3893)
+@@ -1,5 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle" >
+-   <solid android:color="#ffffff" />
+-   <stroke android:width="0.5dp" android:color="#c8c8c8"/>
+-</shape>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/menu_bg.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/menu_bg.xml	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/menu_bg.xml	(revision 3893)
+@@ -1,27 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<!--
+-    Copyright (C) 2015 The Android Open Source Project
+-
+-    Licensed under the Apache License, Version 2.0 (the "License");
+-    you may not use this file except in compliance with the License.
+-    You may obtain a copy of the License at
+-
+-         http://www.apache.org/licenses/LICENSE-2.0
+-
+-    Unless required by applicable law or agreed to in writing, software
+-    distributed under the License is distributed on an "AS IS" BASIS,
+-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-    See the License for the specific language governing permissions and
+-    limitations under the License.
+--->
+-
+-<selector xmlns:android="http://schemas.android.com/apk/res/android">
+-    <item
+-        android:state_pressed="true" />
+-<!--        android:drawable="@color/menu_item_pressed" -->
+-    <item
+-        android:state_focused="true" />
+-<!--        android:drawable="@color/menu_item_pressed" -->
+-    <item
+-        android:drawable="@android:color/transparent" />
+-</selector>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/divider_vertical.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/divider_vertical.xml	(revision 3892)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/divider_vertical.xml	(revision 3893)
+@@ -1,5 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle" >
+-    <solid android:color="#c8c8c8" />
+-    <size android:width="1dp" />
+-</shape>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/drawable/ic_smart_sms_menu.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/drawable-hdpi/ic_smart_sms_menu.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream

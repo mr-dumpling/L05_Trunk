@@ -1,0 +1,123 @@
+Index: vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationList.java
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationList.java	(revision 9144)
++++ vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationList.java	(revision 9145)
+@@ -802,6 +802,7 @@
+                 cellBroadcastItem.setVisible(false);
+             }
+         }
++        cellBroadcastItem.setVisible(false);
+ 
+         mIpConvList.onIpCreateOptionsMenu(menu);
+         /// M: for mwi. @{
+Index: vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/GeneralPreferenceActivity.java
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/GeneralPreferenceActivity.java	(revision 9144)
++++ vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/GeneralPreferenceActivity.java	(revision 9145)
+@@ -370,49 +370,53 @@
+         // if (FeatureOption.MTK_GMO_ROM_OPTIMIZE) {
+         removeWallPaperSetting();
+         // }
+-		mCBSwitchPref = (CheckBoxPreference)findPreference(CELL_BROADCAST_SWITCH);
+-		mCBSwitchPref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+-		@Override
+-		public boolean onPreferenceChange(Preference pref, Object o) {
+-			if (pref == mCBSwitchPref) {
+-	   			boolean onOrOff = (Boolean) o;
+-				mCBSwitchPref.setChecked(onOrOff);
+-	   			Settings.System.putInt(getContentResolver(),Settings.System.CELLBROADCAST_SWITCH, onOrOff ? 1 : 0);	
+-	   			if (onOrOff)	{
+-					if (SimStateMonitor.getInstance().getSubCount() < 1) {
+-		    				mCBsettingPref.setEnabled(false);
+-					} else {
+-		    				mCBsettingPref.setEnabled(true);
+-		    				setMultiCardPreference();
+-					}	
+-	   			} else {
+-	   				mCBsettingPref.setEnabled(false);
+-	   			}
+-			}			
+-			return false;		
+-		}	
+-	});
+-	cb_switch = Settings.System.getInt(getContentResolver(),Settings.System.CELLBROADCAST_SWITCH, 0)==1;
+-	if (mCBSwitchPref != null) {
+-		if(getResources().getBoolean(R.bool.def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile)){
+-			mCBSwitchPref.setEnabled(false);
+-		}
+-		mCBSwitchPref.setChecked(cb_switch);
+-	}
++        mCBSwitchPref = (CheckBoxPreference)findPreference(CELL_BROADCAST_SWITCH);
++        mCBSwitchPref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++            @Override
++            public boolean onPreferenceChange(Preference pref, Object o) {
++                if (pref == mCBSwitchPref) {
++                    boolean onOrOff = (Boolean) o;
++                    mCBSwitchPref.setChecked(onOrOff);
++                    Settings.System.putInt(getContentResolver(),Settings.System.CELLBROADCAST_SWITCH, onOrOff ? 1 : 0);	
++                    if (onOrOff)	{
++                        if (SimStateMonitor.getInstance().getSubCount() < 1) {
++                            mCBsettingPref.setEnabled(false);
++                        } else {
++                            mCBsettingPref.setEnabled(true);
++                            setMultiCardPreference();
++                        }	
++                    } else {
++                        mCBsettingPref.setEnabled(false);
++                    }
++                }			
++                return false;		
++            }	
++        });
++        cb_switch = Settings.System.getInt(getContentResolver(),Settings.System.CELLBROADCAST_SWITCH, 0)==1;
++        if (mCBSwitchPref != null) {
++            if(getResources().getBoolean(R.bool.def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile)){
++                mCBSwitchPref.setEnabled(false);
++            }
++            mCBSwitchPref.setChecked(cb_switch);
++        }
+ 	
+         mCBsettingPref = findPreference(CELL_BROADCAST);
+-        /*if (SimStateMonitor.getInstance().getSubCount() < 1) {
++        if (cb_switch) {
++            if (SimStateMonitor.getInstance().getSubCount() < 1) {
++                mCBsettingPref.setEnabled(false);
++            } else {
++                mCBsettingPref.setEnabled(true);
++            }	
++        } else {
+             mCBsettingPref.setEnabled(false);
+-        }*/
+-	if (cb_switch) {
+-	    if (SimStateMonitor.getInstance().getSubCount() < 1) {
+-	    	mCBsettingPref.setEnabled(false);
+-	    } else {
+-	    	mCBsettingPref.setEnabled(true);
+-	    }	
+-	} else {
+-	    mCBsettingPref.setEnabled(false);
+-	}
++        }
++        
++        PreferenceCategory cellBroadcastTitle = (PreferenceCategory) findPreference("pref_key_cell_broadcast_title");
++        if (getPreferenceScreen() != null && cellBroadcastTitle!= null) {
++            cellBroadcastTitle.removePreference(findPreference(CELL_BROADCAST));
++            cellBroadcastTitle.removePreference(findPreference(CELL_BROADCAST_SWITCH));
++            getPreferenceScreen().removePreference(cellBroadcastTitle);
++        }
+ 
+         mSmsLimitPref = findPreference(SMS_DELETE_LIMIT);
+         mMmsLimitPref = findPreference(MMS_DELETE_LIMIT);
+Index: vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/generalpreferences.xml
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/generalpreferences.xml	(revision 9144)
++++ vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/generalpreferences.xml	(revision 9145)
+@@ -39,7 +39,7 @@
+             android:summary="@string/pref_summary_delete_limit" android:title="@string/pref_title_mms_delete" />
+     </PreferenceCategory>
+ 
+-    <PreferenceCategory android:title="@string/cell_broadcast_title">
++    <PreferenceCategory android:key="pref_key_cell_broadcast_title" android:title="@string/cell_broadcast_title">
+         <CheckBoxPreference android:key="pref_key_cell_broadcast_switch"
+             android:title="@string/cell_broadcast_switch" android:summary="@string/receive_cell_broadcast_message"
+             android:persistent="false">

@@ -1,0 +1,219 @@
+Index: tools/fota.sh
+===================================================================
+--- tools/fota.sh	(revision 0)
++++ tools/fota.sh	(revision 13120)
+@@ -0,0 +1,206 @@
++#!/usr/bin/perl 
++# ##########################################################
++# Author : javen
++# Date : 2018.4.4
++# ##########################################################
++# 5058I_ALAE_V2.1_180402
++
++if(@ARGV < 1){
++	Useage();
++	#exit;
++}
++#for -h
++$idx_help = getCmdParam("-h");
++if($idx_help > 0){
++	Useage();
++	exit;
++}
++$arg_pre_v = $ARGV[0];
++$idx_pre = getCmdParam("-from");
++if($idx_pre > 0){
++	$arg_pre_v = $ARGV[$idx_pre];
++}
++$idx_to = getCmdParam("-to");
++if($idx_to > 0){
++	$arg_cur_v = $ARGV[$idx_to];
++}else{
++	$arg_cur_v = getCurVer();
++}
++###### -- config info -- #####
++$fota_path = "~/zwq_share/release/L05/5058Y_ALIE";
++$fota_br = "5058Y";
++$fota_prj = "ALIE";
++###### -- config info end -- #####
++$prj_name = "aus6739_66_n1";
++$v1_path = "";
++$v2_path = "";
++$v1_to_v2 = "";#"V2.0_to_V2.1";
++$cmd_fota = "../build/tools/releasetools/ota_from_target_files -v --block -k device/mediatek/common/security/$prj_name/releasekey -s device/mediatek/build/releasetools/mt_ota_from_target_files -i ";
++if($arg_pre_v eq "") {
++	$arg_pre_v = getPreVer($fota_path, $arg_cur_v);
++}
++#exit;
++print "##################### BEGIN ######################\n";
++print "-" x 50;print "\n";
++print " -- FOTA INFO:\n";
++print " -- From: [$arg_pre_v] \n -- To: [$arg_cur_v]\n";
++
++$v1_to_v2 = getVerTo($arg_cur_v, $arg_pre_v);
++$v2_path = getMaxZipPath("../out/target/product/$prj_name/obj/PACKAGING/target_files_intermediates");
++$v2_name = getName($v2_path);
++$v1_path = getMaxZipPath($fota_path."/".$arg_pre_v, $v2_name);
++#print "v1_to_v2 = [$v1_to_v2]\n";
++`chmod 777 -R $v2_path`;
++
++$zip_ota = "ODM_".$fota_br."_".$fota_prj."_".$v1_to_v2."_USER_incrementOTA.zip";
++#$cmd_fota = "$cmd_fota $v1_path $v2_path $zip_ota";
++if($cmd_fota =~ /..\/build/){
++	#$cmd_fota = s/..\/build/.\/build/g;
++	$cmd_fota = substr($cmd_fota, 3);
++	$cmd_fota = "cd .. && ".$cmd_fota;
++	if(index($v1_path, "../") == 0){ #if ../../ path
++		print " -- MY need substr path [$v1_path]\n";
++		$v1_path = substr($v1_path, 3);
++	}
++	$v2_path = substr($v2_path, 3);
++	$cmd_fota = "$cmd_fota $v1_path $v2_path $zip_ota";
++}
++
++print " -- V1: [$v1_path]\n";
++print " -- V2: [$v2_path]\n";
++print " -- OTA: [$zip_ota]\n";
++#print " -- cmd_fota = [$cmd_fota]\n";
++if($arg_pre_v ne ""){
++	print " -- -- FOTA Doing... -----------------------\n";
++	`$cmd_fota`;
++}
++
++print "-" x 50;print "\n";
++$cmd_cp = "cp ../$v2_path $fota_path/$arg_cur_v";
++#print "cmd_cp = [$cmd_cp]\n";
++print " -- -- Copy Doing...\n";
++#print "DIR: [$fota_path/$arg_cur_v]\n";
++
++$dir_fota_cur = "$fota_path/$arg_cur_v";
++print " -- dir_fota_cur: [$dir_fota_cur]\n";
++if(-e $dir_fota_cur){
++	print " -- File [$fota_path/$arg_cur_v/] already exisit.\n";
++}else{
++	print " -- File [$fota_path/$arg_cur_v/] copying...\n";
++	`mkdir $fota_path/$arg_cur_v`;
++	#`$cmd_cp/`;
++}
++
++print "-" x 50;print "\n";
++print "##################### END ########################\n";
++exit;
++#######################################end###################	
++sub getName {
++	my($my_n_p) = @_;
++	$my_idx = rindex($my_n_p, "/");
++	if($my_idx > 0){
++		return substr($my_n_p, $my_idx+1);
++	}
++	return $my_n_p;
++}
++sub getPreVer {
++	my($my_fota_path, $my_ex) = @_;
++	$my_fota_path = getMaxZipPath($my_fota_path, $my_ex);
++	$my_fota_path =~ s/$fota_path\///g;
++	my $my_idx_e = index($my_fota_path, "/full_".$prj_name);
++	my $sub_v = substr($my_fota_path, 0, $my_idx_e);
++	my $my_idx_s = rindex($sub_v, "/");
++	$sub_v = substr($sub_v, $my_idx_s+1);
++	return $sub_v;
++}
++sub getMaxZipPath {
++	my($my_path, $my_name) = @_;
++	$cmd_zip = "find $my_path -name full_".$prj_name."-target_files*.zip";
++	@arr_zip2 = `$cmd_zip`;
++	$max_zip2 = "";
++	$max_zip2_name = "";
++	if($my_name ne ""){
++		#print " -- except zip = [$my_name]\n";
++	}
++	foreach $zip2 (@arr_zip2){
++		chomp($zip2);
++		#print "zip2 = [$zip2]\n";
++		#print "max_zip2 = [$max_zip2]\n";
++		if($my_name ne "" && $zip2 =~ /$my_name/){
++			#print "SAME: [$my_name][$zip2]\n";
++			next;
++		}
++		
++		#print "zip = [$zip]\n";
++		$zip2_name = getName($zip2);
++		if($zip2_name gt $max_zip2_name){
++			$max_zip2_name = $zip2_name;
++			$max_zip2 = $zip2;
++		}
++	}
++	$my_path = $max_zip2;
++	return $my_path;
++}	
++sub getCurVer {
++	$f_ver = "../build/tools/buildinfo.sh";
++	$search_id = "ro.build.display.id=";
++	open(FH, "$f_ver") or die $!;
++	foreach $line (<FH>){
++		chomp($line);
++		if($line =~ /$search_id/){
++			$line =~ s/$search_id//g;
++			$line =~ s/echo//g;
++			$line =~ s/[ ,\"]//g;
++			close(FH);
++			return $line;
++		}
++	}
++	close(FH);
++}
++sub getVerTo {
++	my($my_do_v, $my_pre_v) = @_;
++	$last11 = substr($my_do_v, -11);
++	$last11 =~ s/[V_]//g;
++	$last11 = substr($last11,0,3);
++	if($my_pre_v eq ""){
++		$pre_v = $last11 - 0.1;
++	}else{
++		$pre_v = substr($my_pre_v, -11);
++		$pre_v =~ s/[V_]//g;
++		$pre_v = substr($pre_v,0,3);
++	}
++	$last11 = sprintf("V%2.1f"."_to_"."V%2.1f", $pre_v, $last11);
++	return $last11;
++}
++#no input param
++sub getCmdParam {  
++	my ($my_pa) = @_;
++	
++	$av_str = "";
++	foreach $my_b(@ARGV){
++		$av_str = $av_str.$my_b.",";
++	}
++	
++	my @my_av = split(",", $av_str);
++	my $mycount = 0;
++
++	foreach $my_la(@my_av){
++		$mycount++;
++		if($my_pa eq $my_la){
++			return $mycount;
++		}
++	}
++	return -1;
++} 
++
++sub Useage(){
++	print "-" x 50;print "\n";
++	print "FOTA for different version.\n";
++	print "Useage: 
++	fota.sh [-from version] [-to version] [-h]
++	-- -h show help information
++	-- -from version for prev version 
++	-- -to version for next version 
++	\n";
++	print "-" x 50;print "\n";
++}
+\ No newline at end of file
+
+Property changes on: tools/fota.sh
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

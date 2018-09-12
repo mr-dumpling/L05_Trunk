@@ -1,0 +1,138 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/SimStatus.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/SimStatus.java	(revision 13645)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/SimStatus.java	(revision 13646)
+@@ -26,6 +26,7 @@
+ import android.os.PersistableBundle;
+ import android.os.UserHandle;
+ import android.os.UserManager;
++import android.provider.Settings;
+ import android.support.v7.preference.Preference;
+ import android.telephony.CarrierConfigManager;
+ import android.telephony.CellBroadcastMessage;
+@@ -81,7 +82,8 @@
+  * # Signal Strength
+  *
+  */
+-public class SimStatus extends SettingsPreferenceFragment {
++public class SimStatus extends SettingsPreferenceFragment implements
++        Preference.OnPreferenceChangeListener {
+     private static final String TAG = "SimStatus";
+ 
+     private static final String KEY_DATA_STATE = "data_state";
+@@ -89,6 +91,7 @@
+     private static final String KEY_OPERATOR_NAME = "operator_name";
+     private static final String KEY_ROAMING_STATE = "roaming_state";
+     private static final String KEY_NETWORK_TYPE = "network_type";
++	private static final String KEY_ACCESS_POINT_NAMES = "access_point_names";
+     private static final String KEY_LATEST_AREA_INFO = "latest_area_info";
+     private static final String KEY_PHONE_NUMBER = "number";
+     private static final String KEY_SIGNAL_STRENGTH = "signal_strength";
+@@ -96,7 +99,7 @@
+     private static final String KEY_IMEI_SV = "imei_sv";
+     private static final String KEY_ICCID = "iccid";
+     private static final String COUNTRY_ABBREVIATION_BRAZIL = "br";
+-
++	public static final String EXTRA_SUB_ID = "sub_id";
+     static final String CB_AREA_INFO_RECEIVED_ACTION =
+             "android.cellbroadcastreceiver.CB_AREA_INFO_RECEIVED";
+ 
+@@ -113,6 +116,7 @@
+     private Phone mPhone = null;
+     private Resources mRes;
+     private Preference mSignalStrength;
++	private Preference mAccessPointName;
+     private SubscriptionInfo mSir;
+     private boolean mShowLatestAreaInfo;
+     private boolean mShowICCID;
+@@ -155,7 +159,10 @@
+                 .getActiveSubscriptionInfoList();
+ 
+         addPreferencesFromResource(R.xml.device_info_sim_status);
+-
++		mAccessPointName = findPreference(KEY_ACCESS_POINT_NAMES);
++		if (mAccessPointName !=null) {
++			mAccessPointName.setOnPreferenceChangeListener(this);
++		}
+         mRes = getResources();
+         mDefaultText = mRes.getString(R.string.device_info_default);
+         // Note - missing in zaku build, be careful later...
+@@ -610,4 +617,25 @@
+             getActivity().setTitle(title);
+         }
+     }
++	
++	@Override
++	public boolean onPreferenceChange(Preference preference, Object newValue) {
++        Log.d(TAG, "onPreferenceChange(): Preference - " + preference
++                + ", newValue - " + newValue + ", newValue type - "
++                + newValue.getClass());             
++        return true;
++    }
++	
++	@Override
++    public boolean onPreferenceTreeClick(Preference preference) {
++        if (preference.getKey().equals(KEY_ACCESS_POINT_NAMES)) {
++			Intent intent = new Intent(Settings.ACTION_APN_SETTINGS);
++			// This will setup the Home and Search affordance
++			intent.putExtra(":settings:show_fragment_as_subsetting", true);
++			intent.putExtra(EXTRA_SUB_ID, mPhone.getSubId());
++			intent.putExtra("isDisabledRestoreMenu",true);
++			getActivity().startActivity(intent);
++		}       
++        return true;
++    }
+ }
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 13645)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 13646)
+@@ -132,7 +132,7 @@
+     private IntentFilter mMobileStateFilter;
+ 
+     private boolean mUnavailable;
+-
++	private boolean mIsDisabledRestoreMenu = false;
+     private boolean mHideImsApn;
+     private boolean mAllowAddingApns;
+     private boolean mRestoreOngoing = false;
+@@ -187,7 +187,7 @@
+         final Activity activity = getActivity();
+         final int subId = activity.getIntent().getIntExtra(SUB_ID,
+                 SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+-
++		mIsDisabledRestoreMenu = activity.getIntent().getBooleanExtra("isDisabledRestoreMenu",false);
+         mMobileStateFilter = new IntentFilter(
+                 TelephonyIntents.ACTION_ANY_DATA_CONNECTION_STATE_CHANGED);
+         /// M: for Airplane mode check
+@@ -516,9 +516,11 @@
+                         .setIcon(android.R.drawable.ic_menu_add)
+                         .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+             }
+-            menu.add(0, MENU_RESTORE, 0,
++			if (!mIsDisabledRestoreMenu) {
++				menu.add(0, MENU_RESTORE, 0,
+                     getResources().getString(R.string.menu_restore))
+                     .setIcon(android.R.drawable.ic_menu_upload);
++			}           
+         }
+ 
+         /// M: for plug-in
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/res/xml/device_info_sim_status.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/res/xml/device_info_sim_status.xml	(revision 13645)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/res/xml/device_info_sim_status.xml	(revision 13646)
+@@ -37,7 +37,12 @@
+         android:title="@string/status_network_type"
+         android:summary="@string/device_info_not_available"
+         android:persistent="false" />
+-
++		
++	<Preference android:key="access_point_names"
++        android:enabled="true"
++        android:title="@string/access_point_names"
++        android:persistent="false" />
++		
+     <Preference android:key="latest_area_info"
+         android:enabled="false"
+         android:shouldDisableView="false"

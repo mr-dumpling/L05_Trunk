@@ -1,0 +1,127 @@
+Index: vendor/branch/5058I/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058Y/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058J/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058A/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058T/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/Keyguard/Android.mk
+===================================================================
+--- frameworks/base/packages/Keyguard/Android.mk	(revision 4109)
++++ frameworks/base/packages/Keyguard/Android.mk	(revision 4110)
+@@ -37,12 +37,12 @@
+ LOCAL_STATIC_JAVA_AAR_LIBRARIES += vlife_sdk
+ LOCAL_STATIC_JAVA_AAR_LIBRARIES += play-services-ads
+ LOCAL_STATIC_JAVA_AAR_LIBRARIES += play-services-ads-lite
++LOCAL_STATIC_JAVA_LIBRARIES += bzqsdk
+ endif
+ # added by zengjie for JoyLockScreen feature task 5429900 on 2017/10/20 end
+ 
+ # added by zengjie for JoyLockScreen feature task 5429900 on 2017/10/20 start
+ ifeq (yes,$(strip $(TCL_LSCREEN_SUPPORT)))
+-	LOCAL_AAPT_FLAGS += --auto-add-overlay --extra-packages com.hawk.android.adsdk
+ 	LOCAL_AAPT_FLAGS += --auto-add-overlay --extra-packages com.duapps.ad
+ 	#LOCAL_AAPT_FLAGS += --auto-add-overlay --extra-packages com.my.target
+ 	LOCAL_AAPT_FLAGS += --auto-add-overlay --extra-packages com.summit.sdk.magazine
+@@ -69,6 +69,7 @@
+ 	LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES += play-services-ads:libs/play-services-ads-10.2.0.aar
+ 	LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES += play-services-ads-lite:libs/play-services-ads-lite-10.2.0.aar
+ 	LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES += gson-sdk:libs/gson-2.7.jar
++	LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES += bzqsdk:libs/BZQSDK3_0.jar
+ endif
+ include $(BUILD_MULTI_PREBUILT) 
+ 
+Index: frameworks/base/packages/Keyguard/libs/BZQSDK3_0.jar
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/Keyguard/libs/BZQSDK3_0.jar
+===================================================================
+--- frameworks/base/packages/Keyguard/libs/BZQSDK3_0.jar	(revision 0)
++++ frameworks/base/packages/Keyguard/libs/BZQSDK3_0.jar	(revision 4110)
+
+Property changes on: frameworks/base/packages/Keyguard/libs/BZQSDK3_0.jar
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/Keyguard/libs/vlife-sdk-tcl-0.1.aar
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/assets/lscreen.version
+===================================================================
+--- frameworks/base/packages/SystemUI/assets/lscreen.version	(revision 4109)
++++ frameworks/base/packages/SystemUI/assets/lscreen.version	(revision 4110)
+@@ -1 +1 @@
+-1046
+\ No newline at end of file
++1071
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/AndroidManifest.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 4109)
++++ frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 4110)
+@@ -778,9 +778,19 @@
+              android:name="com.flurry.android.FlurryFullscreenTakeoverActivity"
+              android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize" />
+          <!-- HK ad end -->
+-         <!-- added by zengjie for joy lockscreen feature task 5429900 20170927 end-->
+-	   <!--add for incoming calls turn to mute -->
+-	   <service android:name="com.android.systemui.statusbar.phone.SensorFunctionServiceIncall"
++		 
++		<provider
++            android:name="android.support.v4.content.FileProvider"
++            android:authorities="com.bizhiquan.lockscreen.tcl.provider"
++            android:exported="false"
++            android:grantUriPermissions="true">
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/file_paths" />
++		</provider>
++        <!-- added by zengjie for joy lockscreen feature task 5429900 20170927 end-->
++	    <!--add for incoming calls turn to mute -->
++	    <service android:name="com.android.systemui.statusbar.phone.SensorFunctionServiceIncall"
+             android:exported="false"/>
+ 
+     </application>
+Index: frameworks/base/packages/SystemUI/proguard.flags
+===================================================================
+--- frameworks/base/packages/SystemUI/proguard.flags	(revision 4109)
++++ frameworks/base/packages/SystemUI/proguard.flags	(revision 4110)
+@@ -82,4 +82,8 @@
+      <fields>;
+      <methods>;
+  }
+-    #added byfor JoyLockScreen on 2017/10/20 end
++ #added byfor JoyLockScreen on 2017/10/20 end
++ 
++ -keep class com.bizhiquan.** { *; }
++ -keep class com.data.collect.** { *; }
++ -keep class com.unock.** {*;} 
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/res/xml/file_paths.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/xml/file_paths.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/xml/file_paths.xml	(revision 4110)
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<paths xmlns:android="http://schemas.android.com/apk/res/android">
++    <files-path path="image" name="image/"/>
++    <!--<external-path path=".keyguard/sinaScreen/image/original" name="original/" />-->
++</paths>
+\ No newline at end of file

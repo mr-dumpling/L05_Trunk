@@ -1,0 +1,99 @@
+Index: frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java
+===================================================================
+--- frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 5452)
++++ frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 5453)
+@@ -362,6 +362,15 @@
+     private final LocalLog mPhoneTypeLog = new LocalLog(10);
+     private final LocalLog mRatLog = new LocalLog(20);
+ 
++    /** Unknown network class. */
++    public static final int NETWORK_CLASS_UNKNOWN = 0;
++    /** Class of broadly defined "2G" networks. */
++    public static final int NETWORK_CLASS_2_G = 1;
++    /** Class of broadly defined "3G" networks. */
++    public static final int NETWORK_CLASS_3_G = 2;
++    /** Class of broadly defined "4G" networks. */
++    public static final int NETWORK_CLASS_4_G = 3;
++
+     private class SstSubscriptionsChangedListener extends OnSubscriptionsChangedListener {
+         public final AtomicInteger mPreviousSubId =
+                 new AtomicInteger(SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+@@ -3199,7 +3208,20 @@
+                                 String strOperatorLong = null;
+                                 String strOperatorShort = null;
+                                 SpnOverride spnOverride = SpnOverride.getInstance();
+-
++								
++								if(opNames[2].equals("74810")){
++									if(/*(mNewSS.getRilVoiceRadioTechnology()== ServiceState.RIL_RADIO_TECHNOLOGY_GPRS ||
++									mNewSS.getRilVoiceRadioTechnology()== ServiceState.NETWORK_CLASS_3_G )*/
++                                            (getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_2_G)||
++                                                    (getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_3_G)       )
++									{
++									strOperatorLong = "Claro UY";
++									strOperatorShort = "Claro UY";
++									}else if(getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_4_G){
++										strOperatorLong = "Claro LTE";
++										strOperatorShort = "Claro LTE";
++									}
++								}else{		
+                                 strOperatorLong = mCi.lookupOperatorNameFromNetwork(
+                                         SubscriptionManager.getSubIdUsingPhoneId(
+                                                 mPhone.getPhoneId()), opNames[2], true);
+@@ -3242,6 +3264,7 @@
+                                 }
+                                 log("EVENT_POLL_STATE_OPERATOR_CDMA: "
+                                         + strOperatorLong + ", " + strOperatorShort);
++							}
+                                 mNewSS.setOperatorName(strOperatorLong, strOperatorShort,
+                                         opNames[2]);
+                                 /// @}
+@@ -3576,6 +3599,15 @@
+         else if (strNumPlmn != null && strNumPlmn.equals(mSimOperatorNumeric)) {
+             log("Home PLMN, get CPHS ons");
+             plmn = (simRecords != null) ? simRecords.getSIMCPHSOns() : "";
++				if(strNumPlmn.equals("74810")){
++                if((getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_2_G)||
++                (getNetWorkClass(mNewSS.getRilVoiceRadioTechnology()) == NETWORK_CLASS_3_G)){
++									plmn = "Claro UY";
++									}
++                else if(mNewSS.getRilVoiceRadioTechnology() == NETWORK_CLASS_4_G){
++										plmn = "Claro LTE";
++									}
++								}
+         }
+ 
+         if (TextUtils.isEmpty(plmn)) {
+@@ -8666,4 +8698,32 @@
+             explict_update_spn = 1;
+         }
+     }
++    private int getNetWorkClass(int networkType){
++        switch (networkType){
++            case ServiceState.RIL_RADIO_TECHNOLOGY_GPRS:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_EDGE:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_IS95A:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_IS95B:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_1xRTT:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_GSM:
++                return NETWORK_CLASS_2_G;
++            case ServiceState.RIL_RADIO_TECHNOLOGY_UMTS:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_EVDO_0:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_EVDO_A:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_HSUPA:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_HSPA:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_EVDO_B:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_EHRPD:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_HSPAP:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_HSDPA:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_TD_SCDMA:
++                return NETWORK_CLASS_3_G;
++            case ServiceState.RIL_RADIO_TECHNOLOGY_LTE:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_IWLAN:
++            case ServiceState.RIL_RADIO_TECHNOLOGY_LTE_CA:
++                return NETWORK_CLASS_4_G;
++            default:
++                return ServiceState.RIL_RADIO_TECHNOLOGY_UNKNOWN;
++        }
++    }
+ }

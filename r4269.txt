@@ -1,0 +1,175 @@
+Index: packages/apps/Settings/src/com/android/settings/LedIndicatorSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/LedIndicatorSettings.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/LedIndicatorSettings.java	(revision 4269)
+@@ -0,0 +1,78 @@
++/*
++ * Night mode attribute list
++ */
++package com.android.settings;
++import android.app.Activity;
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.content.pm.ResolveInfo;
++import android.os.Bundle;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.PreferenceScreen;
++import android.support.v14.preference.SwitchPreference;
++import android.util.Log;
++
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++import com.android.settings.search.BaseSearchIndexProvider;
++import com.android.settings.search.Indexable;
++import com.android.settings.search.SearchIndexableRaw;
++import android.content.SharedPreferences;
++import com.mediatek.pq.PictureQuality;
++import android.widget.Toast;
++import com.android.settings.ColorTemperaturePreference.Callback;
++import android.provider.Settings;
++import android.app.ActivityManager;
++import android.provider.Settings.Secure;
++import android.content.ContentResolver;
++import android.os.SystemProperties;
++import android.content.BroadcastReceiver;
++import android.content.IntentFilter;
++
++public class LedIndicatorSettings extends SettingsPreferenceFragment {
++	private static final String TAG = "LedIndicatorSettings";
++	private static final String PREFERENCE_NAME = "com.android.settings";
++	private static final String KEY_LEDEVENT = "led_event";
++	private static final String KEY_CHARGE = "battery_charge";
++	private static final String KEY_BATTERY = "battery_low";
++	
++	private SwitchPreference mEventSwitchPreference;
++	private SwitchPreference mChargeSwitchPreference;
++	private SwitchPreference mBatterySwitchPreference;
++	private ContentResolver mContentResolver;
++	
++   /*display attribute list*/
++	@Override
++	public void onCreate(Bundle savedInstanceState) {
++			super.onCreate(savedInstanceState);
++			final Activity activity = getActivity();
++			addPreferencesFromResource(R.xml.led_indicator_settings);
++			mContentResolver = getContext().getContentResolver();		
++			initPreference();
++			
++	}
++    
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++        
++    }
++	@Override
++    protected int getMetricsCategory() {
++        return MetricsEvent.SETTINGS_GESTURES;
++    }
++  
++   	/* Initialize the layout and display the user data*/
++     public void initPreference(){
++     	 PreferenceScreen root = getPreferenceScreen();
++		 mEventSwitchPreference=(SwitchPreference)root.findPreference(KEY_LEDEVENT);
++		 mEventSwitchPreference.setChecked(true);
++		 mChargeSwitchPreference=(SwitchPreference)root.findPreference(KEY_CHARGE);
++		 mChargeSwitchPreference.setChecked(true);
++		 mBatterySwitchPreference=(SwitchPreference)root.findPreference(KEY_BATTERY);
++		 mBatterySwitchPreference.setChecked(true);
++
++	}
++	
++}
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 4268)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 4269)
+@@ -3404,4 +3404,11 @@
+ 	<string name="auto_time_night_mode">22:00 to 7:00</string>
+ 	<string name="fingerprint_manager_back_to_home_title">返回主界面</string>
+ 	<string name="fingerprint_manager_back_to_home_summary">在任意界面触摸指纹传感器返回主界面。</string>
++	<string name="led_indicator_title">指示灯</string>
++    <string name="led_event_title">事件</string>
++	<string name="led_event_summary">未接电话，未读信息及短信等。</string>
++	<string name="battery_charge_title">充电</string>
++	<string name="battery_charge_summary">充电时打开灯</string>
++	<string name="battery_low_title">低电量</string>
++	<string name="battery_low_summary">电量低于15%自动开启灯</string>
+ </resources>
+Index: packages/apps/Settings/res/xml/display_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/display_settings.xml	(revision 4268)
++++ packages/apps/Settings/res/xml/display_settings.xml	(revision 4269)
+@@ -79,6 +79,10 @@
+                 android:summary="@string/screen_timeout_summary"
+                 android:entries="@array/screen_timeout_entries"
+                 android:entryValues="@array/screen_timeout_values" />
++	<PreferenceScreen
++                android:key="led_indicator"
++                android:title="@string/led_indicator_title"
++                android:fragment="com.android.settings.LedIndicatorSettings"/>
+ 
+         <SwitchPreference
+                 android:key="camera_gesture"
+Index: packages/apps/Settings/res/xml/led_indicator_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/led_indicator_settings.xml	(revision 0)
++++ packages/apps/Settings/res/xml/led_indicator_settings.xml	(revision 4269)
+@@ -0,0 +1,39 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2010 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
++                  xmlns:settings="http://schemas.android.com/apk/res/com.android.settings"
++        android:title="@string/led_indicator_title"
++        settings:keywords="@string/keywords_display">
++
++        <SwitchPreference
++                android:key="led_event"
++                android:title="@string/led_event_title" 
++				android:summary="@string/led_event_summary"/>
++
++        <SwitchPreference
++                android:key="battery_charge"
++                android:title="@string/battery_charge_title"
++                android:summary="@string/battery_charge_summary" />
++
++        <SwitchPreference
++                android:key="battery_low"
++                android:title="@string/battery_low_title"
++                android:summary="@string/battery_low_summary" />
++
++       
++
++</PreferenceScreen>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 4268)
++++ packages/apps/Settings/res/values/strings.xml	(revision 4269)
+@@ -8106,4 +8106,12 @@
+ 	
+ 	<string name="fingerprint_manager_back_to_home_title">Back to home screen</string>
+ 	<string name="fingerprint_manager_back_to_home_summary">Touch the fingerprint sensor to go back to home screen.</string>
++	<string name="led_indicator_title">Led Indicator</string>
++	<string name="led_event_title">Events</string>
++	<string name="led_event_summary">Missed Call,received message,received email,etc.</string>
++	<string name="battery_charge_title">Charging</string>
++	<string name="battery_charge_summary">Light is on when battery is Charging.</string>
++	<string name="battery_low_title">Low battery</string>
++	<string name="battery_low_summary">Light up automatically at 15% battery.</string>
++	
+ </resources>

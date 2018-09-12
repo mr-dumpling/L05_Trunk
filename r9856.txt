@@ -1,0 +1,433 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml	(revision 9855)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml	(revision 9856)
+@@ -3062,7 +3062,21 @@
+             <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                 android:value="com.android.settings.applications.DrawOverlayDetails" />
+         </activity>
+-
++        
++	<activity android:name=".sim.SetupWizardMultiSimSettings"
++                  android:label="@string/sim_settings_title"
++                  android:theme="@style/SetupWizardAccessibilityTheme"
++				  android:exported="true"
++                  >
++	             <intent-filter android:priority="100">
++                    <action android:name="com.android.setupwizard.SIM_SETUP_CHECK" />
++                    <category android:name="android.intent.category.DEFAULT" />
++                </intent-filter>	  
++                <intent-filter>
++                    <action android:name="android.intent.action.MAIN" />		
++                </intent-filter>
++        </activity>
++		
+         <activity android:name="Settings$WriteSettingsActivity"
+                 android:label="@string/write_settings_title"
+                 android:taskAffinity="">
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SetupWizardMultiSimSettings.java	(revision 9856)
+@@ -0,0 +1,179 @@
++/*
++ * Copyright (C) 2008 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings.sim;
++
++import android.app.Activity;
++import android.app.AlarmManager;
++import android.content.Context;
++import android.os.Bundle;
++import android.provider.Settings;
++import android.content.Intent;
++import android.support.v14.preference.PreferenceFragment;
++import android.support.v7.preference.Preference;
++import android.util.Log;
++import android.view.View;
++import android.view.View.OnClickListener;
++import android.view.Window;
++import android.telecom.PhoneAccountHandle;
++import android.widget.Button;
++import android.telecom.TelecomManager;
++
++import com.android.settings.R;
++import android.widget.CompoundButton;
++import android.telephony.SubscriptionInfo;
++import com.android.setupwizardlib.util.WizardManagerHelper;
++import android.telephony.TelephonyManager;
++import android.telephony.SubscriptionManager;
++import java.util.List;
++import android.widget.Switch;
++import android.telecom.PhoneAccount;
++import java.util.Iterator;
++public class SetupWizardMultiSimSettings extends Activity
++        implements OnClickListener{
++
++	Context mContext;
++	TelephonyManager tm;
++	SubscriptionManager subscriptionManager;
++	Switch dataSwitch,roaming_switch;
++	boolean isDataOpen = false;
++   
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        requestWindowFeature(Window.FEATURE_NO_TITLE);
++		mContext = getBaseContext();	
++		tm = TelephonyManager.from(mContext);
++		if(!hasIccCard()){
++			Intent intent = WizardManagerHelper.getNextIntent(getIntent(), Activity.RESULT_OK);
++			startActivityForResult(intent, 1000);
++			finish();
++		}
++        super.onCreate(savedInstanceState);
++		subscriptionManager = SubscriptionManager.from(mContext);
++		setDefault();
++        setContentView(R.layout.sim_settings_setupwizard);
++        findViewById(R.id.next_button_1).setOnClickListener(this);    
++    }
++	
++    boolean hasIccCard() {
++        if (tm != null) {
++            return tm.hasIccCard();
++        }
++        return false;
++    }
++	
++    @Override
++    public void onResume() {
++        super.onResume();
++    }
++
++	private void setDefault(){
++		setDefaultData();
++		setDefaultSms();
++		setDefaultCalls();
++	}
++	
++	private void setDefaultData(){
++		if(SubscriptionManager.getDefaultDataSubscriptionId()!=-1){	
++			return;
++		}
++		if(tm.hasIccCard(0) && !tm.hasIccCard(1)){
++			int[] subid = SubscriptionManager.getSubId(0);
++			if(subscriptionManager.isActiveSubId(subid[0]) && (SubscriptionManager.getDefaultDataSubscriptionId() != subid[0])){
++				subscriptionManager.setDefaultDataSubId(subid[0]);
++				tm.setDataEnabled(subid[0], false);
++			}
++		}else if(tm.hasIccCard(1) && !tm.hasIccCard(0)){
++			int[] subid = SubscriptionManager.getSubId(1);
++			if(subscriptionManager.isActiveSubId(subid[0]) && (SubscriptionManager.getDefaultDataSubscriptionId() != subid[0])){
++				subscriptionManager.setDefaultDataSubId(subid[0]);
++				tm.setDataEnabled(subid[0], false);
++			}
++		}
++	}
++	
++	private void setDefaultSms(){
++		if(SubscriptionManager.getDefaultSmsSubscriptionId()!=-1){			
++			return;
++		}
++		if(tm.hasIccCard(0) && !tm.hasIccCard(1) ){
++			int[] subid = SubscriptionManager.getSubId(0);
++			if(subscriptionManager.isActiveSubId(subid[0]) && SubscriptionManager.getDefaultSmsSubscriptionId() != subid[0]){
++				subscriptionManager.setDefaultSmsSubId(subid[0]);
++			}
++		}else if(tm.hasIccCard(1) && !tm.hasIccCard(0)){
++			int[] subid = SubscriptionManager.getSubId(1);
++			if(subscriptionManager.isActiveSubId(subid[0]) && SubscriptionManager.getDefaultSmsSubscriptionId() != subid[0]){
++				subscriptionManager.setDefaultSmsSubId(subid[0]);
++			}
++		}
++	}
++	
++	private void setDefaultCalls(){
++		if(SubscriptionManager.getDefaultVoiceSubscriptionId()!=-1){
++			return;
++		}
++		
++		PhoneAccountHandle phoneAccountHandle;
++		TelecomManager telecomManager = TelecomManager.from(mContext);
++		if(tm.hasIccCard(0)&& !tm.hasIccCard(1)){			
++			int[] subid = SubscriptionManager.getSubId(0);
++			if(subscriptionManager.isActiveSubId(subid[0]) && SubscriptionManager.getDefaultVoiceSubscriptionId() != subid[0]){
++				phoneAccountHandle = subscriptionIdToPhoneAccountHandle(subid[0]);
++				telecomManager.setUserSelectedOutgoingPhoneAccount(phoneAccountHandle);
++			}
++		}else if(tm.hasIccCard(1)  && !tm.hasIccCard(0)){
++			int[] subid = SubscriptionManager.getSubId(1);
++			if(subscriptionManager.isActiveSubId(subid[0]) && SubscriptionManager.getDefaultVoiceSubscriptionId() != subid[0]){
++				phoneAccountHandle = subscriptionIdToPhoneAccountHandle(subid[0]);
++				telecomManager.setUserSelectedOutgoingPhoneAccount(phoneAccountHandle);
++			}
++		}
++	}
++	private PhoneAccountHandle subscriptionIdToPhoneAccountHandle(final int subId) {
++        final TelecomManager telecomManager = TelecomManager.from(this);
++        final TelephonyManager telephonyManager = TelephonyManager.from(this);
++        final Iterator<PhoneAccountHandle> phoneAccounts =
++                telecomManager.getCallCapablePhoneAccounts().listIterator();
++
++        while (phoneAccounts.hasNext()) {
++            final PhoneAccountHandle phoneAccountHandle = phoneAccounts.next();
++            final PhoneAccount phoneAccount = telecomManager.getPhoneAccount(phoneAccountHandle);
++            if (subId == telephonyManager.getSubIdForPhoneAccount(phoneAccount)) {
++                return phoneAccountHandle;
++            }
++        }
++
++        return null;
++    }
++
++    @Override
++    public void onPause() {
++        super.onPause();
++    }
++
++    @Override
++    public void onClick(View view) {
++        switch (view.getId()) {
++        case R.id.next_button_1: 
++			Intent intent = WizardManagerHelper.getNextIntent(getIntent(), Activity.RESULT_OK);
++			startActivityForResult(intent, 1000);
++			overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
++			break;    
++        }
++    }
++
++}
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 9855)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 9856)
+@@ -72,7 +72,8 @@
+ 
+ import java.util.ArrayList;
+ import java.util.List;
+-
++import android.support.v14.preference.SwitchPreference;
++import android.support.v7.preference.Preference.OnPreferenceChangeListener;
+ public class SimSettings extends RestrictedSettingsFragment implements Indexable {
+     private static final String TAG = "SimSettings";
+     private static final boolean DBG = true;
+@@ -84,6 +85,7 @@
+     private static final String KEY_SERVICE_DATA = "sim_service_data";
+     private static final String KEY_CALLS = "sim_calls";
+     private static final String KEY_SMS = "sim_sms";
++	private static final String KEY_DATA = "data_switch";
+     public static final String EXTRA_SLOT_ID = "slot_id";
+ 
+     /**
+@@ -97,9 +99,12 @@
+     private List<SubscriptionInfo> mSelectableSubInfos = null;
+     private PreferenceScreen mSimCards = null;
+     private SubscriptionManager mSubscriptionManager;
++	private boolean isDataOpen = false;
+     private int mNumSlots;
+     private Context mContext;
+-
++	SwitchPreference mDataSwitchPreference;
++	boolean isCompleted = false;
++     TelephonyManager tm;
+     private int mPhoneCount = TelephonyManager.getDefault().getPhoneCount();
+     private int[] mCallState = new int[mPhoneCount];
+     private PhoneStateListener[] mPhoneStateListener = new PhoneStateListener[mPhoneCount];
+@@ -121,8 +126,7 @@
+         mContext = getActivity();
+ 
+         mSubscriptionManager = SubscriptionManager.from(getActivity());
+-        final TelephonyManager tm =
+-                (TelephonyManager) getActivity().getSystemService(Context.TELEPHONY_SERVICE);
++        tm = (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
+         addPreferencesFromResource(R.xml.sim_settings);
+ 
+         mNumSlots = tm.getSimCount();
+@@ -147,8 +151,38 @@
+         /// @}
+ 
+         mRadioOnResult = TelephonyUtils.hasRadioOn(mContext);
++		PreferenceCategory mPreferenceCategoryActivities =
++                (PreferenceCategory) findPreference(KEY_SIM_ACTIVITIES);
++		if(Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0){
++			
++			CheckBoxPreference cbPref =
++                (CheckBoxPreference) findPreference(KEY_DATA_FOLLOW_SERVICE);
++			Preference simPref = findPreference(KEY_SERVICE_DATA);
++			mPreferenceCategoryActivities.removePreference(cbPref);
++			mPreferenceCategoryActivities.removePreference(simPref);
++			initSwitch();
++		}else{
++			mDataSwitchPreference=(SwitchPreference)findPreference(KEY_DATA);
++			mPreferenceCategoryActivities.removePreference(mDataSwitchPreference);
++		}
+     }
+ 
++   	private void initSwitch(){
++		mDataSwitchPreference=(SwitchPreference)findPreference(KEY_DATA);
++		isDataOpen = tm.getDataEnabled();		
++		
++			mDataSwitchPreference.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
++                @Override
++                public boolean onPreferenceChange(Preference preference, Object newValue) {
++					boolean val = (Boolean) newValue;
++					isDataOpen = val;
++				    tm.setDataEnabled(isDataOpen);
++					return true;
++			    }
++			});
++		
++	}
++	
+     private final SubscriptionManager.OnSubscriptionsChangedListener mOnSubscriptionsChangeListener
+             = new SubscriptionManager.OnSubscriptionsChangedListener() {
+         @Override
+@@ -212,6 +246,10 @@
+     }
+ 
+     private void updateActivitesCategory() {
++	    if(Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0 && isCompleted){
++            tm.setDataEnabled(isDataOpen);
++			mDataSwitchPreference.setEnabled(SubscriptionManager.getDefaultDataSubscriptionId() != -1);
++	    }
+         updateCellularDataValues();
+         updateServiceDataValues();
+         updateCallValues();
+@@ -410,6 +448,7 @@
+         customizeSimDisplay();
+         mSimManagementExt.onResume(getActivity());
+         /// @}
++		isCompleted = true;
+     }
+ 
+     @Override
+@@ -526,8 +565,7 @@
+     }
+ 
+     private void setDefaultSubId(int subId) {
+-        TelephonyManager tm = (TelephonyManager)
+-                mContext.getSystemService(Context.TELEPHONY_SERVICE);
++    
+         int selectableSubInfoLength =
+                 mSelectableSubInfos == null ? 0 : mSelectableSubInfos.size();
+ 
+@@ -645,8 +683,6 @@
+     // Returns the line1Number. Line1number should always be read from TelephonyManager since it can
+     // be overridden for display purposes.
+     private String getPhoneNumber(SubscriptionInfo info) {
+-        final TelephonyManager tm =
+-            (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
+         return tm.getLine1Number(info.getSubscriptionId());
+     }
+ 
+@@ -810,7 +846,7 @@
+             Preference sim_data_Pref = findPreference(KEY_CELLULAR_DATA);
+             PreferenceCategory mPreferenceCategoryActivities =
+                 (PreferenceCategory) findPreference(KEY_SIM_ACTIVITIES);
+-            TelephonyManager tm = TelephonyManager.from(getActivity());
++
+             if (!tm.isSmsCapable() && sim_sms_Pref != null) {
+                 mPreferenceCategoryActivities.removePreference(sim_sms_Pref);
+             }
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/res/layout/sim_settings_setupwizard.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/res/layout/sim_settings_setupwizard.xml	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/res/layout/sim_settings_setupwizard.xml	(revision 9856)
+@@ -0,0 +1,70 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2008 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++        android:id="@+id/layout_root"
++        android:layout_height="fill_parent"
++        android:layout_width="fill_parent"
++        android:orientation="vertical">
++		
++    <TextView
++        android:id="@+id/column2"
++	    android:layout_marginTop="20dp"
++	    android:layout_marginLeft="10dp"
++	    android:textSize="20dp"
++	    style="@style/TextAppearance.SuggestionTitle"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++	    android:text="@string/sim_settings_title"
++        >
++    </TextView>
++	
++    <View
++        android:id="@+id/simcards_dropdown_anchor"
++        android:layout_width="match_parent"
++        android:layout_marginStart="20dip"
++        android:layout_marginEnd="20dip"
++        android:layout_height="0px" />
++
++    <LinearLayout android:layout_height="0px"
++                  android:layout_weight="1"
++                  android:layout_width="fill_parent"
++                  android:orientation="vertical">
++        <fragment android:id="@+id/sim_settings_fragment"
++                  class="com.android.settings.sim.SimSettings"
++                  android:layout_width="fill_parent"
++                  android:layout_height="fill_parent" />
++    </LinearLayout>
++	
++    <RelativeLayout android:layout_height="wrap_content"
++        android:layout_weight="0"
++        android:padding="10dip"
++        android:layout_width="wrap_content">
++
++        <Button android:id="@+id/next_button_1"
++            style="@style/SetupWizardButton.Positive"
++            android:layout_width="wrap_content"
++            android:textColor="#FFFFFF"
++	        android:textSize="20dp"
++            android:background="#2E64FE"
++            android:layout_height="40dp"
++            android:layout_alignParentEnd="true"
++            android:text="@string/next_label"
++        />
++
++    </RelativeLayout>
++
++</LinearLayout>
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/sim_settings.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/sim_settings.xml	(revision 9855)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/sim_settings.xml	(revision 9856)
+@@ -39,6 +39,10 @@
+ 
+         <Preference android:key="sim_sms"
+             android:title="@string/sms_messages_title" />
++	    
++        <SwitchPreference android:key="data_switch"
++            android:defaultValue = "false"
++            android:title="@string/cellular_data_title" />
+ 
+     </PreferenceCategory>
+ 

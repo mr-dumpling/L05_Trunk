@@ -1,0 +1,205 @@
+Index: build/tools/releasetools/ota_from_target_files.py
+===================================================================
+--- build/tools/releasetools/ota_from_target_files.py	(revision 1621)
++++ build/tools/releasetools/ota_from_target_files.py	(revision 1622)
+@@ -1307,7 +1307,7 @@
+   # Stage the output zip package for package signing.
+   temp_zip_file = tempfile.NamedTemporaryFile()
+   output_zip = zipfile.ZipFile(temp_zip_file, "w",
+-                               compression=zipfile.ZIP_DEFLATED)
++                               compression=zipfile.ZIP_DEFLATED, allowZip64=True)
+ 
+   # Metadata to comply with Android OTA package format.
+   oem_props = OPTIONS.info_dict.get("oem_fingerprint_properties", None)
+@@ -1430,7 +1430,7 @@
+   # If dm-verity is supported for the device, copy contents of care_map
+   # into A/B OTA package.
+   if OPTIONS.info_dict.get("verity") == "true":
+-    target_zip = zipfile.ZipFile(target_file, "r")
++    target_zip = zipfile.ZipFile(target_file, "r", allowZip64=True)
+     care_map_path = "META/care_map.txt"
+     namelist = target_zip.namelist()
+     if care_map_path in namelist:
+@@ -2166,7 +2166,7 @@
+ 
+   # Load the dict file from the zip directly to have a peek at the OTA type.
+   # For packages using A/B update, unzipping is not needed.
+-  input_zip = zipfile.ZipFile(args[0], "r")
++  input_zip = zipfile.ZipFile(args[0], "r", allowZip64=True)
+   OPTIONS.info_dict = common.LoadInfoDict(input_zip)
+   common.ZipClose(input_zip)
+ 
+@@ -2175,7 +2175,7 @@
+   if ab_update:
+     if OPTIONS.incremental_source is not None:
+       OPTIONS.target_info_dict = OPTIONS.info_dict
+-      source_zip = zipfile.ZipFile(OPTIONS.incremental_source, "r")
++      source_zip = zipfile.ZipFile(OPTIONS.incremental_source, "r", allowZip64=True)
+       OPTIONS.source_info_dict = common.LoadInfoDict(source_zip)
+       common.ZipClose(source_zip)
+ 
+@@ -2242,11 +2242,11 @@
+     if os.path.exists(args[1]):
+       os.unlink(args[1])
+     output_zip = zipfile.ZipFile(args[1], "w",
+-                                 compression=zipfile.ZIP_DEFLATED)
++                                 compression=zipfile.ZIP_DEFLATED, allowZip64=True)
+   else:
+     temp_zip_file = tempfile.NamedTemporaryFile()
+     output_zip = zipfile.ZipFile(temp_zip_file, "w",
+-                                 compression=zipfile.ZIP_DEFLATED)
++                                 compression=zipfile.ZIP_DEFLATED, allowZip64=True)
+ 
+   # Non A/B OTAs rely on /cache partition to store temporary files.
+   cache_size = OPTIONS.info_dict.get("cache_size", None)
+Index: build/tools/releasetools/sign_target_files_apks.py
+===================================================================
+--- build/tools/releasetools/sign_target_files_apks.py	(revision 1621)
++++ build/tools/releasetools/sign_target_files_apks.py	(revision 1622)
+@@ -493,7 +493,7 @@
+   # We DO NOT include the extra_recovery_keys (if any) here.
+ 
+   temp_file = cStringIO.StringIO()
+-  certs_zip = zipfile.ZipFile(temp_file, "w")
++  certs_zip = zipfile.ZipFile(temp_file, "w", allowZip64=True)
+   for k in mapped_keys:
+     common.ZipWrite(certs_zip, k)
+   common.ZipClose(certs_zip)
+@@ -687,8 +687,8 @@
+     common.Usage(__doc__)
+     sys.exit(1)
+ 
+-  input_zip = zipfile.ZipFile(args[0], "r")
+-  output_zip = zipfile.ZipFile(args[1], "w")
++  input_zip = zipfile.ZipFile(args[0], "r", allowZip64=True)
++  output_zip = zipfile.ZipFile(args[1], "w", allowZip64=True)
+ 
+   misc_info = common.LoadInfoDict(input_zip)
+ 
+Index: build/tools/releasetools/check_target_files_signatures.py
+===================================================================
+--- build/tools/releasetools/check_target_files_signatures.py	(revision 1621)
++++ build/tools/releasetools/check_target_files_signatures.py	(revision 1622)
+@@ -181,7 +181,7 @@
+     out = set()
+     try:
+       f = open(full_filename)
+-      apk = zipfile.ZipFile(f, "r")
++      apk = zipfile.ZipFile(f, "r", allowZip64=True)
+       pkcs7 = None
+       for info in apk.infolist():
+         if info.filename.startswith("META-INF/") and \
+Index: build/tools/releasetools/add_img_to_target_files.py
+===================================================================
+--- build/tools/releasetools/add_img_to_target_files.py	(revision 1621)
++++ build/tools/releasetools/add_img_to_target_files.py	(revision 1622)
+@@ -337,7 +337,7 @@
+ 
+   common.ZipClose(input_zip)
+   output_zip = zipfile.ZipFile(filename, "a",
+-                               compression=zipfile.ZIP_DEFLATED)
++                               compression=zipfile.ZIP_DEFLATED, allowZip64=True)
+ 
+   has_recovery = (OPTIONS.info_dict.get("no_recovery") != "true")
+ 
+Index: build/tools/releasetools/rootcheck.py
+===================================================================
+--- build/tools/releasetools/rootcheck.py	(revision 1621)
++++ build/tools/releasetools/rootcheck.py	(revision 1622)
+@@ -308,7 +308,7 @@
+   if(os.path.isfile(zipname)):
+     print "recovery_rootcheck is already is system/data,build otapackage?"
+     os.remove(zipname)
+-  f_zip=zipfile.ZipFile(zipname,"w",zipfile.ZIP_DEFLATED)
++  f_zip=zipfile.ZipFile(zipname,"w",zipfile.ZIP_DEFLATED, allowZip64=True)
+   if(os.path.isfile(file_count)):
+     f_fc=open(file_count).read()
+     common.ZipWriteStr(f_zip, "file_count", f_fc)
+Index: build/tools/releasetools/replace_img_from_target_files.py
+===================================================================
+--- build/tools/releasetools/replace_img_from_target_files.py	(revision 1621)
++++ build/tools/releasetools/replace_img_from_target_files.py	(revision 1622)
+@@ -55,7 +55,7 @@
+     print "Output dir:%s is invalid" % argv[1]
+     sys.exit(1)
+ 
+-  zf = zipfile.ZipFile(argv[0], 'r')
++  zf = zipfile.ZipFile(argv[0], 'r', allowZip64=True)
+ 
+   for img in zf.namelist():
+     if img.find("IMAGES/") != -1:
+Index: build/tools/releasetools/img_from_target_files.py
+===================================================================
+--- build/tools/releasetools/img_from_target_files.py	(revision 1621)
++++ build/tools/releasetools/img_from_target_files.py	(revision 1622)
+@@ -70,7 +70,7 @@
+     sys.exit(1)
+ 
+   OPTIONS.input_tmp, input_zip = common.UnzipTemp(args[0])
+-  output_zip = zipfile.ZipFile(args[1], "w", compression=zipfile.ZIP_DEFLATED)
++  output_zip = zipfile.ZipFile(args[1], "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True)
+   CopyInfo(output_zip)
+ 
+   try:
+Index: build/tools/releasetools/test_common.py
+===================================================================
+--- build/tools/releasetools/test_common.py	(revision 1621)
++++ build/tools/releasetools/test_common.py	(revision 1622)
+@@ -53,7 +53,7 @@
+       self.assertEqual(int(expected_stat.st_mtime), int(new_stat.st_mtime))
+ 
+     # Reopen the zip file to verify.
+-    zip_file = zipfile.ZipFile(zip_file_name, "r")
++    zip_file = zipfile.ZipFile(zip_file_name, "r", allowZip64=True)
+ 
+     # Verify the timestamp.
+     info = zip_file.getinfo(arcname)
+@@ -85,7 +85,7 @@
+       arcname = arcname[1:]
+ 
+     zip_file.close()
+-    zip_file = zipfile.ZipFile(zip_file_name, "w")
++    zip_file = zipfile.ZipFile(zip_file_name, "w", allowZip64=True)
+ 
+     try:
+       test_file.write(contents)
+@@ -113,7 +113,7 @@
+     zip_file_name = zip_file.name
+     zip_file.close()
+ 
+-    zip_file = zipfile.ZipFile(zip_file_name, "w")
++    zip_file = zipfile.ZipFile(zip_file_name, "w", allowZip64=True)
+ 
+     try:
+       expected_compress_type = extra_args.get("compress_type",
+@@ -154,7 +154,7 @@
+       arcname_large = arcname_large[1:]
+ 
+     zip_file.close()
+-    zip_file = zipfile.ZipFile(zip_file_name, "w")
++    zip_file = zipfile.ZipFile(zip_file_name, "w", allowZip64=True)
+ 
+     try:
+       test_file.write(large)
+@@ -270,7 +270,7 @@
+ 
+     try:
+       random_string = os.urandom(1024)
+-      zip_file = zipfile.ZipFile(zip_file_name, "w")
++      zip_file = zipfile.ZipFile(zip_file_name, "w", allowZip64=True)
+       # Default perms should be 0o644 when passing the filename.
+       common.ZipWriteStr(zip_file, "foo", random_string)
+       # Honor the specified perms.
+Index: build/tools/releasetools/common.py
+===================================================================
+--- build/tools/releasetools/common.py	(revision 1621)
++++ build/tools/releasetools/common.py	(revision 1622)
+@@ -765,7 +765,7 @@
+   else:
+     unzip_to_dir(filename, tmp)
+ 
+-  return tmp, zipfile.ZipFile(filename, "r")
++  return tmp, zipfile.ZipFile(filename, "r", allowZip64=True)
+ 
+ 
+ def GetKeyPasswords(keylist):

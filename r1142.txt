@@ -1,0 +1,87 @@
+Index: frameworks/base/services/core/java/com/android/server/power/ShutdownThread.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/power/ShutdownThread.java	(revision 1141)
++++ frameworks/base/services/core/java/com/android/server/power/ShutdownThread.java	(revision 1142)
+@@ -261,7 +261,58 @@
+             beginShutdownSequence(context);
+         }
+     }
++	private static void rebootInner(final Context context, boolean confirm) {
++        // ensure that only one thread is trying to power down.
++        // any additional calls are just returned
++        synchronized (sIsStartedGuard) {
++            if (sIsStarted) {
++                Log.d(TAG, "Request to shutdown already running, returning.");
++                return;
++            }
++        }
+ 
++        final int longPressBehavior = context.getResources().getInteger(
++                        com.android.internal.R.integer.config_longPressOnPowerBehavior);
++		Log.d("yujunjie", "ShutdownThread: rebootInner() longPressBehavior ="+longPressBehavior);
++        final int resourceId = mRebootSafeMode
++                ? com.android.internal.R.string.reboot_safemode_confirm
++                : (longPressBehavior == 2
++                        ? com.android.internal.R.string.shutdown_confirm_question
++                        : com.android.internal.R.string.reboot_confirm);
++		Log.d("yujunjie", "ShutdownThread: rebootInner() resourceId ="+resourceId);
++
++        Log.d(TAG, "Notifying thread to start shutdown longPressBehavior=" + longPressBehavior);
++
++        if (confirm) {
++            final CloseDialogReceiver closer = new CloseDialogReceiver(context);
++            if (sConfirmDialog != null) {
++                sConfirmDialog.dismiss();
++            }
++            bConfirmForAnimation = confirm;
++            Log.d(TAG, "PowerOff dialog doesn't exist. Create it first");
++            sConfirmDialog = new AlertDialog.Builder(context)
++                .setTitle(mRebootSafeMode
++                        ? com.android.internal.R.string.reboot_safemode_title
++                        : com.android.internal.R.string.reboot)
++                .setMessage(resourceId)
++                .setPositiveButton(com.android.internal.R.string.yes,
++                        new DialogInterface.OnClickListener() {
++                    public void onClick(DialogInterface dialog, int which) {
++                        beginShutdownSequence(context);
++                    }
++                })
++                .setNegativeButton(com.android.internal.R.string.no, null)
++                .create();
++            closer.dialog = sConfirmDialog;
++            sConfirmDialog.setOnDismissListener(closer);
++            sConfirmDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
++            sConfirmDialog.show();
++        } else {
++            beginShutdownSequence(context);
++        }
++    }
++	
++
+     private static class CloseDialogReceiver extends BroadcastReceiver
+             implements DialogInterface.OnDismissListener {
+         private Context mContext;
+@@ -321,8 +372,7 @@
+                 Log.d(TAG, "     |----" + element.toString());
+             }
+         }
+-
+-        shutdownInner(context, confirm);
++        rebootInner(context, confirm);
+     }
+ 
+     /**
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 1141)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 1142)
+@@ -2729,5 +2729,9 @@
+   <java-symbol type="string" name="low_storage_warning_message_50m" />
+   <java-symbol type="string" name="free_memory_ignore_btn" />
+   <java-symbol type="string" name="free_memory_free_up_space_btn" />
++  <java-symbol type="string" name="reboot" />
++  <java-symbol type="string" name="reboot_confirm" />
++  
++  
+ 
+ </resources>

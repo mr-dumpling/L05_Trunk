@@ -1,0 +1,57 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 8311)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 8312)
+@@ -500,6 +500,36 @@
+     private boolean mCreateFromSendTo = false;
+     /// @}
+ 
++	private int getNewMmsCount() { 
++		int result = 0; 
++		Cursor csr = getContentResolver().query(Uri.parse("content://mms/inbox"), null, "read = 0", null, null); 
++		if (csr != null) { 
++			result = csr.getCount(); 
++			csr.close(); 
++		} 
++		return result; 
++	} 
++	
++	private int getNewSmsCount() { 
++		int result = 0; 
++		Cursor csr = getContentResolver().query(Uri.parse("content://sms"), null, "type = 1 and read = 0", null, null); 
++		if (csr != null) { 
++			result = csr.getCount(); 
++			csr.close(); 
++		} 
++		return result; 
++	}
++	private void sendUnreadAction(){
++		int mNewSmsCount = getNewSmsCount() + getNewMmsCount(); 
++		Context mContext = ComposeMessageActivity.this;
++		Log.e(TAG, "sendUnreadAction mNewSmsCount="+mNewSmsCount); 
++		ComponentName component = new ComponentName("com.android.mms","com.android.mms.ui.ConversationList");
++		Intent mIntent = new Intent("com.intent.unread");
++		mIntent.putExtra("componentName",component);
++		mIntent.putExtra("unreadNum",mNewSmsCount);
++		mContext.sendBroadcast(mIntent);
++		return;
++	}
+     private void dismissProgressDialog() {
+         Log.d(TAG, "Composer reduce mAsyncTaskNum = " + (--mAsyncTaskNum));
+         if (mAsyncTaskNum == 0) {
+@@ -3908,6 +3938,7 @@
+     protected void onResume() {
+         /// M: fix bug ALPS00444752, set false to enable to Show ContactPicker
+         mShowingContactPicker = false;
++		sendUnreadAction();
+         super.onResume();
+         if (mNeedRequestPermissins) {
+             return;
+@@ -4019,6 +4050,7 @@
+     protected void onPause() {
+         super.onPause();
+         MmsLog.d(TAG, "onPause() enter!!");
++		sendUnreadAction();
+         if (mNeedRequestPermissins) {
+             return;
+         }

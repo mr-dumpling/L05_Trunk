@@ -1,0 +1,158 @@
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 1120)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 1121)
+@@ -3871,6 +3871,12 @@
+ 		*
+ 		*/
+ 		public static final String FP_CAMERA = "fp_camera";
++		
++		/*
++		*add for unlock device by touch fingerprint sensor
++		*
++		*/
++		public static final String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+ 	   
+         /**
+          * Enable fast boot? true = yes false = no
+Index: frameworks/base/core
+===================================================================
+--- frameworks/base/core	(revision 1120)
++++ frameworks/base/core	(revision 1121)
+
+Property changes on: frameworks/base/core
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/core:r722
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1120)
++++ frameworks/base/api/test-current.txt	(revision 1121)
+@@ -32735,6 +32735,7 @@
+     field public static final java.lang.String DTMF_TONE_TYPE_WHEN_DIALING = "dtmf_tone_type";
+     field public static final java.lang.String DTMF_TONE_WHEN_DIALING = "dtmf_tone";
+     field public static final java.lang.String END_BUTTON_BEHAVIOR = "end_button_behavior";
++    field public static final java.lang.String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
+     field public static final java.lang.String FP_CAMERA = "fp_camera";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1120)
++++ frameworks/base/api/current.txt	(revision 1121)
+@@ -32655,6 +32655,7 @@
+     field public static final java.lang.String DTMF_TONE_TYPE_WHEN_DIALING = "dtmf_tone_type";
+     field public static final java.lang.String DTMF_TONE_WHEN_DIALING = "dtmf_tone";
+     field public static final java.lang.String END_BUTTON_BEHAVIOR = "end_button_behavior";
++    field public static final java.lang.String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
+     field public static final java.lang.String FP_CAMERA = "fp_camera";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1120)
++++ frameworks/base/api/system-current.txt	(revision 1121)
+@@ -35414,6 +35414,7 @@
+     field public static final java.lang.String DTMF_TONE_TYPE_WHEN_DIALING = "dtmf_tone_type";
+     field public static final java.lang.String DTMF_TONE_WHEN_DIALING = "dtmf_tone";
+     field public static final java.lang.String END_BUTTON_BEHAVIOR = "end_button_behavior";
++    field public static final java.lang.String FINGERPRINTS_UNCLOCK_DEVICE = "fingerprint_unlock_device";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
+     field public static final java.lang.String FP_CAMERA = "fp_camera";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+Index: frameworks/base/api
+===================================================================
+--- frameworks/base/api	(revision 1120)
++++ frameworks/base/api	(revision 1121)
+
+Property changes on: frameworks/base/api
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/api:r722
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 1120)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 1121)
+@@ -880,7 +880,9 @@
+         @Override
+         public void onAuthenticationSucceeded(AuthenticationResult result) {
+             Trace.beginSection("KeyguardUpdateMonitor#onAuthenticationSucceeded");
+-            handleFingerprintAuthenticated(result.getUserId());
++			if (Settings.System.getInt(mContext.getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 1) != 0) {
++				handleFingerprintAuthenticated(result.getUserId());
++			}
+             Trace.endSection();
+         }
+ 
+Index: frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+===================================================================
+--- frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 1120)
++++ frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 1121)
+@@ -2383,6 +2383,10 @@
+         try {
+             stmt = db.compileStatement("INSERT OR IGNORE INTO system(name,value)"
+                     + " VALUES(?,?);");
++					
++			// add for unlock device by touch fingerprint sensor
++			loadIntegerSetting(stmt, Settings.System.FINGERPRINTS_UNCLOCK_DEVICE,
++                    R.integer.def_fingerprint_unlock_device);
+ 
+             loadBooleanSetting(stmt, Settings.System.DIM_SCREEN,
+                     R.bool.def_dim_screen);
+Index: frameworks/base/packages/SettingsProvider/res/values/defaults.xml
+===================================================================
+--- frameworks/base/packages/SettingsProvider/res/values/defaults.xml	(revision 1120)
++++ frameworks/base/packages/SettingsProvider/res/values/defaults.xml	(revision 1121)
+@@ -223,4 +223,8 @@
+     <integer name="def_navigation_bar_background_index">0</integer>
+     <integer name="def_navigation_bar_background_color">0x00000000</integer>
+     <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
++	
++	<!-- Add for unlock device by touch fingerprint sensor start -->
++	<integer name="def_fingerprint_unlock_device">1</integer>
++	<!-- Add for unlock device by touch fingerprint sensor end -->
+ </resources>
+Index: frameworks/base/packages
+===================================================================
+--- frameworks/base/packages	(revision 1120)
++++ frameworks/base/packages	(revision 1121)
+
+Property changes on: frameworks/base/packages
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P33_K39V1_INHOUSE/frameworks/base/packages:r116,136,153,300
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages:r472,634,722,809,899,920-922,931
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1120)
++++ frameworks/base	(revision 1121)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r722
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 1120)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 1121)
+@@ -449,7 +449,7 @@
+ 			mEditor = mFuncPreference.edit();
+ 			mFunctionsCategory=(PreferenceGroup)root.findPreference(KEY_FINGERPRINTS_FUNCTIONS_CATEGORY);
+ 			mUnclockPreference=(SwitchPreference)mFunctionsCategory.findPreference(KEY_FINGERPRINTS_UNCLOCK_DEVICE);
+-			mUnclockPreference.setChecked(false);
++			mUnclockPreference.setChecked((Settings.System.getInt(root.getContext().getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 1) != 0));
+ 			mUnclockPreference.setOnPreferenceChangeListener(this);
+ 			mFunctionShortcut=(SwitchPreference)mFunctionsCategory.findPreference(KEY_FINGERPRINTS_LAUNCHER_SHORTCUTS);
+ 			mFunctionShortcut.setChecked(mFuncPreference.getBoolean("mState", false));
+@@ -510,9 +510,9 @@
+             if (KEY_FINGERPRINT_ENABLE_KEYGUARD_TOGGLE.equals(key)) {
+                 // TODO
+             }else if(preference == mUnclockPreference){
+-				/*boolean onOrOff = (Boolean) value;
++				int onOrOff = (Boolean) value ? 1 : 0;
+             	Settings.System.putInt(preference.getContext().getContentResolver(),
+-                        Settings.System.FP_CAMERA, onOrOff);*/
++                        Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, onOrOff);
+ 			}else if(preference == mFunctionShortcut){
+ 				boolean auto = (Boolean) value;
+ 				updateGearButton(mFingerprintsCategory,auto);

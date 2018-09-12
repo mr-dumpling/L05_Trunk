@@ -1,0 +1,264 @@
+Index: vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 7344)
++++ vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 7345)
+@@ -139,6 +139,12 @@
+ 
+     private SubscriptionManager mSubscriptionManager;
+     private TelephonyManager mTelephonyManager;
++    private NotificationManager mNotificationManager;
++    
++    //LTE-Only attention notification id
++    private static final int DEFAULT_NOTIFICATION_ID = 1;
++    
++    private Dialog mLteAttentionDialog = null;
+ 
+     //UI objects
+     private ListPreference mButtonPreferredNetworkMode;
+@@ -149,8 +155,6 @@
+ 
+     private static final String iface = "rmnet0"; //TODO: this will go away
+     private List<SubscriptionInfo> mActiveSubInfos;
+-
+-	private boolean OnInit = true;
+ 	
+     private UserManager mUm;
+     private Phone mPhone;
+@@ -513,6 +517,7 @@
+         mUm = (UserManager) getSystemService(Context.USER_SERVICE);
+         mSubscriptionManager = SubscriptionManager.from(this);
+         mTelephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++        mNotificationManager = (NotificationManager) this.getSystemService(Context.NOTIFICATION_SERVICE);
+ 
+         if (mUm.hasUserRestriction(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) {
+             mUnavailable = true;
+@@ -1117,69 +1122,12 @@
+                         .obtainMessage(MyHandler.MESSAGE_SET_PREFERRED_NETWORK_TYPE));
+             }
+         } else if (preference == mButtonEnabledNetworks) {
+-            mButtonEnabledNetworks.setValue((String) objValue);
+-            int buttonNetworkMode;
+-            buttonNetworkMode = Integer.parseInt((String) objValue);
+-            if (DBG) {
+-                log("buttonNetworkMode: " + buttonNetworkMode);
++            if (Phone.NT_MODE_LTE_ONLY == Integer.parseInt((String) objValue)) {
++                showAttentionDialog4LteOnly(objValue);
++            } else {
++                removeLteOnlyNotification();
++                if(handleEnabledNetworksChange(objValue)) return true;
+             }
+-            int settingsNetworkMode = android.provider.Settings.Global.getInt(
+-                    mPhone.getContext().getContentResolver(),
+-                    android.provider.Settings.Global.PREFERRED_NETWORK_MODE + phoneSubId,
+-                    preferredNetworkMode);
+-
+-            if (DBG) {
+-                log("buttonNetworkMode: " + buttonNetworkMode +
+-                    "settingsNetworkMode: " + settingsNetworkMode);
+-            }
+-            if (buttonNetworkMode != settingsNetworkMode) {
+-                int modemNetworkMode;
+-                // if new mode is invalid ignore it
+-                switch (buttonNetworkMode) {
+-                    case Phone.NT_MODE_WCDMA_PREF:
+-                    case Phone.NT_MODE_GSM_ONLY:
+-                    case Phone.NT_MODE_LTE_GSM_WCDMA:
+-                    case Phone.NT_MODE_LTE_CDMA_EVDO_GSM_WCDMA:
+-                    case Phone.NT_MODE_CDMA:
+-                    case Phone.NT_MODE_CDMA_NO_EVDO:
+-                    case Phone.NT_MODE_LTE_CDMA_AND_EVDO:
+-                    case Phone.NT_MODE_TDSCDMA_ONLY:
+-                    case Phone.NT_MODE_TDSCDMA_WCDMA:
+-                    case Phone.NT_MODE_LTE_TDSCDMA:
+-                    case Phone.NT_MODE_TDSCDMA_GSM:
+-                    case Phone.NT_MODE_LTE_TDSCDMA_GSM:
+-                    case Phone.NT_MODE_TDSCDMA_GSM_WCDMA:
+-                    case Phone.NT_MODE_LTE_TDSCDMA_WCDMA:
+-                    case Phone.NT_MODE_LTE_TDSCDMA_GSM_WCDMA:
+-                    case Phone.NT_MODE_TDSCDMA_CDMA_EVDO_GSM_WCDMA:
+-                    case Phone.NT_MODE_LTE_TDSCDMA_CDMA_EVDO_GSM_WCDMA:
+-                    case Phone.NT_MODE_WCDMA_ONLY:
+-                    case Phone.NT_MODE_LTE_ONLY:
+-                    /// M: Add for C2K
+-                    case Phone.NT_MODE_GLOBAL:
+-                        // This is one of the modes we recognize
+-                        modemNetworkMode = buttonNetworkMode;
+-                        break;
+-                    default:
+-                        loge("Invalid Network Mode (" + buttonNetworkMode + ") chosen. Ignore.");
+-                        return true;
+-                }
+-
+-                UpdateEnabledNetworksValueAndSummary(buttonNetworkMode);
+-
+-                /// M: 03100374, need to revert the network mode if set fail
+-                mPreNetworkMode = settingsNetworkMode;
+-
+-                android.provider.Settings.Global.putInt(mPhone.getContext().getContentResolver(),
+-                        android.provider.Settings.Global.PREFERRED_NETWORK_MODE + phoneSubId,
+-                        buttonNetworkMode );
+-
+-                if (DBG) log("setPreferredNetworkType, networkType: " + modemNetworkMode);
+-
+-                //Set the modem network mode
+-                mPhone.setPreferredNetworkType(modemNetworkMode, mHandler
+-                        .obtainMessage(MyHandler.MESSAGE_SET_PREFERRED_NETWORK_TYPE));
+-            }
+         } else if (preference == mButton4glte) {
+             SwitchPreference enhanced4gModePref = (SwitchPreference) preference;
+             boolean enhanced4gMode = !enhanced4gModePref.isChecked();
+@@ -1227,6 +1175,75 @@
+         return true;
+     }
+ 
++
++    private boolean handleEnabledNetworksChange(Object objValue) {
++        final int phoneSubId = mPhone.getSubId();
++        mButtonEnabledNetworks.setValue((String) objValue);
++        int buttonNetworkMode;
++        buttonNetworkMode = Integer.parseInt((String) objValue);
++        if (DBG) {
++            log("buttonNetworkMode: " + buttonNetworkMode);
++        }
++        int settingsNetworkMode = android.provider.Settings.Global.getInt(
++                mPhone.getContext().getContentResolver(),
++                android.provider.Settings.Global.PREFERRED_NETWORK_MODE + phoneSubId,
++                preferredNetworkMode);
++
++        if (DBG) {
++            log("buttonNetworkMode: " + buttonNetworkMode +
++                "settingsNetworkMode: " + settingsNetworkMode);
++        }
++        if (buttonNetworkMode != settingsNetworkMode) {
++            int modemNetworkMode;
++            // if new mode is invalid ignore it
++            switch (buttonNetworkMode) {
++                case Phone.NT_MODE_WCDMA_PREF:
++                case Phone.NT_MODE_GSM_ONLY:
++                case Phone.NT_MODE_LTE_GSM_WCDMA:
++                case Phone.NT_MODE_LTE_CDMA_EVDO_GSM_WCDMA:
++                case Phone.NT_MODE_CDMA:
++                case Phone.NT_MODE_CDMA_NO_EVDO:
++                case Phone.NT_MODE_LTE_CDMA_AND_EVDO:
++                case Phone.NT_MODE_TDSCDMA_ONLY:
++                case Phone.NT_MODE_TDSCDMA_WCDMA:
++                case Phone.NT_MODE_LTE_TDSCDMA:
++                case Phone.NT_MODE_TDSCDMA_GSM:
++                case Phone.NT_MODE_LTE_TDSCDMA_GSM:
++                case Phone.NT_MODE_TDSCDMA_GSM_WCDMA:
++                case Phone.NT_MODE_LTE_TDSCDMA_WCDMA:
++                case Phone.NT_MODE_LTE_TDSCDMA_GSM_WCDMA:
++                case Phone.NT_MODE_TDSCDMA_CDMA_EVDO_GSM_WCDMA:
++                case Phone.NT_MODE_LTE_TDSCDMA_CDMA_EVDO_GSM_WCDMA:
++                case Phone.NT_MODE_WCDMA_ONLY:
++                case Phone.NT_MODE_LTE_ONLY:
++                /// M: Add for C2K
++                case Phone.NT_MODE_GLOBAL:
++                    // This is one of the modes we recognize
++                    modemNetworkMode = buttonNetworkMode;
++                    break;
++                default:
++                    loge("Invalid Network Mode (" + buttonNetworkMode + ") chosen. Ignore.");
++                    return true;
++            }
++
++            UpdateEnabledNetworksValueAndSummary(buttonNetworkMode);
++
++            /// M: 03100374, need to revert the network mode if set fail
++            mPreNetworkMode = settingsNetworkMode;
++
++            android.provider.Settings.Global.putInt(mPhone.getContext().getContentResolver(),
++                    android.provider.Settings.Global.PREFERRED_NETWORK_MODE + phoneSubId,
++                    buttonNetworkMode );
++
++            if (DBG) log("setPreferredNetworkType, networkType: " + modemNetworkMode);
++
++            //Set the modem network mode
++            mPhone.setPreferredNetworkType(modemNetworkMode, mHandler
++                    .obtainMessage(MyHandler.MESSAGE_SET_PREFERRED_NETWORK_TYPE));
++        }
++        return false;
++    }
++
+     private class MyHandler extends Handler {
+ 
+         static final int MESSAGE_SET_PREFERRED_NETWORK_TYPE = 0;
+@@ -2477,10 +2494,23 @@
+             updateEnhanced4GLteSwitchPreference();
+         }
+     };
+-	
+-	private void showAttentionDialog(){
++
++    private void showAttentionDialog4LteOnly(Object objValue){
++        if (mLteAttentionDialog != null && mLteAttentionDialog.isShowing()) {
++            Log.d(LOG_TAG, "mLteAttentionDialog is showing");
++            return;
++        }
++        final int settingsNetworkMode = android.provider.Settings.Global.getInt(
++                mPhone.getContext().getContentResolver(),
++                android.provider.Settings.Global.PREFERRED_NETWORK_MODE + mPhone.getSubId(),
++                preferredNetworkMode);
++        if (settingsNetworkMode == Phone.NT_MODE_LTE_ONLY) {
++            Log.d(LOG_TAG, "showAttentionDialog4LteOnly is already lte");
++            return;
++        }
+         AlertDialog.Builder normalDialog = new AlertDialog.Builder(this);
+         normalDialog.setIcon(R.drawable.icon_dialog_attention);
++        normalDialog.setCancelable(false);
+         normalDialog.setTitle(getString(R.string.attention_dialog_title));
+         normalDialog.setMessage(getString(R.string.attention_dialog_text));
+         normalDialog.setPositiveButton(R.string.attention_dialog_ok, 
+@@ -2488,7 +2518,8 @@
+             @Override
+             public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+-			   sendNotification();
++               handleEnabledNetworksChange(objValue);
++               sendLteOnlyNotification();
+             }
+         });
+         normalDialog.setNegativeButton(R.string.attention_dialog_cancel, 
+@@ -2495,24 +2526,18 @@
+             new DialogInterface.OnClickListener() {
+             @Override
+             public void onClick(DialogInterface dialog, int which) {
+-				dialog.dismiss();
++                dialog.dismiss();
++                Log.d(LOG_TAG, "rollback settingsNetworkMode = " + settingsNetworkMode);
++                mButtonEnabledNetworks.setValue(Integer.toString(settingsNetworkMode));
+             }
+         });
+-        Dialog d =  normalDialog.create();
+-		if(!OnInit){
+-			d.show();
+-		}else{
+-			OnInit = false;
+-		}
++        mLteAttentionDialog = normalDialog.create();
++        mLteAttentionDialog.show();
+     }
+-	
+-	public static final int DEFAULT_NOTIFICATION_ID = 1;
+-    private NotificationManager mNotificationManager;
+-	
+-	private void sendNotification() {
++
++	private void sendLteOnlyNotification() {
+ 		Intent mainIntent = new Intent(this, MobileNetworkSettings.class);
+ 		PendingIntent mainPendingIntent = PendingIntent.getActivity(this, 0, mainIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+-		mNotificationManager = (NotificationManager) this.getSystemService(Context.NOTIFICATION_SERVICE);
+ 		NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
+ 			builder.setSmallIcon(R.mipmap.icon_dialog_attention);
+ 			builder.setContentTitle(getString(R.string.attention_Notification_panel_title));
+@@ -2524,4 +2549,10 @@
+ 			notification.flags |= Notification.FLAG_NO_CLEAR;
+         mNotificationManager.notify(DEFAULT_NOTIFICATION_ID, notification);
+ 	}
++
++    private void removeLteOnlyNotification() {
++        if (mNotificationManager != null) {
++            mNotificationManager.cancel(DEFAULT_NOTIFICATION_ID);
++        }
++    }
+ }

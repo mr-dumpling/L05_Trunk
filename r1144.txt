@@ -1,0 +1,102 @@
+Index: packages/apps/DeskClock/src/com/android/deskclock/AlarmClockFragment.java
+===================================================================
+--- packages/apps/DeskClock/src/com/android/deskclock/AlarmClockFragment.java	(revision 1143)
++++ packages/apps/DeskClock/src/com/android/deskclock/AlarmClockFragment.java	(revision 1144)
+@@ -116,7 +116,7 @@
+ 
+         /// M: Need to get updated DayOrder values for Time Click handler.
+         mAlarmTimeClickHandler.refreshDayOrder(getActivity());
+-
++        mAlarmTimeAdapter.setAlarmUpdateHandler(mAlarmUpdateHandler);
+         // Check if another app asked us to create a blank new alarm.
+         final Intent intent = getActivity().getIntent();
+         if (intent.hasExtra(ALARM_CREATE_NEW_INTENT_EXTRA)) {
+Index: packages/apps/DeskClock/src/com/android/deskclock/alarms/dataadapter/AlarmTimeAdapter.java
+===================================================================
+--- packages/apps/DeskClock/src/com/android/deskclock/alarms/dataadapter/AlarmTimeAdapter.java	(revision 1143)
++++ packages/apps/DeskClock/src/com/android/deskclock/alarms/dataadapter/AlarmTimeAdapter.java	(revision 1144)
+@@ -31,7 +31,14 @@
+ import com.android.deskclock.alarms.ScrollHandler;
+ import com.android.deskclock.provider.Alarm;
+ import com.android.deskclock.provider.AlarmInstance;
+-
++import com.android.deskclock.alarms.AlarmUpdateHandler;
++import android.provider.MediaStore;
++import android.provider.OpenableColumns;
++import android.database.sqlite.SQLiteException;
++import android.content.ContentResolver;
++import android.net.Uri;
++import com.android.deskclock.data.DataModel;
++import android.media.RingtoneManager;
+ /**
+  * Data adapter for alarm time items.
+  */
+@@ -51,7 +58,7 @@
+     private int mExpandedPosition = -1;
+     private long mExpandedId = Alarm.INVALID_ID;
+     private Cursor mCursor;
+-
++    private AlarmUpdateHandler mAlarmUpdateHandler;
+     public AlarmTimeAdapter(Context context, Bundle savedState,
+             AlarmTimeClickHandler alarmTimeClickHandler, ScrollHandler smoothScrollController) {
+         mContext = context;
+@@ -89,12 +96,49 @@
+             LogUtils.e(TAG, "Failed to bind alarm " + position);
+             return;
+         }
+-        final Alarm alarm = new Alarm(mCursor);
++        final Alarm alarm =updateRingtoneName(mCursor);
+         final AlarmInstance alarmInstance = alarm.canPreemptivelyDismiss()
+                 ? new AlarmInstance(mCursor, true /* joinedTable */) : null;
+         viewHolder.bindAlarm(mContext, alarm, alarmInstance);
+     }
+ 
++    private Alarm updateRingtoneName(Cursor cur) {
++        Alarm alarm = new Alarm(cur);
++        Uri ringtoneUri = alarm.alert;
++       
++        // Is it a silent ringtone?
++        if (ringtoneUri == null) {
++            return alarm;
++        } else {
++            Cursor cursor = null;
++            try {
++                if (MediaStore.AUTHORITY.equals(ringtoneUri.getAuthority())) {
++                    cursor = mContext.getContentResolver().query(ringtoneUri,
++                            new String[] { MediaStore.Audio.Media.TITLE }, null, null, null);
++                } else if (ContentResolver.SCHEME_CONTENT.equals(ringtoneUri.getScheme())) {
++                    cursor = mContext.getContentResolver().query(ringtoneUri,
++                            new String[] { OpenableColumns.DISPLAY_NAME }, null, null, null);
++                }
++                if (cursor != null) {
++                    if (cursor.moveToFirst()) {
++                        return alarm;
++                    }else{
++                        Uri uri = RingtoneManager.getActualDefaultRingtoneUri(mContext, RingtoneManager.TYPE_ALARM);
++                        DataModel.getDataModel().setDefaultAlarmRingtoneUri(uri);
++                        alarm.alert = uri;
++                        mAlarmUpdateHandler.asyncUpdateAlarm(alarm, false ,true);
++                    }
++                }
++            } catch (SQLiteException sqle) {
++            } catch (IllegalArgumentException iae) {
++            } finally {
++                if (cursor != null) {
++                    cursor.close();
++                }
++            }
++        }
++        return alarm;
++    }
+     @Override
+     public int getItemCount() {
+         return mCursor == null ? 0 : mCursor.getCount();
+@@ -158,4 +202,8 @@
+         mCursor = cursor;
+         notifyDataSetChanged();
+     }
++	
++    public void  setAlarmUpdateHandler(AlarmUpdateHandler alarmUpdateHandler) {
++        mAlarmUpdateHandler = alarmUpdateHandler;
++    }
+ }

@@ -1,0 +1,248 @@
+Index: frameworks/base/packages/SystemUI/res_ext/layout/mobile_signal_group_ext.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res_ext/layout/mobile_signal_group_ext.xml	(revision 5592)
++++ frameworks/base/packages/SystemUI/res_ext/layout/mobile_signal_group_ext.xml	(revision 5593)
+@@ -18,4 +18,11 @@
+         android:visibility="gone"
+         />
+     <include layout="@layout/mobile_signal_group"/>
++
++    <ImageView
++        android:id="@+id/data_inout"
++        android:layout_height="wrap_content"
++        android:layout_width="wrap_content"
++        android:tag="data_inout"
++        />
+ </LinearLayout>
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java	(revision 5592)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java	(revision 5593)
+@@ -53,6 +53,9 @@
+ 
+ import java.util.ArrayList;
+ import java.util.List;
++import android.net.ConnectivityManager;
++import android.net.NetworkInfo;
++import android.telephony.SubscriptionManager;
+ 
+ // Intimately tied to the design of res/layout/signal_cluster_view.xml
+ public class SignalClusterView
+@@ -112,8 +115,13 @@
+     private boolean mBlockWifi;
+     private boolean mBlockEthernet;
+ 
++    static final int[] DATA_ACTIVITY = {
++        R.drawable.stat_sys_signal,
++        R.drawable.stat_sys_signal_in,
++        R.drawable.stat_sys_signal_out,
++        R.drawable.stat_sys_signal_inout
++    };
+ 
+-
+     /// M: Add for Plugin feature @ {
+     private ISystemUIStatusBarExt mStatusBarExt;
+     /// @ }
+@@ -294,6 +302,25 @@
+ 
+         apply();
+     }
++
++    public void setDataActivityMTK(boolean in, boolean out, int subId) {
++        Log.d(TAG, "zly --> setDataActivityMTK(in= " + in + "), out= " + out);
++
++
++        int imgDataActivityID=0;
++        if (in && out) {
++            imgDataActivityID=DATA_ACTIVITY[3];
++        } else if (out) {
++            imgDataActivityID=DATA_ACTIVITY[2];
++        } else if (in) {
++            imgDataActivityID=DATA_ACTIVITY[1];
++        } else {
++            imgDataActivityID=DATA_ACTIVITY[0];
++        }
++        PhoneState state = getState(subId);
++        state.mDataActivityId = imgDataActivityID;
++    }
++
+     ///M: Support[Network Type and volte on StatusBar]. Add more parameter networkType and volte .
+     @Override
+     public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
+@@ -317,6 +344,8 @@
+         state.mDataActivityOut = activityOut;
+         /// @ }
+ 
++        setDataActivityMTK(activityIn, activityOut, subId);
++
+         apply();
+     }
+ 
+@@ -668,6 +697,10 @@
+         private ISystemUIStatusBarExt mPhoneStateExt;
+         /// @ }
+ 
++        private ImageView mDataActivityInOut;
++        private int mDataActivityId = 0;
++        private Context mContext;
++
+         public PhoneState(int subId, Context context) {
+             ViewGroup root = (ViewGroup) LayoutInflater.from(context)
+                     .inflate(R.layout.mobile_signal_group_ext, null);
+@@ -679,6 +712,7 @@
+ 
+             setViews(root);
+             mSubId = subId;
++            mContext = context;
+         }
+ 
+         public void setViews(ViewGroup root) {
+@@ -688,8 +722,40 @@
+             mMobileType     = (ImageView) root.findViewById(R.id.mobile_type);
+             mNetworkType    = (ImageView) root.findViewById(R.id.network_type);
+             mVolteType      = (ImageView) root.findViewById(R.id.volte_indicator_ext);
++            mDataActivityInOut = (ImageView) root.findViewById(R.id.data_inout);
+         }
+ 
++        public boolean isCellNetwork() {
++            ConnectivityManager connManager = (ConnectivityManager) mContext
++                    .getSystemService(Context.CONNECTIVITY_SERVICE);
++
++            if (null == connManager) {
++                Log.d(TAG, "connectivity manager is null when checking active network");
++                return false;
++            }
++
++            NetworkInfo info = connManager.getActiveNetworkInfo();
++            if (info == null) {
++                Log.d(TAG, "no active network when checking active network");
++                return false;
++            }
++
++            if (!info.isConnected()) {
++                Log.d(TAG, "current network is not connected when checking active network");
++                return false;
++            }
++
++            if (!info.isAvailable()) {
++                Log.d(TAG, "current network is not available when checking active network");
++                return false;
++            }
++
++            if (ConnectivityManager.TYPE_MOBILE == info.getType()) {
++                return true;
++            }
++            return false;
++        }
++
+         public boolean apply(boolean isSecondaryIcon) {
+             if (mMobileVisible && !mIsAirplaneMode) {
+                 if (mLastMobileStrengthId != mMobileStrengthId) {
+@@ -706,6 +772,14 @@
+                         + " " + mMobileDescription);
+                 mMobileGroup.setVisibility(View.VISIBLE);
+                 showViewInWfcCase();
++
++                if (mDataActivityId != 0 && isCellNetwork() && mSubId == SubscriptionManager.getDefaultDataSubscriptionId()) {
++                    mDataActivityInOut.setImageResource(mDataActivityId);
++                    mDataActivityInOut.setVisibility(View.VISIBLE);
++                } else {
++                    mDataActivityInOut.setImageDrawable(null);
++                    mDataActivityInOut.setVisibility(View.GONE);
++                }
+             } else {
+                 if (mIsAirplaneMode && (mIsWfcEnable && mVolteIcon != 0)) {
+                     /// M:Bug fix for show vowifi icon in flight mode
+Index: frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal_out.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal_out.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal_out.xml	(revision 5593)
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="18dp"
++    android:height="16dp"
++    android:viewportWidth="18"
++    android:viewportHeight="16">
++
++    <path
++        android:fillColor="#FFFFFF"
++        android:fillAlpha="0.3"
++        android:strokeAlpha="0.3"
++        android:strokeWidth="1"
++        android:pathData="M 5.976 6.504 L 5.976 15 L 2.988 15 L 2.988 6.504 L 0 6.504 L 4.518 1 L 9.037 6.504 Z" />
++    <path
++        android:fillColor="#FFFFFF"
++        android:pathData="M 12.023 9.492 L 12.023 1 L 15.012 1 L 15.012 9.492 L 18 9.492 L 13.48 15 L 9.037 9.492 Z" />
++</vector>
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal_in.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal_in.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal_in.xml	(revision 5593)
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="18dp"
++    android:height="16dp"
++    android:viewportWidth="18"
++    android:viewportHeight="16">
++
++    <path
++        android:fillColor="#FFFFFF"
++        android:pathData="M 5.976 6.504 L 5.976 15 L 2.988 15 L 2.988 6.504 L 0 6.504 L 4.518 1 L 9.037 6.504 Z" />
++    <path
++        android:fillColor="#FFFFFF"
++        android:fillAlpha="0.3"
++        android:strokeAlpha="0.3"
++        android:strokeWidth="1"
++        android:pathData="M 12.023 9.492 L 12.023 1 L 15.012 1 L 15.012 9.492 L 18 9.492 L 13.48 15 L 9.037 9.492 Z" />
++</vector>
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal.xml	(revision 5593)
+@@ -0,0 +1,20 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="18dp"
++    android:height="16dp"
++    android:viewportWidth="18"
++    android:viewportHeight="16">
++
++    <path
++        android:fillColor="#FFFFFF"
++        android:fillAlpha="0.3"
++        android:strokeAlpha="0.3"
++        android:strokeWidth="1"
++        android:pathData="M 5.976 6.504 L 5.976 15 L 2.988 15 L 2.988 6.504 L 0 6.504 L 4.518 1 L 9.037 6.504 Z" />
++    <path
++        android:fillColor="#FFFFFF"
++        android:fillAlpha="0.3"
++        android:strokeAlpha="0.3"
++        android:strokeWidth="1"
++        android:pathData="M 12.023 9.492 L 12.023 1 L 15.012 1 L 15.012 9.492 L 18 9.492 L 13.48 15 L 9.037 9.492 Z" />
++</vector>
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal_inout.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal_inout.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/stat_sys_signal_inout.xml	(revision 5593)
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="18dp"
++    android:height="16dp"
++    android:viewportWidth="18"
++    android:viewportHeight="16">
++
++    <path
++        android:fillColor="#FFFFFF"
++        android:pathData="M 5.976 6.504 L 5.976 15 L 2.988 15 L 2.988 6.504 L 0 6.504 L 4.518 1 L 9.037 6.504 Z" />
++    <path
++        android:fillColor="#FFFFFF"
++        android:pathData="M 12.023 9.492 L 12.023 1 L 15.012 1 L 15.012 9.492 L 18 9.492 L 13.48 15 L 9.037 9.492 Z" />
++</vector>
+\ No newline at end of file

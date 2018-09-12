@@ -1,0 +1,406 @@
+Index: packages/apps/Settings/src/com/android/settings/TechRadioButtonPreference.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/TechRadioButtonPreference.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/TechRadioButtonPreference.java	(revision 1596)
+@@ -0,0 +1,144 @@
++package com.android.settings;
++
++import android.content.Context;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.PreferenceViewHolder;
++import android.util.Log;
++import android.view.View;
++import android.widget.Checkable;
++import android.widget.CompoundButton;
++import android.widget.RadioButton;
++
++import com.android.settings.SettingsActivity;
++
++
++public class TechRadioButtonPreference extends Preference {
++
++    private final RadioButtonGroupState mSharedState;
++    private final SettingsActivity mSettingsActivity;
++    private volatile boolean mPreventRadioButtonCallbacks;
++    private String mName;
++    private RadioButton mRadioButton;
++    private static int beginInit = 0;
++    private boolean mChecked;
++    private boolean mFlag = false;
++
++    public TechRadioButtonPreference(Context context, String name, RadioButtonGroupState state, SettingsActivity prefActivity, boolean checked) {
++        super(context);
++
++        setLayoutResource(R.layout.preference_radio_button);
++        mName = name;
++        mSharedState = state;
++        mSettingsActivity = prefActivity;
++        mPreventRadioButtonCallbacks = false;
++        mChecked = checked;
++        setKey(name);
++    }
++
++    private final CompoundButton.OnCheckedChangeListener mRadioChangeListener =
++            new CompoundButton.OnCheckedChangeListener() {
++                @Override
++                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
++                    onRadioButtonClicked(buttonView, isChecked);
++                    /*
++                    beginInit++;
++                    if (2 < beginInit) {
++                        mSharedState.update();
++                        beginInit = 3;
++                    }
++                    */
++                    if (!mFlag) {
++                        mSharedState.update();
++                    }
++                    mFlag = false;
++                }
++            };
++
++    @Override
++    public void onBindViewHolder(PreferenceViewHolder view) {
++        super.onBindViewHolder(view);
++
++        if (null == mSharedState) {
++            throw new IllegalStateException("Call to getView() before a call to" +
++                    "setSharedState()");
++        }
++
++        mFlag = true;
++
++        final RadioButton rb = (RadioButton) view.findViewById(R.id.night_mode_radio_button);
++        rb.setOnCheckedChangeListener(mRadioChangeListener);
++        rb.setText(mName);
++        //boolean isChecked = getKey().equals(mSharedState.getCurrentKey());
++//       boolean isChecked = getKey().equals(mSharedState.getCurrentKey());
++        if (mChecked) {
++            mSharedState.setCurrentChecked(rb);
++        }
++
++        if (getKey().equals("Sunset to sunrise")) {
++            mSharedState.setRadioOne(rb);
++        } else {
++            mSharedState.setRadioTwo(rb);
++        }
++
++        mPreventRadioButtonCallbacks = true;
++        rb.setChecked(mChecked);
++        mPreventRadioButtonCallbacks = false;
++
++        mRadioButton = rb;
++
++        //syncSummaryView(view);
++    }
++
++    private void onRadioButtonClicked(final CompoundButton buttonView,
++                                      boolean isChecked) {
++        if (mPreventRadioButtonCallbacks ||
++                (mSharedState.getCurrentChecked() == buttonView)) {
++            return;
++        }
++
++        makeCurrentEngine(buttonView);
++/*
++        if (isChecked) {
++            // Should we alert user? if that's true, delay making engine current one.
++            if (shouldDisplayDataAlert()) {
++                displayDataAlert(new DialogInterface.OnClickListener() {
++                    @Override
++                    public void onClick(DialogInterface dialog, int which) {
++                        makeCurrentEngine(buttonView);
++                    }
++                },new DialogInterface.OnClickListener() {
++                    @Override
++                    public void onClick(DialogInterface dialog, int which) {
++                        // Undo the click.
++                        buttonView.setChecked(false);
++                    }
++                });
++            } else {
++                // Privileged engine, set it current
++                makeCurrentEngine(buttonView);
++            }
++        } else {
++//            mSettingsIcon.setEnabled(false);
++        }*/
++    }
++
++    private void makeCurrentEngine(Checkable current) {
++        if (mSharedState.getCurrentChecked() != null) {
++            mSharedState.getCurrentChecked().setChecked(false);
++        }
++        mSharedState.setCurrentChecked(current);
++        mSharedState.setCurrentKey(getKey());
++        callChangeListener(mSharedState.getCurrentKey());
++    }
++
++    public interface RadioButtonGroupState {
++        String getCurrentKey();
++        Checkable getCurrentChecked();
++
++        void setCurrentKey(String key);
++        void setCurrentChecked(Checkable current);
++        void setRadioOne(RadioButton rb);
++        void setRadioTwo(RadioButton rb);
++        void update();
++    }
++}
+\ No newline at end of file
+Index: packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java	(revision 1595)
++++ packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java	(revision 1596)
+@@ -32,6 +32,9 @@
+ import android.content.BroadcastReceiver;
+ import java.util.Date;
+ 
++import android.support.v7.preference.PreferenceCategory;
++import android.widget.Checkable;
++import android.widget.RadioButton;
+ 
+ 
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+@@ -39,7 +42,8 @@
+  * Created by Administrator on 2017/8/21.
+  Set the night mode time
+  */
+-public class SchedulePlanTypeSettings extends SettingsPreferenceFragment implements Indexable{
++public class SchedulePlanTypeSettings extends SettingsPreferenceFragment implements Indexable,
++                TechRadioButtonPreference.RadioButtonGroupState {
+ 	private static final String TAG = "SchedulePlanTypeSettings";
+ 	public static final String OPEN_ACTION = "com.android.settings.nightmode.open";
+ 	public static final String CLOSE_ACTION ="com.android.settings.nightmode.close";
+@@ -58,8 +62,16 @@
+     private final String CLOSE="close_nightMode";
+ 	private  Preference turn_on_at ;
+ 	private   Preference turn_off_at ;
+-	private   CheckBoxPreference custom_schedule ;
+-	private   CheckBoxPreference sunset2sunrise ;
++// private   CheckBoxPreference custom_schedule ;
++// private   CheckBoxPreference sunset2sunrise ;
++    private PreferenceCategory mSchedulePlanPreferenceCategory;
++    private Checkable mCurrentChecked;
++    private String mCurrentEngine;
++    private TechRadioButtonPreference radioOne;
++    private TechRadioButtonPreference radioTwo;
++    private RadioButton radioButtonOne;
++    private RadioButton radioButtonTwo;
++
+ 	private   SharedPreferences modePrenference ;
+ 	private TimePickerDialog.OnTimeSetListener timeOffListener;
+ 	private TimePickerDialog.OnTimeSetListener timeOnListener;
+@@ -89,28 +101,27 @@
+ 	public void initPreference() {
+         turn_on_at= findPreference(KEY_TIME_ON);
+         turn_off_at =  findPreference(KEY_TIME_OFF);
+-        custom_schedule = (CheckBoxPreference) findPreference(KEY_SETTING_TIME);
+-        sunset2sunrise = (CheckBoxPreference) findPreference(KEY_SUNSET_SUNRISE);
++        //custom_schedule = (CheckBoxPreference) findPreference(KEY_SETTING_TIME);
++        //sunset2sunrise = (CheckBoxPreference) findPreference(KEY_SUNSET_SUNRISE);
+         modePrenference = getContext().getSharedPreferences(PREFERENCE_NAME, 0);
+         boolean checkoutTime = modePrenference.getBoolean(SETTING_TIME_PLAN, false);
+ 		boolean auto = modePrenference.getBoolean(SUNSET_TO_SUNRISE, true);
+ 		updateTimeDisplay();
+-		sunset2sunrise.setChecked(auto);
+-        if (checkoutTime) {
+-			custom_schedule.setChecked(true);
+-            turn_on_at.setEnabled(true);
+-            turn_on_at.setShouldDisableView(false);
+-            turn_off_at.setEnabled(true);
+-            turn_off_at.setShouldDisableView(false);
++        //sunset2sunrise.setChecked(auto);
+ 
+-        } else {
+-        	custom_schedule.setChecked(false);
+-            turn_on_at.setEnabled(false);
+-            turn_on_at.setShouldDisableView(true);
+-            turn_off_at.setEnabled(false);
+-            turn_off_at.setShouldDisableView(true);
+-        }
+-		sunset2sunrise.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++        turn_on_at.setEnabled(checkoutTime);
++        turn_on_at.setShouldDisableView(!checkoutTime);
++        turn_off_at.setEnabled(checkoutTime);
++        turn_off_at.setShouldDisableView(!checkoutTime);
++
++        mSchedulePlanPreferenceCategory = (PreferenceCategory) findPreference("schedule_plan_preference");
++        radioOne = new TechRadioButtonPreference(getPrefContext(), "Sunset to sunrise", this, (SettingsActivity)getActivity(), auto);
++        radioTwo = new TechRadioButtonPreference(getPrefContext(), "Custom schedule", this, (SettingsActivity)getActivity(), checkoutTime);
++        mSchedulePlanPreferenceCategory.addPreference(radioOne);
++        mSchedulePlanPreferenceCategory.addPreference(radioTwo);
++
++/*
++        sunset2sunrise.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+             @Override
+             public boolean onPreferenceChange(Preference preference, Object newValue) {
+             		 modePrenference.edit().putBoolean(SUNSET_TO_SUNRISE, Boolean.parseBoolean(newValue.toString())).commit();
+@@ -132,7 +143,7 @@
+ 						NightModeUtils.cancelAlarm(getContext(),OPEN_ACTION,0);
+ 						NightModeUtils.cancelAlarm(getContext(),CLOSE_ACTION,-1);
+ 						if(!custom_schedule.isChecked()){
+-							PictureQuality.enableBlueLight(false);
++                            PictureQuality.enableBlueLight(false);
+ 						}
+ 
+ 					 }
+@@ -156,7 +167,8 @@
+ 					startTime_Hour=Integer.parseInt(timeOns[1]);
+ 					NightModeUtils.sendBroad(OPEN_ACTION, getContext(), OPEN, Integer.parseInt(timeOns[0]), Integer.parseInt(timeOns[1]), 0);
+             		NightModeUtils.sendBroad(CLOSE_ACTION, getContext(), CLOSE, Integer.parseInt(timeOffs[0]), Integer.parseInt(timeOffs[1]), -1);
+-					/*PictureQuality.enableBlueLight(true);
++*/
++            /*PictureQuality.enableBlueLight(true);
+ 
+ 					UiModeManager uiManager = (UiModeManager) getContext().getSystemService(
+                 		Context.UI_MODE_SERVICE);
+@@ -165,6 +177,7 @@
+ 					getActivity().recreate();
+             int currentNightMode = uiManager.getNightMode();
+ 			Toast.makeText(getContext(),"currentNightMode==="+currentNightMode,Toast.LENGTH_LONG).show();*/
++/*
+                 }else{
+                     turn_on_at.setEnabled(false);
+                     turn_on_at.setShouldDisableView(true);
+@@ -179,6 +192,7 @@
+                 return true;
+             }
+         });
++*/
+         turn_on_at.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+             @Override
+             public boolean onPreferenceClick(Preference preference) {
+@@ -357,4 +371,66 @@
+         return DateFormat.is24HourFormat(getActivity());
+     }
+     
+-	}
++	    @Override
++    public String getCurrentKey() {
++        return mCurrentEngine;
++    }
++
++    @Override
++    public Checkable getCurrentChecked() {
++        return mCurrentChecked;
++    }
++
++    @Override
++    public void setCurrentKey(String key) {
++        mCurrentEngine = key;
++    }
++
++    @Override
++    public void setCurrentChecked(Checkable current) {
++        mCurrentChecked = current;
++    }
++
++    @Override
++    public void setRadioOne(RadioButton rb) {
++        radioButtonOne = rb;
++    }
++
++    @Override
++    public void setRadioTwo(RadioButton rb) {
++        radioButtonTwo = rb;
++    }
++
++    @Override
++    public void update() {
++        boolean sunsetToSunriseFlag = radioButtonOne.isChecked();
++        boolean settingTimeFlag = radioButtonTwo.isChecked();
++        modePrenference.edit().putBoolean(SUNSET_TO_SUNRISE, sunsetToSunriseFlag).commit();
++        modePrenference.edit().putBoolean(SETTING_TIME_PLAN, settingTimeFlag).commit();
++        turn_on_at.setEnabled(settingTimeFlag);
++        turn_on_at.setShouldDisableView(!settingTimeFlag);
++        turn_off_at.setEnabled(settingTimeFlag);
++        turn_off_at.setShouldDisableView(!settingTimeFlag);
++
++        if (sunsetToSunriseFlag) {
++            NightModeUtils.sendBroad(OPEN_ACTION, getContext(), OPEN, 22, 0, 0);
++            NightModeUtils.sendBroad(CLOSE_ACTION, getContext(), CLOSE, 7, 0, -1);
++            Calendar c = Calendar.getInstance();
++            int mHour = c.get(Calendar.HOUR_OF_DAY);
++            int mMinute = c.get(Calendar.MINUTE);
++            if (22 < mHour) {
++                PictureQuality.enableBlueLight(true);
++            } else if (22 == mHour && 00<mMinute) {
++                PictureQuality.enableBlueLight(true);
++            }
++        } else {
++            String[] timeOns = modePrenference.getString(TIME_ON, timeOn).split(":");
++            String[] timeOffs = modePrenference.getString(TIME_ON, timeOff).split(":");
++            startTime_Min = Integer.parseInt(timeOns[0]);
++            startTime_Hour = Integer.parseInt(timeOns[1]);
++            NightModeUtils.sendBroad(OPEN_ACTION, getContext(), OPEN, Integer.parseInt(timeOns[0]), Integer.parseInt(timeOns[1]), 0);
++            NightModeUtils.sendBroad(CLOSE_ACTION, getContext(), CLOSE, Integer.parseInt(timeOffs[0]), Integer.parseInt(timeOffs[1]), -1);
++        }
++    }
++
++}
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1595)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1596)
+@@ -8046,4 +8046,5 @@
+     
+     <string name="empty_title"> </string>
+     <string name="sim_card_rename_hit">SIM card name can not be empty.</string>
++    <string name="schedule_plan_mode">Select Mode</string>
+ </resources>
+Index: packages/apps/Settings/res/layout/preference_radio_button.xml
+===================================================================
+--- packages/apps/Settings/res/layout/preference_radio_button.xml	(revision 0)
++++ packages/apps/Settings/res/layout/preference_radio_button.xml	(revision 1596)
+@@ -0,0 +1,16 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:orientation="vertical" android:layout_width="match_parent"
++    android:layout_height="40dp">
++
++    <RadioButton
++        android:paddingStart="20dp"
++        android:paddingLeft="20dp"
++        android:id="@+id/night_mode_radio_button"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:button="@null"
++        android:background="@null"
++        android:drawableRight="@android:drawable/btn_radio"
++        android:clickable="true" />
++</LinearLayout>
+\ No newline at end of file
+Index: packages/apps/Settings/res/xml/schedule_plan_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/schedule_plan_settings.xml	(revision 1595)
++++ packages/apps/Settings/res/xml/schedule_plan_settings.xml	(revision 1596)
+@@ -3,6 +3,7 @@
+     xmlns:settings="http://schemas.android.com/apk/res/com.android.settings"
+     android:title="@string/schedule_plan_title">
+ 
++<!--
+     <CheckBoxPreference
+         android:key="sunset2sunrise"
+         android:title="@string/sunset2sunrise_title"
+@@ -13,6 +14,10 @@
+         android:title="@string/custom_schedule"
+         settings:keywords="@string/keywords_custom_schedule"
+         />
++-->
++    <PreferenceCategory android:key="schedule_plan_preference"
++        android:title="@string/schedule_plan_mode"/>
++
+     <Preference
+         android:key="turn_on_at"
+         android:title="@string/turn_on_at_title"
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1595)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1596)
+@@ -3348,4 +3348,5 @@
+ 	<string name="reset_confirm">重置</string>
+ 	<string name="reset_cancel">取消</string>
+ 	<string name="reset_network_message">重置所有网络设置？ 此操作不能撤消。</string>
++    <string name="schedule_plan_mode">选择计划方式</string>
+ </resources>

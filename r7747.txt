@@ -1,0 +1,253 @@
+Index: vendor/branch/5058A_Cable_Bahamas/diff.txt
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/diff.txt	(revision 7746)
++++ vendor/branch/5058A_Cable_Bahamas/diff.txt	(revision 7747)
+@@ -509,7 +509,12 @@
+ >     <provider id="hotmail" label="Windows Live Hotmail Plus" domain="hotmail.com"
+ 
+ vendor/branch/5058A_Cable_Bahamas/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java:
+->             newSignature = getResources().getString(R.string.preferences_signature_content);
++>             boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
++> 			if(bFrBug119814){
++> 				newSignature = getResources().getString(R.string.preferences_signature_content_default);
++> 			}else{
++> 				newSignature = getResources().getString(R.string.preferences_signature_content);
++> 			}            
+ 
+ vendor/branch/5058A_Cable_Bahamas/packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java:
+ >             if (!TextUtils.isEmpty(summary)) {
+@@ -516,7 +521,12 @@
+ >                 mAccountDescription.setSummary(summary);
+ >                 mAccountDescription.setText(summary);
+ >                 cv.put(AccountColumns.DISPLAY_NAME, summary);
+-> 			accountSignature=SystemProperties.get("ro.business.name");;
++> 		boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
++> 			if(bFrBug119814){
++> 				accountSignature=mContext.getResources().getString(R.string.preferences_signature_content_default);
++> 			}else{
++> 				accountSignature=SystemProperties.get("ro.business.name");;
++> 			}
+ > 	
+ > 	private void updateNotificationTitle(){
+ > 		if(mInboxFolderPreferences == null) return;
+@@ -550,6 +560,15 @@
+ >             updateViewConfiguration(true);
+ >             updateFragmentsVisibility();
+ 
++vendor/branch/5058A_Cable_Bahamas/packages/apps/EmailPartnerProvider/res/xml/providers.xml:
++>     <provider id="yahoo" label="Yahoo" domain="yahoo.com" signature="@string/global_signature">
++>     <provider id="gmail" label="Gmail" domain="gmail.com" signature="@string/global_signature">
++>     <provider id="hotmail" label="Hotmail" domain="hotmail.com" signature="@string/global_signature">
++>     <provider id="163" label="163" domain="163.com" signature="@string/global_signature">
++
++vendor/branch/5058A_Cable_Bahamas/packages/apps/EmailPartnerProvider/src/com/android/email/partnerprovider/PartnerProvider.java:
++>         String globalSignature = getContext().getString(R.string.global_signature);
++
+ vendor/branch/5058A_Cable_Bahamas/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java:
+ > import android.os.LocaleList;
+ > 
+@@ -711,7 +730,6 @@
+ >                                 ? R.string.network_4G : R.string.network_lte);
+ >                 int select = mShow4GForLTE ? R.array.enabled_networks_4g_choices
+ >                         : R.array.enabled_networks_choices;
+->         prefSet.addPreference(mPLMNPreference);
+ >         volteEnabled = false;
+ >                 mButtonEnabledNetworks.setEntries(R.array.enabled_networks_4g_choices);
+ 
+@@ -736,7 +754,6 @@
+ >     <bool name="config_dreamsActivatedOnSleepByDefault">true</bool>
+ >     <bool name="config_camera_sound_forced">true</bool>
+ >     <bool name="config_supportAudioSourceUnprocessed">false</bool>
+->     <bool name="config_cameraDoubleTapPowerGestureEnabled">false</bool>
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/core/res/res/values/locale_config.xml:
+ >         <item>es-US</item> <!-- Spanish (United States) -->
+@@ -809,14 +826,73 @@
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/res/drawable/roaming_lte.png:
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java:
++> 	private String mApnType = "unknow";
+ >             mCurrentState.iconGroup = TelephonyIcons.ROAMING;
++> 		@Override 
++> 		public void onPreciseDataConnectionStateChanged(PreciseDataConnectionState dataConnectionState){
++> 			if (DEBUG) {
++> 				Log.d(mTag, "onPreciseDataConnectionStateChanged: dataConnectionState=" + dataConnectionState);
++> 	 		}
++>         	if ((mDataState==dataConnectionState.getDataConnectionState())&&(mDataNetType==dataConnectionState.getDataConnectionNetworkType()))
++>         	{
++>             	mApnType = dataConnectionState.getDataConnectionAPNType();
++>             	Log.d(TAG, "mtk onPreciseDataConnectionStateChanged mApnType: " + mApnType);
++>             	notifyListenersIfNecessary();
++>         	}
++> 		}
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java:
+ > 
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java:
++> 
++> 	private TelephonyManager mPhone;
++> 	private MobilePhoneStateListener mPhoneStateListener;
++> 	private String mApnType = "unknow";
++> 	private boolean showDataIcon=false;
++> 		mPhone=(TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
++> 		mPhoneStateListener=new MobilePhoneStateListener();
++> 		mPhone.listen(mPhoneStateListener, PhoneStateListener.LISTEN_PRECISE_DATA_CONNECTION_STATE | PhoneStateListener.LISTEN_DATA_CONNECTION_STATE);
++> 				if(mApnType.equals("mms")){
++> 					if(showDataIcon){
++> 						mDataActivityInOut.setImageResource(mDataActivityId);
++>                     	mDataActivityInOut.setVisibility(View.VISIBLE);
++> 					}else{
++> 						mDataActivityInOut.setImageDrawable(null);
++>                     	mDataActivityInOut.setVisibility(View.GONE);
++> 					}
++> 				}
++> 	class MobilePhoneStateListener extends PhoneStateListener {
++> 			
++> 		@Override 
++> 		public void onPreciseDataConnectionStateChanged(PreciseDataConnectionState dataConnectionState){
++> 			if (DEBUG) {
++> 				Log.d(TAG, "MobilePhoneStateListener:onPreciseDataConnectionStateChanged() dataConnectionState=" + dataConnectionState);
++> 	 		}
++>             
++> 		}
++> 		@Override
++>         	if (DEBUG) {
++> 				Log.d(TAG, "onDataConnectionStateChanged: dataConnectionState..." );
++> 	 		}
++> 			switch(state){
++> 				case TelephonyManager.DATA_DISCONNECTED:
++> 					showDataIcon=false;
++> 				break;
++> 				case TelephonyManager.DATA_CONNECTED:
++> 				case TelephonyManager.DATA_CONNECTING:
++> 					showDataIcon=true;
++> 				break;
++> 			}
++> 		
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/Keyguard/src/com/android/keyguard/EmergencyButton.java:
++>         boolean bFrEmcOn = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_EMC_CALL_ALWAYS_ON_SECRITY);
++>         if(bFrEmcOn){
++> 			mIsSecure = true;
++> 		}else{
++> 			mIsSecure = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser());
++> 		}
+ >             boolean eccShouldShow = eccButtonShouldShow();
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java:
+@@ -842,7 +918,6 @@
+ >             return;
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SettingsProvider/res/values/defaults.xml:
+->     <string name="def_location_providers_allowed" translatable="false">gps,network</string>
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java:
+ > 
+@@ -859,13 +934,6 @@
+ >     * Values: true, remove the toast of maximum participants in conference call
+ >     * @hide
+ >     */
+->      public static final String KEY_CARRIER_AVOID_CMAS_LIST_BOOL = "carrier_avoid_cmas_list_bool";
+-> 
+->      /**
+->     * @M: Added for showing conference host number to participants.
+->     * Values: true, show conference host number to participants
+->     * @hide
+->     */
+ >    /**
+ >     * @M: Added to support WFC enable in flight mode
+ >     * Values: true, if WFC is supported in flight mode & false if not.
+@@ -887,8 +955,10 @@
+ > echo "ro.build.display.id=5058A_LATAM_V2.0_180111"
+ > echo "ro.build.version.custintid=5058A_LATAM_V2.1_180111"
+ > echo "ro.build.version.incremental=LATAM_5058A_L030_S15A_180115"
++> echo "ro.tct.sys.ver=O58AWE01"
+ > echo "ro.build.hardware.version=V1"
+ > echo "ro.build.display.factoryid=Plat:5058A_LATAM_S15A_180115Outer:5058A_LATAM_V2.0_180111End"
++> echo "ro.build.date=`$DATE`"
+ > echo "ro.product.manufacturer= TCT"
+ > echo "ro.build.fingerprint=TCL/5058A/A3A_PLUS:7.1.1/N6F26Q/5058A_LATAM_V2.0_180110:user/release-keys"
+ 
+@@ -896,6 +966,12 @@
+ > # Put en_US first in the list, so make it default.
+ > PRODUCT_LOCALES := en_US
+ 
++vendor/branch/5058A_Cable_Bahamas/build/target/product/core.mk:
++>     Email \
++> 	fcimini
++> 	
++> 
++
+ vendor/branch/5058A_Cable_Bahamas/device/mediatek/common/device.mk:
+ >       ro.com.google.clientidbase.am=alps-$(TARGET_PRODUCT)-{country}
+ > ifneq ($(strip $(MTK_BSP_PACKAGE)), yes)
+@@ -927,6 +1003,12 @@
+ >   PRODUCT_PACKAGES += FullscreenMode
+ >   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ > endif
++> 
++> endif
++> 
++> ifeq ($(strip $(TCT_DIAGNOSTIC)), yes)
++>    PRODUCT_PROPERTY_OVERRIDES += ro.tct_diagnostic=1
++> endif
+ 
+ vendor/branch/5058A_Cable_Bahamas/device/ausshine/aus6739_66_n1/system.prop:
+ > ro.mtk_gemini_support = 1
+Index: vendor/branch/5058A_Cable_Bahamas/diff_5058A.txt
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/diff_5058A.txt	(revision 7746)
++++ vendor/branch/5058A_Cable_Bahamas/diff_5058A.txt	(revision 7747)
+@@ -4,7 +4,6 @@
+ >                     MotocrossTrialExtreme \
+ >                     PuzzlePets \
+ >                     ModernCombat4 \
+->                     Gboard \
+ >                     Toolkit
+ 
+ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/BrowserOverlay/res/values/isdm_BrowserRes_defaults.xml:
+@@ -97,6 +96,9 @@
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java:
+ >                 mMobileIconExt.customizeMobileNetCondition(1);
++>                         | PhoneStateListener.LISTEN_CARRIER_NETWORK_CHANGE);
++>                 || dataDisabled;
++>             mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java:
+ 
+@@ -162,23 +164,25 @@
+ > 	
+ 
+ vendor/branch/5058A_Cable_Bahamas/build/tools/buildinfo.sh:
+-> echo "ro.build.display.id=5058A_LATAM_V2.3_180126"
+-> echo "ro.build.version.custintid=5058A_LATAM_V2.3_180126"
+-> echo "ro.build.version.incremental=LATAM_5058A_L030_S18_180126"
+-> echo "ro.tct.sys.ver=O58AWE04"
++> echo "ro.build.display.id=5058A_LATAM_V2.5_180131"
++> echo "ro.build.version.custintid=5058A_LATAM_V2.5_180131"
++> echo "ro.build.version.incremental=LATAM_5058A_L030_S20_180131"
++> echo "ro.tct.sys.ver=O58AWE05"
+ > echo "ro.build.hardware.version=V1"
+-> echo "ro.build.display.factoryid=Plat:LATAM_5058A_L030_S18_180126Outer:5058A_LATAM_V2.3_180126End"
++> echo "ro.build.display.factoryid=Plat:LATAM_5058A_L030_S20_180131Outer:5058A_LATAM_V2.5_180131End"
+ > echo "ro.product.manufacturer= TCT"
+-> echo "ro.build.fingerprint=TCL/5058A/A3A_PLUS:7.1.1/N6F26Q/5058A_LATAM_V2.3_180126:user/release-keys"
++> echo "ro.build.fingerprint=TCL/5058A/A3A_PLUS:7.1.1/N6F26Q/5058A_LATAM_V2.5_180131:user/release-keys"
+ 
+ vendor/branch/5058A_Cable_Bahamas/build/target/product/full_base.mk:
+ > PRODUCT_LOCALES :=es_MX es_US en_ES en_US en_GB pt_BR pt_PT fr_FR
+ 
++vendor/branch/5058A_Cable_Bahamas/build/target/product/core.mk:
++>     ChromeCustomizations 
++
+ vendor/branch/5058A_Cable_Bahamas/device/ausshine/aus6739_66_n1/system.prop:
+ > ro.tct.curef.default=5058A-2*ALOP1
++> ro.mtk_default_ime=com.android.inputmethod.latin
+ > ro.business.name=Alcatel 3X
+-> ro.com.google.rlzbrandcode=TCTB
+-> ro.com.google.rlz_ap_whitelist=YG
+ > ro.camera_default_picture_size=0x0010
+ > 
+ > # add customer client id

@@ -1,0 +1,68 @@
+Index: packages/apps/Settings/src/com/android/settings/location/LocationSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/location/LocationSettings.java	(revision 1083)
++++ packages/apps/Settings/src/com/android/settings/location/LocationSettings.java	(revision 1084)
+@@ -63,6 +63,7 @@
+ import java.util.List;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
++import android.location.LocationManager; //lance add for bug 110921
+ 
+ /**
+  * System location settings (Settings &gt; Location). The screen has three parts:
+@@ -483,16 +484,24 @@
+ 
+         private final Context mContext;
+         private final SummaryLoader mSummaryLoader;
+-
++        private BroadcastReceiver mModeChangeReceiver; //lance add for bug 110921
+         public SummaryProvider(Context context, SummaryLoader summaryLoader) {
+             mContext = context;
+             mSummaryLoader = summaryLoader;
++
++            //lance add for bug 110921 @{
++            mModeChangeReceiver = new BroadcastReceiver() {
++                @Override
++                public void onReceive(Context context, Intent intent) {
++                    updateSummary();
++                }
++            };
++            // @}
+         }
+ 
+-        @Override
+-        public void setListening(boolean listening) {
+-            if (listening) {
+-                int mode = Settings.Secure.getInt(mContext.getContentResolver(),
++        //lance add for bug 110921 @{
++        public void updateSummary() {
++            int mode = Settings.Secure.getInt(mContext.getContentResolver(),
+                         Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF);
+                 if (mode != Settings.Secure.LOCATION_MODE_OFF) {
+                     mSummaryLoader.setSummary(this, mContext.getString(R.string.location_on_summary,
+@@ -501,7 +510,25 @@
+                     mSummaryLoader.setSummary(this,
+                             mContext.getString(R.string.location_off_summary));
+                 }
++        }
++		// @}
++
++        @Override
++        public void setListening(boolean listening) {
++            //lance add for bug 110921 @{
++            if (listening) {
++                updateSummary();
++                IntentFilter filter = new IntentFilter();
++                filter.addAction(LocationManager.MODE_CHANGED_ACTION);
++                mContext.registerReceiver(mModeChangeReceiver, filter);
++            } else {
++                try {
++                    mContext.unregisterReceiver(mModeChangeReceiver);
++                } catch (RuntimeException e) {
++                    // Ignore exceptions caused by race condition
++                }
+             }
++            // @}
+         }
+     }
+ 

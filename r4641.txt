@@ -1,0 +1,104 @@
+Index: vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 4640)
++++ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 4641)
+@@ -4846,6 +4846,9 @@
+             if (!isSubjectEditorVisible()) {
+                 menu.add(0, MENU_ADD_SUBJECT, 0,
+                         R.string.add_subject).setIcon(R.drawable.ic_menu_edit);
++            }else {
++                menu.add(0, MENU_ADD_SUBJECT, 0,
++                        R.string.remove_subject).setIcon(R.drawable.ic_menu_edit);
+             }
+ 
+             menu.add(0, MENU_ADD_ATTACHMENT, 0, R.string.add_attachment)
+@@ -4911,20 +4914,26 @@
+ 
+         switch (item.getItemId()) {
+             case MENU_ADD_SUBJECT:
+-                showSubjectEditor(true);
+-                mWorkingMessage.setSubject("", true);
+-                /// M: Code analyze 052, Show input keyboard.@{
+-                mInputMethodManager.showSoftInput(
+-                        getCurrentFocus(), InputMethodManager.SHOW_IMPLICIT);
+-                /// @}
+-                updateSendButtonState();
+-                mSubjectTextEditor.requestFocus();
+-                break;
++                if(isSubjectEditorVisible()){
++                    mWorkingMessage.setSubject("", true);
++                    showSubjectEditor(false);
++                    break;
++                }else {
++                    showSubjectEditor(true);
++                    mWorkingMessage.setSubject("", true);
++                    /// M: Code analyze 052, Show input keyboard.@{
++                    mInputMethodManager.showSoftInput(
++                            getCurrentFocus(), InputMethodManager.SHOW_IMPLICIT);
++                    /// @}
++                    updateSendButtonState();
++                    mSubjectTextEditor.requestFocus();
++                    break;
++                }
+             case MENU_ADD_ATTACHMENT:
+                 // Launch the add-attachment list dialog
+                 /// M: Code analyze 051, Hide input keyboard.@{
+                 hideInputMethod();
+-                showAddAttachmentDialog(!mWorkingMessage.hasAttachedFiles());
++                showAddAttachmentDialog(/*!mWorkingMessage.hasAttachedFiles()*/true);//lance modify for bug 117676
+                 MmsLog.d(TAG, "Attach: showAddAttachmentDialog(!hasAttachedFiles)");
+                 break;
+             /// M: Code analyze 014, Add quick text. @{
+@@ -9971,11 +9980,14 @@
+             // if (mAttachmentTypeSelectorAdapter == null) {
+             // add for vcard, if there is a real slideshow, hide vCard
+             int mode = AttachmentTypeSelectorAdapter.MODE_WITH_SLIDESHOW;
+-            if (mWorkingMessage.hasSlideshow()) {
++            //lance modify for bug 117676 @{
++            mode |= AttachmentTypeSelectorAdapter.MODE_WITH_FILE_ATTACHMENT; 
++            /*if (mWorkingMessage.hasSlideshow()) {
+                 mode |= AttachmentTypeSelectorAdapter.MODE_WITHOUT_FILE_ATTACHMENT;
+             } else {
+                 mode |= AttachmentTypeSelectorAdapter.MODE_WITH_FILE_ATTACHMENT;
+-            }
++            }*/
++            // @}
+             if (MessageUtils.isVCalendarAvailable(ComposeMessageActivity.this)) {
+                 mode |= AttachmentTypeSelectorAdapter.MODE_WITH_VCALENDAR;
+             }
+Index: vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java	(revision 4640)
++++ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java	(revision 4641)
+@@ -1125,7 +1125,7 @@
+             if (mSlideshow != null && mSlideshow.size() > 0) {
+                 /// M: Code analyze 034, For new feature ALPS00231349,  add vCard support. @{
+                 if (mOpWorkingMessageExt.removeAllAttachFiles()) {
+-                    mSlideshow.removeAllAttachFiles();
++                    //mSlideshow.removeAllAttachFiles();//lance modify for bug 117676
+                 }
+                 mSlideshow.clear();
+                 mSlideshow = null;
+@@ -1178,7 +1178,12 @@
+         }
+ 
+         // Remove any previous attachments.
+-        removeSlideAttachments(slide);
++        //lance modify for bug 117676 @{
++        //removeSlideAttachments(slide);
++        slide.removeImage();
++        slide.removeVideo();
++        slide.removeAudio();
++        // @}
+ 
+         slide.add(media);
+ 
+@@ -1251,7 +1256,7 @@
+         slide.add(media);
+ 
+         /// M: for vcard, since we append a media, remove vCard
+-        removeAllFileAttaches();
++        //removeAllFileAttaches(); //lance modify for bug 117676
+ 
+         // For video and audio, set the duration of the slide to
+         // that of the attachment.

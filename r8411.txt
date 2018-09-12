@@ -1,0 +1,24 @@
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 8410)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 8411)
+@@ -520,7 +520,18 @@
+             mvnoType = "imsi";
+         }
+         Log.d(TAG, "mvnoType = " + mvnoType + ", mvnoMatchData = " + mvnoMatchData);
+-        if (r != null && !TextUtils.isEmpty(mvnoType) && !TextUtils.isEmpty(mvnoMatchData)) {
++        //modified for apn visible of TIM sim card(mccmnc=22201)
++        final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++        String mccmnc = mSubscriptionInfo == null ? ""
++            : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
++        /// M: for plug-in @{
++        // use mcc&mnc in IMPI to query apn.
++        mccmnc = mApnExt.getOperatorNumericFromImpi(mccmnc,
++                SubscriptionManager.getPhoneId(mSubscriptionInfo.getSubscriptionId()));
++        if(mccmnc.equals("22201")) {
++            //when insert TIM sim card, mvno spn also visible for end-user
++            mnoList.add(pref);
++        } else if (r != null && !TextUtils.isEmpty(mvnoType) && !TextUtils.isEmpty(mvnoMatchData)) {
+             if (ApnSetting.mvnoMatches(r, mvnoType, mvnoMatchData)) {
+                 mvnoList.add(pref);
+                 // Since adding to mvno list, save mvno info

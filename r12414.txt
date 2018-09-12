@@ -1,0 +1,152 @@
+Index: frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- frameworks/base/core/res/res/values/features.xml	(revision 12413)
++++ frameworks/base/core/res/res/values/features.xml	(revision 12414)
+@@ -35,6 +35,9 @@
+ 	<!-- feature for arabic language etc right to left display -->
+ 	<bool name="FR_ARABIC_RTOL">false</bool>
+ 	
++	<!-- feature for voice mail add for one step -->
++	<bool name="FR_VOICEMAIL_ADD_PRIO">false</bool>
++	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">true</bool>
+     
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 12413)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 12414)
+@@ -2819,6 +2819,7 @@
+   <java-symbol type="bool" name="FR_EMC_CALL_INFO_IN_INDIA" />
+   <java-symbol type="bool" name="FR_FINGER_PRINT_ERROR_5TIMES_SCREEN_ON" />
+   <java-symbol type="bool" name="FR_ARABIC_RTOL" />
++  <java-symbol type="bool" name="FR_VOICEMAIL_ADD_PRIO" />
+   <java-symbol type="bool" name="FR_OTHER_TEST" />
+   <!-- feature techain end -->
+ 
+Index: packages/apps/Dialer/src/com/android/dialer/dialpad/DialpadFragment.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/dialpad/DialpadFragment.java	(revision 12413)
++++ packages/apps/Dialer/src/com/android/dialer/dialpad/DialpadFragment.java	(revision 12414)
+@@ -118,7 +118,8 @@
+ import java.util.List;
+ import java.util.Timer;
+ import java.util.TimerTask;
+-
++import android.content.ComponentName;
++import com.android.internal.telephony.PhoneConstants;
+ /**
+  * Fragment that displays a twelve-key phone dialpad.
+  */
+@@ -1188,9 +1189,17 @@
+                         dialogFragment.show(getFragmentManager(),
+                                 "voicemail_request_during_airplane_mode");
+                     } else {
++						//Add by javen for feature (ALM5534792) FR_VOICEMAIL_ADD_PRIO ---
++						boolean bFrVM_Add = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_VOICEMAIL_ADD_PRIO);
++						if(bFrVM_Add){
++							DialogFragment dialogFragment = VMErrorDialogFragment.newInstance(R.string.no_vm_number_msg);
++							dialogFragment.show(getFragmentManager(), "voicemail_not_ready");
++						}else{
+                         DialogFragment dialogFragment = ErrorDialogFragment.newInstance(
+                                 R.string.dialog_voicemail_not_ready_message);
+                         dialogFragment.show(getFragmentManager(), "voicemail_not_ready");
++						}
++						//End by javen for feature (ALM5534792) FR_VOICEMAIL_ADD_PRIO ---
+                     }
+                 }
+                 return true;
+@@ -1292,7 +1301,72 @@
+             return builder.create();
+         }
+     }
++	
++	//javen
++	public static class VMErrorDialogFragment extends DialogFragment {
++        private int mTitleResId;
++        private int mMessageResId;
+ 
++        private static final String ARG_TITLE_RES_ID = "argTitleResId";
++        private static final String ARG_MESSAGE_RES_ID = "argMessageResId";
++
++        public static VMErrorDialogFragment newInstance(int messageResId) {
++            return newInstance(0, messageResId);
++        }
++
++        public static VMErrorDialogFragment newInstance(int titleResId, int messageResId) {
++            final VMErrorDialogFragment fragment = new VMErrorDialogFragment();
++            final Bundle args = new Bundle();
++            args.putInt(ARG_TITLE_RES_ID, titleResId);
++            args.putInt(ARG_MESSAGE_RES_ID, messageResId);
++            fragment.setArguments(args);
++            return fragment;
++        }
++
++        @Override
++        public void onCreate(Bundle savedInstanceState) {
++            super.onCreate(savedInstanceState);
++            mTitleResId = getArguments().getInt(ARG_TITLE_RES_ID);
++            mMessageResId = getArguments().getInt(ARG_MESSAGE_RES_ID);
++        }
++
++        @Override
++        public Dialog onCreateDialog(Bundle savedInstanceState) {
++            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
++            if (mTitleResId != 0) {
++                builder.setTitle(mTitleResId);
++            }
++            if (mMessageResId != 0) {
++                builder.setMessage(mMessageResId);
++            }
++			builder.setTitle(R.string.no_vm_number);
++            
++			builder.setPositiveButton(android.R.string.cancel, new DialogInterface.OnClickListener() {
++                @Override
++                public void onClick(DialogInterface dialog, int which) {
++					dismiss();
++                }});
++			builder.setNegativeButton(R.string.add_vm_number_str,
++                    new DialogInterface.OnClickListener() {
++                            @Override
++                            public void onClick(DialogInterface dialog, int which) {
++                                addVoiceMailNumberPanel(dialog);
++                            }
++                    });
++            return builder.create();
++        }
++		private void addVoiceMailNumberPanel(DialogInterface dialog) {
++			if (dialog != null) {
++				dialog.dismiss();
++			}
++			ComponentName cnn = new ComponentName("com.android.phone","com.android.phone.settings.VoicemailSettingsActivity");
++			Intent it = new Intent();
++			it.putExtra(PhoneConstants.SUBSCRIPTION_KEY, 0);
++			it.setComponent(cnn);
++			startActivity(it);  
++		}
++    }
++
+     /**
+      * In most cases, when the dial button is pressed, there is a
+      * number in digits area. Pack it in the intent, start the
+Index: packages/services/Telephony/src/com/android/phone/settings/VoicemailSettingsActivity.java
+===================================================================
+--- packages/services/Telephony/src/com/android/phone/settings/VoicemailSettingsActivity.java	(revision 12413)
++++ packages/services/Telephony/src/com/android/phone/settings/VoicemailSettingsActivity.java	(revision 12414)
+@@ -279,6 +279,16 @@
+             prefSet.removePreference(mVoicemailVisualVoicemail);
+             prefSet.removePreference(mVoicemailChangePinPreference);
+         }
++		//Add by javen for feature (ALM5534792) FR_VOICEMAIL_ADD_PRIO ---
++        boolean bFrVM_Add = getResources().getBoolean(com.android.internal.R.bool.FR_VOICEMAIL_ADD_PRIO);
++		if(bFrVM_Add){
++			mOldVmNumber = mPhone.getVoiceMailNumber();
++			if (TextUtils.isEmpty(mOldVmNumber)) {			
++				simulatePreferenceClick(mVoicemailSettings);
++				mSubMenuVoicemailSettings.showPhoneNumberDialog();
++			}
++		}
++		//End by javen for feature (ALM5534792) FR_VOICEMAIL_ADD_PRIO ---
+     }
+ 
+     @Override

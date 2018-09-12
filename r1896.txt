@@ -1,0 +1,70 @@
+Index: packages/apps/Dialer/InCallUI/res/values/bools.xml
+===================================================================
+--- packages/apps/Dialer/InCallUI/res/values/bools.xml	(revision 0)
++++ packages/apps/Dialer/InCallUI/res/values/bools.xml	(revision 1896)
+@@ -0,0 +1,19 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2009 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<resources>
++	<bool name="is_need_mini_ecc">false</bool>
++</resources>
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java	(revision 1895)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java	(revision 1896)
+@@ -189,7 +189,8 @@
+ 
+     private float mTranslationOffset;
+     private Animation mPulseAnimation;
+-
++	private String mPhoneNumberDigits;
++	private boolean isNeedMiniECC;
+     private int mVideoAnimationDuration;
+     // Whether or not the call card is currently in the process of an animation
+     private boolean mIsAnimating;
+@@ -231,6 +232,7 @@
+ 
+         /// M: log enhancement
+         Log.d(this, "onCreate...");
++		isNeedMiniECC = getResources().getBoolean(R.bool.is_need_mini_ecc);
+         mHandler = new Handler(Looper.getMainLooper());
+         mShrinkAnimationDuration = getResources().getInteger(R.integer.shrink_animation_duration);
+         mVideoAnimationDuration = getResources().getInteger(R.integer.video_animation_duration);
+@@ -578,6 +580,9 @@
+         if (TextUtils.isEmpty(name)) {
+             mPrimaryName.setText(null);
+         } else {
++			if(nameIsNumber) {
++				mPhoneNumberDigits = name;
++			}
+             mPrimaryName.setText(nameIsNumber
+                     ? PhoneNumberUtilsCompat.createTtsSpannable(name)
+                     : name);
+@@ -649,6 +654,13 @@
+         Log.d(this, "Setting primary call");
+         // set the name field.
+         setPrimaryName(name, nameIsNumber);
++		if(isNeedMiniECC && !nameIsNumber && "100".equals(mPhoneNumberDigits) ){
++			number = "Police 100";
++		}else if(isNeedMiniECC && !nameIsNumber && "101".equals(mPhoneNumberDigits)){
++			number = "Fire 101";
++		}else if(isNeedMiniECC && !nameIsNumber && "102".equals(mPhoneNumberDigits) ){
++			number = "Ambulance 102";
++		} 
+ 
+         if (TextUtils.isEmpty(number) && TextUtils.isEmpty(label)) {
+             mCallNumberAndLabel.setVisibility(View.GONE);

@@ -1,0 +1,108 @@
+Index: packages/apps/Settings/src/com/android/settings/sim/SimSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 1274)
++++ packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 1275)
+@@ -98,6 +98,8 @@
+     private int[] mCallState = new int[mPhoneCount];
+     private PhoneStateListener[] mPhoneStateListener = new PhoneStateListener[mPhoneCount];
+ 
++    private int mRadioOnResult = 0;
++
+     public SimSettings() {
+         super(DISALLOW_CONFIG_SIM);
+     }
+@@ -137,6 +139,8 @@
+        /// M: for [Smart Call Forwarding] @{
+         mSimManagementExt.initPlugin(this);
+         /// @}
++
++        mRadioOnResult = TelephonyUtils.hasRadioOn(mContext);
+     }
+ 
+     private final SubscriptionManager.OnSubscriptionsChangedListener mOnSubscriptionsChangeListener
+@@ -233,7 +237,7 @@
+ 
+             boolean enabled = sir == null ? mSelectableSubInfos.size() >= 1
+                     : mSelectableSubInfos.size() > 1;
+-            simPref.setEnabled(enabled);
++            simPref.setEnabled(enabled && (mRadioOnResult > 2));
+             /// M: for plug-in
+             mSimManagementExt.configSimPreferenceScreen(simPref, KEY_SMS,
+                        mSelectableSubInfos.size());
+@@ -273,7 +277,7 @@
+             /// M: check should enable data preference by multiple conditions @{
+             boolean defaultState = sir == null ? mSelectableSubInfos.size() >= 1
+                     : mSelectableSubInfos.size() > 1;
+-            simPref.setEnabled(shouldEnableSimPref(defaultState));
++            simPref.setEnabled(shouldEnableSimPref(defaultState) && (mRadioOnResult > 2));
+ 
+             mSimManagementExt.configSimPreferenceScreen(simPref, KEY_CELLULAR_DATA, -1);
+             /// @}
+@@ -307,7 +311,7 @@
+                     ? mContext.getResources().getString(R.string.sim_calls_ask_first_prefs_title)
+                     : (String)defaultAccount.getLabel());
+             /// @}
+-            simPref.setEnabled(allPhoneAccounts.size() > 1);
++            simPref.setEnabled(allPhoneAccounts.size() > 1 && (mRadioOnResult > 2));
+             mSimManagementExt.configSimPreferenceScreen(simPref, KEY_CALLS,
+                     allPhoneAccounts.size());
+ 
+@@ -318,7 +322,7 @@
+                 }
+                 boolean hasActiveSubscription
+                     = SubscriptionManager.from(mContext).getActiveSubscriptionInfoCount() >= 1;
+-                simPref.setEnabled(allPhoneAccounts.size() >= 1 && hasActiveSubscription);
++                simPref.setEnabled(allPhoneAccounts.size() >= 1 && hasActiveSubscription && (mRadioOnResult > 2));
+             }
+             /// M: For Op01 open market. @}
+             mSimManagementExt.setPrefSummary(simPref, KEY_CALLS);
+@@ -623,7 +627,9 @@
+      */
+     private void handleRadioPowerSwitchComplete() {
+         if(isResumed()) {
++            mRadioOnResult = TelephonyUtils.hasRadioOn(mContext);
+             updateSimSlotValues();
++            updateActivitesCategory();
+         }
+         // for plug-in
+         mSimManagementExt.showChangeDataConnDialog(this, isResumed());
+Index: packages/apps/Settings/src/com/mediatek/settings/sim/TelephonyUtils.java
+===================================================================
+--- packages/apps/Settings/src/com/mediatek/settings/sim/TelephonyUtils.java	(revision 1274)
++++ packages/apps/Settings/src/com/mediatek/settings/sim/TelephonyUtils.java	(revision 1275)
+@@ -116,4 +116,34 @@
+         log("is support Mims:" + isSupportMims);
+         return isSupportMims;
+     }
++
++    /**
++     * Get the current radio subId.
++     * @param subId Subscribers ID.
++     * @return 1: sim1, 2:sim2, 3:sim1 and sim2
++     */
++    public static int hasRadioOn(Context context) {
++        ITelephony phone = ITelephony.Stub.asInterface(ServiceManager
++                .getService(Context.TELEPHONY_SERVICE));
++        int ret = 0;
++        boolean onOff = false;
++        for (int i = 1; i < 3; i++) {
++            try {
++                if (phone != null) {
++                    onOff = i == SubscriptionManager.INVALID_SUBSCRIPTION_ID ? false :
++                        phone.isRadioOnForSubscriber(i, context.getPackageName());
++                    if (onOff) {
++                        ret += i;
++                    }
++                } else {
++                    Log.d(TAG, "phone is null");
++                }
++            } catch (RemoteException e) {
++                e.printStackTrace();
++            }
++            Log.d(TAG, "ret = " + ret);
++        }
++
++        return ret;
++    }
+ }
+\ No newline at end of file

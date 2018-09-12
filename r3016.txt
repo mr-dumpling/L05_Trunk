@@ -1,0 +1,313 @@
+Index: frameworks/opt/telephony/src/java/com/android/internal/telephony/IccSmsInterfaceManager.java
+===================================================================
+--- frameworks/opt/telephony/src/java/com/android/internal/telephony/IccSmsInterfaceManager.java	(revision 3015)
++++ frameworks/opt/telephony/src/java/com/android/internal/telephony/IccSmsInterfaceManager.java	(revision 3016)
+@@ -24,6 +24,7 @@
+ import android.app.AppOpsManager;
+ import android.app.PendingIntent;
+ import android.content.ContentResolver;
++import android.content.ContentValues; // added by jiayi.wang for task 3682185 at 2017.01.04
+ import android.content.Context;
+ import android.database.Cursor;
+ import android.database.sqlite.SQLiteException;
+@@ -736,6 +737,18 @@
+         mPhone.getContext().enforceCallingPermission(
+                 Manifest.permission.SEND_SMS,
+                 "Sending SMS message");
++        // begin added by jiayi.wang for task 3682185 at 2017.01.04
++        try{
++            ContentValues values = new ContentValues();
++            values.put("action","ADD");
++            values.put("FRM_MESSAGE_SMS_SEND", 1);
++            Log.i("qiang.sun", "FRM_MESSAGE_SMS_SEND");
++            mContext.getContentResolver().update(Uri.parse("content://com.tct.diagnostics.provider.diagnosticsinfo/diagnostics/"),
++                        values, null, null);
++        }catch(Exception e){
++            Log.i("com.tct.diagnostics.provider.diagnosticsinfo : ", e.toString());
++        }
++        // end added by jiayi.wang for task 3682185 at 2017.01.04
+         sendTextInternal(callingPackage, destAddr, scAddr, text, sentIntent, deliveryIntent,
+             persistMessageForNonDefaultSmsApp);
+     }
+Index: frameworks/opt/telephony/src/java/com/android/internal/telephony/gsm/GsmInboundSmsHandler.java
+===================================================================
+--- frameworks/opt/telephony/src/java/com/android/internal/telephony/gsm/GsmInboundSmsHandler.java	(revision 3015)
++++ frameworks/opt/telephony/src/java/com/android/internal/telephony/gsm/GsmInboundSmsHandler.java	(revision 3016)
+@@ -23,6 +23,11 @@
+ import android.os.SystemProperties;
+ // MTK-END
+ import android.provider.Telephony.Sms.Intents;
++// begin added by jiayi.wang for task 3682185 at 2017.01.04
++import android.content.ContentValues;
++import android.net.Uri;
++import android.util.Log;
++// end added by jiayi.wang for task 3682185 at 2017.01.04
+ 
+ import com.android.internal.telephony.CommandsInterface;
+ import com.android.internal.telephony.InboundSmsHandler;
+@@ -179,6 +184,19 @@
+             return Intents.RESULT_SMS_OUT_OF_MEMORY;
+         }
+ 
++        //begin added by jiayi.wang for task 3682185 at 2017.01.04
++        try{
++            ContentValues values = new ContentValues();
++            values.put("action","ADD");
++            values.put("FRM_MESSAGE_SMS_RECEIVE", 1);
++            Log.i("qiang.sun", "FRM_MESSAGE_SMS_RECEIVE");
++            mContext.getContentResolver().update(Uri.parse("content://com.tct.diagnostics.provider.diagnosticsinfo/diagnostics/"),
++                        values, null, null);
++        }catch(Exception e){
++            Log.i("com.tct.diagnostics.provider.diagnosticsinfo : ", e.toString());
++        }
++        //end added by jiayi.wang for task 3682185 at 2017.01.04
++
+         return dispatchNormalMessage(smsb);
+     }
+ 
+Index: packages/services/Telecomm/src/com/android/server/telecom/CallLogManager.java
+===================================================================
+--- packages/services/Telecomm/src/com/android/server/telecom/CallLogManager.java	(revision 3015)
++++ packages/services/Telecomm/src/com/android/server/telecom/CallLogManager.java	(revision 3016)
+@@ -50,6 +50,12 @@
+ import android.widget.Toast;
+ import android.text.TextUtils;
+ 
++//begin added by jiayi.wang for task 3682185 at 2017.01.04
++import android.content.ContentProviderClient;
++import android.os.RemoteException;
++import android.content.ContentValues;
++//end added by jiayi.wang for task 3682185 at 2017.01.04
++
+ // TODO: Needed for move to system service: import com.android.internal.R;
+ import com.android.internal.annotations.VisibleForTesting;
+ import com.android.internal.telephony.CallerInfo;
+@@ -149,6 +155,13 @@
+     private static final String CALL_TYPE = "callType";
+     private static final String CALL_DURATION = "duration";
+ 
++    //begin added by jiayi.wang for task 3682185 at 2017.01.04
++    private static final String SCHEME = "content";
++    private static final String AUTHORITY = "com.tct.diagnostics.provider.diagnosticsinfo";
++    private static final String TABLE_NAME = "diagnostics";
++    private static final Uri CONTENT_URI = new Uri.Builder().scheme(SCHEME).authority(AUTHORITY).path(TABLE_NAME).build();
++    //end added by jiayi.wang for task 3682185 at 2017.01.04
++
+     private Object mLock;
+     private String mCurrentCountryIso;
+ 
+@@ -215,6 +228,9 @@
+             /// @}
+ 
+             logCall(call, type, true /*showNotificationForMissedCall*/);
++			//begin added by jiayi.wang for task 3682185 at 2017.01.04
++            recordCall(disconnectCause,type);
++            //end added by jiayi.wang for task 3682185 at 2017.01.04
+         }
+ 
+         /// M: Log the conference unconnected participants (such as connect fail, remote reject)
+@@ -427,6 +443,67 @@
+         }
+     }
+ 
++    //begin added by jiayi.wang for task 3682185 at 2017.01.04
++    private void recordCall(int disconnectCause,int callType) {
++        ContentValues values = new ContentValues();
++        values.put("action","ADD");
++        boolean isOutGoing = (callType == Calls.OUTGOING_TYPE);
++        if (isOutGoing) {
++            values.put("PHONE_MO_VOICE",String.valueOf(1));
++        } else {
++            values.put("PHONE_MT_VOICE",String.valueOf(1));
++        }
++        switch (disconnectCause) {
++            case DisconnectCause.LOCAL:
++                values.put("DISCONNECT_LOCAL",String.valueOf(1));
++                break;
++            case DisconnectCause.REMOTE:
++                values.put("DISCONNECT_REMOTE",String.valueOf(1));
++                break;
++            case DisconnectCause.CANCELED:
++                values.put("DISCONNECT_CANCELED",String.valueOf(1));
++                break;
++            case DisconnectCause.MISSED:
++                values.put("DISCONNECT_MISSED",String.valueOf(1));
++                break;
++            case DisconnectCause.REJECTED:
++                values.put("DISCONNECT_REJECTED",String.valueOf(1));
++                break;
++            case DisconnectCause.BUSY:
++                values.put("DISCONNECT_BUSY",String.valueOf(1));
++                break;
++            case DisconnectCause.RESTRICTED:
++                values.put("DISCONNECT_RESTRICTED",String.valueOf(1));
++                break;
++            case DisconnectCause.ERROR:
++                values.put("DISCONNECT_ERROR",String.valueOf(1));
++                break;
++            case DisconnectCause.UNKNOWN:
++                values.put("DISCONNECT_UNKNOWN",String.valueOf(1));
++                break;
++            case DisconnectCause.OTHER:
++                values.put("DISCONNECT_OTHER",String.valueOf(1));
++                break;
++            default:
++                values.put("DISCONNECT_UNKNOWN",String.valueOf(1));
++                break;
++        }
++        ContentProviderClient privider = mContext.getContentResolver().acquireUnstableContentProviderClient(AUTHORITY);
++        try {
++            if (privider != null) {
++                privider.update(CONTENT_URI, values, null, null);
++            }
++        } catch (IllegalArgumentException e) {
++             Log.d("LSH","llegalArgumentException Exception: "+e);
++        } catch (RemoteException e) {
++             Log.d("LSH","write2DB() RemoteException Exception: "+e);
++        } finally {
++             if (privider != null) {
++                privider.release();
++             }
++        }
++    }
++    //end added by jiayi.wang for task 3682185 at 2017.01.04
+     /**
+      * Based on the video state of the call, determines the call features applicable for the call.
+      *
+Index: packages/services/Telephony/src/com/android/phone/CallNotifier.java
+===================================================================
+--- packages/services/Telephony/src/com/android/phone/CallNotifier.java	(revision 3015)
++++ packages/services/Telephony/src/com/android/phone/CallNotifier.java	(revision 3016)
+@@ -61,6 +61,15 @@
+ import java.util.List;
+ import java.util.Map;
+ 
++//begin added by jiayi.wang for task 3682185 at 2017.01.04
++import com.android.internal.telephony.imsphone.ImsPhone;
++import android.telephony.SignalStrength;
++import android.content.ContentProviderClient;
++import android.content.ContentValues;
++import android.os.RemoteException;
++import android.net.Uri;
++//end added by jiayi.wang for task 3682185 at 2017.01.04
++
+ import com.mediatek.phone.ext.ExtensionManager;
+ import com.mediatek.phone.ext.ICallForwardExt.ICfiAction;
+ 
+@@ -75,6 +84,18 @@
+     , ICfiAction {
+     /// @}
+     private static final String LOG_TAG = "CallNotifier";
++
++    //begin added by jiayi.wang for task 3682185 at 2017.01.04
++    private static final String SCHEME = "content";
++    private static final String AUTHORITY = "com.tct.diagnostics.provider.diagnosticsinfo";
++    private static final String TABLE_NAME = "diagnostics";
++    private static final Uri CONTENT_URI = new Uri.Builder().scheme(SCHEME).authority(AUTHORITY).path(TABLE_NAME).build();
++    private int mSignalStrength = 0;
++    private boolean mPhoneFlag = false;
++    private Phone mCurrentPhone = null;
++    private ContentValues mValues;
++   //end added by jiayi.wang for task 3682185 at 2017.01.04
++
+     private static final boolean DBG =
+             (PhoneGlobals.DBG_LEVEL >= 1) && (SystemProperties.getInt("ro.debuggable", 0) == 1);
+     private static final boolean VDBG = (PhoneGlobals.DBG_LEVEL >= 2);
+@@ -646,6 +667,7 @@
+                 CallNotifierPhoneStateListener listener = new CallNotifierPhoneStateListener(subId);
+                 mTelephonyManager.listen(listener,
+                         PhoneStateListener.LISTEN_MESSAGE_WAITING_INDICATOR
++                        | PhoneStateListener.LISTEN_CALL_STATE //added by jiayi.wang for task 3682185 at 2017.01.04
+                         | PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR);
+                 mPhoneStateListeners.put(subId, listener);
+             }
+@@ -818,6 +840,89 @@
+                     mApplication.getApplicationContext(), CallNotifier.this, visible);
+             /// }@
+         }
++
++        //begin added by jiayi.wang for task 3682185 at 2017.01.04
++        @Override
++        public void onCallStateChanged(int state, String incomingNumber) {
++            super.onCallStateChanged(state, incomingNumber);
++            switch (state) {
++                case TelephonyManager.CALL_STATE_OFFHOOK:
++                    if (!mPhoneFlag) {
++                        mCurrentPhone = PhoneUtils.getPhoneUsingSubId(this.mSubId);
++                        storePhoneType(mCurrentPhone);
++                        mPhoneFlag = true;
++                    }
++                    break;
++                case TelephonyManager.CALL_STATE_IDLE:
++                    if (mPhoneFlag && mCurrentPhone != null) {
++                        mSignalStrength = mCurrentPhone.getSignalStrength().getLevel();
++                        switch (mSignalStrength) {
++                            case SignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN:
++                                mValues.put("SIGNAL_STRENGTH_NONE",String.valueOf(1));
++                                break;
++                            case SignalStrength.SIGNAL_STRENGTH_POOR:
++                                mValues.put("SIGNAL_STRENGTH_POOR",String.valueOf(1));
++                                break;
++                            case SignalStrength.SIGNAL_STRENGTH_MODERATE:
++                                mValues.put("SIGNAL_STRENGTH_MODERATE",String.valueOf(1));
++                                break;
++                            case SignalStrength.SIGNAL_STRENGTH_GOOD:
++                                mValues.put("SIGNAL_STRENGTH_GOOD",String.valueOf(1));
++                                break;
++                            case SignalStrength.SIGNAL_STRENGTH_GREAT:
++                                mValues.put("SIGNAL_STRENGTH_GREAT",String.valueOf(1));
++                                break;
++                            default:
++                                break;
++                        }
++                        recordCall(mValues);
++                    }
++                    mPhoneFlag = false;
++                    break;
++                case TelephonyManager.CALL_STATE_RINGING:
++                     mCurrentPhone = PhoneUtils.getPhoneUsingSubId(this.mSubId);
++                     storePhoneType(mCurrentPhone);
++                     mPhoneFlag = true;
++                     break;
++                default:
++                    break;
++             }
++         }
++
++        private void storePhoneType (Phone phone) {
++            mValues = new ContentValues();
++            mValues.put("action","ADD");
++            if (phone != null) {
++                if (phone.isImsRegistered()) {
++                    if (phone.isVolteEnabled()) {
++                        mValues.put("CALL_TYPE_VOLTE",String.valueOf(1));
++                    } else if (phone.getImsPhone() !=null && ((ImsPhone) phone.getImsPhone()).isWifiCallingEnabled()){
++                        mValues.put("CALL_TYPE_WFC",String.valueOf(1));
++                    }
++                } else {
++                  mValues.put("CALL_TYPE_CELULLAR",String.valueOf(1));
++                }
++            }
++
++        }
++
++        private void recordCall(ContentValues values) {
++            ContentProviderClient privider = mApplication.getContentResolver().acquireUnstableContentProviderClient(AUTHORITY);
++            try {
++                 if (privider != null) {
++                    privider.update(CONTENT_URI, values, null, null);
++                 }
++            } catch (IllegalArgumentException e) {
++                 Log.d("LSH","llegalArgumentException Exception: "+e);
++            } catch (RemoteException e) {
++                 Log.d("LSH","write2DB() RemoteException Exception: "+e);
++            } finally {
++                 if (privider != null) {
++                    privider.release();
++                 }
++            }
++        }
++        //end added by jiayi.wang for task 3682185 at 2017.01.04
+     };
+ 
+     private void log(String msg) {

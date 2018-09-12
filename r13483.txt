@@ -1,0 +1,57 @@
+Index: packages/apps/Settings/src/com/android/settings/MasterClear.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 13482)
++++ packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 13483)
+@@ -55,6 +55,12 @@
+ import android.os.BatteryManager;
+ import android.widget.Toast;
+ import java.util.List;
++import android.graphics.Matrix;
++import android.graphics.Bitmap;
++import android.graphics.drawable.BitmapDrawable;
++import android.graphics.Matrix;
++import android.graphics.Canvas;
++import android.graphics.PixelFormat;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+ 
+@@ -355,7 +361,7 @@
+                 TextView child = (TextView)inflater.inflate(R.layout.master_clear_account,
+                         contents, false);
+                 child.setText(account.name);
+-                child.setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null);
++                child.setCompoundDrawablesWithIntrinsicBounds(zoomDrawable(icon,150,150), null, null, null);
+                 contents.addView(child);
+             }
+         }
+@@ -370,6 +376,30 @@
+         otherUsers.setVisibility(hasOtherUsers ? View.VISIBLE : View.GONE);
+     }
+ 
++    private Drawable zoomDrawable(Drawable drawable, int w, int h) {
++        int width = drawable.getIntrinsicWidth();
++        int height = drawable.getIntrinsicHeight();
++        Bitmap oldbmp = drawableToBitmap(drawable);
++        Matrix matrix = new Matrix();
++        float scaleWidth = ((float) w / width);
++        float scaleHeight = ((float) h / height);
++        matrix.postScale(scaleWidth, scaleHeight);
++        Bitmap newbmp = Bitmap.createBitmap(oldbmp, 0, 0, width, height, matrix, true);
++        return new BitmapDrawable(null, newbmp);
++    }
++
++    private Bitmap drawableToBitmap(Drawable drawable) {
++        int width = drawable.getIntrinsicWidth();
++        int height = drawable.getIntrinsicHeight();
++        Bitmap.Config config = drawable.getOpacity() != PixelFormat.OPAQUE ? Bitmap.Config.ARGB_8888
++            : Bitmap.Config.RGB_565;
++        Bitmap bitmap = Bitmap.createBitmap(width, height, config);
++        Canvas canvas = new Canvas(bitmap);
++        drawable.setBounds(0, 0, width, height);
++        drawable.draw(canvas);
++        return bitmap;
++    }
++
+     @Override
+     public View onCreateView(LayoutInflater inflater, ViewGroup container,
+             Bundle savedInstanceState) {

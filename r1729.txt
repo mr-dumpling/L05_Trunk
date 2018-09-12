@@ -1,0 +1,358 @@
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 1728)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 1729)
+@@ -21962,6 +21962,10 @@
+         }
+     }
+ 
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    private String mLastPkgName = "camer_closed";
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
++    
+     private final ActivityRecord resumedAppLocked() {
+         ActivityRecord act = mStackSupervisor.resumedAppLocked();
+         String pkg;
+@@ -21987,6 +21991,25 @@
+                         mCurResumedPackage, mCurResumedUid);
+             }
+         }
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if(act != null) {
++            if(!pkg.equals("com.google.android.packageinstaller")) {
++                //String str = (pkg.equals("com.mediatek.hz.camera") ? 1 : 0) + ";" + (act.mActivityType==ActivityRecord.HOME_ACTIVITY_TYPE ? 1 : 0);
++                //if(mLastPkgName == null || !str.equals(mLastPkgName)) {
++                //    Settings.System.putString(mContext.getContentResolver(),"tct_top_package_name", str);
++                //    mLastPkgName = str;
++                //}
++                String str = (pkg.equals("com.mediatek.hz.camera") ? "camer_opened" : "camer_closed");
++                if(!str.equals(mLastPkgName)) {
++                    Settings.System.putString(mContext.getContentResolver(),"tct_top_package_name", str);
++                    mLastPkgName = str;
++                }
++                
++                Log.d(TAG, "resumedAppLocked: mLastPkgName = " + mLastPkgName);
++            }
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+         return act;
+     }
+ 
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1728)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1729)
+@@ -2892,6 +2892,9 @@
+                 }
+                 mNavigationBar = win;
+                 mNavigationBarController.setWindow(win);
++                //ADD-S By Justin.Shen for Hide/Show navigation-bar
++                requestTransientBars(mNavigationBar);
++                //ADD-E By Justin.Shen for Hide/Show navigation-bar
+                 if (DEBUG_LAYOUT) Slog.i(TAG, "NAVIGATION BAR: " + mNavigationBar);
+                 break;
+             case TYPE_NAVIGATION_BAR_PANEL:
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 1728)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 1729)
+@@ -915,6 +915,11 @@
+     protected int mCurrentUserId = 0;
+     
+     public void updateNailIcon() {
++        if(!isWithNailIcon()) {
++            Log.d(TAG, "updateNailIcon: current layout without nail, do nothing!");
++            return;
++        }
++        
+         boolean isTipsAnimation = Settings.Global.getInt(mContext.getContentResolver(), "navigation_bar_tips_animation", 0) == 1 ? true : false;
+         if(isTipsAnimation) {
+             Drawable tips_pin = mContext.getDrawable(R.drawable.ic_navigationbar_tips_pin);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1728)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1729)
+@@ -786,6 +786,10 @@
+         mContext.getContentResolver().registerContentObserver(
+                     Settings.Global.getUriFor(Settings.Global.DEVICE_PROVISIONED), true,
+                     mDeviceProvisionedObserver);
++                    
++        mContext.getContentResolver().registerContentObserver(
++                    Settings.System.getUriFor("tct_top_package_name"), true,
++                    mActivityRecordObserver);
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 	
+@@ -1127,8 +1131,6 @@
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+         filter.addAction("android.intent.action.RESET_NAVIGATION_BAR");
+         filter.addAction("android.intent.action.NAVIGATION_BAR_TIPS_ANIMATION_FINISH");
+-        filter.addAction("android.intent.action.CAMERA_START");
+-        filter.addAction("android.intent.action.CAMERA_STOP");
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 		filter.addAction("battery_percentage_on_off");
+         context.registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null, null);
+@@ -1553,8 +1555,8 @@
+             switch (event.getAction()) {
+                 case MotionEvent.ACTION_DOWN:
+                     //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-                    mHandler.removeCallbacks(mHideNavigationBar);
+                     mHandler.removeCallbacks(mShowNavigationBar);
++                    cancelAutohide();
+                     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+                     mBlockedThisTouch = false;
+                     TelecomManager telecomManager = mContext.getSystemService(TelecomManager.class);
+@@ -1572,7 +1574,7 @@
+                     //ADD-S By Justin.Shen for Hide/Show navigation-bar
+                     boolean isFixed = checkNavigationBarFixed();
+                     if(!isFixed) {
+-                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++                        scheduleAutohide();
+                     }
+                     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+                     awakenDreams();
+@@ -1680,14 +1682,19 @@
+         //CHG-E By Justin.Shen for Hide/Show navigation-bar
+         
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        int backgroundColor = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
+-        mNavigationBarView.setBackgroundColor(backgroundColor);
+-        mHandler.removeCallbacks(mHideNavigationBar);
++        cancelAutohide();
+         mHandler.removeCallbacks(mShowNavigationBar);
++        
+         boolean isFixed = checkNavigationBarFixed();
++        int backgroundColor = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
++        changeNavigationBarStatus(isFixed);
+         if(!isFixed) {
+-            mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++            if(backgroundColor == 0x00000000) {
++                backgroundColor = ANVIGATION_BAR_BACKGOUND;
++            }
++            scheduleAutohide();
+         }
++        mNavigationBarView.setBackgroundColor(backgroundColor);
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 
+@@ -3854,39 +3861,6 @@
+                     mNavigationBarView.updateNailIcon();
+                 }
+             }
+-            else if("android.intent.action.CAMERA_START".equals(action)) {
+-                if(!mNavigationBarView.isWithNailIcon()) {
+-                    return;
+-                }
+-                
+-                mCameraIsOn = true;
+-                
+-                mHandler.removeCallbacks(mHideNavigationBar);
+-                mHandler.removeCallbacks(mShowNavigationBar);
+-                mOldNailStatus = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
+-                if(mOldNailStatus == 0) {
+-                    Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
+-                    if(mNavigationBarView != null) {
+-                        mNavigationBarView.updateNailIcon();
+-                    } else {
+-                        mHandler.postDelayed(mShowNavigationBar, 300);
+-                    }
+-                }
+-            }
+-            else if("android.intent.action.CAMERA_STOP".equals(action)) {
+-                if(!mNavigationBarView.isWithNailIcon()) {
+-                    return;
+-                }
+-                
+-                mCameraIsOn = false;
+-                if(mOldNailStatus == 0) {
+-                    Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, mOldNailStatus, mCurrentUserId);
+-                    if(mNavigationBarView != null) {
+-                        mNavigationBarView.updateNailIcon();
+-                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
+-                    }
+-                }
+-            }
+             //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 			//add by wqq start{
+             else if(action.equals("battery_percentage_on_off")){
+@@ -5548,10 +5522,12 @@
+     /// M: Support "Operator plugin - Customize Carrier Label for PLMN". @}
+     
+     //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-    private static int NAVIGATION_BAR_SHOW_TIMEOUT = 3200;
++    private final float ANVIGATION_BAR_ALPHA = 0.8f;
++    private final int ANVIGATION_BAR_BACKGOUND = 0x30000000;
+     private boolean mShowMenu = false;
+-    private boolean mCameraIsOn = false;
+     private int mOldNailStatus = 0;
++    private int mOldBackground = 0;
++    private int mOldLayout     = 0;
+     private boolean mNavigationBarViewIsAdded = false;
+     protected int mPreviousUserId = 0;
+     
+@@ -5562,7 +5538,6 @@
+             return;
+         }
+         
+-        mHandler.removeCallbacks(mHideNavigationBar);
+         mHandler.removeCallbacks(mShowNavigationBar);
+         
+         createNavigationBarView(mContext);
+@@ -5579,7 +5554,7 @@
+     };
+     
+     private void hideNavigationBar() {
+-        Log.d(TAG, "mHideNavigationBar: mNavigationBarView = " + mNavigationBarView);
++        Log.d(TAG, "hideNavigationBar: mNavigationBarView = " + mNavigationBarView);
+         if (mNavigationBarView == null) {
+             return;
+         }
+@@ -5603,8 +5578,8 @@
+         public boolean onTouch(View v, MotionEvent event) {
+             switch (event.getAction()) {
+                 case MotionEvent.ACTION_DOWN:
+-                    mHandler.removeCallbacks(mHideNavigationBar);
+                     mHandler.removeCallbacks(mShowNavigationBar);
++                    cancelAutohide();
+                     break;
+                     
+                 case MotionEvent.ACTION_UP:
+@@ -5611,7 +5586,7 @@
+                 case MotionEvent.ACTION_CANCEL:
+                     boolean isFixed = checkNavigationBarFixed();
+                     if(!isFixed) {
+-                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++                        scheduleAutohide();
+                     }
+                     break;
+             }
+@@ -5624,8 +5599,8 @@
+         public boolean onTouch(View v, MotionEvent event) {
+             switch (event.getAction()) {
+                 case MotionEvent.ACTION_DOWN:
+-                    mHandler.removeCallbacks(mHideNavigationBar);
+                     mHandler.removeCallbacks(mShowNavigationBar);
++                    cancelAutohide();
+                     break;
+                     
+                 case MotionEvent.ACTION_UP:
+@@ -5632,7 +5607,7 @@
+                 case MotionEvent.ACTION_CANCEL:
+                     boolean isFixed = checkNavigationBarFixed();
+                     if(!isFixed) {
+-                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++                        scheduleAutohide();
+                     }
+                     break;
+             }
+@@ -5649,22 +5624,11 @@
+                 return true;
+             }
+             
+-            if(mCameraIsOn) {
+-                Log.d(TAG, "mNailActionListener: Camera is on, do nothing!");
+-                return true;
+-            }
+-            
+             boolean isFixed = false;
+             switch (event.getAction()) {
+                 case MotionEvent.ACTION_DOWN:
+                     isFixed = checkNavigationBarFixed();
+-                    Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, isFixed ? 0 : 1, mCurrentUserId);
+-                    if(mNavigationBarView != null) {
+-                        mNavigationBarView.updateNailIcon();
+-                    }
+-                    
+-                    mHandler.removeCallbacks(mHideNavigationBar);
+-                    mHandler.removeCallbacks(mShowNavigationBar);
++                    changeNavigationBarStatus(!isFixed);
+                     break;
+                     
+                 case MotionEvent.ACTION_UP:
+@@ -5671,7 +5635,7 @@
+                 case MotionEvent.ACTION_CANCEL:
+                     isFixed = checkNavigationBarFixed();
+                     if(!isFixed) {
+-                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++                        scheduleAutohide();
+                     }
+                     break;
+             }
+@@ -5679,6 +5643,30 @@
+         }
+     };
+     
++    private void changeNavigationBarStatus(boolean isFixed) {
++        float alpha = 1.0f;
++        Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, isFixed ? 1 : 0, mCurrentUserId);
++        if(mNavigationBarView != null) {
++            mNavigationBarView.updateNailIcon();
++            int backgroundColor = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
++            if(backgroundColor == 0x00000000) {
++                if(!isFixed) {
++                     backgroundColor = ANVIGATION_BAR_BACKGOUND;
++                }
++                mNavigationBarView.setBackgroundColor(backgroundColor);
++            } else {
++                if(!isFixed) {
++                    alpha = ANVIGATION_BAR_ALPHA;
++                }
++                mNavigationBarView.setAlpha(alpha);
++            }
++        }
++        Settings.Global.putStringForUser(mContext.getContentResolver(), Settings.Global.POLICY_CONTROL, 
++                                            isFixed ? "" : "immersive.navigation=-com.android.systemui,*", mCurrentUserId);
++        
++        mHandler.removeCallbacks(mShowNavigationBar);
++        cancelAutohide();
++    }
+     private boolean checkNavigationBarFixed() {
+         boolean isFixed = Settings.Secure.getIntForUser(mContext.getContentResolver(), 
+                             Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId) == 1 ? true : false;
+@@ -5690,7 +5678,7 @@
+         Log.d(TAG, "resetNavigationBar");
+         int delayTime = 300;
+         mHandler.removeCallbacks(mShowNavigationBar);
+-        mHandler.removeCallbacks(mHideNavigationBar);
++        cancelAutohide();
+         if(mNavigationBarView != null) {
+             hideNavigationBar();
+             delayTime = 600;
+@@ -5724,5 +5712,36 @@
+             }
+         }
+     };
++    
++    final private ContentObserver mActivityRecordObserver = new ContentObserver(mHandler) {
++        @Override
++        public void onChange(boolean selfChange) {
++            Log.d(TAG, "mActivityRecordObserver: selfChange = " + selfChange);
++            String record = Settings.System.getString(mContext.getContentResolver(), "tct_top_package_name");
++            Log.d(TAG, "mActivityRecordObserver: record = " + record);
++            if((record != null) && record.equals("camer_opened")) {
++                mOldLayout = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
++                mOldBackground = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
++                mOldNailStatus = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
++                
++                int newLayout = mOldLayout;
++                if(mOldLayout == 0 || mOldLayout == 2) {
++                    newLayout = 4;
++                } else if(mOldLayout == 1 || mOldLayout == 3) {
++                    newLayout = 5;
++                }
++                
++                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
++                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, newLayout, mCurrentUserId);
++                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
++                resetNavigationBar();
++            } else {
++                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, mOldNailStatus, mCurrentUserId);
++                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, mOldLayout, mCurrentUserId);
++                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, mOldBackground, mCurrentUserId);
++                resetNavigationBar();
++            }
++        }
++    };
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ }

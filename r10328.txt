@@ -1,0 +1,115 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java	(revision 10327)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java	(revision 10328)
+@@ -35,18 +35,24 @@
+ import com.android.systemui.qs.QSTile;
+ import com.android.systemui.statusbar.policy.HotspotController;
+ import android.nfc.NfcAdapter;
++import android.nfc.NfcManager;
++import android.nfc.INfcAdapter;
++import android.util.Log;
++import android.os.IBinder;
++import android.os.RemoteException;
++import android.os.ServiceManager;
++import android.content.res.Resources;
+ 
+ /** Quick settings tile: Hotspot **/
+ public class NfcTile extends QSTile<QSTile.BooleanState> {
+    
+-	private final NfcAdapter mNfcAdapter;
++	//private final NfcAdapter mNfcAdapter;
++	private static INfcAdapter sService; 
+ 
+     public NfcTile(Host host) {
+         super(host);
+-        mNfcAdapter = NfcAdapter.getDefaultAdapter(mContext);
+-		if (mNfcAdapter == null) {
+-            return;
+-        }
++        IBinder bind = ServiceManager.getService("nfc");
++		sService = INfcAdapter.Stub.asInterface(bind);
+     }
+ 
+     @Override
+@@ -66,37 +72,45 @@
+     @Override
+     protected void handleClick() {
+         boolean newState = !mState.value;
+-		if (newState) {
+-            mNfcAdapter.enable();
+-        } else{
+-            mNfcAdapter.disable();
+-        }
+-		refreshState();
++		try{
++			if(newState){
++				sService.enable();
++			}else{
++				sService.disable(true);
++			} 
++		}catch (RemoteException e) {
++				
++		}
++		
++		refreshState(newState);
+     }
+ 
+     @Override
+     public CharSequence getTileLabel() {
+-        return mContext.getString(R.string.quick_settings_nfc_label);
++        return mContext.getResources().getString(R.string.quick_settings_nfc_label);
+     }
+ 
+     @Override
+     protected void handleUpdateState(BooleanState state, Object arg) {
+-        boolean enabled =  false;
+-		if (mNfcAdapter.getAdapterState() == NfcAdapter.STATE_OFF || mNfcAdapter.getAdapterState() ==  NfcAdapter.STATE_TURNING_OFF) {
++		boolean enabled =  false;
++		final Resources r = mContext.getResources();
++		state.label = r.getString(R.string.quick_settings_nfc_label);
++		state.icon = ResourceIcon.get(R.drawable.ic_qs_nfc_on);
++		int nfcState=getNfcState();
++		if (nfcState == NfcAdapter.STATE_OFF || nfcState ==  NfcAdapter.STATE_TURNING_OFF) {
+ 			enabled = false;
+-		} else if (mNfcAdapter.getAdapterState() == NfcAdapter.STATE_ON || mNfcAdapter.getAdapterState() ==  NfcAdapter.STATE_TURNING_ON){
++		} else if (nfcState == NfcAdapter.STATE_ON || nfcState ==  NfcAdapter.STATE_TURNING_ON){
+ 			enabled = true;
+ 		}
+         state.value = enabled;
++		state.label = r.getString(R.string.quick_settings_nfc_label);
+         if (enabled) {
+             state.icon = ResourceIcon.get(R.drawable.ic_qs_nfc_on);
+-            state.label = mContext.getString(R.string.quick_settings_nfc_label);
+-            state.contentDescription = mContext.getString(
++            state.contentDescription = r.getString(
+                     R.string.accessibility_quick_settings_nfc_on);
+         } else {
+             state.icon = ResourceIcon.get(R.drawable.ic_qs_nfc_off);
+-            state.label = mContext.getString(R.string.quick_settings_nfc_label);
+-            state.contentDescription = mContext.getString(
++            state.contentDescription = r.getString(
+                     R.string.accessibility_quick_settings_nfc_off);
+         }
+     }
+@@ -114,5 +128,20 @@
+             return mContext.getString(R.string.accessibility_quick_settings_nfc_off);
+         }
+     }
++	
++	private int getNfcState(){
++		int nfcMode = NfcAdapter.STATE_OFF;
++		try{
++			if (sService == null) {
++				sService = INfcAdapter.Stub.asInterface(ServiceManager.getService("nfc"));
++			} 
++			if (sService != null) {
++				nfcMode=sService.getState();
++			}
++		}catch (RemoteException e) {
++			nfcMode=NfcAdapter.STATE_OFF;	
++		}
++		return nfcMode;
++	}
+ 
+ }

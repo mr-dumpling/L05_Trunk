@@ -1,0 +1,452 @@
+Index: frameworks/av/media/libeffects/data/audio_effects.conf
+===================================================================
+--- frameworks/av/media/libeffects/data/audio_effects.conf	(revision 1195)
++++ frameworks/av/media/libeffects/data/audio_effects.conf	(revision 1196)
+@@ -40,7 +40,13 @@
+   }
+   pre_processing {
+     path /system/lib/soundfx/libaudiopreprocessing.so
+-  }  
++  }
++
++# add Dirac Audio enhancement
++  dirac {
++	path /system/etc/libdirac.so
++  }
++# add Dirac Audio enhancement  
+ }
+ 
+ # Default pre-processing library. Add to audio_effect.conf "libraries" section if
+@@ -144,6 +150,16 @@
+     library pre_processing
+     uuid c06c8400-8e06-11e0-9cb6-0002a5d5c51b
+   }
++  
++  dirac_contoller {
++	library dirac
++	uuid b437f4de-da28-449b-9673-667f8b9643fe
++  }
++  
++  dirac_music {
++	library dirac
++	uuid b437f4de-da28-449b-9673-667f8b964304
++  }
+ }
+ # Audio preprocessor configurations.
+ # The pre processor configuration consists in a list of elements each describing
+Index: frameworks/av/services/audiopolicy/managerdefault/AudioPolicyManager.cpp
+===================================================================
+--- frameworks/av/services/audiopolicy/managerdefault/AudioPolicyManager.cpp	(revision 1195)
++++ frameworks/av/services/audiopolicy/managerdefault/AudioPolicyManager.cpp	(revision 1196)
+@@ -78,6 +78,10 @@
+ #ifdef MTK_NEW_VOL_CONTROL
+ #include "AudioParamParser.h"
+ #include <media/IAudioPolicyService.h>
++
++#include <sys/un.h>
++#include <sys/socket.h>
++
+ namespace android {
+ void gainTableXmlChangedCb(AppHandle *_appHandle, const char *_audioTypeName);
+ };
+@@ -1701,6 +1705,15 @@
+         if (strategy == STRATEGY_SONIFICATION) {
+             mpClientInterface->invalidateStream(AUDIO_STREAM_ACCESSIBILITY);
+         }
++		
++		// add Dirac Audio enhancement
++		if (stream == AUDIO_STREAM_MUSIC)
++		{
++			android_thread_id_t threadID;
++			androidCreateThreadEtc((android_thread_func_t)ThreadWrapper, this, "notifyAudioEffect", 0, 0, &threadID);
++		}
++		// add Dirac Audio enhancement
++		
+ #if defined(MTK_AUDIO)
+         if (isNeedInvalidate) {
+             ALOGD("Invalidate %d stream type, startOutput doesn't support device%d", stream, originDevice);
+@@ -1729,7 +1742,85 @@
+     return NO_ERROR;
+ }
+ 
++// add Dirac Audio enhancement
++status_t AudioPolicyManager::ThreadWrapper(void *me) {
++    return (static_cast<AudioPolicyManager *>(me))->threadFunc();
++}
+ 
++status_t AudioPolicyManager::threadFunc(){
++	return socketSentString("open");
++}
++
++static int writex(int s, const char *_buf, int count)
++{
++    const char *buf = _buf;
++    int n = 0, r;
++    if (count < 0) return -1;
++    while (n < count) {
++        r = write(s, buf + n, count - n);
++        if (r < 0) {
++            if (errno == EINTR) continue;
++            ALOGE("write error: %s\n", strerror(errno));
++            return -1;
++        }
++        n += r;
++    }
++    return 0;
++}
++
++status_t AudioPolicyManager::socketSentString(const char *sendString) {
++    const char* sockname= "AudioEffect";
++    //const char* name = "/system/bin/mediaserver";
++    status_t err = NO_ERROR;
++    int lsocket;
++    int sockaddr_len;
++    unsigned short count;
++    struct sockaddr_un address;
++    int val;
++    char buf[32];
++
++    pthread_detach(pthread_self());
++
++    lsocket = socket(AF_LOCAL, SOCK_STREAM, 0);
++    if (lsocket < 0) {
++        ALOGE("Surface socket create fail err %s ", strerror(errno));
++        close(lsocket);
++        return UNKNOWN_ERROR;
++    }
++    val = fcntl(lsocket, F_GETFL, 0);
++    fcntl(lsocket, F_SETFL, val | O_NONBLOCK);
++
++    memset(&address, 0, sizeof(address));
++    address.sun_family = AF_UNIX;
++    
++    strcpy(address.sun_path + 1, sockname);
++
++    sockaddr_len = sizeof(address.sun_family) + strlen(sockname) + 1;
++
++    if (::connect(lsocket, (struct sockaddr*)&address, sockaddr_len) < 0) {
++        ALOGE("AudioEffect socket connect fail err %s ", strerror(errno));
++        close(lsocket);
++        return UNKNOWN_ERROR;
++    }
++
++    sprintf(buf, "%s", sendString);
++    count = strlen(buf);
++
++    if (writex(lsocket, (const char*)&count, sizeof(count))) {
++        ALOGE("Surface writex0 fail err %s ", strerror(errno));
++        close(lsocket);
++        return UNKNOWN_ERROR;
++    }
++    if (writex(lsocket, buf, strlen(buf))) {
++        ALOGE("Surface writex fail err %s ", strerror(errno));
++        close(lsocket);
++        return UNKNOWN_ERROR;
++    }
++    close(lsocket);
++    return err;
++}
++// add Dirac Audio enhancement
++
+ status_t AudioPolicyManager::stopOutput(audio_io_handle_t output,
+                                             audio_stream_type_t stream,
+                                             audio_session_t session)
+Index: frameworks/av/services/audiopolicy/managerdefault/AudioPolicyManager.h
+===================================================================
+--- frameworks/av/services/audiopolicy/managerdefault/AudioPolicyManager.h	(revision 1195)
++++ frameworks/av/services/audiopolicy/managerdefault/AudioPolicyManager.h	(revision 1196)
+@@ -787,6 +787,13 @@
+             param.addInt(String8(AUDIO_PARAMETER_MONO_OUTPUT), (int)mMasterMono);
+             mpClientInterface->setParameters(output, param.toString());
+         }
++		
++		// add Dirac Audio enhancement
++		static status_t ThreadWrapper(void *);
++        status_t threadFunc();
++        status_t socketSentString(const char *sendString);
++		// add Dirac Audio enhancement
++		
+ // <MTK_AUDIO_ADD
+             float linearToLog(int volume);
+             int logToLinear(float volume);
+Index: frameworks/av/services/audioflinger/PlaybackTracks.h
+===================================================================
+--- frameworks/av/services/audioflinger/PlaybackTracks.h	(revision 1195)
++++ frameworks/av/services/audioflinger/PlaybackTracks.h	(revision 1196)
+@@ -45,6 +45,9 @@
+ 
+     static  void        appendDumpHeader(String8& result);
+             void        dump(char* buffer, size_t size, bool active);
++			// add Dirac Audio enhancement
++			int    getActiveSessionId();
++			// add Dirac Audio enhancement
+     virtual status_t    start(AudioSystem::sync_event_t event =
+                                     AudioSystem::SYNC_EVENT_NONE,
+                              audio_session_t triggerSession = AUDIO_SESSION_NONE);
+Index: frameworks/av/services/audioflinger/AudioFlinger.cpp
+===================================================================
+--- frameworks/av/services/audioflinger/AudioFlinger.cpp	(revision 1195)
++++ frameworks/av/services/audioflinger/AudioFlinger.cpp	(revision 1196)
+@@ -2119,6 +2119,37 @@
+         }
+         return out_s8;
+     }
++	
++	// add Dirac Audio enhancement
++	if(keys == "get_pid")
++	{
++		Vector<int32_t> outPids; 
++		Vector<int32_t> mActiveSessionIds;
++		String8 out_pid ;
++		for (size_t i = 0; i < mPlaybackThreads.size(); i++) {
++			Vector<int32_t> tmp;
++			mPlaybackThreads.valueAt(i)->getActiveSessionIds(tmp);
++			for (size_t j = 0; j < tmp.size(); j++) {
++				mActiveSessionIds.add(tmp[j]);
++			}
++			tmp.clear();
++		}	
++		
++		for (size_t i = 0; i < mAudioSessionRefs.size(); i++) {
++			AudioSessionRef *r = mAudioSessionRefs[i];
++			for (size_t j = 0; j < mActiveSessionIds.size(); j++) {
++				if (r->mSessionid == mActiveSessionIds[j]) {
++					char testbuff[100];
++					sprintf(testbuff,"%d",r->mPid);
++					String8 teststr = String8(":");
++					teststr = teststr + testbuff;
++					out_pid += teststr;
++				}
++			}
++		} 
++        return out_pid;
++	}
++	// add Dirac Audio enhancement
+ 
+     PlaybackThread *playbackThread = checkPlaybackThread_l(ioHandle);
+     if (playbackThread != NULL) {
+Index: frameworks/av/services/audioflinger/Threads.cpp
+===================================================================
+--- frameworks/av/services/audioflinger/Threads.cpp	(revision 1195)
++++ frameworks/av/services/audioflinger/Threads.cpp	(revision 1196)
+@@ -1916,6 +1916,22 @@
+     free(mEffectBuffer);
+ }
+ 
++// add Dirac Audio enhancement
++status_t AudioFlinger::PlaybackThread::getActiveSessionIds(Vector<int32_t>& outValue)
++{
++    Mutex::Autolock _l(mLock);
++    outValue.clear();
++	
++    for (size_t i = 0; i < mActiveTracks.size(); ++i) {        
++        sp<Track> track = mActiveTracks[i].promote();       
++        if (track != 0) {
++            outValue.add(track->getActiveSessionId());
++        }
++    }
++    return NO_ERROR;
++}
++// add Dirac Audio enhancement
++
+ void AudioFlinger::PlaybackThread::dump(int fd, const Vector<String16>& args)
+ {
+     dumpInternals(fd, args);
+Index: frameworks/av/services/audioflinger/Threads.h
+===================================================================
+--- frameworks/av/services/audioflinger/Threads.h	(revision 1195)
++++ frameworks/av/services/audioflinger/Threads.h	(revision 1196)
+@@ -537,6 +537,9 @@
+     virtual             ~PlaybackThread();
+ 
+                 void        dump(int fd, const Vector<String16>& args);
++				// add Dirac Audio enhancement
++				status_t getActiveSessionIds(Vector<int32_t>& outValue);
++				// add Dirac Audio enhancement
+ 
+     // Thread virtuals
+     virtual     bool        threadLoop();
+Index: frameworks/av/services/audioflinger/Tracks.cpp
+===================================================================
+--- frameworks/av/services/audioflinger/Tracks.cpp	(revision 1195)
++++ frameworks/av/services/audioflinger/Tracks.cpp	(revision 1196)
+@@ -573,6 +573,13 @@
+                   "L dB  R dB    Server Main buf  Aux Buf Flags UndFrmCnt\n");
+ }
+ 
++// add Dirac Audio enhancement
++int AudioFlinger::PlaybackThread::Track::getActiveSessionId()
++{
++    return mSessionId;
++}
++// add Dirac Audio enhancement
++
+ void AudioFlinger::PlaybackThread::Track::dump(char* buffer, size_t size, bool active)
+ {
+     gain_minifloat_packed_t vlr = mAudioTrackServerProxy->getVolumeLR();
+Index: frameworks
+===================================================================
+--- frameworks	(revision 1195)
++++ frameworks	(revision 1196)
+
+Property changes on: frameworks
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks:r859
+Index: device/mediatek/common/sepolicy/full/mediaserver.te
+===================================================================
+--- device/mediatek/common/sepolicy/full/mediaserver.te	(revision 1195)
++++ device/mediatek/common/sepolicy/full/mediaserver.te	(revision 1196)
+@@ -1,72 +1,3 @@
+-# ==============================================
+-# MTK Policy Rule
+-# ==============================================
+-
+-# Date : WK15.36
+-# Operation : ViLTE
+-# Purpose : for ViLTE - set VTservice has permission to access me
+-allow mediaserver vtservice:binder { transfer call };
+-allow mediaserver vtservice:fd use;
+-
+-# Date : WK15.35
+-# Operation : Migration
+-# Purpose: Allow reador andgetattr path="/data/data/com.mediatek.voicecommand/training
+-# /unlock/passwordfile/0.dat"
+-allow mediaserver system_app_data_file:file { read getattr };
+-
+-# Add by jackie.lin
+-# Date : WK16.10
+-# Operation : Move these sepolicy from basic to tk(full) which OMA DRM need
+-# Purpose : Allow mediaserver to read /proc/pid/cmdline to get process name, so that
+-# it can do white list check which is MTK OMA DRM additional protection mechanism
+-# system_app:
+-allow mediaserver system_app:dir search;
+-allow mediaserver system_app:file { read open getattr };
+-# platform_app:
+-allow mediaserver platform_app:dir search;
+-allow mediaserver platform_app:file { read open getattr };
+-# untrusted_app:
+-allow mediaserver untrusted_app:dir search;
+-allow mediaserver untrusted_app:file { read open getattr };
+-
+-# Date : WK15.45
+-# Operation : 1/32x SlowMotion SQC
+-# Purpose : for Clearmotion LowPower Switch
+-allow mediaserver mjc_lib_prop:property_service set;
+-allow mediaserver mtk_mjc_prop:property_service set;
+-
+-# Date : WK15.02
+-# Operation : 120Hz Feature SQC
+-# Purpose : for 120Hz Smart Switch
+-allow mediaserver mtk_rrc_device:chr_file { read write ioctl open };
+-
+-# Date : WK14.39
+-# Operation : Migration
+-# Purpose : MJC Driver
+-allow mediaserver MJC_device:chr_file { read write ioctl open };
+-
+-# Date : WK15.46
+-# Operation : Migration
+-# Purpose : OpenDSP: read/write ipi message to tinysys
+-allow mediaserver audio_ipi_device:chr_file { read write ioctl open };
+-
+-# Date : WK14.37
+-# Operation : Migration
+-# Purpose : WFD and MET Latency measurement
+-allow mediaserver media_wfd_prop:property_service set;
+-
+-# Date : WK16.34
+-# Operation : Migration
+-# Purpose : Play tone for alert
+-allow mediaserver custom_file:file {read getattr};
+-
+-# Date : WK16.50
+-# Operation : Migration
+-# Purpose : Use aee API
+-allow mediaserver debuggerd_socket:unix_stream_socket connectto;
+-
+-# Date : WK17.29
+-# Operation : MT6739 SQC
+-# Purpose : for CTS verifier "Camera Video" binder fail
+-allow mediaserver cameraserver:fifo_file read;
+-allow mediaserver cameraserver:fifo_file write;
+\ No newline at end of file
++# + cedar
++allow mediaserver system_app:unix_stream_socket connectto;
++# -cedar 
+Index: device/mediatek/common/sepolicy/full/audioserver.te
+===================================================================
+--- device/mediatek/common/sepolicy/full/audioserver.te	(revision 1195)
++++ device/mediatek/common/sepolicy/full/audioserver.te	(revision 1196)
+@@ -1,40 +1,4 @@
+-# ==============================================
+-# MTK Policy Rule
+-# ==============================================
+-
+-# Date : WK15.36
+-# Operation : ViLTE
+-# Purpose : for ViLTE - set VTservice has permission to access me
+-allow audioserver vtservice:binder { transfer call };
+-allow audioserver vtservice:fd use;
+-
+-# Date : WK15.35
+-# Operation : Migration
+-# Purpose: Allow reador andgetattr path="/data/data/com.mediatek.voicecommand/training
+-# /unlock/passwordfile/0.dat"
+-allow audioserver system_app_data_file:file { read getattr };
+-
+-# Add by jackie.lin
+-# Date : WK16.10
+-# Operation : Move these sepolicy from basic to tk(full) which OMA DRM need
+-# Purpose : Allow audioserver to read /proc/pid/cmdline to get process name, so that
+-# it can do white list check which is MTK OMA DRM additional protection mechanism
+-# system_app:
+-allow audioserver system_app:dir search;
+-allow audioserver system_app:file { read open getattr };
+-# platform_app:
+-allow audioserver platform_app:dir search;
+-allow audioserver platform_app:file { read open getattr };
+-# untrusted_app:
+-allow audioserver untrusted_app:dir search;
+-allow audioserver untrusted_app:file { read open getattr };
+-
+-# Date : WK15.46
+-# Operation : Migration
+-# Purpose : OpenDSP: read/write ipi message to tinysys
+-allow audioserver audio_ipi_device:chr_file { read write ioctl open };
+-
+-# Date : WK14.37
+-# Operation : Migration
+-# Purpose : WFD and MET Latency measurement
+-allow audioserver media_wfd_prop:property_service set;
++# + cedar
++allow audioserver system_app:unix_stream_socket connectto;
++allow audioserver system_data_file:lnk_file { open read getattr };
++# - cedar
+Index: device/mediatek/common
+===================================================================
+--- device/mediatek/common	(revision 1195)
++++ device/mediatek/common	(revision 1196)
+
+Property changes on: device/mediatek/common
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/device/mediatek/common:r514,535,635,733,779,859
+Index: device/mediatek
+===================================================================
+--- device/mediatek	(revision 1195)
++++ device/mediatek	(revision 1196)
+
+Property changes on: device/mediatek
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/device/mediatek:r514,535,635,733,779,859*
+Index: device
+===================================================================
+--- device	(revision 1195)
++++ device	(revision 1196)
+
+Property changes on: device
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/device:r514,535,635,733,779,859*

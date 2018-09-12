@@ -1,0 +1,425 @@
+Index: vendor/branch/5058Y_ALGB/vendor/mediatek/proprietary/packages/apps/Stk/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/vendor/mediatek/proprietary/packages/apps/Stk/AndroidManifest.xml	(revision 0)
++++ vendor/branch/5058Y_ALGB/vendor/mediatek/proprietary/packages/apps/Stk/AndroidManifest.xml	(revision 13548)
+@@ -0,0 +1,139 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2007 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++        xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
++        package="com.android.stk"
++        android:sharedUserId="android.uid.phone">
++
++    <original-package android:name="com.android.stk" />
++
++    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
++    <uses-permission android:name="android.permission.GET_TASKS" />
++    <uses-permission android:name="android.permission.RECEIVE_STK_COMMANDS" />
++    <uses-permission android:name="android.permission.INTERACT_ACROSS_USER_FULL" />
++    <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
++    <protected-broadcast android:name="android.intent.action.RESET_MAIN_ACCESS" />
++    <protected-broadcast android:name="android.stkDialog.TIMEOUT" />
++
++    <application android:icon="@drawable/ic_launcher_sim_toolkit"
++        android:label="@string/app_name"
++        android:clearTaskOnLaunch="true"
++        android:process="com.android.phone"
++        android:taskAffinity="android.task.stk">
++
++        <activity android:name=".StkMain"
++            android:theme="@android:style/Theme.Translucent.NoTitleBar"
++            android:configChanges="orientation"
++            android:label="@string/app_name"
++            android:enabled="false"
++            android:exported="true"
++            android:taskAffinity="android.task.stk.task">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.LAUNCHER" />
++            </intent-filter>
++        </activity>
++
++        <activity android:name=".StkLauncherActivity"
++            android:theme="@android:style/Theme.NoTitleBar"
++            android:configChanges="orientation"
++            android:label="@string/app_name"
++            android:exported="true"
++            android:taskAffinity="android.task.stk.task">
++            <intent-filter>
++                 <action android:name="android.intent.action.VIEW" />
++                 <action android:name="android.intent.action.PICK" />
++                 <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++
++        <activity android:name=".StkMenuActivity"
++            android:theme="@android:style/Theme.NoTitleBar"
++            android:icon="@drawable/ic_launcher_sim_toolkit"
++            android:label="@string/app_name"
++            android:configChanges="orientation|locale|screenSize|layoutDirection|keyboardHidden|mnc|mcc"
++            android:exported="false"
++            android:taskAffinity="android.task.stk.task">
++             <intent-filter>
++                 <action android:name="android.intent.action.VIEW" />
++                 <action android:name="android.intent.action.PICK" />
++                 <category android:name="android.intent.category.DEFAULT" />
++             </intent-filter>
++         </activity>
++
++         <activity android:name=".StkInputActivity"
++            android:label="@string/app_name"
++            android:icon="@drawable/ic_launcher_sim_toolkit"
++            android:theme="@android:style/Theme.Holo"
++            android:configChanges="orientation|locale|screenSize|keyboardHidden|layoutDirection"
++            android:exported="false"
++            android:taskAffinity="android.task.stk.task">
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW" />
++                <action android:name="android.intent.action.EDIT" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++
++        <activity android:name=".StkDialogActivity"
++            android:directBootAware="true"
++            android:configChanges="orientation|locale|screenSize|mcc|mnc|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|smallestScreenSize|layoutDirection"
++            android:theme="@android:style/Theme.Holo.Dialog"
++            android:exported="false"
++            android:taskAffinity="android.task.stk.task">
++        </activity>
++
++        <activity android:name=".ToneDialog"
++            android:exported="false"
++            android:theme="@android:style/Theme.Holo.Dialog"
++            android:configChanges="orientation|locale|screenSize|layoutDirection" >
++        </activity>
++
++        <receiver android:name="com.android.stk.StkCmdReceiver"
++            android:directBootAware="true">
++            <intent-filter>
++                <action android:name= "android.intent.action.stk.command" />
++                <action android:name= "android.intent.action.stk.session_end" />
++                <action android:name= "android.intent.action.stk.icc_status_change" />
++                <action android:name= "android.intent.action.stk.alpha_notify" />
++            </intent-filter>
++        </receiver>
++
++        <receiver android:name="com.android.stk.EventReceiver"
++            android:directBootAware="true">
++            <intent-filter>
++                <action android:name="android.intent.action.stk.USER_ACTIVITY" />
++                <action android:name="android.intent.action.LOCALE_CHANGED" />
++                <action android:name="android.intent.action.stk.BROWSER_TERMINATION" />
++            </intent-filter>
++        </receiver>
++        <receiver android:name="com.android.stk.BootCompletedReceiver"
++            android:directBootAware="true">
++            <intent-filter>
++                <action android:name="android.intent.action.BOOT_COMPLETED" />
++                <action android:name="android.intent.action.SIM_STATE_CHANGED" />
++                <action android:name="android.intent.action.RADIO_TECHNOLOGY" />
++                <action android:name="android.intent.action.USER_INITIALIZE" />
++            </intent-filter>
++        </receiver>
++
++        <service android:name="StkAppService"
++                android:directBootAware="true"/>
++
++    </application>
++</manifest>
+Index: vendor/branch/5058Y_ALGB/vendor/mediatek/proprietary/packages/apps/Stk/src/com/android/stk/StkAppInstaller.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/vendor/mediatek/proprietary/packages/apps/Stk/src/com/android/stk/StkAppInstaller.java	(revision 0)
++++ vendor/branch/5058Y_ALGB/vendor/mediatek/proprietary/packages/apps/Stk/src/com/android/stk/StkAppInstaller.java	(revision 13548)
+@@ -0,0 +1,276 @@
++/*
++ * Copyright (C) 2007 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.stk;
++
++import com.android.internal.telephony.cat.CatLog;
++import com.android.internal.telephony.PhoneConstants;
++import com.android.internal.telephony.TelephonyProperties;
++
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.pm.PackageManager;
++import android.telephony.TelephonyManager;
++import android.telephony.SubscriptionManager;
++import android.os.SystemProperties;
++
++/**
++ * Application installer for SIM Toolkit.
++ *
++ */
++class StkAppInstaller {
++    private static final String LOG_TAG = "StkAppInstaller";
++    Context mContext;
++    private static int sSimCount = 0;
++    private static StkAppInstaller mInstance = new StkAppInstaller();
++    private StkAppInstaller() {
++        CatLog.d(LOG_TAG, "init");
++    }
++    public static StkAppInstaller getInstance() {
++        if (mInstance != null) {
++            mInstance.initThread();
++        }
++        return mInstance;
++    }
++    private void initThread() {
++        int i = 0;
++        // The STK_GEMINI_SIM_NUM index is for STK_MAIN
++        sSimCount = StkAppService.STK_GEMINI_SIM_NUM + 2;
++        CatLog.v(LOG_TAG, "installThread = " + installThread + ", uninstallThread = "
++                + uninstallThread + ", miSTKInstalled = " + miSTKInstalled);
++        if (installThread == null) {
++            installThread = new InstallThread[sSimCount];
++            for (i = 0; i < sSimCount; i++) {
++                if (installThread[i] == null) {
++                    installThread[i] = new InstallThread();
++                }
++            }
++        }
++        if (uninstallThread == null) {
++            uninstallThread = new UnInstallThread[sSimCount];
++            for (i = 0; i < sSimCount; i++) {
++                uninstallThread[i] = new UnInstallThread();
++            }
++        }
++        if (miSTKInstalled == null) {
++            miSTKInstalled = new int[sSimCount];
++            for (i = 0; i < sSimCount; i++) {
++                miSTKInstalled[i] = -1;
++            }
++        }
++    }
++
++    public static final int STK_NOT_INSTALLED = 1;
++    public static final int STK_INSTALLED = 2;
++    public static final int STK_LAUNCH_ID = 0xFF;
++    public static final int STK_MENU_LAUNCH_ID = 0xFE;
++
++    //private static int miSTKInstalled = -1;  // 1 -not_ready, 2-ready
++    private static int[] miSTKInstalled = null;  // 1 -not_ready, 2-ready
++    /* TODO: Gemini+ */
++    private static final String STK_MAIN = "com.android.stk.StkMain";
++    private static final String STK_MENU_LAUNCHER_ACTIVITY = "com.android.stk.StkLauncherActivity";
++    private static final String STK1_LAUNCHER_ACTIVITY = "com.android.stk.StkLauncherActivityI";
++    private static final String STK2_LAUNCHER_ACTIVITY = "com.android.stk.StkLauncherActivityII";
++    private static final String STK3_LAUNCHER_ACTIVITY = "com.android.stk.StkLauncherActivityIII";
++    private static final String STK4_LAUNCHER_ACTIVITY = "com.android.stk.StkLauncherActivityIV";
++
++    void install(Context context) {
++        setAppState(context, true, STK_LAUNCH_ID);
++    }
++    void unInstall(Context context) {
++        setAppState(context, false, STK_LAUNCH_ID);
++    }
++
++    void install(Context context, int sim_id) {
++        CatLog.d(LOG_TAG, "[install]+ sim_id: " + sim_id);
++        if (STK_LAUNCH_ID == sim_id) {
++            sim_id = (sSimCount - 2);
++        } else if (STK_MENU_LAUNCH_ID == sim_id) {
++            sim_id = (sSimCount - 1);
++        }
++        if (installThread[sim_id] != null) {
++            mContext = context;
++            installThread[sim_id].setSim(sim_id);
++            new Thread(installThread[sim_id]).start();
++        }
++    }
++
++    void unInstall(Context context, int sim_id) {
++        CatLog.v(LOG_TAG, "[unInstall]+ sim_id: " + sim_id);
++        if (STK_LAUNCH_ID == sim_id) {
++            sim_id = (sSimCount - 2);
++        } else if (STK_MENU_LAUNCH_ID == sim_id) {
++            sim_id = (sSimCount - 1);
++        }
++        if (uninstallThread[sim_id] != null) {
++            mContext = context;
++            uninstallThread[sim_id].setSim(sim_id);
++            new Thread(uninstallThread[sim_id]).start();
++        }
++    }
++
++    private static void setAppState(Context context, boolean install, int sim_id) {
++        CatLog.v(LOG_TAG, "[setAppState]+ sim_id: " + sim_id + ", install: " + install);
++        if (context == null) {
++            CatLog.e(LOG_TAG, "[setAppState]- no context, just return.");
++            return;
++        }
++        PackageManager pm = context.getPackageManager();
++        if (pm == null) {
++            CatLog.e(LOG_TAG, "[setAppState]- no package manager, just return.");
++            return;
++        }
++        // check that STK app package is known to the PackageManager
++        /* TODO: Gemini+ begin */
++        String classname = null;
++        String optr = SystemProperties.get("persist.operator.optr");
++        if (optr != null && "OP02".equals(optr)) {
++            switch (sim_id) {
++                case PhoneConstants.SIM_ID_1:
++                    classname = STK1_LAUNCHER_ACTIVITY;
++                    break;
++                case PhoneConstants.SIM_ID_2:
++                    classname = STK2_LAUNCHER_ACTIVITY;
++                    break;
++                case PhoneConstants.SIM_ID_3:
++                    classname = STK3_LAUNCHER_ACTIVITY;
++                    break;
++                case PhoneConstants.SIM_ID_4:
++                    classname = STK4_LAUNCHER_ACTIVITY;
++                    break;
++                case STK_LAUNCH_ID:
++                    classname = STK_MAIN;
++                    break;
++                case STK_MENU_LAUNCH_ID:
++                    classname = STK_MENU_LAUNCHER_ACTIVITY;
++                    break;
++                default:
++                    CatLog.v("StkAppInstaller1", "setAppState, ready to return because sim id "
++                    + sim_id + " is wrong.");
++                    return;
++            }
++        } else {
++            switch (sim_id) {
++                case STK_LAUNCH_ID:
++                    classname = STK_MAIN;
++                    break;
++                case STK_MENU_LAUNCH_ID:
++                    classname = STK_MENU_LAUNCHER_ACTIVITY;
++                    break;
++                default:
++                    CatLog.v("StkAppInstaller2", "setAppState, ready to return because sim id "
++                    + sim_id + " is wrong.");
++                    return;
++            }
++        }
++        /* TODO: Gemini+ end */
++        ComponentName cName = new ComponentName("com.android.stk", classname);
++        CatLog.v(LOG_TAG, "setAppState, classname: "
++            + classname.substring(classname.lastIndexOf('.') + 1)
++            + " ComponentEnabledSetting: " + (PackageManager.COMPONENT_ENABLED_STATE_ENABLED
++                    == pm.getComponentEnabledSetting(cName) ? "ENABLED" : "DISABLED"));
++
++        int state = install ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
++                : PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
++
++        if (((PackageManager.COMPONENT_ENABLED_STATE_ENABLED == state) &&
++                (PackageManager.COMPONENT_ENABLED_STATE_ENABLED ==
++                pm.getComponentEnabledSetting(cName))) ||
++                ((PackageManager.COMPONENT_ENABLED_STATE_DISABLED == state) &&
++                (PackageManager.COMPONENT_ENABLED_STATE_DISABLED ==
++                pm.getComponentEnabledSetting(cName)))) {
++            CatLog.w(LOG_TAG, "setAppState, sim_id: " + sim_id +
++                    "No need change app state!!");
++        } else {
++            try {
++                pm.setComponentEnabledSetting(cName, state, PackageManager.DONT_KILL_APP);
++            } catch (Exception e) {
++                CatLog.e(LOG_TAG, "setAppState, sim_id: " + sim_id +
++                        " Could not change STK app state !!!");
++                return;
++            }
++        }
++        CatLog.d(LOG_TAG, "setAppState, sim_id: " + sim_id + " Change app state[" + install + "]");
++        if (STK_LAUNCH_ID == sim_id) {
++            try {
++                miSTKInstalled[(sSimCount - 2)] = install ? STK_INSTALLED : STK_NOT_INSTALLED;
++            } catch (ArrayIndexOutOfBoundsException e) {
++                CatLog.e(LOG_TAG, "IOOB of setting miSTKInstalled[]");
++            }
++        } else if (STK_MENU_LAUNCH_ID == sim_id) {
++            try {
++                miSTKInstalled[(sSimCount - 1)] = install ? STK_INSTALLED : STK_NOT_INSTALLED;
++            } catch (ArrayIndexOutOfBoundsException e) {
++                CatLog.e(LOG_TAG, "IOOB2 of setting miSTKInstalled[]");
++            }
++        } else if ((SubscriptionManager.isValidSlotId(sim_id)) ||
++                    (optr != null && "OP02".equals(optr))) {
++            try {
++                miSTKInstalled[sim_id] = install ? STK_INSTALLED : STK_NOT_INSTALLED;
++            } catch (ArrayIndexOutOfBoundsException e) {
++                CatLog.e(LOG_TAG, "IOOB3 of setting miSTKInstalled[]");
++            }
++        }
++    }
++    private class InstallThread implements Runnable {
++        private int mSimId = -1;
++        @Override
++        public void run() {
++            if ((sSimCount - 2) == mSimId) {
++                setAppState(mContext, true, STK_LAUNCH_ID);
++            } else if ((sSimCount - 1) == mSimId) {
++                setAppState(mContext, true, STK_MENU_LAUNCH_ID);
++            } else if (SubscriptionManager.isValidSlotId(mSimId)) {
++                setAppState(mContext, true, mSimId);
++            }
++        }
++
++        public void setSim(int sim_id) {
++            mSimId = sim_id;
++        }
++    }
++    private class UnInstallThread implements Runnable {
++        private int mSimId = -1;
++        @Override
++        public void run() {
++            String optr = SystemProperties.get("persist.operator.optr");
++            if ((sSimCount - 2) == mSimId) {
++                setAppState(mContext, false, STK_LAUNCH_ID);
++            } else if ((sSimCount - 1) == mSimId) {
++                setAppState(mContext, false, STK_MENU_LAUNCH_ID);
++            } else if ((SubscriptionManager.isValidSlotId(mSimId)) ||
++                        (optr != null && "OP02".equals(optr))) {
++                setAppState(mContext, false, mSimId);
++            }
++        }
++
++        public void setSim(int sim_id) {
++            mSimId = sim_id;
++        }
++    }
++    private InstallThread[] installThread = null;
++    private UnInstallThread[] uninstallThread = null;
++
++    public static int getIsInstalled(int sim_id) {
++        if (STK_LAUNCH_ID == sim_id) {
++            sim_id = (sSimCount - 2);
++        } else if (STK_MENU_LAUNCH_ID == sim_id) {
++            sim_id = (sSimCount - 1);
++        }
++        return miSTKInstalled[sim_id];
++    }
++}

@@ -1,0 +1,73 @@
+Index: vendor/branch/5058I_ALAV1/frameworks/base/core/java/android/text/StaticLayout.java
+===================================================================
+--- vendor/branch/5058I_ALAV1/frameworks/base/core/java/android/text/StaticLayout.java	(revision 5881)
++++ vendor/branch/5058I_ALAV1/frameworks/base/core/java/android/text/StaticLayout.java	(revision 5882)
+@@ -38,6 +38,8 @@
+ import java.nio.ByteBuffer;
+ import java.util.Arrays;
+ import java.util.Locale;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
+ 
+ /**
+  * StaticLayout is a Layout for text that will not be edited after it
+@@ -678,6 +680,59 @@
+             }
+ 
+             measured.setPara(source, paraStart, paraEnd, textDir, b);
++            
++           
++            //Add-BEGIN by NJAM.SG,11/19/2015,bug-34950 for display "+" on the left of number
++            /*
++            * when source is pattern like "+1345" with Arabic letters behind,
++            * after BIDI calculation the level of "+" will be the same with Arabic letters,
++            * this codes is to indicated the position of "+" and change the level as Europen number
++            * For excample:
++            *    Source string is: "+1345{Arabic letters}"
++            *    After BIDI calculation, mLevels is [1,0,0,0,0,1...] 
++            *    Source string will display like: "{Arabic letters}1345+"
++            *    
++            *    The following codes will change mLevels to: [0,0,0,0,0,1...],
++            *    after that, the source string will display like "{Arabic letters}+1345" 
++            *
++            * We do this pattern matching only for the TextView, which textDirection 
++            *  has been set to View.TEXT_DIRECTION_ANY_RTL.
++            */
++            if (null != measured && !measured.mEasy 
++            && measured.mLevels != null && null != measured.mChars) {
++                try {
++                    String tempString = new String(measured.mChars);
++                    final Pattern pattern = Pattern.compile("(\\+)*(\\s)*[0-9]+((\\s)*(\\-)*(\\s)*[0-9]+)*");
++                    final Pattern tempPattern = Pattern.compile("[0-9]+");   
++                    Matcher mm = pattern.matcher(tempString);
++                    Matcher matcher = tempPattern.matcher(tempString);
++                    byte levelOfNumberic = 0;
++                    if (matcher.find()) {
++                        levelOfNumberic = measured.mLevels[tempString.indexOf(matcher.group(0))];
++                    }
++                    while (mm.find()) {
++                        String value = mm.group(0);
++                        int index = tempString.indexOf(value);
++                        /*
++                        *replace the level of '+' and ' ' to the number 
++                        */
++                        if (value.contains("+") || value.contains(" ")) {
++                            int maxLength = value.length() - 1;
++                            for (int position = 0; position < maxLength; position ++ ) {
++                                if ((('+' == value.charAt(position)) || (' ' == value.charAt(position))) 
++                                && (position + index) < measured.mLevels.length 
++                                && levelOfNumberic > 0) {
++                                    measured.mLevels[index + position] = levelOfNumberic;
++                                }
++                            }
++                        }
++                    }
++                } catch(Exception ex){
++                    Log.e(TAG, ex.getMessage());
++                }
++            }
++            //Add-END by NJAM.SG,11/19/2015,bug-34950 for display "+" on the left of number
++            
+             char[] chs = measured.mChars;
+             float[] widths = measured.mWidths;
+             byte[] chdirs = measured.mLevels;

@@ -1,0 +1,53 @@
+Index: vendor/branch/5058A_Digicel_Jamaica/packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java
+===================================================================
+--- vendor/branch/5058A_Digicel_Jamaica/packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java	(revision 9543)
++++ vendor/branch/5058A_Digicel_Jamaica/packages/apps/Settings/src/com/android/settings/deviceinfo/PrivateVolumeSettings.java	(revision 9544)
+@@ -128,6 +128,7 @@
+     private IStorageSettingsExt mExt;
+ 
+     private StorageSummaryPreference mSummary;
++	private StorageSummaryPreference mSystemStorageSummary;
+     private List<StorageItemPreference> mItemPreferencePool = Lists.newArrayList();
+     private List<PreferenceCategory> mHeaderPreferencePool = Lists.newArrayList();
+     private int mHeaderPoolIndex;
+@@ -195,6 +196,7 @@
+         getPreferenceScreen().setOrderingAsAdded(true);
+ 
+         mSummary = new StorageSummaryPreference(getPrefContext());
++		mSystemStorageSummary = new StorageSummaryPreference(context);
+         mCurrentUser = mUserManager.getUserInfo(UserHandle.myUserId());
+ 
+         mExplore = buildAction(R.string.storage_menu_explore);
+@@ -231,7 +233,7 @@
+             addPreference(screen, mAutomaticStorageManagement);
+         }
+         addPreference(screen, mSummary);
+-
++		addPreference(screen, mSystemStorageSummary);
+         List<UserInfo> allUsers = mUserManager.getUsers();
+         final int userCount = allUsers.size();
+         final boolean showHeaders = userCount > 1;
+@@ -281,6 +283,10 @@
+         mSummary.setSummary(getString(R.string.storage_volume_used,
+                 Formatter.formatFileSize(context, mTotalSize)));
+         mSummary.setPercent((int) ((usedBytes * 100) / mTotalSize));
++		
++		mSystemStorageSummary.setTitle(getString(R.string.system_storage_title));
++		mSystemStorageSummary.setSummary(Formatter.formatFileSize(context, mSystemSize));
++		
+         mExt.updateCustomizedPrivateSettingsPlugin(screen, mVolume);
+         mMeasure.forceMeasure();
+         mNeedsUpdate = false;
+Index: vendor/branch/5058A_Digicel_Jamaica/packages/apps/Settings/res/layout/storage_summary.xml
+===================================================================
+--- vendor/branch/5058A_Digicel_Jamaica/packages/apps/Settings/res/layout/storage_summary.xml	(revision 9543)
++++ vendor/branch/5058A_Digicel_Jamaica/packages/apps/Settings/res/layout/storage_summary.xml	(revision 9544)
+@@ -34,7 +34,7 @@
+         android:textAlignment="viewStart"
+         android:textAppearance="@android:style/TextAppearance.Material.Subhead"
+         android:textColor="?android:attr/colorAccent"
+-        android:textSize="36sp"
++        android:textSize="18sp"
+         android:ellipsize="marquee"
+         android:fadingEdge="horizontal" />
+ 

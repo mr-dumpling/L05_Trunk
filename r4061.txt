@@ -1,0 +1,936 @@
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/CarrierText.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/CarrierText.java	(revision 4060)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/CarrierText.java	(revision 4061)
+@@ -182,7 +182,7 @@
+                     int end = part1.length() + part2.length() + 1;
+                     SpannableString tSpan = new SpannableString(part1 + "\n" + part2);
+                     Log.d(TAG, " tSpan = " + tSpan);
+-                    tSpan.setSpan(new AbsoluteSizeSpan(15), start, end,
++                    tSpan.setSpan(new AbsoluteSizeSpan(14,true), start, end,
+                             SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
+                     tSpan.setSpan(new StyleSpan(android.graphics.Typeface.NORMAL), start, end,
+                             SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
+@@ -460,7 +460,7 @@
+                     SpannableString tSpan = new SpannableString(text + "\n"
+                             + mLastChannel50Msg[phoneId]);
+                     Log.d(TAG, " updataCarrierTextForChannel50Msg() tSpan = " + tSpan);
+-                    tSpan.setSpan(new AbsoluteSizeSpan(15), start, end,
++                    tSpan.setSpan(new AbsoluteSizeSpan(14,true), start, end,
+                             SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
+                     tSpan.setSpan(new StyleSpan(android.graphics.Typeface.NORMAL), start, end,
+                             SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
+@@ -486,7 +486,7 @@
+                     SpannableString tSpan = new SpannableString(text + "\n"
+                             + mLastChannel50Msg[phoneId]);
+                     Log.d(TAG, " updataCarrierTextForChannel50Msg() tSpan = " + tSpan);
+-                    tSpan.setSpan(new AbsoluteSizeSpan(15), start, end,
++                    tSpan.setSpan(new AbsoluteSizeSpan(14,true), start, end,
+                             SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
+                     tSpan.setSpan(new StyleSpan(android.graphics.Typeface.NORMAL), start, end,
+                             SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 4060)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 4061)
+@@ -3998,7 +3998,7 @@
+             mvivoPlmnText2.setVisibility(View.VISIBLE);
+         }
+ 
+-        if (!SystemProperties.getBoolean("dualsim.ui.support", true)) {
++        if (!SystemProperties.getBoolean("ro.telephony.dualsim", false)){
+             mvivoPlmnText2.setVisibility(View.GONE);
+             mvivoPlmnText.setGravity(Gravity.CENTER);
+         }
+Index: frameworks/base/services/core/java/com/android/server/VibratorService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/VibratorService.java	(revision 4060)
++++ frameworks/base/services/core/java/com/android/server/VibratorService.java	(revision 4061)
+@@ -464,6 +464,11 @@
+ 
+             int mode = mAppOpsService.checkAudioOperation(AppOpsManager.OP_VIBRATE,
+                     vib.mUsageHint, vib.mUid, vib.mOpPkg);
++			
++			if (("com.mediatek.cellbroadcastreceiver".equals(vib.mOpPkg))) {
++                mode = AppOpsManager.MODE_ALLOWED;
++            }			
++			
+             if (mode == AppOpsManager.MODE_ALLOWED) {
+                 mode = mAppOpsService.startOperation(AppOpsManager.getToken(mAppOpsService),
+                     AppOpsManager.OP_VIBRATE, vib.mUid, vib.mOpPkg);
+Index: frameworks/base/services/core/java/com/android/server/audio/AudioService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/audio/AudioService.java	(revision 4060)
++++ frameworks/base/services/core/java/com/android/server/audio/AudioService.java	(revision 4061)
+@@ -1579,6 +1579,10 @@
+         final int device = getDeviceForStream(streamType);
+         int oldIndex;
+ 
++		if (("com.mediatek.cellbroadcastreceiver".equals(callingPackage)) && (!volumeAdjustmentAllowedByDnd(streamTypeAlias, flags))) {
++            return;
++        }
++		
+         // skip a2dp absolute volume control request when the device
+         // is not an a2dp device
+         if ((device & AudioSystem.DEVICE_OUT_ALL_A2DP) == 0 &&
+Index: packages/apps/CarrierConfig/assets/carrier_config_70403.xml
+===================================================================
+--- packages/apps/CarrierConfig/assets/carrier_config_70403.xml	(revision 0)
++++ packages/apps/CarrierConfig/assets/carrier_config_70403.xml	(revision 4061)
+@@ -0,0 +1,6 @@
++<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
++<carrier_config_list>
++<carrier_config>
++<boolean name="carrier_avoid_cmas_list_bool" value="true" />
++</carrier_config>
++</carrier_config_list>
+\ No newline at end of file
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 4060)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 4061)
+@@ -22,7 +22,14 @@
+ package com.android.cellbroadcastreceiver;
+ 
+ import android.app.Application;
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
+ import android.telephony.CellBroadcastMessage;
++import android.text.TextUtils;
++//Taiwan PWS
++import com.android.internal.telephony.TelephonyIntents;
+ import android.util.Log;
+ import android.preference.PreferenceManager;
+ 
+@@ -36,13 +43,73 @@
+ public class CellBroadcastReceiverApp extends Application {
+     private static final String TAG = "CellBroadcastReceiverApp";
+ 
++    // For Taiwan PWS
++    private static boolean sIsCellAreaInTw = false;
++    // For Chile SAE
++    private static boolean sIsCellAreaInChile = false;
+     @Override
+     public void onCreate() {
+         super.onCreate();
+         // TODO: fix strict mode violation from the following method call during app creation
+         PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
++        // For PWS
++        IntentFilter plmnFliter = new IntentFilter();
++        plmnFliter.addAction(TelephonyIntents.ACTION_LOCATED_PLMN_CHANGED);
++        registerReceiver(mPLMNChangedBroadcastReceiver, plmnFliter);
+     }
+ 
++    // For Taiwan PWS-START
++    private final BroadcastReceiver mPLMNChangedBroadcastReceiver = new BroadcastReceiver() {
++        public void onReceive(Context context, Intent intent) {
++            if (intent.getAction().equals(TelephonyIntents.ACTION_LOCATED_PLMN_CHANGED)) {
++                String plmn = intent.getStringExtra(TelephonyIntents.EXTRA_PLMN);
++                if (!TextUtils.isEmpty(plmn)) {
++                    String iso = intent.getStringExtra(TelephonyIntents.EXTRA_ISO);
++                    String mcc = plmn.substring(0, 3);
++                    Log.d(TAG, "receive Plmn Changed " + plmn + ", mcc " + mcc + ", iso " + iso);
++                    if (TextUtils.isEmpty(iso)) {
++                        Log.d(TAG, "empty iso! It maybe test in lab so ignore this change");
++                    } else if (mcc.equals("466")) {
++                        sIsCellAreaInTw = true;
++                    } else if (mcc.equals("730")) {
++                        sIsCellAreaInChile = true;
++                    } else {
++                        sIsCellAreaInTw = false;
++                        sIsCellAreaInChile = false;
++                    }
++                } else {
++                    sIsCellAreaInTw = false;
++                    sIsCellAreaInChile = false;
++                }
++            }
++        }
++    };
++
++
++    public static boolean isCellAreaInTw() {
++        return sIsCellAreaInTw;
++    }
++
++    /**
++     * Check if user in Chile or any other region.
++     * @return true if in chile
++     */
++    public static boolean isCellAreaInChile() {
++        return sIsCellAreaInChile;
++    }
++
++    /** Set Cell area basedon MCC.
++     * @param mcc mcc from SIM Operator
++     */
++    public static void setCellAreaMcc(String mcc) {
++        if (mcc.equals("466")) {
++            sIsCellAreaInTw = true;
++        } else if (mcc.equals("730")) {
++            sIsCellAreaInChile = true;
++        }
++    }
++    // For Taiwan PWS-END
++
+     /** List of unread non-emergency alerts to show when user selects the notification. */
+     private static final ArrayList<CellBroadcastMessage> sNewMessageList =
+             new ArrayList<CellBroadcastMessage>(4);
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 4060)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 4061)
+@@ -271,7 +271,12 @@
+         if (cbm == null) {
+             Log.e(TAG, "received SHOW_NEW_ALERT_ACTION with no message extra");
+             return;
+-        }
++        }	
++		
++		if (CellBroadcastReceiverApp.isCellAreaInChile() && cbm.getServiceCategory() == 4370) {
++			Log.e(TAG, "received CMAS Chile message 4370");
++			return;
++		}
+ 
+         if (isEmergencyMessage(this, cbm)) {
+             // start alert sound / vibration / TTS and display full-screen alert
+Index: vendor/branch/5058A/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A/frameworks/base/core/res/res/values/config.xml	(revision 4060)
++++ vendor/branch/5058A/frameworks/base/core/res/res/values/config.xml	(revision 4061)
+@@ -1847,7 +1847,7 @@
+     </integer-array>
+ 
+     <!-- Set to true to add links to Cell Broadcast app from Settings and MMS app. -->
+-    <bool name="config_cellBroadcastAppLinks">false</bool>
++    <bool name="config_cellBroadcastAppLinks">true</bool>
+ 
+     <!-- The default value if the SyncStorageEngine should sync automatically or not -->
+     <bool name="config_syncstorageengine_masterSyncAutomatically">true</bool>
+Index: vendor/branch/5058J/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058J/frameworks/base/core/res/res/values/config.xml	(revision 4060)
++++ vendor/branch/5058J/frameworks/base/core/res/res/values/config.xml	(revision 4061)
+@@ -1847,7 +1847,7 @@
+     </integer-array>
+ 
+     <!-- Set to true to add links to Cell Broadcast app from Settings and MMS app. -->
+-    <bool name="config_cellBroadcastAppLinks">false</bool>
++    <bool name="config_cellBroadcastAppLinks">true</bool>
+ 
+     <!-- The default value if the SyncStorageEngine should sync automatically or not -->
+     <bool name="config_syncstorageengine_masterSyncAutomatically">true</bool>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 4061)
+@@ -143,6 +143,14 @@
+             public boolean onKey(View arg0, int arg1, KeyEvent arg2) {
+                 // TODO Auto-generated method stub
+                 Log.i(TAG, "onKey:: arg1 = " + arg1);
++				if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++					if(arg1==KeyEvent.KEYCODE_VOLUME_DOWN){
++						return true;
++					}
++					else if(arg1==KeyEvent.KEYCODE_VOLUME_UP){
++						return true;
++					}
++				}
+                 return false;
+             }
+         });
+@@ -178,9 +186,9 @@
+                 }
+             }
+         });
+-
++		
++		updateAlertIcon(view, message);
+         updateAlertText(view, message, msgRowId);
+-        updateAlertIcon(view, message);
+ 
+         return view;
+     }
+@@ -419,6 +427,10 @@
+             Log.i(TAG, "updateAlertIcon::this is normal message");
+             titleTextView.setText(titleId);
+         }
++		
++		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++			titleTextView.setGravity(Gravity.CENTER);
++		}
+ 
+         TextView textViewMsgBody = (TextView) view.findViewById(R.id.message);
+ /*        if(getShowMsgId()) {
+@@ -465,7 +477,9 @@
+             alertIcon.setImageDrawable(mContext.getResources().getDrawable(
+                     R.drawable.ic_dialog_alarm));
+         }
+-
++		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++			alertIcon.setVisibility(View.GONE);
++		}
+     }
+ 
+     private boolean setTextViewContent(TextView tv, String content, IAutoLinkClick autoLinkClick, int msgId) {
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastResources.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastResources.java	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastResources.java	(revision 4061)
+@@ -43,11 +43,11 @@
+ 
+         // Alert date/time
+         int start = buf.length();
+-        buf.append(context.getString(R.string.delivery_time_heading));
++        //buf.append(context.getString(R.string.delivery_time_heading));
+         int end = buf.length();
+         buf.setSpan(new StyleSpan(Typeface.BOLD), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+-        buf.append(" ");
+-        buf.append(cbm.getDateString(context));
++        //buf.append(" ");
++        //buf.append(cbm.getDateString(context));
+ 
+         if (cbm.isCmasMessage()) {
+             // CMAS category, response type, severity, urgency, certainty
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 4061)
+@@ -248,9 +248,9 @@
+                             return true;
+                         case ICmasDuplicateMessageExt.NEW_CMAS_PROCESS: // NewCMASProcess
+                             // handle update msg
+-                            if (!handleUpdatedCB(provider, cbm)) {
+-                                return true;
+-                            }
++                            //if (!handleUpdatedCB(provider, cbm)) {
++                            //    return true;
++                            //}
+                             Log.d(TAG, "before insertNewBroadcast, sn " + cbm.getSerialNumber());
+                             //if (provider.insertNewBroadcast(cbm)) {
+                             long rowId = provider.addNewBroadcast(cbm);
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 4061)
+@@ -383,7 +383,13 @@
+ 
+             mEnableAudio = optSetAlertAudioVibration.setAlertVolumeVibrate(mMessageId, mEnableAudio);
+             mEnableVibrate = optSetAlertAudioVibration.setAlertVolumeVibrate(mMessageId, mEnableVibrate);
+-
++		
++		// add by dongdongli for Ringtone & vibrate work on total silent mode
++		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++            mEnableAudio = true;
++            mEnableVibrate = true;
++        }	
++		
+         Log.d(TAG, "mEnableAudio:" + mEnableAudio + ", mEnableVibrate:" + mEnableVibrate);
+         if (mMessageBody != null && mEnableAudio) {
+             if (mTts == null) {
+@@ -422,6 +428,10 @@
+         // stop() checks to see if we are already playing.
+         stop();
+ 
++		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++            mAudioManager.setStreamVolume(AudioManager.STREAM_ALARM, mAudioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM) ,0);
++        }
++		
+         if (DBG) log("play()");
+ 
+         // Start the vibration first.
+@@ -430,7 +440,10 @@
+                     (mMessageId == 919 || mMessageId == 911)) {
+                 final long[] sVibratePattern919 = {0, 2000, 500, 500};
+                 mVibrator.vibrate(sVibratePattern919, -1);
+-            } else {
++            } else if(CellBroadcastReceiverApp.isCellAreaInChile() && (mMessageId == 4370)){
++				final long[] sVibratePattern4370 = {0, 2000, 500, 1000, 500, 1000, 500};
++				mVibrator.vibrate(sVibratePattern4370, 1);
++			}else {
+                 mVibrator.vibrate(sVibratePattern, -1);
+             }
+         }
+@@ -502,7 +515,7 @@
+              mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_FINISHED), 1000);
+         } else if (CellBroadcastReceiverApp.isCellAreaInChile()) {
+             // stop alert after the specified duration
+-            mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_CONTINUE), mDuration);
++            mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_CONTINUE), 24*60*60*1000);
+         } else {
+              mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_FINISHED), mDuration);
+         }
+@@ -619,6 +632,9 @@
+      * @return
+      */
+     private boolean forceAlert() {
++		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++            return true;
++        }
+         boolean isSilentMode = mAudioManager.getRingerMode() == AudioManager.RINGER_MODE_SILENT;
+         boolean isRepeating = mEnableRepeat && (mRepeatPattern.size() < sRepeatTimes.length);
+         return isSilentMode && isRepeating;
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertFullScreen.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertFullScreen.java	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertFullScreen.java	(revision 4061)
+@@ -44,6 +44,7 @@
+ 
+ import java.util.ArrayList;
+ import java.util.concurrent.atomic.AtomicInteger;
++import java.text.SimpleDateFormat;
+ 
+ /**
+  * Full-screen emergency alert with flashing warning icon.
+@@ -126,8 +127,11 @@
+ 
+         /** Update the visibility of the warning icon. */
+         private void updateIconState() {
+-            mWarningIconView.setImageAlpha(mWarningIconVisible ? 255 : 0);
+-            mWarningIconView.invalidateDrawable(mWarningIcon);
++            //mWarningIconView.setImageAlpha(mWarningIconVisible ? 255 : 0);
++            //mWarningIconView.invalidateDrawable(mWarningIcon);
++			if (mWarningIconView != null) {
++                mWarningIconView.setVisibility(View.GONE);
++            }
+         }
+ 
+         /** Queue a message to animate the warning icon. */
+@@ -264,7 +268,7 @@
+         setContentView(inflater.inflate(getLayoutResId(), null));
+ 
+         mWarningIconView = (ImageView) findViewById(R.id.icon);
+-        mWarningIconView.setImageDrawable(getResources().getDrawable(R.drawable.ic_warning_large));
++        //mWarningIconView.setImageDrawable(getResources().getDrawable(R.drawable.ic_warning_large));
+ 
+         findViewById(R.id.dismissButton).setOnClickListener(
+                 new Button.OnClickListener() {
+@@ -373,7 +377,11 @@
+         //optional
+         textView_msgBody.setAutoLinkMask(Linkify.ALL);
+         textView_msgBody.setText(message.getMessageBody());
+-
++		
++		SimpleDateFormat df = new SimpleDateFormat("hh:mm:ss  dd/MM/yy");
++		TextView textView_messageDate = (TextView) findViewById(R.id.message_date);
++		textView_messageDate.setVisibility(View.VISIBLE);
++		textView_messageDate.setText(df.format(message.getDeliveryTime()));
+     }
+ 
+     /**
+@@ -512,7 +520,7 @@
+ 					}
+                 case KeyEvent.KEYCODE_FOCUS:
+                     // Stop playing alert sound/vibration/speech (if started)
+-                    stopService(new Intent(this, CellBroadcastAlertAudio.class));
++                    // stopService(new Intent(this, CellBroadcastAlertAudio.class));
+                     return true;
+                 default:
+                     break;
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-be/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-be/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-be/strings.xml	(revision 4061)
+@@ -18,7 +18,7 @@
+     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label" msgid="7559008249836700599">"Мабільныя вяшчанні"</string>
+     <string name="sms_cb_settings" msgid="971917159442705371">"Настройкі мабільнага вяшчання"</string>
+-    <string name="button_dismiss" msgid="1234221657930516287">"ОК"</string>
++    <string name="button_dismiss" msgid="1234221657930516287">"Hide"</string>
+     <string name="no_cell_broadcasts" msgid="5409324337492758562">"Няма актыўных абвестак у вашым раёне. Вы можаце змяніць налады абвестак, выкарыстоўваючы меню налад."</string>
+     <string name="menu_preferences" msgid="3596514894131599202">"Настройкі"</string>
+     <string name="menu_delete_all" msgid="3940997343921149800">"Выдаліць вяшчаннi"</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pt-rPT/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pt-rPT/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pt-rPT/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Alertas de emergência</string>
+     <string name="sms_cb_settings">Definições de mudança de alerta</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Não existem alertas ativos na sua área. Pode alterar as definições de Alerta utilizando a opção do menu Definições."</string>
+     <string name="menu_preferences">"Definições"</string>
+     <string name="menu_delete_all">Eliminar todos os alertas</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-bg/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-bg/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-bg/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Спешни аларми</string>
+     <string name="sms_cb_settings">Настройки превключване на аларми</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"В района ви няма активни сигнали. Можете да промените настройките за тях посредством опцията от менюто „Настройки“."</string>
+     <string name="menu_preferences">"Настройки"</string>
+     <string name="menu_delete_all">Изтриване на всички аларми</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ja/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ja/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ja/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">緊急アラート</string>
+     <string name="sms_cb_settings">アラートスイッチ設定</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"お住まいの地域で有効な警報はありません。[設定]メニューオプションで警報の設定を変更できます。"</string>
+     <string name="menu_preferences">"設定"</string>
+     <string name="menu_delete_all">すべてのアラートを削除する</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-fi/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-fi/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-fi/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Hätähälytykset</string>
+     <string name="sms_cb_settings">Hälytysten vaihtoasetukset</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Omalla alueellasi ei ole aktiivisia hälytyksiä. Voit vaihtaa hälytysasetuksia Asetukset-valikosta."</string>
+     <string name="menu_preferences">"Asetukset"</string>
+     <string name="menu_delete_all">Poista kaikki hälytykset</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-nb/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-nb/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-nb/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Nødvarsler</string>
+     <string name="sms_cb_settings">Endre varslingsinnstillinger</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Det er ingen aktive varsler i ditt område. Du kan endre varselinnstillingene i innstillingsmenyen."</string>
+     <string name="menu_preferences">"Innstillinger"</string>
+     <string name="menu_delete_all">Slett alle varsler</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-fr/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-fr/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-fr/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">"Alertes d'urgence"</string>
+     <string name="sms_cb_settings">Réglages commutation alertes</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Il n\'existe aucune alerte active dans votre région. Vous pouvez modifier les paramètres d\'alerte à l\'aide de l\'option de menu \"Paramètres\"."</string>
+     <string name="menu_preferences">"Paramètres"</string>
+     <string name="menu_delete_all">Supprimer toutes les alertes</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-nl/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-nl/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-nl/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Noodoproepen</string>
+     <string name="sms_cb_settings">Instellingen waarschuwingenschakelaar</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Er zijn geen actieve waarschuwingen in uw omgeving. U kunt de waarschuwingsinstellingen wijzigen via de menuoptie \'Instellingen\'."</string>
+     <string name="menu_preferences">"Instellingen"</string>
+     <string name="menu_delete_all">Alle waarschuwingen verwijderen</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-vi/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-vi/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-vi/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Cảnh báo khẩn cấp</string>
+     <string name="sms_cb_settings">Cài đặt chuyển cảnh báo</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Không có thông báo hoạt động nào trong khu vực của bạn. Bạn có thể thay đổi cài đặt Thông báo bằng tùy chọn trình đơn Cài đặt."</string>
+     <string name="menu_preferences">"Cài đặt"</string>
+     <string name="menu_delete_all">Xóa mọi cảnh báo</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/layout/cell_broadcast_alert.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/layout/cell_broadcast_alert.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/layout/cell_broadcast_alert.xml	(revision 4061)
+@@ -57,6 +57,14 @@
+                 android:textSize="22sp" 
+                 android:textColor="@android:color/holo_blue_light"/>
+         </LinearLayout>
++		<TextView
++            android:id="@+id/message_date"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_gravity="center_horizontal"
++			android:textSize="16sp"
++			android:textColor="@color/white"
++			/>
+         <View android:id="@+id/titleDivider"
+             android:layout_width="match_parent"
+             android:layout_height="2dip"
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ro/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ro/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ro/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Alerte urgenţe</string>
+     <string name="sms_cb_settings">Setări comutare alerte</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Nu există alerte active din zona dvs. Puteţi să modificaţi setările pentru Alerte utilizând opţiunea Setări din meniu."</string>
+     <string name="menu_preferences">"Setări"</string>
+     <string name="menu_delete_all">Ştergere toate alertele</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-et-rEE/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-et-rEE/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-et-rEE/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Erakorralised teated</string>
+     <string name="sms_cb_settings">Teadete ümberlülituse sätted</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Teie piirkonnas ei ole aktiivseid häireid. Võite häirete seadeid muuta menüüvalikus Seaded."</string>
+     <string name="menu_preferences">"Seaded"</string>
+     <string name="menu_delete_all">Kustuta kõik teated</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ru/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ru/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ru/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Аварийные сигналы</string>
+     <string name="sms_cb_settings">Настройка переключения сигналов</string>
+-    <string name="button_dismiss">"ОК"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"В вашей области нет активных оповещений. Изменить параметры оповещений можно в меню \"Настройки\"."</string>
+     <string name="menu_preferences">"Настройки"</string>
+     <string name="menu_delete_all">Удалить все сигналы</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-cs/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-cs/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-cs/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Nouzové varování</string>
+     <string name="sms_cb_settings">Nastavení spínače varování</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Ve vaší oblasti nejsou žádná aktivní upozornění. Nastavení upozornění můžete změnit prostřednictvím nabídky Nastavení."</string>
+     <string name="menu_preferences">"Nastavení"</string>
+     <string name="menu_delete_all">Odstranit všechna varování</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-kk/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-kk/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-kk/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Төтенше жағдайдағы ескертулер</string>
+     <string name="sms_cb_settings">қосқыш параметрлерін ескертеді</string>
+-    <string name="button_dismiss">OK</string>
++    <string name="button_dismiss">Hide</string>
+     <string name="no_cell_broadcasts">Сіздің аймағыңызда белсенді ескертулер жоқ. Параметрлер мәзірінің опциясын пайдалану арқылы Ескерту параметрлерін өзгертуіңізге болады.</string>
+     <string name="menu_preferences">Параметрлер</string>
+     <string name="menu_delete_all">Барлық ескертулерді жою</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-sk/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-sk/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-sk/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Upozornenia na naliehavé prípady</string>
+     <string name="sms_cb_settings">Nastavenia spínača upozornení</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Vo vašej oblasti nie sú žiadne aktívne upozornenia. Nastavenia Upozornení môžete meniť prostredníctvom ponuky Nastavenia."</string>
+     <string name="menu_preferences">"Nastavenia"</string>
+     <string name="menu_delete_all">Odstrániť všetky upozornenia</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/mtk_string.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/mtk_string.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/mtk_string.xml	(revision 4061)
+@@ -46,4 +46,5 @@
+     <string name="enable_cell_broadcast_title">Alertas de Em</string>
+     <string name="alert_sound_volume">Volumen de sonido de alerta</string>
+     <string name="alert_volume_summary">Aj de vol del sonido</string>
++	<string name="chile_emergency_alert">Alerta de Emergencia</string>
+ </resources>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Alertas de Em</string>
+     <string name="sms_cb_settings">Config del Conm de Alertas</string>
+-    <string name="button_dismiss">"Aceptar"</string>
++    <string name="button_dismiss">"Ocultar"</string>
+     <string name="no_cell_broadcasts">"No hay alertas activas en tu zona. Puedes modificar la configuración de las alertas en el menú Configuración."</string>
+     <string name="menu_preferences">"Configuración"</string>
+     <string name="menu_delete_all">Elim todas alertas</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-da/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-da/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-da/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Nødmeddelelser</string>
+     <string name="sms_cb_settings">Indstillingsknap for advarsler</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Der er ingen aktive advarsler i dit område. Du kan ændre indstillingerne for advarslen ved hjælp af menuen Indstillinger."</string>
+     <string name="menu_preferences">"Indstillinger"</string>
+     <string name="menu_delete_all">Slet alle advarsler</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-de/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-de/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-de/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Notrufe</string>
+     <string name="sms_cb_settings">Alarmwechseleinstellungen</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Es sind keine aktiven Warnungen für Ihre Umgebung vorhanden. Sie können die Einstellungen für Warnmeldungen über die Menüoption \"Einstellungen\" ändern."</string>
+     <string name="menu_preferences">"Einstellungen"</string>
+     <string name="menu_delete_all">Alle Alarme löschen</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-sv/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-sv/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-sv/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Nödmeddelanden</string>
+     <string name="sms_cb_settings">Inställningar för meddelandeinställningar</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Det finns inga aktiva varningar i ditt område. Du kan ändra inställningarna för vilka varningar som visas i menyalternativet Inställningar."</string>
+     <string name="menu_preferences">"Inställningar"</string>
+     <string name="menu_delete_all">Ta bort alla meddelanden</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-en-rGB/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-en-rGB/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-en-rGB/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Emergency alerts</string>
+     <string name="sms_cb_settings">Alert Switch Settings</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"There are no active alerts in your area. You can change the Alert settings using the Settings menu option."</string>
+     <string name="menu_preferences">"Settings"</string>
+     <string name="menu_delete_all">Delete all alerts</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pl/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pl/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pl/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Alerty alarmowe</string>
+     <string name="sms_cb_settings">Ustawienia przełączania alertów</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Nie ma aktywnych alertów w Twojej okolicy. Alerty możesz zmodyfikować w menu Ustawienia."</string>
+     <string name="menu_preferences">"Ustawienia"</string>
+     <string name="menu_delete_all">Usuń wszystkie alerty</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-hu/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-hu/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-hu/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Vészhelyzeti figyelmeztetések</string>
+     <string name="sms_cb_settings">Figyelmeztetések kapcsolási beállításai</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Jelenleg nincsenek aktív értesítések a tartózkodási helyén. A Beállítások menüben módosíthatja az Értesítés beállításait."</string>
+     <string name="menu_preferences">"Beállítások"</string>
+     <string name="menu_delete_all">Minden jelzés törlése</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-tl/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-tl/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-tl/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Mga emerhensiyang alerto</string>
+     <string name="sms_cb_settings">Mga Setting ng Switch ng Alerto</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Walang mga aktibong alerto sa iyong lugar. Mababago mo ang mga setting ng Alerto gamit ang pagpipilian ng menu ng Mga Setting."</string>
+     <string name="menu_preferences">"Mga Setting"</string>
+     <string name="menu_delete_all">Tanggalin lahat ng mga alerto</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pt/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pt/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-pt/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Alertas de emergência</string>
+     <string name="sms_cb_settings">Configurações de Troca de Alertas</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Não há alertas ativos em sua área. É possível alterar as configurações de alerta utilizando a opção do menu \"Configurações\"."</string>
+     <string name="menu_preferences">"Configurações"</string>
+     <string name="menu_delete_all">Excluir todos os alertas</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-af/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-af/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-af/strings.xml	(revision 4061)
+@@ -18,7 +18,7 @@
+     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label" msgid="7559008249836700599">"Seluitsendings"</string>
+     <string name="sms_cb_settings" msgid="971917159442705371">"Seluitsending-instellings"</string>
+-    <string name="button_dismiss" msgid="1234221657930516287">"OK"</string>
++    <string name="button_dismiss" msgid="1234221657930516287">"Hide"</string>
+     <string name="no_cell_broadcasts" msgid="5409324337492758562">"Daar is geen aktiewe berigte in jou area nie. Jy kan die Berigte-instellings verander in die Instellings-kieslysopsie."</string>
+     <string name="menu_preferences" msgid="3596514894131599202">"Instellings"</string>
+     <string name="menu_delete_all" msgid="3940997343921149800">"Vee uitsendings uit"</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-el/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-el/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-el/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Ειδοποιήσεις επείγουσας ανάγκης</string>
+     <string name="sms_cb_settings">Εναλλαγή ρυθμίσεων ειδοποιήσεων </string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Δεν υπάρχουν ενεργές ειδοποιήσεις στην περιοχή σας. Μπορείτε να αλλάξετε τις ρυθμίσεις ειδοποιήσεων χρησιμοποιώντας την επιλογή μενού Ρυθμίσεις."</string>
+     <string name="menu_preferences">"Ρυθμίσεις"</string>
+     <string name="menu_delete_all">Διαγραφή όλων των ειδοποιήσεων</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/mtk_string.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/mtk_string.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/mtk_string.xml	(revision 4061)
+@@ -58,7 +58,7 @@
+     <string name="alert_sound_volume">Alert sound volume</string>
+     <string name="alert_volume_summary">Adjust alert sound volume</string>
+ 	
+-	<string name="chile_emergency_alert">ALERTA DE EMERGENCIA</string>
++	<string name="chile_emergency_alert">Emergency Alert</string>
+     
+ </resources>
+ 
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/strings.xml	(revision 4061)
+@@ -24,7 +24,7 @@
+     <string name="sms_cb_settings">Alerts Switch Settings</string>
+ 
+     <!-- Text for dismiss button in broadcast message view dialog. [CHAR LIMIT=25] -->
+-    <string name="button_dismiss">OK</string>
++    <string name="button_dismiss">Hide</string>
+ 
+     <!-- Text for list view when empty (no broadcasts). [CHAR LIMIT=200] -->
+     <string name="no_cell_broadcasts">There are no active alerts in your area. You can change the Alert settings using the Settings menu option.</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es/mtk_string.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es/mtk_string.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es/mtk_string.xml	(revision 4061)
+@@ -46,4 +46,5 @@
+     <string name="enable_cell_broadcast_title">Alertas de emergencia</string>
+     <string name="alert_sound_volume">Volumen del sonido de alerta</string>
+     <string name="alert_volume_summary">Ajustar el volumen de sonido de alerta</string>
++	<string name="chile_emergency_alert">Alerta de Emergencia</string>
+ </resources>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Alertas de emergencia</string>
+     <string name="sms_cb_settings">Configuración de cambio de alerta</string>
+-    <string name="button_dismiss">"Aceptar"</string>
++    <string name="button_dismiss">"Ocultar"</string>
+     <string name="no_cell_broadcasts">"No hay alertas activas en tu zona. Puedes modificar la configuración de las alertas a través del menú Ajustes."</string>
+     <string name="menu_preferences">"Ajustes"</string>
+     <string name="menu_delete_all">Eliminar todas las alertas</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-de-rAT/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-de-rAT/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-de-rAT/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Notfallwarnungen</string>
+     <string name="sms_cb_settings">Warneinstellungen</string>
+-    <string name="button_dismiss">OK</string>
++    <string name="button_dismiss">Hide</string>
+     <string name="no_cell_broadcasts">In Ihrem Bereich sind keine aktiven Warnungen vorhanden. Sie können die Warneinstellungen im Einstellungsmenü ändern.</string>
+     <string name="menu_preferences">Einstellungen</string>
+     <string name="menu_delete_all">Alle Warnungen löschen</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-it/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-it/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-it/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Avvisi emergenza</string>
+     <string name="sms_cb_settings">Impostazioni cambio avvisi</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Non ci sono avvisi attivi nella tua zona. Puoi modificare le impostazioni degli avvisi utilizzando l\'opzione di menu Impostazioni."</string>
+     <string name="menu_preferences">"Impostazioni"</string>
+     <string name="menu_delete_all">Elimina tutti gli avvisi</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-uk/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-uk/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-uk/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Термінова сигналізація</string>
+     <string name="sms_cb_settings">Налаштування перемикача сигналізації</string>
+-    <string name="button_dismiss">"ОК"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Немає активних сповіщень у вашому районі. Можна змінити налаштування сповіщень за допомогою опції меню Налаштування."</string>
+     <string name="menu_preferences">"Налаштування"</string>
+     <string name="menu_delete_all">Видалити всю сигналізацію</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ms/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ms/strings.xml	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-ms/strings.xml	(revision 4061)
+@@ -13,7 +13,7 @@
+ <resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <string name="app_label">Amaran kecemasan</string>
+     <string name="sms_cb_settings">Tetapan Tukar Amaran</string>
+-    <string name="button_dismiss">"OK"</string>
++    <string name="button_dismiss">"Hide"</string>
+     <string name="no_cell_broadcasts">"Tiada amaran aktif di kawasan anda. Anda boleh menukar tetapan Amaran menggunakan pilihan menu Tetapan."</string>
+     <string name="menu_preferences">"Tetapan"</string>
+     <string name="menu_delete_all">Padam semua amaran</string>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java	(revision 4060)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java	(revision 4061)
+@@ -251,10 +251,11 @@
+                 channel.setSummary(R.string.disable);
+             }
+ 
+-            if (isMtkCmasSupport() && isCmasEmergencyChannel(channelId)) {
++            if (isMtkCmasSupport() && isCmasDefaultChannel(channelId)) {
+                 MmsLog.d(LOG_TAG, "mtk cmas channel disabled");
+                 channel.setEnabled(false);
+                 channel.setSelectable(false);
++				channel.setSummary(R.string.enable);
+                 // skip to set the onclick handler as well
+             } else {
+ 
+@@ -1237,4 +1238,17 @@
+         }
+         return false;
+     }
++	
++	private boolean isCmasDefaultChannel(int channelId) {
++        if ((channelId == 4356) || (channelId == 4355) || (channelId == 4352) || (channelId == 4353) 
++				|| (channelId == 4354) || (channelId == 4370) || (channelId == 4371) || (channelId == 4372)
++				|| (channelId == 4373) || (channelId == 4374) || (channelId == 4375) || (channelId == 4376)
++				|| (channelId == 4377) || (channelId == 4378) || (channelId == 4379) || (channelId == 4383)
++				|| (channelId == 4384) || (channelId == 4385) || (channelId == 4386) || (channelId == 4387)
++				|| (channelId == 4388) || (channelId == 4389) || (channelId == 4390) || (channelId == 4391)
++				|| (channelId == 4392) || (channelId == 919) || (channelId == 921) || (channelId == 4411)) {
++            return true;
++        }
++        return false;
++    }
+ }

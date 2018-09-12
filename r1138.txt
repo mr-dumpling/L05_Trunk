@@ -1,0 +1,1560 @@
+Index: device/mediatek/common/sepolicy/full/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/full/system_app.te	(revision 1137)
++++ device/mediatek/common/sepolicy/full/system_app.te	(revision 1138)
+@@ -159,3 +159,9 @@
+ # Operation : SQC
+ # Purpose : allow AT tool to do aee command
+ allow system_app debuggerd_socket:unix_stream_socket connectto;
++
++# added by yongfeng.zhang for task 3720739 on 2017-01-11 begin
++allow system_app domain:dir { search open read getattr };
++allow system_app domain:{ file lnk_file } { open read getattr };
++# added by yongfeng.zhang for task 3720739 on 2017-01-11 end
++
+Index: frameworks/base/services/appwidget/java/com/android/server/appwidget/AppWidgetServiceImpl.java
+===================================================================
+--- frameworks/base/services/appwidget/java/com/android/server/appwidget/AppWidgetServiceImpl.java	(revision 1137)
++++ frameworks/base/services/appwidget/java/com/android/server/appwidget/AppWidgetServiceImpl.java	(revision 1138)
+@@ -4689,4 +4689,20 @@
+             }
+         }
+     }
++
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    @Override
++    public boolean checkUsedInLauncher(String packageName) {
++        if(mWidgets != null){
++            final int N = mWidgets.size();
++            for (int i = 0; i < N; i++) {
++                Widget widget = mWidgets.get(i);
++                if(packageName.contains(widget.provider.info.provider.getPackageName())){
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
+ }
+Index: frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java	(revision 1137)
++++ frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java	(revision 1138)
+@@ -4231,6 +4231,25 @@
+                 }
+             }
+         }
++		
++		//added by yongfeng.zhang for task 3720739 on 2017-01-11 begin
++        @Override
++        public String getWakelocks() {
++        	if (DEBUG_SPEW) Slog.i(TAG,"getWakelocks ....");
++        	final long ident = Binder.clearCallingIdentity();
++	       	try {
++				String resultTemp = "";
++        		if (mWakeLocks.size() > 0) {
++        			for (WakeLock wl : mWakeLocks) {
++        				resultTemp = resultTemp + wl.toString() + "\n";
++        			};
++        		}
++        		return resultTemp;
++        	}  finally {
++        		Binder.restoreCallingIdentity(ident);
++        	}
++        }
++        //added by yongfeng.zhang for task 3720739 on 2017-01-11 end
+     }
+ 
+     private final class LocalService extends PowerManagerInternal {
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1137)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1138)
+@@ -1480,6 +1480,13 @@
+     }
+ 
+     private void handleLongPressOnHome(int deviceId) {
++		//modified by bing.wang.hz for Task4940849 begin
++        if (SystemProperties.get("persist.sys.powersaver.mode","normal_mode").equals("super_mode") ) {
++            Log.w(TAG, "PW/PhoneWindowManager handleLongPressOnHome supermode ignore");
++            return;
++        }
++        //modified by bing.wang.hz for Task4940849 end
++		
+         if (mLongPressOnHomeBehavior == LONG_PRESS_HOME_NOTHING) {
+             return;
+         }
+@@ -3193,6 +3200,14 @@
+         // timeout.
+         if (keyCode == KeyEvent.KEYCODE_HOME) {
+ 
++			
++			//modified by bing.wang.hz for Task4940849 begin
++            if (SystemProperties.get("persist.sys.powersaver.mode","normal_mode").equals("super_mode") ) {
++                Log.w(TAG, "PW/PhoneWindowManager KEYCODE_HOME supermode ignore");
++                return 0 ;
++            }
++            //modified by bing.wang.hz for Task4940849 end
++			
+             // If we have released the home key, and didn't do anything else
+             // while it was pressed, then it is time to go home!
+             if (!down) {
+@@ -3260,6 +3275,13 @@
+             }
+             return -1;
+         } else if (keyCode == KeyEvent.KEYCODE_MENU) {
++			//modified by bing.wang.hz for Task4940849 begin
++            if (SystemProperties.get("persist.sys.powersaver.mode","normal_mode").equals("super_mode") ) {
++                Log.w(TAG, "PW/PhoneWindowManager KEYCODE_MENU supermode ignore");
++                return 0 ;
++            }
++            //modified by bing.wang.hz for Task4940849 end
++			
+             // Hijack modified menu keys for debugging features
+             final int chordBug = KeyEvent.META_SHIFT_ON;
+ 
+Index: frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java	(revision 1137)
++++ frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java	(revision 1138)
+@@ -15305,7 +15305,7 @@
+                                 null, null, null,
+                                 false, // blockUninstall
+                                 INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED,
+-                                0);
++                                0, mSettings.mRestrictPackages.contains(packageName));//modified by yongfeng.zhang for task 3682193 on 2016-12-28
+                     }
+                 }
+                 /** @} */
+@@ -17111,7 +17111,7 @@
+                             null, null, null,
+                             false, // blockUninstall
+                             INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED,
+-                            0);
++                            0, mSettings.mRestrictPackages.contains(packageName));//modified by yongfeng.zhang for task 3682193 on 2016-12-28
+                 }
+             }
+         } else {
+@@ -17180,7 +17180,7 @@
+                     false /*installed*/, true /*stopped*/, true /*notLaunched*/,
+                     false /*hidden*/, false /*suspended*/, null, null, null,
+                     false /*blockUninstall*/,
+-                    ps.readUserState(nextUserId).domainVerificationStatus, 0);
++                    ps.readUserState(nextUserId).domainVerificationStatus, 0, mSettings.mRestrictPackages.contains(ps.name));//modified by yongfeng.zhang for task 3682193 on 2016-12-28
+         }
+     }
+ 
+@@ -22265,4 +22265,119 @@
+         return fileContents;
+     }
+     /** @}*/
++	
++    ///added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    @Override
++    public boolean setPackageRestrictState(String packageName, boolean restrict, int userId) {
++    	if (!sUserManager.exists(userId))
++    		//This means muti-users swith, packagesetting not create, just return false
++    		return false;
++    	final int uid = Binder.getCallingUid();
++    	final int permission = mContext.checkCallingOrSelfPermission(
++    			android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE);
++    	final boolean allowedByPermission = (permission == PackageManager.PERMISSION_GRANTED);
++    	enforceCrossUserPermission(uid, userId, true, true, "restrict package");
++    	// writer
++    	synchronized (mPackages) {
++    		if (isRestrictedAvailable(packageName) && mSettings.setPackageRestrictStateLPw(
++    				packageName, restrict, allowedByPermission, uid, userId)) {
++    			scheduleWritePackageRestrictionsLocked(userId);
++    			return true;
++    		} else {
++    			return false;
++    		}
++    	}
++    }
++
++    @Override
++    public boolean isRestrictedAvailable(String packageName) {
++    	//FIXME, we need a whitelist to forbid core apps
++    	//maybe we can remove these apps from UI according to whitelist
++    	/*if (packageName.contains("input") || packageName.contains("pinyin") || packageName.contains("home")
++			|| packageName.contains("launcher") || packageName.contains("shell")) {
++    		Log.d(TAG, "Packagename = "+packageName+", inputmethod and launcher app will not set restrict, so just return false");
++    		return false;
++    	}
++    	if (packageName.contains("google") || packageName.contains("vending") || packageName.contains("com.android.chrome") ) {
++    		Log.d(TAG, "Packagename = "+packageName+", GMS app will not set restrict, so just return false");
++    		return false;
++    	}*/
++    	synchronized (mPackages) {
++    		PackageParser.Package p = mPackages.get(packageName);
++    		if (null != p) {
++    			//FIXME, we need a whitelist to forbid core apps
++    			//return p.codePath.contains("/data/app/") || p.codePath.contains("/system/custpack/app/removeable/");
++    			return true;
++    		} else {
++    			return false;
++    		}
++    	}
++    }
++
++    @Override
++    public boolean isPackageRestricted(String packageName, int userId) {
++    	if (!sUserManager.exists(userId))
++    		//This means muti-users swith, packagesetting not create, just return false
++    		return false;
++    	synchronized (mPackages) {
++    		return mSettings.isPackageRestrictedLPr(packageName, userId);
++    	}
++    }
++
++    @Override
++    public void setPackageAliveState(String packageName, String procName, boolean alive, int userId) {
++    	if (!sUserManager.exists(userId)) return;
++    	final int uid = Binder.getCallingUid();
++    	final int permission = mContext.checkCallingOrSelfPermission(
++    			android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE);
++    	final boolean allowedByPermission = (permission == PackageManager.PERMISSION_GRANTED);
++    	enforceCrossUserPermission(uid, userId, true, true, "restrict package");
++    	// writer
++    	synchronized (mPackages) {
++    		mSettings.setPackageAliveState(packageName, procName, alive, allowedByPermission, uid, userId);
++    	}
++    }
++
++    @Override
++    public boolean isPackageAlive(String packageName, int userId) {
++    	if (!sUserManager.exists(userId))
++    		//This means muti-users swith, packagesetting not create, just return false
++    		return false;
++    	synchronized (mPackages) {
++    		return mSettings.isPackageAlive(packageName, userId);
++    	}
++    }
++
++    @Override
++    public boolean isPackageTempRestricted(String packageName, int userId) {
++        if (!sUserManager.exists(userId))
++            //This means muti-users swith, packagesetting not create, just return false
++            return false;
++        synchronized (mPackages) {
++            return mSettings.isPackageTempRestrictedLPr(packageName, userId);
++        }
++    }
++
++    @Override
++    public boolean setPackageTempRestrictState(String packageName, int userId) {
++        if (!sUserManager.exists(userId))
++            //This means muti-users swith, packagesetting not create, just return false
++            return false;
++        final int uid = Binder.getCallingUid();
++        final int permission = mContext.checkCallingOrSelfPermission(
++                android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE);
++        final boolean allowedByPermission = (permission == PackageManager.PERMISSION_GRANTED);
++        enforceCrossUserPermission(uid, userId, true, true, "restrict package");
++        // writer
++        synchronized (mPackages) {
++            if (isRestrictedAvailable(packageName) && mSettings.setPackageTempRestrictStateLPw(
++                    packageName, allowedByPermission, uid, userId)) {
++                scheduleWritePackageRestrictionsLocked(userId);
++                return true;
++            } else {
++                return false;
++            }
++        }
++    }
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
+ }
+Index: frameworks/base/services/core/java/com/android/server/pm/PackageSettingBase.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/pm/PackageSettingBase.java	(revision 1137)
++++ frameworks/base/services/core/java/com/android/server/pm/PackageSettingBase.java	(revision 1138)
+@@ -37,6 +37,8 @@
+ import java.util.List;
+ import java.util.Set;
+ 
++import java.util.HashSet;//added by yongfeng.zhang for task 3682193 on 2016-12-28	
++
+ /**
+  * Settings base class for pending and resolved classes.
+  */
+@@ -399,7 +401,7 @@
+             boolean notLaunched, boolean hidden, boolean suspended,
+             String lastDisableAppCaller, ArraySet<String> enabledComponents,
+             ArraySet<String> disabledComponents, boolean blockUninstall, int domainVerifState,
+-            int linkGeneration) {
++            int linkGeneration, boolean restricted) {//modified by yongfeng.zhang for task 3682193 on 2016-12-28
+         PackageUserState state = modifyUserState(userId);
+         state.ceDataInode = ceDataInode;
+         state.enabled = enabled;
+@@ -414,6 +416,7 @@
+         state.blockUninstall = blockUninstall;
+         state.domainVerificationStatus = domainVerifState;
+         state.appLinkGeneration = linkGeneration;
++        state.restricted = restricted;//added by yongfeng.zhang for task 3682193 on 2016-12-28
+     }
+ 
+     ArraySet<String> getEnabledComponents(int userId) {
+@@ -533,4 +536,43 @@
+         modifyUserState(userId).domainVerificationStatus =
+                 PackageManager.INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED;
+     }
++
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    void setRestrict(boolean restrict, int userId) {
++    	modifyUserState(userId).restricted = restrict;
++    }
++
++    boolean getRestrict(int userId) {
++    	return readUserState(userId).restricted;
++    }
++
++    boolean getTempRestrict(int userId) {
++        return readUserState(userId).tempRestricted;
++    }
++
++    void setTempRestrict(boolean tempRestrict, int userId) {
++        modifyUserState(userId).tempRestricted = tempRestrict;
++    }
++
++    void setAlive(String procName, boolean alive, int userId) {
++    	if (readUserState(userId).aliveProcesses == null) {
++    		modifyUserState(userId).aliveProcesses = new HashSet<String>();
++    	}
++    	if (alive) {
++    		modifyUserState(userId).aliveProcesses.add(procName);
++    	} else {
++    		modifyUserState(userId).aliveProcesses.remove(procName);
++    	}
++    }
++
++    boolean isAlive(String procName, int userId) {
++    	return readUserState(userId).aliveProcesses != null &&
++    			readUserState(userId).aliveProcesses.contains(procName);
++    }
++
++    boolean isAlive(int userId) {
++    	return readUserState(userId).aliveProcesses != null &&
++    			!readUserState(userId).aliveProcesses.isEmpty();
++    }
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
+ }
+Index: frameworks/base/services/core/java/com/android/server/pm/Settings.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/pm/Settings.java	(revision 1137)
++++ frameworks/base/services/core/java/com/android/server/pm/Settings.java	(revision 1138)
+@@ -402,6 +402,12 @@
+ 
+     public final KeySetManagerService mKeySetManagerService = new KeySetManagerService(mPackages);
+ 
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    private static final boolean DEBUG_RESTRICT = false;
++    private static final String ATTR_RESTRICTED = "restricted";
++    final ArrayList<String> mRestrictPackages = new ArrayList<String>();
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
++
+     Settings(Object lock) {
+         this(Environment.getDataDirectory(), lock);
+     }
+@@ -428,8 +434,207 @@
+         // Deprecated: Needed for migration
+         mStoppedPackagesFilename = new File(mSystemDir, "packages-stopped.xml");
+         mBackupStoppedPackagesFilename = new File(mSystemDir, "packages-stopped-backup.xml");
++        initializeRestrictionConf();//added by yongfeng.zhang for task 3682193 on 2016-12-28
+     }
+ 
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    private void initializeRestrictionConf() {
++    	mRestrictPackages.clear();
++    	File restrictionConfFile = getRestrictionsConfigFile();
++    	if (!restrictionConfFile.exists()) {
++    		Slog.d(PackageManagerService.TAG, "no restriction config found!");
++    		return;
++    	}
++    	FileInputStream str = null;
++    	try {
++    		str = new FileInputStream(restrictionConfFile);
++    		XmlPullParser parser = Xml.newPullParser();
++    		parser.setInput(str, null);
++    		
++    		int type;
++    		while ((type = parser.next()) != XmlPullParser.START_TAG &&
++    				type != XmlPullParser.END_DOCUMENT) {
++    			
++    		}
++    		if (type != XmlPullParser.START_TAG) {
++    			mReadMessages.append("No start tag found in "+ restrictionConfFile.getPath() + " file\n");
++    			PackageManagerService.reportSettingsProblem(Log.WARN,
++    					"No start tag found in " + restrictionConfFile.getPath());
++    			Log.wtf(PackageManagerService.TAG,
++    					"No start tag found in " + restrictionConfFile.getPath());
++    			return;
++    		}
++    		
++    		int outerDepth = parser.getDepth();
++    		while ((type = parser.next()) != XmlPullParser.END_DOCUMENT &&
++    				(type != XmlPullParser.END_TAG || parser.getDepth() > outerDepth)) {
++    			if (type == XmlPullParser.END_TAG || type == XmlPullParser.TEXT) {
++    				continue;
++    			}
++    			
++    			String tagName = parser.getName();
++    			if (tagName.equals(TAG_PACKAGE)) {
++    				readRestrictionConfgLPw(parser);
++    			}
++    		}
++    		
++    		if (DEBUG_RESTRICT) {
++    			Slog.i(TAG, "restriction config: " + mRestrictPackages);
++    		}
++    	} catch (XmlPullParserException e) {
++    		mReadMessages.append("Error reading: " + e.toString());
++    		PackageManagerService.reportSettingsProblem(Log.ERROR,
++    				"Error reading settings: " + e);
++    		Log.wtf(PackageManagerService.TAG, "Error reading " +
++    				restrictionConfFile.getPath(), e);
++    	} catch (java.io.IOException e) {
++    		mReadMessages.append("Error reading: " + e.toString());
++    		PackageManagerService.reportSettingsProblem(Log.ERROR,
++    				"Error reading settings: " + e);
++    		Log.wtf(PackageManagerService.TAG, "Error reading" +
++    				restrictionConfFile.getPath(), e);
++    	} finally {
++    		if (str != null) {
++    			try {
++    				str.close();
++    			} catch (Exception e) {
++    				
++    			}
++    		}
++    	}
++    }
++
++    private File getRestrictionsConfigFile() {
++    	return new File(Environment.getRootDirectory(), "etc/restrictions-conf.xml");
++    }
++
++    private void readRestrictionConfgLPw(XmlPullParser parser)
++    		throws XmlPullParserException, IOException {
++    	String packageName = parser.getAttributeValue(null, ATTR_NAME);
++    	if (packageName == null) {
++    		Slog.w(PackageManagerService.TAG, "No package known for restriction config package: " + packageName);
++    	} else {
++    		mRestrictPackages.add(packageName);
++    	}
++    }
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
++	
++	//added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    boolean setPackageRestrictStateLPw(String packageName, boolean restrict,
++    		boolean allowedByPermission, int uid, int userId) {
++    	int appId = UserHandle.getAppId(uid);
++    	final PackageSetting pkgSetting = mPackages.get(packageName);
++    	if (pkgSetting == null) {
++    		throw new IllegalArgumentException("Unknown package: " + packageName);
++    	}
++    	if (!allowedByPermission && (appId != pkgSetting.appId)) {
++    		 throw new SecurityException(
++    				 "Permission Denial: attempt to change restrict state from pid=" +
++    						 Binder.getCallingPid() +
++    						 ", uid=" + uid + ", package uid=" + pkgSetting.appId);
++    	}
++    	if (pkgSetting.getRestrict(userId) != restrict) {
++    		if (DEBUG_RESTRICT) {
++    			RuntimeException e = new RuntimeException("here");
++    			e.fillInStackTrace();
++    			Slog.i(TAG, "restricting package " + packageName + ": " + restrict, e);
++    		}
++    		pkgSetting.setRestrict(restrict, userId);
++    		return true;
++    	}
++    	return false;
++    }
++
++    boolean isPackageRestrictedLPr(String packageName, int userId) {
++    	final PackageSetting pkgSetting = mPackages.get(packageName);
++    	if (pkgSetting == null) {
++    		return false;
++    	}
++    	return pkgSetting.getRestrict(userId);
++    }
++    
++    boolean setPackageAliveState(String packageName, String procName, boolean alive,
++    		boolean allowedByPermission, int uid, int userId) {
++    	int appId = UserHandle.getAppId(uid);
++    	final PackageSetting pkgSetting = mPackages.get(packageName);
++    	if (pkgSetting == null) {
++    		//this means this app already uninstalled, no need update app status, just return.
++    		Slog.w(TAG, packageName + " was already removed. " );
++    		return false;
++    	}
++    	if (!allowedByPermission && (appId != pkgSetting.appId)) {
++    		throw new SecurityException(
++    				"Permission Denial: attempt to change alive state from pid=" +
++    						Binder.getCallingPid() +
++    						", uid=" + uid + ", package uid=" + pkgSetting.appId);
++    	}
++    	if (pkgSetting.isAlive(procName, userId) != alive) {
++    		if (DEBUG_RESTRICT) {
++    			RuntimeException e = new RuntimeException("here");
++    			e.fillInStackTrace();
++    			String processes = String.valueOf(pkgSetting.readUserState(userId).aliveProcesses);
++    			Slog.i(TAG, packageName + " alive state changed: " + processes, e);
++    		}
++    		pkgSetting.setAlive(procName, alive, userId);
++    		if(alive) {
++                pkgSetting.setTempRestrict(false, userId);
++            }
++    		return true;
++    	}
++    	return false;
++    }
++
++    boolean isPackageAlive(String packageName, int userId) {
++    	final PackageSetting pkgSetting = mPackages.get(packageName);
++    	if (DEBUG_RESTRICT) {
++    		RuntimeException e = new RuntimeException("here");
++    		e.fillInStackTrace();
++    		String processes = null;
++    		if (pkgSetting != null) {
++    			processes = String.valueOf(pkgSetting.readUserState(userId).aliveProcesses);
++    		}
++    		Slog.i(TAG, packageName + " alive? " + processes, e);
++    	}
++    	if (pkgSetting == null) {
++    		return false;
++    	}
++    	return pkgSetting.isAlive(userId);
++    }
++
++    boolean setPackageTempRestrictStateLPw(String packageName,
++    		boolean allowedByPermission, int uid, int userId) {
++    	int appId = UserHandle.getAppId(uid);
++        final PackageSetting pkgSetting = mPackages.get(packageName);
++        if (pkgSetting == null) {
++            throw new IllegalArgumentException("Unknown package: " + packageName);
++        }
++        if (!allowedByPermission && (appId != pkgSetting.appId)) {
++            throw new SecurityException(
++                    "Permission Denial: attempt to change restrict state from pid="
++                    + Binder.getCallingPid()
++                    + ", uid=" + uid + ", package uid=" + pkgSetting.appId);
++        }
++        if (pkgSetting.getTempRestrict(userId) != true) {
++            if (DEBUG_RESTRICT) {
++                RuntimeException e = new RuntimeException("here");
++                e.fillInStackTrace();
++                Slog.i(TAG, "temp-restricting package " + packageName + ": " + true, e);
++            }
++            pkgSetting.setTempRestrict(true, userId);
++            return true;
++        }
++        return false;
++    }
++
++    boolean isPackageTempRestrictedLPr(String packageName, int userId) {
++        final PackageSetting pkgSetting = mPackages.get(packageName);
++        if (pkgSetting == null) {
++            return false;
++        }
++        return pkgSetting.getTempRestrict(userId);
++    }
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
++
+     /// M: [FlagExt] Add flagsEx
+     PackageSetting getPackageLPw(PackageParser.Package pkg, PackageSetting origPackage,
+             String realName, SharedUserSetting sharedUser, File codePath, File resourcePath,
+@@ -823,7 +1028,7 @@
+                                     false, // suspended
+                                     null, null, null,
+                                     false, // blockUninstall
+-                                    INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED, 0);
++                                    INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED, 0, mRestrictPackages.contains(name));//modified by yongfeng.zhang for task 3682193 on 2016-12-28
+                             writePackageRestrictionsLPr(user.id);
+                         }
+                     }
+@@ -1629,7 +1834,7 @@
+                                 false,  // suspended
+                                 null, null, null,
+                                 false, // blockUninstall
+-                                INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED, 0);
++                                INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED, 0, mRestrictPackages.contains(pkg.name));//modified by yongfeng.zhang for task 3682193 on 2016-12-28
+                     }
+                     return;
+                 }
+@@ -1710,6 +1915,12 @@
+                         maxAppLinkGeneration = linkGeneration;
+                     }
+ 
++                    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++                    final String restrictedStr = parser.getAttributeValue(null, ATTR_RESTRICTED);
++                    final boolean restricted = restrictedStr == null ?
++                    		false : Boolean.parseBoolean(restrictedStr);
++                    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
++
+                     ArraySet<String> enabledComponents = null;
+                     ArraySet<String> disabledComponents = null;
+ 
+@@ -1731,7 +1942,7 @@
+ 
+                     ps.setUserState(userId, ceDataInode, enabled, installed, stopped, notLaunched,
+                             hidden, suspended, enabledCaller, enabledComponents, disabledComponents,
+-                            blockUninstall, verifState, linkGeneration);
++                            blockUninstall, verifState, linkGeneration, restricted);//modified by yongfeng.zhang for task 3682193 on 2016-12-28
+                 } else if (tagName.equals("preferred-activities")) {
+                     readPreferredActivitiesLPw(parser, userId);
+                 } else if (tagName.equals(TAG_PERSISTENT_PREFERRED_ACTIVITIES)) {
+@@ -2041,6 +2252,11 @@
+                     }
+                     serializer.endTag(null, TAG_DISABLED_COMPONENTS);
+                 }
++                //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++                if (ustate.restricted) {
++                	serializer.attribute(null, ATTR_RESTRICTED, "true");
++                }
++                //added by yongfeng.zhang for task 3682193 on 2016-12-28 end    
+ 
+                 serializer.endTag(null, TAG_PACKAGE);
+             }
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 1137)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 1138)
+@@ -425,6 +425,8 @@
+ /// M: BMW
+ import com.mediatek.multiwindow.MultiWindowManager;
+ 
++import com.android.internal.appwidget.IAppWidgetService;//added by yongfeng.zhang for task 3682193 on 2016-12-28
++
+ public final class ActivityManagerService extends ActivityManagerNative
+         implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback {
+ 
+@@ -644,6 +646,12 @@
+ 
+     BroadcastStats mLastBroadcastStats;
+     BroadcastStats mCurBroadcastStats;
++	
++	//added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    static final long AUTO_CLEAN_TIME_LIMIT = 20*60*1000;
++    static final long AUTO_CLEAN_TIME_MIN_DURATION = 120*1000;
++    private long lastAutoClean = 0;
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
+ 
+     BroadcastQueue broadcastQueueForIntent(Intent intent) {
+         final boolean isFg = (intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) != 0;
+@@ -12122,7 +12130,7 @@
+                 final List<ApplicationInfo> apps = AppGlobals.getPackageManager()
+                         .getPersistentApplications(STOCK_PM_FLAGS | matchFlags).getList();
+                 for (ApplicationInfo app : apps) {
+-                    if (!"android".equals(app.packageName)) {
++                    if (!"android".equals(app.packageName) && validNewProc(app.packageName, UserHandle.getUserId(app.uid))) {//modified by yongfeng.zhang for task 3682193 on 2016-12-28
+                         addAppLocked(app, false, null /* ABI override */);
+                     }
+                 }
+@@ -24510,5 +24518,138 @@
+     /// M: [process suppression] @}
+ 
+     /// M: Mediatek added functions end
++	
++	//added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    public final boolean validNewProc(String packageName, int userId) {
++    	try {
++    		 boolean restrict = AppGlobals.getPackageManager().isPackageRestricted(packageName, userId);
++    		 boolean alive = AppGlobals.getPackageManager().isPackageAlive(packageName, userId);
++    		 boolean tempRestrict = AppGlobals.getPackageManager().isPackageTempRestricted(packageName, userId);
++    		 
++    		 boolean defalutInputMethod = false;
++             if(mBootAnimationComplete){
++                 String currentInput = android.provider.Settings.Secure.getString(
++                     mContext.getContentResolver(),
++                     android.provider.Settings.Secure.DEFAULT_INPUT_METHOD);
++                 if(currentInput != null && currentInput.contains(packageName)){
++                     defalutInputMethod = true;
++                 }
++             }
++             
++    		 IBinder binder = ServiceManager.getService(Context.APPWIDGET_SERVICE);
++             IAppWidgetService appWidgetService = IAppWidgetService.Stub.asInterface(binder);
++             boolean useInLauncher = false;
++             try {
++                 if(appWidgetService != null){
++                     useInLauncher = appWidgetService.checkUsedInLauncher(packageName);
++                 }
++             } catch (Exception e) {
++                 e.printStackTrace();
++             }
++             
++    		 return alive || !(restrict || tempRestrict) || defalutInputMethod || useInLauncher;
++    	} catch (RemoteException e) {
++    		Slog.d(TAG, "failed to get restrict state of " + packageName, e);
++    	}
++    	return true;
++    }
+ 
++    @Override
++    public void cleanBackgroundProcesses() {
++    	long callingId = Binder.clearCallingIdentity();
++        try {
++			synchronized (this) {
++				long now = SystemClock.uptimeMillis();
++				if (now - lastAutoClean < AUTO_CLEAN_TIME_MIN_DURATION) {
++					return;
++				}
++				lastAutoClean = now;
++				ArrayList<ProcessRecord> cleanList = null;
++				cleanList = getNeedCleanAppProcesses();
++				for (int i = 0; i < cleanList.size(); i++) {
++					ProcessRecord cleanApp = cleanList.get(i);
++					//removeProcessLocked(cleanApp, false, false, "auto kill");
++					forceStopPackageLocked(cleanApp.info.packageName, cleanApp.uid, "auto kill");
++				}
++				updateOomAdjLocked();
++			}
++		} finally {
++            Binder.restoreCallingIdentity(callingId);
++        }
++    }
++
++    private ArrayList<ProcessRecord> getNeedCleanAppProcesses() {
++        enforceNotIsolatedCaller("getNeedCleanAppProcesses");
++
++        final int callingUid = Binder.getCallingUid();
++
++        // Lazy instantiation of list
++        ArrayList<ProcessRecord> cleanList = new ArrayList<>();
++        
++        final boolean allUsers = ActivityManager.checkUidPermission(INTERACT_ACROSS_USERS_FULL,
++                callingUid) == PackageManager.PERMISSION_GRANTED;
++        final int userId = UserHandle.getUserId(callingUid);
++        final boolean allUids = isGetTasksAllowed(
++                "getNeedCleanAppProcesses", Binder.getCallingPid(), callingUid);
++        long now = SystemClock.uptimeMillis();
++        
++        synchronized (this) {
++            // Iterate across all processes
++            for (int i = mLruProcesses.size() - 1; i >= 0; i--) {
++                ProcessRecord app = mLruProcesses.get(i);
++                if ((!allUsers && app.userId != userId)
++                        || (!allUids && app.uid != callingUid)) {
++                    continue;
++                }
++                if ((app.thread != null) && (!app.crashing && !app.notResponding)) {
++                	// Generate process state info for running application
++                    if((app.info.flags & ApplicationInfo.FLAG_SYSTEM) == 0){
++                        if(!app.persistent && !app.foregroundServices && !app.foregroundActivities){
++                            try {
++                                if(!AppGlobals.getPackageManager().isPackageRestricted(app.info.packageName,userId)){
++                                    continue;
++                                }
++                            } catch (RemoteException e) {
++                                Slog.d(TAG, "failed to get restrict state of " , e);
++                            }
++                            
++                            if(now - app.lastActivityTime > AUTO_CLEAN_TIME_LIMIT){
++                            	if(app.serviceb){
++                            		cleanList.add(app);
++                            	}
++                            }
++                        }
++                    }
++                }
++            }
++        }
++        return cleanList;
++    }
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++	
++	//added by yongfeng.zhang for task 3720739 on 2017-01-11 begin
++    @Override
++    public boolean isBackgroundProcesses(String packageName) {
++    	long callingId = Binder.clearCallingIdentity();
++    	try {
++    		synchronized (this) {
++    			// Iterate across all processes
++    			for (int i = mLruProcesses.size() - 1; i >= 0; i--) {
++    				ProcessRecord app = mLruProcesses.get(i);
++    				if (app.processName.equalsIgnoreCase(packageName)) {
++    					if ((app.info.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
++    						if (!app.persistent && !app.foregroundServices && !app.foregroundActivities) {
++    							return true;
++    						}
++    					}
++    				}
++    			}
++			}
++    		return false;
++    	} finally {
++    		Binder.restoreCallingIdentity(callingId);
++    	}
++    }
++    //added by yongfeng.zhang for task 3720739 on 2017-01-11 end
++
+ }
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityStack.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityStack.java	(revision 1137)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityStack.java	(revision 1138)
+@@ -5316,7 +5316,13 @@
+                     Slog.i(TAG, "  Force finishing activity " + r);
+                     if (sameComponent) {
+                         if (r.app != null) {
+-                            r.app.removed = true;
++                            //modified by bing.wang.hz for Task4940849 begin
++                            if (r.finishing && r.realActivity != null && r.realActivity.getClassName().equalsIgnoreCase("com.tct.onetouchbooster.module.battery.activity.SuperModeActivity")) {
++                                Slog.w(TAG, "PW/SuperMode for system path r.app.removed not set to true r.realActivity = " + r.realActivity.getClassName());
++                            } else {
++                                r.app.removed = true;
++                            }
++                            //modified by bing.wang.hz for Task4940849 end
+                         }
+                         r.app = null;
+                     }
+Index: frameworks/base/services/core/java/com/android/server/am/BroadcastQueue.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/BroadcastQueue.java	(revision 1137)
++++ frameworks/base/services/core/java/com/android/server/am/BroadcastQueue.java	(revision 1138)
+@@ -1350,6 +1350,19 @@
+                     }
+                 }
+             }
++            //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++            if (!skip) {
++            	if (!mService.validNewProc(info.activityInfo.packageName,
++            			UserHandle.getUserId(info.activityInfo.applicationInfo.uid))) {
++            		if (DEBUG_BROADCAST) {
++            			Slog.v(TAG, "Skipping delivery to " + info.activityInfo.packageName +
++            					" / " + info.activityInfo.applicationInfo.uid +
++            					" : package is restricted");
++            		}
++            		skip = true;
++            	}
++            }
++            //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
+ 
+             /// M: AMEventHook event @{
+             if ("1".equals(SystemProperties.get("persist.duraspeed.support"))) {
+Index: frameworks/base/services/core/java/com/android/server/am/ActiveServices.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActiveServices.java	(revision 1137)
++++ frameworks/base/services/core/java/com/android/server/am/ActiveServices.java	(revision 1138)
+@@ -1879,6 +1879,17 @@
+             bringDownServiceLocked(r);
+             return msg;
+         }
++        //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++        if (!mAm.validNewProc(r.packageName, r.userId)) {
++        	String msg = "Unable to launch app " +
++        			r.appInfo.packageName + "/" +
++        			r.appInfo.uid + " for service " +
++        			r.intent.getIntent() + ": " + r.packageName + " is restricted";
++        	Slog.w(TAG, msg);
++        	bringDownServiceLocked(r);
++        	return msg;
++        }
++        //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
+ 
+         // Service is now being launched, its package can't be stopped.
+         try {
+Index: frameworks/base/services
+===================================================================
+--- frameworks/base/services	(revision 1137)
++++ frameworks/base/services	(revision 1138)
+
+Property changes on: frameworks/base/services
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/services:r827
+Index: frameworks/base/core/java/com/android/internal/appwidget/IAppWidgetService.aidl
+===================================================================
+--- frameworks/base/core/java/com/android/internal/appwidget/IAppWidgetService.aidl	(revision 1137)
++++ frameworks/base/core/java/com/android/internal/appwidget/IAppWidgetService.aidl	(revision 1138)
+@@ -68,5 +68,6 @@
+     int[] getAppWidgetIds(in ComponentName providerComponent);
+     boolean isBoundWidgetPackage(String packageName, int userId);
+     List<ComponentName> getAppWidgetOfHost(String pkg, int uid);
++    boolean checkUsedInLauncher(String packageName);//added by yongfeng.zhang for task 3682193 on 2016-12-28
+ }
+ 
+Index: frameworks/base/core/java/android/content/pm/PackageManager.java
+===================================================================
+--- frameworks/base/core/java/android/content/pm/PackageManager.java	(revision 1137)
++++ frameworks/base/core/java/android/content/pm/PackageManager.java	(revision 1138)
+@@ -5853,4 +5853,21 @@
+             }
+         }
+     }
++	
++	//added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++	/** {@hide} */
++	public abstract boolean setPackageRestrictState(String packageName, boolean restrict);
++
++	/** {@hide} */
++	public abstract boolean isRestrictedAvailable(String packageName);
++
++	/** {@hide} */
++	public abstract boolean isPackageRestricted(String packageName);
++
++	/** {@hide} */
++    public abstract boolean isPackageTempRestricted(String packageName);
++
++    /** {@hide} */
++    public abstract boolean setPackageTempRestrictState(String packageName);
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
+ }
+Index: frameworks/base/core/java/android/content/pm/IPackageManager.aidl
+===================================================================
+--- frameworks/base/core/java/android/content/pm/IPackageManager.aidl	(revision 1137)
++++ frameworks/base/core/java/android/content/pm/IPackageManager.aidl	(revision 1138)
+@@ -585,4 +585,14 @@
+     List<String> getPermRecordPerms(String packageName);
+     PermissionRecords getPermRecords(String packageName, String permName);
+     ///@}
++
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    boolean setPackageRestrictState(String packageName, boolean restrict, int userId);
++    boolean isRestrictedAvailable(String packageName);
++    boolean isPackageRestricted(String packageName, int userId);
++    void setPackageAliveState(String packageName, String procName, boolean alive, int userId);
++    boolean isPackageAlive(String packageName, int userId);
++    boolean isPackageTempRestricted(String packageName, int userId);
++    boolean setPackageTempRestrictState(String packageName, int userId);
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
+ }
+Index: frameworks/base/core/java/android/content/pm/PackageUserState.java
+===================================================================
+--- frameworks/base/core/java/android/content/pm/PackageUserState.java	(revision 1137)
++++ frameworks/base/core/java/android/content/pm/PackageUserState.java	(revision 1138)
+@@ -31,6 +31,8 @@
+ 
+ import com.android.internal.util.ArrayUtils;
+ 
++import java.util.HashSet;//added by yongfeng.zhang for task 3682193 on 2016-12-28
++
+ /**
+  * Per-user state information about a package.
+  * @hide
+@@ -51,6 +53,12 @@
+     public ArraySet<String> disabledComponents;
+     public ArraySet<String> enabledComponents;
+ 
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++	public boolean restricted;
++	public HashSet<String> aliveProcesses;
++	public boolean tempRestricted;
++	//added by yongfeng.zhang for task 3682193 on 2016-12-28 end
++
+     public PackageUserState() {
+         installed = true;
+         hidden = false;
+@@ -74,6 +82,12 @@
+         appLinkGeneration = o.appLinkGeneration;
+         disabledComponents = ArrayUtils.cloneOrNull(o.disabledComponents);
+         enabledComponents = ArrayUtils.cloneOrNull(o.enabledComponents);
++        //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    	restricted = o.restricted;
++    	aliveProcesses = o.aliveProcesses != null ?
++    			new HashSet<String>(o.aliveProcesses) : null;
++    	tempRestricted = o.tempRestricted;
++    	//added by yongfeng.zhang for task 3682193 on 2016-12-28 end
+     }
+ 
+     /**
+Index: frameworks/base/core/java/android/os/PowerManager.java
+===================================================================
+--- frameworks/base/core/java/android/os/PowerManager.java	(revision 1137)
++++ frameworks/base/core/java/android/os/PowerManager.java	(revision 1138)
+@@ -1485,6 +1485,18 @@
+                     release();
+                 }
+             };
++    }
++
++    /**
++     * added by yongfeng.zhang for task 3720739 on 2017-01-11
++     * @hide
++     */
++    public String getWakelocks() {
++    	try {
++    		return mService.getWakelocks();
++    	} catch (RemoteException e) {
++    		return "";
++    	}
+         }
+     }
+ 
+Index: frameworks/base/core/java/android/os/IPowerManager.aidl
+===================================================================
+--- frameworks/base/core/java/android/os/IPowerManager.aidl	(revision 1137)
++++ frameworks/base/core/java/android/os/IPowerManager.aidl	(revision 1138)
+@@ -71,4 +71,7 @@
+ 
+     // sets the attention light (used by phone app only)
+     void setAttentionLight(boolean on, int color);
++
++    //added by yongfeng.zhang for task 3720739 on 2017-01-11
++    String getWakelocks();
+ }
+Index: frameworks/base/core/java/android/app/ActivityManager.java
+===================================================================
+--- frameworks/base/core/java/android/app/ActivityManager.java	(revision 1137)
++++ frameworks/base/core/java/android/app/ActivityManager.java	(revision 1138)
+@@ -3813,4 +3813,26 @@
+     /// M: App-based AAL @}
+ 
+     /// M: Mediatek added APIs end
++    
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    /** @hide */
++    public void cleanBackgroundProcesses() throws SecurityException {
++        try {
++            ActivityManagerNative.getDefault().cleanBackgroundProcesses();
++        } catch (RemoteException e) {
++            // System dead, we will be dead too soon!
++        }
++    }
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
++	
++	//added by yongfeng.zhang for task 3720739 on 2017-01-11 begin
++    /** @hide */
++    public boolean isBackgroundProcesses(String packageName) throws SecurityException {
++    	try {
++    		return ActivityManagerNative.getDefault().isBackgroundProcesses(packageName);
++    	} catch (RemoteException e) {
++    		return false;
++    	}
++    }
++    //added by yongfeng.zhang for task 3720739 on 2017-01-11 end
+ }
+Index: frameworks/base/core/java/android/app/ActivityManagerNative.java
+===================================================================
+--- frameworks/base/core/java/android/app/ActivityManagerNative.java	(revision 1137)
++++ frameworks/base/core/java/android/app/ActivityManagerNative.java	(revision 1138)
+@@ -3158,7 +3158,27 @@
+         /// M: App-based AAL @}
+ 
+         /// M: End of Mediatek transactions
++        
++        //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++        case CLEAN_BACKGROUND_PROCESS_TRANSACTION: {
++            data.enforceInterface(IActivityManager.descriptor);
++            cleanBackgroundProcesses();
++            reply.writeNoException();
++            return true;
+         }
++        //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
++		
++		//added by yongfeng.zhang for task 3720739 on 2017-01-11 begin
++        case IS_BACKGROUND_PROCESS_TRANSACTION: {
++        	data.enforceInterface(IActivityManager.descriptor);
++        	String pkgname = data.readString();
++        	boolean res = isBackgroundProcesses(pkgname);
++        	reply.writeNoException();
++        	reply.writeInt(res ? 1 : 0);
++        	return true;
++        }
++        //added by yongfeng.zhang for task 3720739 on 2017-01-11 end
++        }
+ 
+         return super.onTransact(code, data, reply, flags);
+     }
+@@ -7441,5 +7461,34 @@
+ 
+     /// M: Mediatek added APIs end
+ 
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    @Override
++    public void cleanBackgroundProcesses() throws RemoteException {
++        Parcel data = Parcel.obtain();
++        Parcel reply = Parcel.obtain();
++        data.writeInterfaceToken(IActivityManager.descriptor);
++        mRemote.transact(CLEAN_BACKGROUND_PROCESS_TRANSACTION, data, reply, 0);
++        reply.readException();
++        data.recycle();
++        reply.recycle();
++    }
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 end
++	
++	//added by yongfeng.zhang for task 3720739 on 2017-01-11 begin
++    @Override
++    public boolean isBackgroundProcesses(String packageName) throws RemoteException {
++    	Parcel data = Parcel.obtain();
++    	Parcel reply = Parcel.obtain();
++    	data.writeInterfaceToken(IActivityManager.descriptor);
++    	data.writeString(packageName);
++    	mRemote.transact(IS_BACKGROUND_PROCESS_TRANSACTION, data, reply, 0);
++    	reply.readException();
++    	int res = reply.readInt();
++    	data.recycle();
++    	reply.recycle();
++		return res != 0;
++    }
++    //added by yongfeng.zhang for task 3720739 on 2017-01-11 end
++
+     private IBinder mRemote;
+ }
+Index: frameworks/base/core/java/android/app/IActivityManager.java
+===================================================================
+--- frameworks/base/core/java/android/app/IActivityManager.java	(revision 1137)
++++ frameworks/base/core/java/android/app/IActivityManager.java	(revision 1138)
+@@ -717,6 +717,8 @@
+     /// M: [process suppression] @{
+     public int readyToGetContentProvider(IApplicationThread caller, String name, int userId)
+             throws RemoteException;
++    public void cleanBackgroundProcesses() throws RemoteException;//added by yongfeng.zhang for task 3682193 on 2016-12-28
++    public boolean isBackgroundProcesses(String packageName) throws RemoteException;//added by yongfeng.zhang for task 3720739 on 2017-01-11
+     /// M: [process suppression] @}
+ 
+     /// M: App-based AAL @{
+@@ -1073,6 +1075,8 @@
+             = IBinder.FIRST_CALL_TRANSACTION+299;
+     int SHOW_ASSIST_FROM_ACTIVITY_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION+300;
+     int IS_ROOT_VOICE_INTERACTION_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION+301;
++    int CLEAN_BACKGROUND_PROCESS_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION+302;//added by yongfeng.zhang for task 3682193 on 2016-12-28
++    int IS_BACKGROUND_PROCESS_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION+303;//added by yongfeng.zhang for task 3720739 on 2017-01-11
+ 
+     // Start of N transactions
+     int START_BINDER_TRACKING_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION + 340;
+Index: frameworks/base/core/java/android/app/ApplicationPackageManager.java
+===================================================================
+--- frameworks/base/core/java/android/app/ApplicationPackageManager.java	(revision 1137)
++++ frameworks/base/core/java/android/app/ApplicationPackageManager.java	(revision 1138)
+@@ -2482,4 +2482,68 @@
+             return false;
+         }
+     }
++		
++	//added by yongfeng.zhang for task 3066059 on 2016-10-13 begin
++	/**
++	 * @hide
++	 */
++	@Override
++	public boolean setPackageRestrictState(String packageName, boolean restrict) {
++		try {
++			return mPM.setPackageRestrictState(packageName, restrict, mContext.getUserId());
++		} catch (RemoteException e) {
++			Log.e(TAG, "Failed to set restrict", e);
++		}
++		return false;
++	}
++
++	/**
++	 * @hide
++	 */
++	@Override
++	public boolean isRestrictedAvailable(String packageName) {
++		try {
++			return mPM.isRestrictedAvailable(packageName);
++		} catch (RemoteException e) {
++			throw new RuntimeException("Package manager has died", e);
++		}
++	}
++
++	/**
++	 * @hide
++	 */
++	@Override
++	public boolean isPackageRestricted(String packageName) {
++		try {
++			return mPM.isPackageRestricted(packageName, mContext.getUserId());
++		} catch (RemoteException e) {
++			throw new RuntimeException("Package manager has died", e);
++		}
++	}
++
++	/**
++	 * @hide
++	 */
++    @Override
++    public boolean isPackageTempRestricted(String packageName) {
++        try {
++            return mPM.isPackageTempRestricted(packageName, mContext.getUserId());
++        } catch (RemoteException e) {
++            throw new RuntimeException("Package manager has died", e);
++        }
++    }
++
++    /**
++     * @hide
++     */
++    @Override
++    public boolean setPackageTempRestrictState(String packageName) {
++        try {
++            return mPM.setPackageTempRestrictState(packageName, mContext.getUserId());
++        } catch (RemoteException e) {
++            Log.e(TAG, "Failed to set restrict", e);
++        }
++        return false;
++    }
++    //added by yongfeng.zhang for task 3066059 on 2016-10-13 end
+ }
+Index: frameworks/base/core/java/android/appwidget/AppWidgetManager.java
+===================================================================
+--- frameworks/base/core/java/android/appwidget/AppWidgetManager.java	(revision 1137)
++++ frameworks/base/core/java/android/appwidget/AppWidgetManager.java	(revision 1138)
+@@ -1104,4 +1104,20 @@
+     private boolean isDuraspeedSupport() {
+         return SystemProperties.get("persist.duraspeed.support").equals("1");
+     }
++    
++    //added by yongfeng.zhang for task 3682193 on 2016-12-28 begin
++    /**
++     * @hide
++     */
++    public boolean checkUsedInLauncher(String packageName) {
++        if (mService == null) {
++            return false;
++        }
++        try {
++            return mService.checkUsedInLauncher(packageName);
++        }
++        catch (RemoteException e) {
++            throw new RuntimeException("system server dead?", e);
++        }
++    }
+ }
+Index: frameworks/base/core
+===================================================================
+--- frameworks/base/core	(revision 1137)
++++ frameworks/base/core	(revision 1138)
+
+Property changes on: frameworks/base/core
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/core:r827
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1137)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1138)
+@@ -4591,9 +4591,44 @@
+         mKeyguardMonitor.notifyKeyguardState(mStatusBarKeyguardViewManager.isShowing(),
+                 mStatusBarKeyguardViewManager.isSecure(),
+                 mStatusBarKeyguardViewManager.isOccluded());
++		//modified by bing.wang.hz for Task4940849 begin
++        if (SUPER_MODE.equals(SystemProperties.get(JRD_POWER_SAVER_MODE))) {
++            updateToDepthMode();
++        }
++        //modified by bing.wang.hz for Task4940849 end
+         Trace.endSection();
+     }
++	
++    //modified by bing.wang.hz for Task4940849 begin
++    public static boolean sInSuperMode = false;
++    private static final String JRD_POWER_SAVER_MODE = "persist.sys.powersaver.mode";
++    private static final String JRD_POWER_SAVER_MODE_CHANGED = "com.tct.powersaver.JRD_POWER_SAVER_MODE_CHANGED";
+ 
++    private static final String SUPER_MODE = "super_mode";
++    private static final String NORMAL_MODE = "normal_mode";
++    private BroadcastReceiver mDepthModeChangeReceiver = new BroadcastReceiver() {
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++            if (JRD_POWER_SAVER_MODE_CHANGED.equals(action)) {
++                sInSuperMode = SUPER_MODE.equals(SystemProperties.get(JRD_POWER_SAVER_MODE));
++                updateQsExpansionEnabled();
++            }
++        }
++    };
++
++    private void updateToDepthMode() {
++        if (mState == StatusBarState.KEYGUARD || mState == StatusBarState.SHADE_LOCKED) {
++            mKeyguardStatusBar.setVisibility(View.INVISIBLE);
++            mKeyguardBottomArea.setVisibility(View.INVISIBLE);
++            mStackScroller.setDark(true, false, mWakeUpTouchLocation);
++            mScrimController.setDozeBehindAlpha(1.0f);
++        } else {
++            mStackScroller.setDark(false, true, mWakeUpTouchLocation);
++            mScrimController.setDozeBehindAlpha(0.0f);
++        }
++     }
++    //modified by bing.wang.hz for Task4940849 end
++
+     private void updateDozingState() {
+         Trace.beginSection("PhoneStatusBar#updateDozingState");
+         boolean animate = !mDozing && mDozeScrimController.isPulsing();
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1137)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1138)
+@@ -344,6 +344,7 @@
+         boolean visible = !isCameraDisabled
+                 && resolved != null
+                 && getResources().getBoolean(R.bool.config_keyguardShowCameraAffordance)
++                && !PhoneStatusBar.sInSuperMode //modified by bing.wang.hz for Task4940849
+                 && mUserSetupComplete;
+         mCameraImageView.setVisibility(visible ? View.VISIBLE : View.GONE);
+     }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/DragDownHelper.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/DragDownHelper.java	(revision 1137)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/DragDownHelper.java	(revision 1138)
+@@ -31,6 +31,8 @@
+ import com.android.systemui.R;
+ import com.android.systemui.classifier.FalsingManager;
+ 
++import com.android.systemui.statusbar.phone.PhoneStatusBar;//modified by bing.wang.hz for Task4940849
++
+ /**
+  * A utility class to enable the downward swipe on the lockscreen to go to the full shade and expand
+  * the notification where the drag started.
+@@ -114,17 +116,21 @@
+                 } else {
+                     mDragDownCallback.setEmptyDragAmount(mLastHeight);
+                 }
+-                if (mLastHeight > mMinDragDistance) {
+-                    if (!mDraggedFarEnough) {
+-                        mDraggedFarEnough = true;
+-                        mDragDownCallback.onCrossedThreshold(true);
++                //modified by bing.wang.hz for Task4940849 begin
++                if (!PhoneStatusBar.sInSuperMode) {
++                    if (mLastHeight > mMinDragDistance) {
++                        if (!mDraggedFarEnough) {
++                            mDraggedFarEnough = true;
++                            mDragDownCallback.onCrossedThreshold(true);
++                        }
++                    } else {
++                        if (mDraggedFarEnough) {
++                            mDraggedFarEnough = false;
++                            mDragDownCallback.onCrossedThreshold(false);
++                        }
+                     }
+-                } else {
+-                    if (mDraggedFarEnough) {
+-                        mDraggedFarEnough = false;
+-                        mDragDownCallback.onCrossedThreshold(false);
+-                    }
+                 }
++				//modified by bing.wang.hz for Task4940849 end
+                 return true;
+             case MotionEvent.ACTION_UP:
+                 if (!isFalseTouch() && mDragDownCallback.onDraggedDown(mStartingChild,
+@@ -169,12 +175,15 @@
+                 ? RUBBERBAND_FACTOR_EXPANDABLE
+                 : RUBBERBAND_FACTOR_STATIC;
+         float rubberband = heightDelta * rubberbandFactor;
+-        if (expandable
+-                && (rubberband + child.getCollapsedHeight()) > child.getMaxContentHeight()) {
+-            float overshoot =
+-                    (rubberband + child.getCollapsedHeight()) - child.getMaxContentHeight();
+-            overshoot *= (1 - RUBBERBAND_FACTOR_STATIC);
+-            rubberband -= overshoot;
++        //modified by bing.wang.hz for Task4940849 begin
++        if (!PhoneStatusBar.sInSuperMode) {
++            if (expandable
++                    && (rubberband + child.getCollapsedHeight()) > child.getMaxContentHeight()) {
++                float overshoot =
++                        (rubberband + child.getCollapsedHeight()) - child.getMaxContentHeight();
++                overshoot *= (1 - RUBBERBAND_FACTOR_STATIC);
++                rubberband -= overshoot;
++            }
+         }
+         child.setActualHeight((int) (child.getCollapsedHeight() + rubberband));
+     }
+Index: frameworks/base/packages/SystemUI
+===================================================================
+--- frameworks/base/packages/SystemUI	(revision 1137)
++++ frameworks/base/packages/SystemUI	(revision 1138)
+
+Property changes on: frameworks/base/packages/SystemUI
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages/SystemUI:r827
+Index: frameworks/base/packages/SettingsLib/src/com/android/settingslib/drawer/TileUtils.java
+===================================================================
+--- frameworks/base/packages/SettingsLib/src/com/android/settingslib/drawer/TileUtils.java	(revision 1137)
++++ frameworks/base/packages/SettingsLib/src/com/android/settingslib/drawer/TileUtils.java	(revision 1138)
+@@ -44,6 +44,9 @@
+ import java.util.List;
+ import java.util.Map;
+ 
++import android.content.ComponentName;
++import com.android.settingslib.R;
++
+ public class TileUtils {
+ 
+     private static final boolean DEBUG = false;
+@@ -161,6 +164,30 @@
+             }
+             category.addTile(tile);
+         }
++		
++		if (isPkgInstalled(context, "com.tct.onetouchbooster")) {
++            Tile boostTile = new Tile();
++            boostTile.title = getActivityLabel(context,
++                    new ComponentName("com.tct.onetouchbooster", "com.tct.onetouchbooster.ui.MainActivity"));
++            //begin add by wenli for 4940849 SmartManager on 2017/07/05
++            StringBuilder stringBuilder = new StringBuilder();
++            stringBuilder.append(context.getString(R.string.module_smart_cleaner_withpg));
++            stringBuilder.append(", ");
++            stringBuilder.append(context.getString(R.string.module_super_speeder_withpg));
++            stringBuilder.append(", ");
++            stringBuilder.append(context.getString(R.string.module_power_saving));
++            boostTile.summary = stringBuilder.toString();
++            //end add by wenli for 4940849 SmartManager on 2017/07/05
++
++            boostTile.intent = new Intent().setClassName(
++                    "com.tct.onetouchbooster", "com.tct.onetouchbooster.ui.MainActivity");
++            boostTile.category = "com.android.settings.category.device";
++            boostTile.priority = 0;
++            boostTile.icon = Icon.createWithResource(context, R.drawable.ic_boost_launcher);
++            DashboardCategory tempCategory = categoryMap.get(boostTile.category);
++            tempCategory.addTile(boostTile);
++        }
++		
+         ArrayList<DashboardCategory> categories = new ArrayList<>(categoryMap.values());
+         for (DashboardCategory category : categories) {
+             Collections.sort(category.tiles, TILE_COMPARATOR);
+@@ -170,7 +197,30 @@
+                 + (System.currentTimeMillis() - startTime) + " ms");
+         return categories;
+     }
++	
++	private static boolean isPkgInstalled(Context context, String packageName) {
++        PackageManager pm = context.getPackageManager();
++        try {
++            pm.getPackageInfo(packageName, 0);
++        } catch (Exception e) {
++            return false;
++        }
++        return true;
++	}
++	
++	private static String getActivityLabel(Context context, ComponentName mComponentName) {
++        PackageManager pm = null; 
++		ActivityInfo activityInfo = null;
++        try {
++			pm = context.getPackageManager();
++            activityInfo = pm.getActivityInfo(mComponentName, 0);
++        } catch (Exception e) {
++            return "";
++        }
++        return activityInfo.loadLabel(pm).toString();
++	}
+ 
++
+     private static DashboardCategory createCategory(Context context, String categoryKey) {
+         DashboardCategory category = new DashboardCategory();
+         category.key = categoryKey;
+@@ -220,6 +270,19 @@
+                 continue;
+             }
+             ActivityInfo activityInfo = resolved.activityInfo;
++
++            //begin add by wenli for 4940849 SmartManager on 2017/07/05
++            if (isPkgInstalled(context, "com.tct.onetouchbooster")
++                    && "com.android.settings".equals(activityInfo.packageName)
++                    && null != activityInfo.name
++                    && (activityInfo.name.endsWith("StorageSettingsActivity")
++                            || activityInfo.name.endsWith("MemorySettingsActivity"))) {
++                Log.w(LOG_TAG, "getTilesForIntent, in loop, activityInfo.name: " + activityInfo.name
++                    + ", activityInfo.packageName: " + activityInfo.packageName);
++                continue;
++            }
++            //end add by wenli for 4940849 SmartManager on 2017/07/05
++
+             Bundle metaData = activityInfo.metaData;
+             String categoryKey = defaultCategory;
+             if (checkCategory && ((metaData == null) || !metaData.containsKey(EXTRA_CATEGORY_KEY))
+Index: frameworks/base/packages/SettingsLib/res/drawable/ic_boost_launcher.xml
+===================================================================
+--- frameworks/base/packages/SettingsLib/res/drawable/ic_boost_launcher.xml	(revision 0)
++++ frameworks/base/packages/SettingsLib/res/drawable/ic_boost_launcher.xml	(revision 1138)
+@@ -0,0 +1,51 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++        android:width="24dp"
++        android:height="24dp"
++        android:viewportWidth="24.0"
++        android:viewportHeight="24.0">
++    <path
++        android:pathData="M6.17,18.83L7.59,17.41C6.01,16.14 5,14.19 5,12C5,8.13 8.13,5 12,5C15.87,5 19,8.13 19,12C19,14.19 17.99,16.14 16.42,17.42L17.83,18.83C19.77,17.18 21,14.74 21,12C21,7.03 16.97,3 12,3C7.03,3 3,7.03 3,12C3,14.74 4.23,17.18 6.17,18.83L6.17,18.83Z"
++        android:strokeColor="#00000000"
++        android:fillColor="#009688"
++        android:strokeWidth="1"/>
++    <path
++        android:pathData="M12,4.866C11.666,4.866 11,5 11,5L11,6.361L13,6.361L13,5.047L13,5C13,5 12.333,4.866 12,4.866Z"
++        android:strokeColor="#00000000"
++        android:fillColor="#009688"
++        android:strokeWidth="1"/>
++    <path
++        android:pathData="M19.02,11.01l-1.361,0l0,0.644l0,1.356l1.361,0z"
++        android:strokeColor="#00000000"
++        android:fillColor="#009688"
++        android:strokeWidth="1"/>
++    <path
++        android:pathData="M6.361,11l-1.361,0l0,0.644l0,1.356l1.361,0z"
++        android:strokeColor="#00000000"
++        android:fillColor="#009688"
++        android:strokeWidth="1"/>
++    <path
++        android:pathData="M8.635,7.258l-0.963,-0.963l-0.455,0.455l-0.959,0.959l0.963,0.963z"
++        android:strokeColor="#00000000"
++        android:fillColor="#009688"
++        android:strokeWidth="1"/>
++    <path
++        android:pathData="M8.494,16.488l-0.963,0.963l-1.414,-1.414l0.963,-0.963z"
++        android:strokeColor="#00000000"
++        android:fillColor="#009688"
++        android:strokeWidth="1"/>
++    <path
++        android:pathData="M17.883,16.032l-0.963,-0.963l-1.414,1.414l0.963,0.963z"
++        android:strokeColor="#00000000"
++        android:fillColor="#009688"
++        android:strokeWidth="1"/>
++    <path
++        android:pathData="M13.315,11.271C13.058,10.811 12.567,10.5 12.003,10.5C11.175,10.5 10.503,11.172 10.503,12C10.503,12.7 10.983,13.288 11.631,13.454L14.763,14.772L13.323,11.262L13.315,11.271L13.315,11.271Z"
++        android:strokeColor="#00000000"
++        android:fillColor="#009688"
++        android:strokeWidth="1"/>
++    <path
++        android:pathData="M15.29,7.262l0.963,-0.963l0.455,0.455l0.959,0.959l-0.963,0.963z"
++        android:strokeColor="#00000000"
++        android:fillColor="#009688"
++        android:strokeWidth="1"/>
++</vector>
+\ No newline at end of file
+Index: frameworks/base/packages/SettingsLib/res/values-zh-rCN/strings.xml
+===================================================================
+--- frameworks/base/packages/SettingsLib/res/values-zh-rCN/strings.xml	(revision 1137)
++++ frameworks/base/packages/SettingsLib/res/values-zh-rCN/strings.xml	(revision 1138)
+@@ -341,4 +341,10 @@
+     <string name="screen_zoom_summary_custom" msgid="5611979864124160447">"自定义 (<xliff:g id="DENSITYDPI">%d</xliff:g>)"</string>
+     <string name="help_feedback_label" msgid="6815040660801785649">"帮助和反馈"</string>
+     <string name="content_description_menu_button" msgid="8182594799812351266">"菜单"</string>
++	
++	<!-- begin add by wenli for 4940849 SmartManager on 2017/07/05 -->
++    <string name="module_super_speeder_withpg">"内存"</string>
++    <string name="module_smart_cleaner_withpg">"存储"</string>
++    <string name="module_power_saving">"省电"</string>
++    <!-- end add by wenli for 4940849 SmartManager on 2017/07/05 -->
+ </resources>
+Index: frameworks/base/packages/SettingsLib/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SettingsLib/res/values/strings.xml	(revision 1137)
++++ frameworks/base/packages/SettingsLib/res/values/strings.xml	(revision 1138)
+@@ -863,4 +863,10 @@
+     <!-- Content description for drawer menu button [CHAR_LIMIT=30]-->
+     <string name="content_description_menu_button">Menu</string>
+ 
++    <!-- begin add by wenli for 4940849 SmartManager on 2017/07/05 -->
++    <string name="module_super_speeder_withpg">"Memory"</string>
++    <string name="module_smart_cleaner_withpg">"Storage"</string>
++    <string name="module_power_saving">"Power saving"</string>
++    <!-- end add by wenli for 4940849 SmartManager on 2017/07/05 -->
++
+ </resources>
+Index: frameworks/base/packages
+===================================================================
+--- frameworks/base/packages	(revision 1137)
++++ frameworks/base/packages	(revision 1138)
+
+Property changes on: frameworks/base/packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages:r827
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1137)
++++ frameworks/base	(revision 1138)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r827

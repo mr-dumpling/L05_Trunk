@@ -1,0 +1,43 @@
+Index: packages/services/Telephony/res/values/strings.xml
+===================================================================
+--- packages/services/Telephony/res/values/strings.xml	(revision 4064)
++++ packages/services/Telephony/res/values/strings.xml	(revision 4065)
+@@ -1389,7 +1389,6 @@
+     <!-- The error message to show if the server reported an error while attempting to change the voicemail PIN -->
+     <string name="change_pin_system_error">Unable to set PIN</string>
+     <string name="dialog_voicemail_not_ready_message">To set up voicemail, go to Menu &gt; Settings.</string>
+-    <string name="fdn_list_dialog_title">Office</string>
+-    <string name="fdn_list_dialog_call">Call</string>
+-    <string name="fdn_list_dialog_edit">Edit</string>
++    <string name="fdn_list_dialog_call">Dial contact</string>
++    <string name="fdn_list_dialog_edit">Edit contact</string>
+ </resources>
+Index: vendor/branch/5058A/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnList.java
+===================================================================
+--- vendor/branch/5058A/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnList.java	(revision 4064)
++++ vendor/branch/5058A/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnList.java	(revision 4065)
+@@ -151,9 +151,14 @@
+     }
+ 
+     private void showItemDialog(int positon) {
++        String name = "";
++        if (mCursor.moveToPosition(positon)) {
++            name = mCursor.getString(NAME_COLUMN);
++        }
++
+         final String[] items = new String []{getResources().getString(R.string.fdn_list_dialog_call),
+                                             getResources().getString(R.string.fdn_list_dialog_edit)};
+-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(R.string.fdn_list_dialog_title)
++        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(name)
+             .setItems(items, new DialogInterface.OnClickListener() {
+ 
+                 @Override
+@@ -173,7 +178,7 @@
+ 
+     private void callTheItem (int position) {
+         if (mCursor.moveToPosition(position)) {
+-            String name = mCursor.getString(NAME_COLUMN);
++
+             String number = mCursor.getString(NUMBER_COLUMN);
+ 
+             PhoneAccountHandle phoneAccountHandle = PhoneUtils.makePstnPhoneAccountHandle(mSubscriptionInfoHelper.getPhone());

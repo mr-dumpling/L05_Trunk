@@ -1,0 +1,52 @@
+Index: frameworks/base/services/retaildemo/java/com/android/server/retaildemo/RetailDemoModeService.java
+===================================================================
+--- frameworks/base/services/retaildemo/java/com/android/server/retaildemo/RetailDemoModeService.java	(revision 6284)
++++ frameworks/base/services/retaildemo/java/com/android/server/retaildemo/RetailDemoModeService.java	(revision 6285)
+@@ -141,6 +141,9 @@
+     private int mUserActionCountInDemo =0;
+ 
+     private static final String ACTION_STOP_TCT_DEMO_PLAYER = "com.tct.retaildemo.ACTION_STOP_TCT_DEMO_PLAYER";
++    //<!--Added by yun.zhang for Task 5361077 on 2018/01/18 begin-->
++    private static final String ACTION_CLEAR_DATA_FOR_DEMO = "com.tct.retaildemo.ACTION_CLEAR_DATA_FOR_DEMO";
++    //<!--Added by yun.zhang for Task 5361077 on 2018/01/18 end-->
+     /*****------------------------------------------ above items used for tcl old workflow ------------------------------------------**/
+ 
+     // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+@@ -741,6 +744,9 @@
+                     //if (DEBUG) Slog.i(TAG, "loked status");
+                     canPlayVideo = false;
+                     clearFingerPrintForDemo();
++                    //<!--Added by yun.zhang for Task 5361077 on 2018/01/18 begin-->
++                    clearDataForDemo();
++                    //<!--Added by yun.zhang for Task 5361077 on 2018/01/18 end-->
+                 }
+ 	            mInjector.getLockPatternUtils().clearLock(mCurrentUserId);
+                 mInjector.getLockPatternUtils().setLockScreenDisabled(true, mCurrentUserId);
+@@ -802,6 +808,14 @@
+         }
+     }
+ 
++    //<!--Added by yun.zhang for Task 5361077 on 2018/01/18 begin-->
++    private void clearDataForDemo() {
++	if (DEBUG) Slog.d(TAG, "RD-YUN clearDataForDemo");
++        Intent intent = new Intent(ACTION_CLEAR_DATA_FOR_DEMO);
++        mInjector.getContext().sendBroadcastAsUser(intent, UserHandle.ALL);
++    }
++    //<!--Added by yun.zhang for Task 5361077 on 2018/01/18 begin-->
++
+     private void setDemoSystemLanguage(int userId) {
+         final String localeValue = Settings.System.getStringForUser(mInjector.getContentResolver(), Settings.System.SYSTEM_LOCALES, UserHandle.USER_SYSTEM);
+         if (localeValue != null) {
+@@ -1151,8 +1165,10 @@
+ 
+         if (!mIsCarrierDemoMode) {
+             // Show reset notification (except in carrier demo mode).
+-            mInjector.getNotificationManager().notifyAsUser(TAG, SystemMessage.NOTE_RETAIL_RESET,
+-                    mInjector.createResetNotification(), UserHandle.of(userId));
++            //<!--Deleted by yun.zhang for Task 5361077 on 2018/01/16 begin-->
++            //mInjector.getNotificationManager().notifyAsUser(TAG, SystemMessage.NOTE_RETAIL_RESET,
++            //        mInjector.createResetNotification(), UserHandle.of(userId));
++            //<!--Deleted by yun.zhang for Task 5361077 on 2018/01/16 end-->
+ 
+             synchronized (mActivityLock) {
+                 mUserUntouched = true;

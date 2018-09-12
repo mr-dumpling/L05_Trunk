@@ -1,0 +1,239 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/ContactsCommon/src/com/android/contacts/common/list/ContactEntryListFragment.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/ContactsCommon/src/com/android/contacts/common/list/ContactEntryListFragment.java	(revision 8825)
++++ vendor/branch/5058I_ALRU/packages/apps/ContactsCommon/src/com/android/contacts/common/list/ContactEntryListFragment.java	(revision 8826)
+@@ -497,6 +497,7 @@
+         Log.d(TAG, "[onPartitionLoaded]");
+         mAdapter.changeCursor(partitionIndex, data);
+         setProfileHeader();
++        showCount(partitionIndex, data);
+ 
+         if (!isLoading()) {
+             completeRestoreInstanceState();
+@@ -537,6 +538,18 @@
+     }
+ 
+     /**
++     * SPRD: Bug474264 Shows the count of entries included in the list. The default implementation does nothing.
++     * @{
++     */
++    protected void showCount(int partitionIndex, Cursor data) {
++        
++    }
++    /**
++     * @}
++     */
++    
++
++    /**
+      * Shows a view at the top of the list with a pseudo local profile prompting the user to add
+      * a local profile. Default implementation does nothing.
+      */
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/list/DefaultContactBrowseListFragment.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/list/DefaultContactBrowseListFragment.java	(revision 8825)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/list/DefaultContactBrowseListFragment.java	(revision 8826)
+@@ -36,6 +36,7 @@
+ import android.widget.ListView;
+ import android.widget.ProgressBar;
+ import android.widget.TextView;
++import android.database.Cursor;
+ 
+ import com.android.contacts.R;
+ import com.android.contacts.common.activity.RequestPermissionsActivity;
+@@ -48,7 +49,6 @@
+ import com.android.contacts.common.util.ImplicitIntentsUtil;
+ import com.android.contacts.editor.ContactEditorFragment;
+ import com.android.contacts.common.util.AccountFilterUtil;
+-
+ import com.mediatek.contacts.ExtensionManager;
+ import com.mediatek.contacts.util.ContactsListUtils;
+ import com.mediatek.contacts.util.Log;
+@@ -63,6 +63,7 @@
+ 
+     private static final int REQUEST_CODE_ACCOUNT_FILTER = 1;
+ 
++	private TextView mCounterHeaderView;
+     private View mSearchHeaderView;
+     private View mAccountFilterHeader;
+     private FrameLayout mProfileHeaderContainer;
+@@ -186,7 +187,10 @@
+ 
+     private void checkHeaderViewVisibility() {
+         updateFilterHeaderView();
+-
++		if (mCounterHeaderView != null) {
++            mCounterHeaderView.setVisibility(isSearchMode() ? View.GONE : View.VISIBLE);
++        }
++		
+         // Hide the search header by default.
+         if (mSearchHeaderView != null) {
+             mSearchHeaderView.setVisibility(View.GONE);
+@@ -265,6 +269,7 @@
+         mProfileHeader.setVisibility(show ? View.VISIBLE : View.GONE);
+         mProfileTitle.setVisibility(show ? View.VISIBLE : View.GONE);
+         mProfileMessage.setVisibility(show ? View.VISIBLE : View.GONE);
++		mCounterHeaderView.setVisibility(show ? View.VISIBLE : View.GONE);
+     }
+ 
+     /**
+@@ -277,9 +282,11 @@
+         ListView list = getListView();
+         // Add a header with the "ME" name. The view is embedded in a frame view since you cannot
+         // change the visibility of a view in a ListView without having a parent view.
+-        mProfileHeader = inflater.inflate(R.layout.user_profile_header, null, false);
+-        mProfileTitle = (TextView) mProfileHeader.findViewById(R.id.profile_title);
++        //mProfileHeader = inflater.inflate(R.layout.user_profile_header, null, false);
+         mProfileHeaderContainer = new FrameLayout(inflater.getContext());
++		mProfileHeader = inflater.inflate(R.layout.user_profile_header_overlay, null, false);
++		mCounterHeaderView = (TextView) mProfileHeader.findViewById(R.id.contacts_count);
++		mProfileTitle = (TextView) mProfileHeader.findViewById(R.id.profile_title);
+         mProfileHeaderContainer.addView(mProfileHeader);
+         list.addHeaderView(mProfileHeaderContainer, null, false);
+ 
+@@ -324,4 +331,72 @@
+         }
+         return count;
+     }
++	/**
++    * SPRD: add for Bug 474264
++    *
++    * @{
++    */
++
++    @Override
++    protected void showCount(int partitionIndex, Cursor data) {
++        if (!isSearchMode() && data != null) {
++            int count = data.getCount();
++			showEmptyUserProfile(true);
++            if (count != 0) {
++                count -= (mUserProfileExists ? 1 : 0); 
++                mCounterHeaderView.setText(count+" contacts");
++				Log.d(TAG,"mCounterHeaderView.getVisibility():"+mCounterHeaderView.getVisibility()+
++				",mProfileMessage.getVisibility():"+mProfileMessage.getVisibility()+",mProfileMessage.getVisibility():"+mProfileMessage.getVisibility());
++            } else {
++                ContactListFilter filter = getFilter();
++                int filterType = filter != null ? filter.filterType
++                        : ContactListFilter.FILTER_TYPE_ALL_ACCOUNTS;
++                switch (filterType) {
++                case ContactListFilter.FILTER_TYPE_WITH_PHONE_NUMBERS_ONLY:
++                    mCounterHeaderView
++                            .setText(R.string.listTotalPhoneContactsZero);
++                    break;
++                case ContactListFilter.FILTER_TYPE_STARRED:
++                    mCounterHeaderView
++                            .setText(R.string.listTotalAllContactsZeroStarred);
++                    break;
++                case ContactListFilter.FILTER_TYPE_CUSTOM:
++                    mCounterHeaderView
++                            .setText(R.string.listTotalAllContactsZeroCustom);
++                    break;
++                default:
++                    mCounterHeaderView
++                            .setText(R.string.listTotalAllContactsZero);
++                    break;
++                }
++            }
++        } else {
++            ContactListAdapter adapter = getAdapter();
++            if (adapter == null) {
++                return;
++            }
++
++            // In search mode we only display the header if there is nothing
++            // found
++            if (TextUtils.isEmpty(getQueryString())
++                    || !adapter.areAllPartitionsEmpty()) {
++                mSearchHeaderView.setVisibility(View.GONE);
++                showSearchProgress(false);
++            } else {
++                mSearchHeaderView.setVisibility(View.VISIBLE);
++                if (adapter.isLoading()) {
++                    mSearchProgressText
++                            .setText(R.string.search_results_searching);
++                    showSearchProgress(true);
++                } else {
++                    mSearchProgressText
++                            .setText(R.string.listFoundAllContactsZero);
++                    mSearchProgressText
++                            .sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
++                    showSearchProgress(false);
++                }
++            }
++            showEmptyUserProfile(false);
++        }
++    }
+ }
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/res/layout/user_profile_header_overlay.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/res/layout/user_profile_header_overlay.xml	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/res/layout/user_profile_header_overlay.xml	(revision 8826)
+@@ -0,0 +1,68 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2011 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<LinearLayout
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:orientation="vertical">
++	<TextView
++        android:id="@+id/contacts_count"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:gravity="left|center_vertical"
++        android:paddingLeft="?attr/list_item_padding_left"
++        android:paddingTop="8dp"
++        android:singleLine="true"
++        android:textAppearance="?android:attr/textAppearanceMedium" />
++		
++	<LinearLayout
++        android:id="@+id/user_profile_header"
++		android:orientation="horizontal"
++		android:layout_width="match_parent"
++		android:layout_height="wrap_content"
++		android:paddingLeft="?attr/list_item_padding_left"
++		android:paddingRight="?attr/list_item_padding_right"
++		android:paddingStart="?attr/list_item_padding_left"
++		android:paddingEnd="?attr/list_item_padding_right"
++		android:paddingTop="4dp"
++		android:paddingBottom="8dp" >
++		
++    <TextView 
++		android:id="@+id/profile_title"
++        android:layout_width="@dimen/contact_list_section_header_width"
++        android:layout_height="?android:attr/listPreferredItemHeight"
++        android:singleLine="true"
++        android:text="@string/user_profile_contacts_list_header"
++        android:ellipsize="end"
++        android:textAppearance="@style/SectionHeaderStyle"
++        android:gravity="start|center_vertical" />
++
++    <Button 
++		android:id="@+id/user_profile_button"
++        android:layout_width="match_parent"
++        android:layout_height="?android:attr/listPreferredItemHeight"
++        android:paddingStart="?attr/list_item_padding_left"
++        android:paddingEnd="?attr/list_item_padding_right"
++        android:background="?android:attr/selectableItemBackground"
++        android:singleLine="true"
++        android:text="@string/profile_display_name"
++        android:ellipsize="end"
++        android:gravity="start|center_vertical"
++        android:textAppearance="?android:attr/textAppearanceMedium" />
++	</LinearLayout>
++
++</LinearLayout>

@@ -1,0 +1,53 @@
+Index: vendor/branch/5058A_Digicel_Jamaica/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A_Digicel_Jamaica/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 10058)
++++ vendor/branch/5058A_Digicel_Jamaica/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 10059)
+@@ -224,7 +224,7 @@
+ MTK_BT_SUPPORT = yes
+ MTK_BT_WIFI_COEX_RADIO_MODIFY = no
+ MTK_BUFFER_COMPRESSION_SUPPORT = no
+-MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P66
++MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P67
+ MTK_BWC_SUPPORT = yes
+ MTK_C2K_LTE_MODE = 0
+ MTK_CACHE_MERGE_SUPPORT = no
+@@ -677,7 +677,7 @@
+ MTK_WAPI_SUPPORT = yes
+ MTK_WAPPUSH_SUPPORT = yes
+ MTK_WB_SPEECH_SUPPORT = yes
+-MTK_WEEK_NO = W18.09
++MTK_WEEK_NO = W18.10
+ MTK_WFC_SUPPORT = no
+ MTK_WFD_HDCP_RX_SVP_SUPPORT = no
+ MTK_WFD_HDCP_TX_SUPPORT = no
+Index: vendor/branch/5058A_Digicel_Jamaica/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java
+===================================================================
+--- vendor/branch/5058A_Digicel_Jamaica/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 10058)
++++ vendor/branch/5058A_Digicel_Jamaica/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 10059)
+@@ -2250,6 +2250,15 @@
+         throw new UnsupportedOperationException("unimplemented, EmailProvider unknown");
+     }
+ 
++	/**
++     * @return the authority of EmailAttachmentProvider for this app. should be overridden in
++     * concrete app implementations. can't be known here because this project doesn't know about
++     * that sort of thing.
++     */
++    protected String getEmailAttachmentProviderAuthority() {
++        throw new UnsupportedOperationException("unimplemented, EmailAttachmentProvider unknown");
++    }
++	
+     /**
+      * Helper function to handle a list of uris to attach.
+      * @return the total size of all successfully attached files.
+@@ -2271,7 +2280,9 @@
+                             }
+                     } else if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
+                         // disallow attachments from our own EmailProvider (b/27308057)
+-                        if (getEmailProviderAuthority().equals(uri.getAuthority())) {
++                        if (getEmailProviderAuthority().equals(uri.getAuthority())
++                                || getEmailAttachmentProviderAuthority().equals(
++                                        uri.getAuthority()))  {
+                             showErrorToast(getString(R.string.attachment_permission_denied));
+                             Analytics.getInstance().sendEvent(ANALYTICS_CATEGORY_ERRORS,
+                                     "send_intent_attachment", "email_provider", 0);

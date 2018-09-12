@@ -1,0 +1,94 @@
+Index: vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 9390)
++++ vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 9391)
+@@ -129,7 +129,7 @@
+ public class ServiceStateTracker extends Handler {
+     private static final String LOG_TAG = "SST";
+     //private static final boolean DBG = true;
+-    private static final boolean VDBG = false;  // STOPSHIP if true
++    private static final boolean VDBG = true;  // STOPSHIP if true
+ 
+     private static final String PROP_FORCE_ROAMING = "telephony.test.forceRoaming";
+ 
+@@ -612,11 +612,6 @@
+                                         "310800"},
+                                        {"310150", "310170", "310380", "310410"},
+                                        {"31033", "310330"},
+-                                       //added by wanyu for NL[
+-                                       {"20402", "20416", "20420"},
+-                                       {"20404", "20409"},
+-                                       {"20408", "20412", "20414"},
+-                                       //added by wanyu for NL]
+                                        //ALPS02446235[
+                                        {"21401", "21402", "21403", "21404", "21405", "21406",
+                                         "21407", "21408", "21409", "21410", "21411", "21412",
+@@ -6674,6 +6669,11 @@
+      */
+     private boolean regCodeIsRoaming (int code) {
+ 		SIMRecords simRecords = null;
++        IccRecords r = mPhone.mIccRecords.get();
++        if (r != null) {
++            simRecords = (SIMRecords) r;
++        }
++
+         if (mPhone.isPhoneTypeGsm()) {
+             //M: MTK added
+             boolean isRoaming = false;
+@@ -6702,11 +6702,17 @@
+             if (ServiceState.RIL_REG_STATE_ROAMING == code) {
+                 isRoaming = true;
+             }
++            
++            log("regCodeIsRoaming  isRoaming = " + isRoaming + ", Mvno=" + 
++                ((null != simRecords) && (PhoneConstants.MVNO_TYPE_NONE != simRecords.getMvnoMatchType()))
++                + ", goto customEhplmn:"+ ((isRoaming == true) && (strServingPlmn != null) && (strHomePlmn != null));
+ 
+             /* ALPS00236452: check manufacturer maintained table for specific operator with
+                multiple home PLMN id */
+-            if ((null != simRecords)&&(PhoneConstants.MVNO_TYPE_NONE != simRecords.getMvnoMatchType())&&
+-				(isRoaming == true) && (strServingPlmn != null) && (strHomePlmn != null)) {
++            
++            //if ((null != simRecords) && (PhoneConstants.MVNO_TYPE_NONE != simRecords.getMvnoMatchType()) &&
++			//	(isRoaming == true) && (strServingPlmn != null) && (strHomePlmn != null)) {
++            if ((isRoaming == true) && (strServingPlmn != null) && (strHomePlmn != null)) {
+                 log("strServingPlmn = " + strServingPlmn + " strHomePlmn = " + strHomePlmn);
+ 				
+                 for (int i = 0; i < customEhplmn.length; i++) {
+@@ -6734,6 +6740,11 @@
+                 }
+             }
+ 
++            if (isRoaming) {
++                log("laod custom NonRoaming!");
++                isRoaming = isNonRoaming(strHomePlmn,strServingPlmn,roaming);
++            }
++
+             return isRoaming;
+             // M : MTK added end
+         } else {
+@@ -6741,6 +6752,24 @@
+         }
+     }
+ 
++    String[] mNonRoamingMcc = new String[]{"204", "206", "208", "214", "222",
++                            "232", "238", "240", "242", "244", "262", "270"};
++
++    private boolean isNonRoaming(String strHomePlmn, String strServingPlmn, boolean roaming) {
++        if (TextUtils.isEmpty(strHomePlmn) || TextUtils.isEmpty(strServingPlmn)) {
++            return roaming;
++        }
++        for (int i = 0; i < mNonRoamingMcc.length; i++) {
++            boolean isContained = mNonRoamingMcc[i].equals(strHomePlmn.substring(0, 3))
++                                    && mNonRoamingMcc[i].equals(strServingPlmn.substring(0, 3));
++            if (isContained) {
++                roaming = false;
++                break;
++            }
++        }
++        return roaming;
++    }
++
+     private boolean isSameOperatorNameFromSimAndSS(ServiceState s) {
+         String spn = ((TelephonyManager) mPhone.getContext().
+                 getSystemService(Context.TELEPHONY_SERVICE)).

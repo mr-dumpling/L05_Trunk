@@ -1,0 +1,116 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/SecurityBaseSwitchPreference.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/SecurityBaseSwitchPreference.java	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/SecurityBaseSwitchPreference.java	(revision 9236)
+@@ -0,0 +1,68 @@
++/*
++* Copyright (C) 2014 MediaTek Inc.
++* Modification based on code covered by the mentioned copyright
++* and/or permission notice(s).
++*/
++/*
++ * Copyright (C) 2007 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings;
++
++import android.content.Context;
++import android.support.v14.preference.SwitchPreference;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.PreferenceViewHolder;
++import android.util.AttributeSet;
++import android.util.Log;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.text.TextUtils;
++import android.widget.TextView;
++
++public class SecurityBaseSwitchPreference extends SwitchPreference  {
++    private static final String LOG_TAG = "SecurityBaseSwitchPreference";
++    
++    private static final boolean DBG = true;
++
++    private Context mContext;
++    
++	public SecurityBaseSwitchPreference(Context context) {
++        super(context);
++        init(context);
++    }
++	
++    public SecurityBaseSwitchPreference(Context context, AttributeSet attrs) {
++        super(context, attrs);
++        init(context);
++    }
++	
++    private void init(Context context) {
++        mContext = context;
++        setEnabled(true);
++        
++    }
++
++    @Override
++    public void onBindViewHolder(PreferenceViewHolder holder) {
++        super.onBindViewHolder(holder);
++
++        View titleView = holder.findViewById(com.android.internal.R.id.title);
++        if (titleView != null && titleView instanceof TextView) {
++           ((TextView) titleView).setEllipsize(TextUtils.TruncateAt.valueOf("MARQUEE"));
++		   ((TextView) titleView).setSelected(true);
++        }
++    }
++}
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/applications/UsageAccessDetails.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/applications/UsageAccessDetails.java	(revision 9235)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/applications/UsageAccessDetails.java	(revision 9236)
+@@ -36,6 +36,7 @@
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ import com.android.settings.R;
+ import com.android.settings.applications.AppStateUsageBridge.UsageState;
++import com.android.settings.SecurityBaseSwitchPreference;
+ 
+ public class UsageAccessDetails extends AppInfoWithHeader implements OnPreferenceChangeListener,
+         OnPreferenceClickListener {
+@@ -49,7 +50,7 @@
+     // TODO: Break out this functionality into its own class.
+     private AppStateUsageBridge mUsageBridge;
+     private AppOpsManager mAppOpsManager;
+-    private SwitchPreference mSwitchPref;
++    private SecurityBaseSwitchPreference mSwitchPref;
+     private Preference mUsagePrefs;
+     private Preference mUsageDesc;
+     private Intent mSettingsIntent;
+@@ -66,7 +67,7 @@
+         mDpm = context.getSystemService(DevicePolicyManager.class);
+ 
+         addPreferencesFromResource(R.xml.app_ops_permissions_details);
+-        mSwitchPref = (SwitchPreference) findPreference(KEY_APP_OPS_SETTINGS_SWITCH);
++        mSwitchPref = (SecurityBaseSwitchPreference) findPreference(KEY_APP_OPS_SETTINGS_SWITCH);
+         mUsagePrefs = findPreference(KEY_APP_OPS_SETTINGS_PREFS);
+         mUsageDesc = findPreference(KEY_APP_OPS_SETTINGS_DESC);
+ 
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/app_ops_permissions_details.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/app_ops_permissions_details.xml	(revision 9235)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/app_ops_permissions_details.xml	(revision 9236)
+@@ -17,7 +17,7 @@
+ <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:settings="http://schemas.android.com/apk/res/com.android.settings">
+ 
+-    <SwitchPreference
++    <com.android.settings.SecurityBaseSwitchPreference
+         android:key="app_ops_settings_switch" />
+ 
+     <Preference

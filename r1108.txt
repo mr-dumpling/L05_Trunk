@@ -1,0 +1,482 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1107)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1108)
+@@ -1064,6 +1064,15 @@
+             <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                 android:value="true" />
+         </activity>
++		<activity android:name="BatteryInfo" android:label="@string/testing_battery_info"
++                  android:taskAffinity="com.android.settings"
++                  android:parentActivityName="Settings">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEVELOPMENT_PREFERENCE" />
++                <category android:name="android.intent.category.VOICE_LAUNCH" />
++            </intent-filter>
++        </activity>
+ 
+         <activity android:name="Settings$ManageApplicationsActivity"
+                 android:label="@string/applications_settings"
+Index: packages/apps/Settings/src/com/android/settings/BatteryInfo.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/BatteryInfo.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/BatteryInfo.java	(revision 1108)
+@@ -0,0 +1,189 @@
++/*
++ * Copyright (C) 2006 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings;
++
++import android.app.Activity;
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.os.BatteryManager;
++import android.os.BatteryStats;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.IPowerManager;
++import android.os.Message;
++import android.os.ServiceManager;
++import android.os.SystemClock;
++import android.text.format.DateUtils;
++import android.widget.TextView;
++
++import com.android.internal.app.IBatteryStats;
++
++public class BatteryInfo extends Activity {
++    private TextView mStatus;
++    private TextView mPower;
++    private TextView mLevel;
++    private TextView mScale;
++    private TextView mHealth;
++    private TextView mVoltage;
++    private TextView mTemperature;
++    private TextView mTechnology;
++    private TextView mUptime;
++    private IBatteryStats mBatteryStats;
++    private IPowerManager mScreenStats;
++    
++    private static final int EVENT_TICK = 1;
++    
++    private Handler mHandler = new Handler() {
++        @Override
++        public void handleMessage(Message msg) {
++            switch (msg.what) {
++                case EVENT_TICK:
++                    updateBatteryStats();
++                    sendEmptyMessageDelayed(EVENT_TICK, 1000);
++                    
++                    break;
++            }
++        }
++    };
++
++    /**
++     * Format a number of tenths-units as a decimal string without using a
++     * conversion to float.  E.g. 347 -> "34.7", -99 -> "-9.9"
++     */
++    private final String tenthsToFixedString(int x) {
++        int tens = x / 10;
++        // use Math.abs to avoid "-9.-9" about -99
++        return Integer.toString(tens) + "." + Math.abs(x - 10 * tens);
++    }
++
++   /**
++    *Listens for intent broadcasts
++    */
++    private IntentFilter   mIntentFilter;
++
++    private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++            if (action.equals(Intent.ACTION_BATTERY_CHANGED)) {
++                int plugType = intent.getIntExtra("plugged", 0);
++
++                mLevel.setText("" + intent.getIntExtra("level", 0));
++                mScale.setText("" + intent.getIntExtra("scale", 0));
++                mVoltage.setText("" + intent.getIntExtra("voltage", 0) + " "
++                        + getString(R.string.battery_info_voltage_units));
++                mTemperature.setText("" + tenthsToFixedString(intent.getIntExtra("temperature", 0))
++                        + getString(R.string.battery_info_temperature_units));
++                mTechnology.setText("" + intent.getStringExtra("technology"));
++                
++                mStatus.setText(Utils.getBatteryStatus(getResources(), intent));
++
++                switch (plugType) {
++                    case 0:
++                        mPower.setText(getString(R.string.battery_info_power_unplugged));
++                        break;
++                    case BatteryManager.BATTERY_PLUGGED_AC:
++                        mPower.setText(getString(R.string.battery_info_power_ac));
++                        break;
++                    case BatteryManager.BATTERY_PLUGGED_USB:
++                        mPower.setText(getString(R.string.battery_info_power_usb));
++                        break;
++                    case BatteryManager.BATTERY_PLUGGED_WIRELESS:
++                        mPower.setText(getString(R.string.battery_info_power_wireless));
++                        break;
++                    case (BatteryManager.BATTERY_PLUGGED_AC|BatteryManager.BATTERY_PLUGGED_USB):
++                        mPower.setText(getString(R.string.battery_info_power_ac_usb));
++                        break;
++                    default:
++                        mPower.setText(getString(R.string.battery_info_power_unknown));
++                        break;
++                }
++                
++                int health = intent.getIntExtra("health", BatteryManager.BATTERY_HEALTH_UNKNOWN);
++                String healthString;
++                if (health == BatteryManager.BATTERY_HEALTH_GOOD) {
++                    healthString = getString(R.string.battery_info_health_good);
++                } else if (health == BatteryManager.BATTERY_HEALTH_OVERHEAT) {
++                    healthString = getString(R.string.battery_info_health_overheat);
++                } else if (health == BatteryManager.BATTERY_HEALTH_DEAD) {
++                    healthString = getString(R.string.battery_info_health_dead);
++                } else if (health == BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE) {
++                    healthString = getString(R.string.battery_info_health_over_voltage);
++                } else if (health == BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE) {
++                    healthString = getString(R.string.battery_info_health_unspecified_failure);
++                } else if (health == BatteryManager.BATTERY_HEALTH_COLD) {
++                    healthString = getString(R.string.battery_info_health_cold);
++                } else {
++                    healthString = getString(R.string.battery_info_health_unknown);
++                }
++                mHealth.setText(healthString);
++            }
++        }
++    };
++
++    @Override
++    public void onCreate(Bundle icicle) {
++        super.onCreate(icicle);
++
++        setContentView(R.layout.battery_info);
++
++        // create the IntentFilter that will be used to listen
++        // to battery status broadcasts
++        mIntentFilter = new IntentFilter();
++        mIntentFilter.addAction(Intent.ACTION_BATTERY_CHANGED);
++    }
++
++    @Override
++    public void onResume() {
++        super.onResume();
++
++        mStatus = (TextView)findViewById(R.id.status);
++        mPower = (TextView)findViewById(R.id.power);
++        mLevel = (TextView)findViewById(R.id.level);
++        mScale = (TextView)findViewById(R.id.scale);
++        mHealth = (TextView)findViewById(R.id.health);
++        mTechnology = (TextView)findViewById(R.id.technology);
++        mVoltage = (TextView)findViewById(R.id.voltage);
++        mTemperature = (TextView)findViewById(R.id.temperature);
++        mUptime = (TextView) findViewById(R.id.uptime);
++        
++        // Get awake time plugged in and on battery
++        mBatteryStats = IBatteryStats.Stub.asInterface(ServiceManager.getService(
++                BatteryStats.SERVICE_NAME));
++        mScreenStats = IPowerManager.Stub.asInterface(ServiceManager.getService(POWER_SERVICE));
++        mHandler.sendEmptyMessageDelayed(EVENT_TICK, 1000);
++        
++        registerReceiver(mIntentReceiver, mIntentFilter);
++    }
++
++    @Override
++    public void onPause() {
++        super.onPause();
++        mHandler.removeMessages(EVENT_TICK);
++        
++        // we are no longer on the screen stop the observers
++        unregisterReceiver(mIntentReceiver);
++    }
++
++    private void updateBatteryStats() {
++        long uptime = SystemClock.elapsedRealtime();
++        mUptime.setText(DateUtils.formatElapsedTime(uptime / 1000));
++    }
++    
++}
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1107)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1108)
+@@ -7891,9 +7891,113 @@
+     <string name="notification_color_preference_title">Colour settings</string>
+     <string name="notification_color_preference_summary">Set a colour for the app notification.</string>
+     <string name="filter_customize_color_notifications_apps">Highlighted in colour</string>
++	<!-- Night mode. -->
++	<string name="night_mode_title">Night mode</string>
++	<string name="night_mode_summary">Off</string>
++	<string name="mode_off">"off"</string>
++	<string name="mode_on">"on"</string>
++	<string name="automate_schedule_title">"Automate schedule"</string>
++	<string name="keywords_display_automate_schedule">"Automate"</string>
++	<string name="schedule_plan_title">"Schedule plan"</string>
++	<string name="schedule_plan_summary">"Sunset to sunrise"</string>
++	<string name="keywords_schedule_plan">"Sunset"</string>
++	<string name="manually_enable_title">"Manually enable"</string>
++	<string name="keywords_display_manually_enable">"Manually enable"</string>
++	<string name="color_temperature">"Color temperature"</string>
++	<string name="less_warm">"Less warm"</string>
++	<string name="more_warn">"More warm"</string>
++	<string name="night_mode_on">"When Night mode is on"</string>
++	<string name="schedule_plan_title">"Schedule Plan"</string>
++	<string name="sunset2sunrise_title">"Sunset to sunrise"</string>
++	<string name="keywords_sunset2sunrise">"Sunset to sunrise"</string>
++	<string name="custom_schedule">"Custom schedule"</string>
++	<string name="keywords_custom_schedule">"Custom schedule"</string>
++	<string name="turn_on_at_title">"Turn on at"</string>
++	<string name="turn_on_at_summary">"22:00"</string>
++	<string name="keywords_turn_on_at">"Turn on at"</string>
++	<string name="turn_off_at_title">"Turn off at"</string>
++	<string name="turn_off_at_summary">"7:00"</string>
++	<string name="keywords_turn_off_at">"Turn off at"</string>
++	<string name="setting_time_error">"Setting Time Error"</string>
++	<string name="auto_time_night_mode">"22:00 to 7:00"</string>
++	<string name="fun_setting_titlte">"Func shortcuts"</string>
++	<string name="regulartory_safety_title">Regulatory &amp; Safety</string>
+ 
++    <!-- ADD-S By Justin.Shen for Hide/Show navigation-bar -->
++    <string name="navigationbar_settings_title">"Navigation bar"</string>
++    <string name="navigationbar_button_layout_title">"Button layout"</string>
++    <string name="navigationbar_button_layout_summary">"Change the position of Back, Recent apps and Hide navigation bar by your favorite."</string>
++    <string name="navigationbar_background_color_title">"Background color"</string>
++    <string name="navigationbar_background_color_summary">"Change the background color of navigation bar, but it may not be applied to all apps."</string>
++	 <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_status_label">Battery status:</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_power_label">Power plug:</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_scale_label">Battery scale:</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_level_label">Battery level:</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_health_label">Battery health:</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_technology_label">Battery technology:</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_voltage_label">Battery voltage:</string>
++    <!-- Battery Info screen. Units shown after a value.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_voltage_units">mV</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_temperature_label">Battery temperature:</string>
++    <!-- Battery Info screen. Units shown after a value.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_temperature_units">\u00B0 C</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_uptime">Time since boot:</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_awake_battery">Awake time on battery:</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_awake_plugged">Awake time when charging:</string>
++    <!-- Battery Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_screen_on">Screen ON time:</string>
+ 
+-    <string name="reset_attention">Erase all data and reset to factory defaults? Your device will restart to perform a factory reset. This action can not be undone.</string>
+-    <string name="reset_confirm">RESET</string>
+-    <string name="reset_cancel">CANCEL</string>	
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_status_unknown">Unknown</string>
++    <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging from an unknown source.  -->
++    <string name="battery_info_status_charging">Charging</string>
++    <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging on AC.  -->
++    <string name="battery_info_status_charging_ac">Charging on AC</string>
++    <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging over USB.  -->
++    <string name="battery_info_status_charging_usb">Charging over USB</string>
++    <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging over a wireless connection.  -->
++    <string name="battery_info_status_charging_wireless">Charging wirelessly</string>
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_status_discharging">Not charging</string>
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_status_not_charging">Not charging</string>
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_status_full">Full</string>
++
++    <!-- Battery Info screen. Units shown after a value.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_power_unplugged">Unplugged</string>
++    <string name="battery_info_power_ac">AC</string>
++    <string name="battery_info_power_usb">USB</string>
++    <string name="battery_info_power_wireless">wireless</string>
++    <string name="battery_info_power_ac_usb">AC+USB</string>
++    <string name="battery_info_power_unknown">Unknown</string>
++
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_health_unknown">Unknown</string>
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_health_good">Good</string>
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_health_overheat">Overheat</string>
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_health_dead">Dead</string>
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_health_over_voltage">Over voltage</string>
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_health_unspecified_failure">Unknown error</string>
++    <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
++    <string name="battery_info_health_cold">Cold</string>
++	<string name="testing_battery_info">Battery information</string>
++    <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
++    <string name="battery_percent_title">Show Battery percentage</string>
+ </resources>
+Index: packages/apps/Settings/res/layout/battery_info.xml
+===================================================================
+--- packages/apps/Settings/res/layout/battery_info.xml	(revision 0)
++++ packages/apps/Settings/res/layout/battery_info.xml	(revision 1108)
+@@ -0,0 +1,78 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++/* //device/apps/Settings/assets/res/any/layout/battery_info.xml
++**
++** Copyright 2006, The Android Open Source Project
++**
++** Licensed under the Apache License, Version 2.0 (the "License"); 
++** you may not use this file except in compliance with the License. 
++** You may obtain a copy of the License at 
++**
++**     http://www.apache.org/licenses/LICENSE-2.0 
++**
++** Unless required by applicable law or agreed to in writing, software 
++** distributed under the License is distributed on an "AS IS" BASIS, 
++** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
++** See the License for the specific language governing permissions and 
++** limitations under the License.
++*/
++-->
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/info_layout">        
++
++    <!-- Battery Status -->
++    <LinearLayout style="@style/entry_layout">
++        <TextView android:text="@string/battery_info_status_label" style="@style/info_label" />
++        <TextView android:id="@+id/status" style="@style/info_value" />
++    </LinearLayout>
++
++    <!-- Battery Status -->
++    <LinearLayout style="@style/entry_layout">
++        <TextView android:text="@string/battery_info_power_label" style="@style/info_label" />
++        <TextView android:id="@+id/power" style="@style/info_value" />
++    </LinearLayout>
++
++    <!-- Battery Level -->
++    <LinearLayout style="@style/entry_layout">
++        <TextView android:text="@string/battery_info_level_label" style="@style/info_label" />
++        <TextView android:id="@+id/level" style="@style/info_value" />
++    </LinearLayout>
++
++    <!-- Battery Scale -->
++    <LinearLayout style="@style/entry_layout">
++        <TextView android:text="@string/battery_info_scale_label" style="@style/info_label" />
++        <TextView android:id="@+id/scale" style="@style/info_value" />
++    </LinearLayout>
++    
++    <!-- Battery Health -->
++    <LinearLayout style="@style/entry_layout">
++        <TextView android:text="@string/battery_info_health_label" style="@style/info_label" />
++        <TextView android:id="@+id/health" style="@style/info_value" />
++    </LinearLayout>
++
++    <!-- Battery Voltage -->
++    <LinearLayout style="@style/entry_layout">
++        <TextView android:text="@string/battery_info_voltage_label" style="@style/info_label" />
++        <TextView android:id="@+id/voltage" style="@style/info_value" />
++    </LinearLayout>
++
++    <!-- Battery Temperature -->
++    <LinearLayout style="@style/entry_layout">
++        <TextView android:text="@string/battery_info_temperature_label" style="@style/info_label" />
++        <TextView android:id="@+id/temperature" style="@style/info_value" />
++    </LinearLayout>
++
++    <!-- Battery Technology -->
++    <LinearLayout style="@style/entry_layout">
++        <TextView android:text="@string/battery_info_technology_label" style="@style/info_label" />
++        <TextView android:id="@+id/technology" style="@style/info_value" />
++    </LinearLayout>
++
++    <!-- Uptime -->
++    <LinearLayout style="@style/entry_layout">
++        <TextView android:text="@string/battery_info_uptime" style="@style/info_label" />
++        <TextView android:id="@+id/uptime" style="@style/info_value" />
++    </LinearLayout>
++
++</LinearLayout>
++
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1107)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1108)
+@@ -3249,4 +3249,41 @@
+     <string name="domain_url_section_title" msgid="7046835219056428883">"已安装的应用"</string>
+     <string name="automatic_storage_manager_activation_warning" msgid="6353100011690933254">"您的存储空间目前是由存储空间管理器管理"</string>
+     <string name="regulartory_safety_title">"监管和安全"</string>
++	<string name="battery_percent_title">电池百分比显示</string>
++	<string name="battery_info_status_label" msgid="8109155295509700309">"电池状态："</string>
++    <string name="battery_info_power_label" msgid="7465140230991349382">"是否已插电："</string>
++    <string name="battery_info_scale_label" msgid="3649763192389778437">"电池电量："</string>
++    <string name="battery_info_level_label" msgid="8706526709307788737">"电池电量："</string>
++    <string name="battery_info_health_label" msgid="6416051542741886958">"电池运行状况："</string>
++    <string name="battery_info_technology_label" msgid="788304533220748681">"电池技术："</string>
++    <string name="battery_info_voltage_label" msgid="8971764146757637863">"电池电压："</string>
++    <string name="battery_info_voltage_units" msgid="8658490792208288107">"mV"</string>
++    <string name="battery_info_temperature_label" msgid="1968383098818648037">"电池温度："</string>
++    <string name="battery_info_temperature_units" msgid="9098950587249987550">"° C"</string>
++    <string name="battery_info_uptime" msgid="5548545143573527992">"启动后的时间："</string>
++    <string name="battery_info_awake_battery" msgid="2557725975486185849">"电池的唤醒时间："</string>
++    <string name="battery_info_awake_plugged" msgid="176716874713478188">"充电时的唤醒时间："</string>
++    <string name="battery_info_screen_on" msgid="376277447175613889">"屏幕开启时间："</string>
++    <string name="battery_info_status_unknown" msgid="196130600938058547">"未知"</string>
++    <string name="battery_info_status_charging" msgid="1705179948350365604">"正在充电"</string>
++    <string name="battery_info_status_charging_ac" msgid="2909861890674399949">"交流电"</string>
++    <string name="battery_info_status_charging_usb" msgid="2207489369680923929">"通过 USB 充电"</string>
++    <string name="battery_info_status_charging_wireless" msgid="3574032603735446573">"无线充电"</string>
++    <string name="battery_info_status_discharging" msgid="310932812698268588">"未在充电"</string>
++    <string name="battery_info_status_not_charging" msgid="2820070506621483576">"未在充电"</string>
++    <string name="battery_info_status_full" msgid="2824614753861462808">"已满"</string>
++    <string name="battery_info_power_unplugged" msgid="5987246575519551081">"未插电"</string>
++    <string name="battery_info_power_ac" msgid="6808516193001604634">"交流电"</string>
++    <string name="battery_info_power_usb" msgid="8012931702516331797">"USB"</string>
++    <string name="battery_info_power_wireless" msgid="6819163295739305097">"无线"</string>
++    <string name="battery_info_power_ac_usb" msgid="6777734146838328688">"交流电 + USB"</string>
++    <string name="battery_info_power_unknown" msgid="7344115502868899881">"未知"</string>
++    <string name="battery_info_health_unknown" msgid="5664295556921944255">"未知"</string>
++    <string name="battery_info_health_good" msgid="8070356565806711806">"正常"</string>
++    <string name="battery_info_health_overheat" msgid="8442959549291368806">"过热"</string>
++    <string name="battery_info_health_dead" msgid="1725917445762829059">"没电"</string>
++    <string name="battery_info_health_over_voltage" msgid="2420269351664490121">"过电压"</string>
++    <string name="battery_info_health_unspecified_failure" msgid="6347021103185471590">"未知错误"</string>
++    <string name="battery_info_health_cold" msgid="3835692786176707318">"电量低"</string>
++	<string name="testing_battery_info" msgid="4132685016148679403">"电池信息"</string>
+ </resources>
+Index: packages/apps/Settings/res/xml/testing_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/testing_settings.xml	(revision 1107)
++++ packages/apps/Settings/res/xml/testing_settings.xml	(revision 1108)
+@@ -24,7 +24,12 @@
+                 android:targetPackage="com.android.settings"
+                 android:targetClass="com.android.settings.RadioInfo" />
+     </PreferenceScreen>
+-
++	<PreferenceScreen           
++   			android:title="@string/testing_battery_info">       
++    	<intent android:action="android.intent.action.MAIN"                
++    			android:targetPackage="com.android.settings"                
++    			android:targetClass="com.android.settings.BatteryInfo" />    
++    </PreferenceScreen>
+     <PreferenceScreen
+             android:title="@string/testing_usage_stats">
+         <intent android:action="android.intent.action.MAIN"

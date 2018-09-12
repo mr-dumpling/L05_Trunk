@@ -1,0 +1,163 @@
+Index: vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java
+===================================================================
+--- vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java	(revision 2671)
++++ vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java	(revision 2672)
+@@ -64,6 +64,7 @@
+ import com.android.fmradio.views.FmScroller;
+ import com.android.fmradio.views.FmScroller.EventListener;
+ import com.android.fmradio.views.FmSnackBar;
++import android.provider.Settings;// lance add for bug 114532
+ 
+ 
+ /**
+@@ -728,8 +729,17 @@
+      */
+     @Override
+     public void onStart() {
+-            Log.d(TAG, "onStart");
++        Log.d(TAG, "onStart");
+         super.onStart();
++		// lance add for bug 114532 @{
++        boolean isAirplaneMode = Settings.System.getInt(mContext.getContentResolver(),
++                Settings.System.AIRPLANE_MODE_ON, 0) == 1;
++        if(isAirplaneMode) {
++            showToast(getString(R.string.not_available_airplanemode));
++            finish();
++            return;
++        }
++		// @}
+         // check layout onstart
+         if (isAntennaAvailable()) {
+             changeToMainLayout();
+Index: vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FMMediaButtonIntentReceiver.java
+===================================================================
+--- vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FMMediaButtonIntentReceiver.java	(revision 2671)
++++ vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FMMediaButtonIntentReceiver.java	(revision 2672)
+@@ -79,6 +79,10 @@
+                 default:
+                     break;
+             }
++            
++        }
++    }
++          
+ 
+     public static void sendToStartService() {
+         Intent i = new Intent(mContext, FmService.class);
+Index: vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmService.java
+===================================================================
+--- vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmService.java	(revision 2671)
++++ vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmService.java	(revision 2672)
+@@ -68,6 +68,7 @@
+ import java.util.Iterator;
+ 
+ import android.content.ComponentName;// lance add for MediaButtonReceiver
++import android.widget.Toast;// lance add for bug 114532
+ 
+ /**
+  * Background service to control FM or do background tasks.
+@@ -237,6 +238,30 @@
+     private Notification.Builder mNotificationBuilder = null;
+     private BigTextStyle mNotificationStyle = null;
+ 
++    // lance add for bug 114532 @{
++    public static final int MSG_EXIT_FM = 1234;
++    private Handler sHandler11 = new Handler() {
++        @Override
++        public void handleMessage(Message msg) {
++            Log.d(TAG, "sHandler11 =  " + msg.what);
++            switch (msg.what) {
++                case MSG_EXIT_FM:
++                    android.os.Process.killProcess(android.os.Process.myPid());
++                    break;
++            }
++        }
++    };
++    private Toast mToast = null;
++    private void showToast(CharSequence text) {
++        if (null == mToast) {
++            mToast = Toast.makeText(mContext, text, Toast.LENGTH_SHORT);
++        }
++        mToast.setText(text);
++        mToast.show();
++        Log.v(TAG, "FMRadioActivity.showToast: toast = " + text);
++    };
++    // @}
++
+     @Override
+     public IBinder onBind(Intent intent) {
+         return mBinder;
+@@ -339,7 +364,20 @@
+                     bundle.putBoolean(FmListener.KEY_IS_SPEAKER_MODE, false);
+                     notifyActivityStateChanged(bundle);
+                 }
++			// lance add for bug 114532 @{
++            } else if (Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(action)) {
++                    boolean isAirPlaneMode = intent.getBooleanExtra("state",false);
++                    if(isAirPlaneMode) {
++                        Log.d(TAG, ">>>ACTION_AIRPLANE_MODE_CHANGED");
++                        if (mPowerStatus == POWER_UP) {
++                            showToast(getString(R.string.toast_fm_enter_airplane_mode)); 
++                            sHandler11.sendMessageDelayed(sHandler11.obtainMessage(MSG_EXIT_FM, FmService.this),(long)1000); 
++                            mFmServiceHandler.removeCallbacksAndMessages(null); 
++                            focusChanged(AudioManager.AUDIOFOCUS_LOSS);
++                        }
++                    }  
+             }
++			// @}
+         }
+     }
+ 
+@@ -1947,6 +1985,7 @@
+         filter.addAction(Intent.ACTION_SCREEN_ON);
+         filter.addAction(Intent.ACTION_SCREEN_OFF);
+         filter.addAction(Intent.ACTION_HEADSET_PLUG);
++        filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);// lance add for bug 114532
+         mBroadcastReceiver = new FmServiceBroadcastReceiver();
+         registerReceiver(mBroadcastReceiver, filter);
+     }
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rCN/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rCN/strings.xml	(revision 2671)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rCN/strings.xml	(revision 2672)
+@@ -67,4 +67,6 @@
+     <string name="previous_channel">"上一步"</string>
+     <string name="stop_fm">"停止"</string>
+     <string name="next_channel">"下一步"</string>
++    <string name="toast_fm_enter_airplane_mode">进入飞行模式，收音机将被关闭。</string>
++    <string name="not_available_airplanemode">飞行模式下，无法打开收音机。</string>
+ </resources>
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/values/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/values/strings.xml	(revision 2671)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/values/strings.xml	(revision 2672)
+@@ -163,4 +163,7 @@
+     <string name="previous_channel">Previous</string>
+     <string name="stop_fm">Stop</string>
+     <string name="next_channel">Next</string>
++
++    <string name="toast_fm_enter_airplane_mode">The FM will close because you have been entered the airplane mode</string>
++    <string name="not_available_airplanemode">FM is not available under airplane mode</string>
+ </resources>
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rHK/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rHK/strings.xml	(revision 2671)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rHK/strings.xml	(revision 2672)
+@@ -67,4 +67,6 @@
+     <string name="previous_channel">"上一步"</string>
+     <string name="stop_fm">"停止"</string>
+     <string name="next_channel">"下一步"</string>
++    <string name="toast_fm_enter_airplane_mode">進入飛行模式，收音機將被關閉。</string>
++    <string name="not_available_airplanemode">飛行模式下，無法打開收音機。</string>
+ </resources>
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rTW/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rTW/strings.xml	(revision 2671)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rTW/strings.xml	(revision 2672)
+@@ -67,4 +67,6 @@
+     <string name="previous_channel">"上一步"</string>
+     <string name="stop_fm">"停止"</string>
+     <string name="next_channel">"下一步"</string>
++    <string name="toast_fm_enter_airplane_mode">進入飛行模式，收音機將被關閉。</string>
++    <string name="not_available_airplanemode">飛行模式下，無法打開收音機。</string>
+ </resources>

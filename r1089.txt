@@ -1,0 +1,87 @@
+Index: frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java	(revision 1088)
++++ frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java	(revision 1089)
+@@ -1777,6 +1777,8 @@
+                 // it can provide feedback to the user.
+                 if (dockedOnWirelessCharger) {
+                     mNotifier.onWirelessChargingStarted();
++                } else {
++                    mNotifier.onChargingStarted();//lance add for bug110952
+                 }
+             }
+ 
+Index: frameworks/base/services/core/java/com/android/server/power/Notifier.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/power/Notifier.java	(revision 1088)
++++ frameworks/base/services/core/java/com/android/server/power/Notifier.java	(revision 1089)
+@@ -86,6 +86,7 @@
+     private static final int MSG_BROADCAST = 2;
+     private static final int MSG_WIRELESS_CHARGING_STARTED = 3;
+     private static final int MSG_SCREEN_BRIGHTNESS_BOOST_CHANGED = 4;
++    private static final int MSG_CHARGING_STARTED = 5; //lance add for bug110952
+ 
+     private final Object mLock = new Object();
+ 
+@@ -564,6 +565,19 @@
+         mHandler.sendMessage(msg);
+     }
+ 
++    //lance add for bug110952 @{
++    public void onChargingStarted() {
++        if (DEBUG) {
++            Slog.d(TAG, "onChargingStarted");
++        }
++
++        mSuspendBlocker.acquire();
++        Message msg = mHandler.obtainMessage(MSG_CHARGING_STARTED);
++        msg.setAsynchronous(true);
++        mHandler.sendMessage(msg);
++    }
++    //@}
++
+     private void updatePendingBroadcastLocked() {
+         if (DEBUG) {
+             Slog.d(TAG, "updatePendingBroadcastLocked "
+@@ -750,6 +764,27 @@
+         mSuspendBlocker.release();
+     }
+ 
++    //lance add for bug110952 @{
++	private void playChargingStartedSound() {
++        final boolean enabled = Settings.Global.getInt(mContext.getContentResolver(),
++                Settings.Global.CHARGING_SOUNDS_ENABLED, 1) != 0;
++        final String soundPath = Settings.Global.getString(mContext.getContentResolver(),
++                Settings.Global.WIRELESS_CHARGING_STARTED_SOUND);
++        if (enabled && soundPath != null) {
++            final Uri soundUri = Uri.parse("file://" + soundPath);
++            if (soundUri != null) {
++                final Ringtone sfx = RingtoneManager.getRingtone(mContext, soundUri);
++                if (sfx != null) {
++                    sfx.setStreamType(AudioManager.STREAM_SYSTEM);
++                    sfx.play();
++                }
++            }
++        }
++
++        mSuspendBlocker.release();
++    }
++    // @}
++
+     private final class NotifierHandler extends Handler {
+         public NotifierHandler(Looper looper) {
+             super(looper, null, true /*async*/);
+@@ -769,6 +804,13 @@
+                 case MSG_WIRELESS_CHARGING_STARTED:
+                     playWirelessChargingStartedSound();
+                     break;
++
++                //lance add for bug110952 @{
++				case MSG_CHARGING_STARTED:
++                    playChargingStartedSound();
++                    break;
++                // @}
++
+                 case MSG_SCREEN_BRIGHTNESS_BOOST_CHANGED:
+                     sendBrightnessBoostChangedBroadcast();
+                     break;

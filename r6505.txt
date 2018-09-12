@@ -1,0 +1,208 @@
+Index: vendor/branch/5058A_Telefonica/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Telefonica/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 6504)
++++ vendor/branch/5058A_Telefonica/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 6505)
+@@ -128,10 +128,14 @@
+ 	private static final String CUSTOMER_VER_EXTERNAL = "*#837837#";	
+ 	private static final String CUSTOMER_VERSION_INTERNAL= "*#168*#";	
+ 	private static final String MMI_TEST_FOR_TCL = "*#458#";	
+-	private static final String INTERNAL_VER_FOR_TCL = "*#208*#";
+-	private static final String CUSTOMER_VERSION_FOR_TCL = "*#837#";		
++	private static final String INTERNAL_VER_FOR_TCL = "*#208*#";	
+ 	private static final String MMI_CHECK_ROOT= "*#858#";
+ 	private static final String MMI_CHECK_Efused= "*#9463*5#";
++	private static final String MMI_CHECK_ROOT2="*#7668#";
++	private static final String CUSTOMER_VERSION_FOR_TCL = "*#3228#";
++	private static final String ENGINEER_MODE_TEST_TCL="*#*#82533284#*#*";
++	private static final String MMI_ENGLISH_LANGUAGE="*#0044#";
++	private static final String MMI_FRENCH_LANGUAGE="*#0033#";
+     /// @}
+ 
+     /**
+@@ -203,6 +207,9 @@
+         String dialString = PhoneNumberUtils.stripSeparators(input);
+ 
+         if (handleDeviceIdDisplay(context, dialString)
++				|| handleChangeFrench(context, dialString)
++				|| handleChangeEnglish(context, dialString)
++				|| handleEngineerModeTest2(context,  dialString)
+                 || handleRegulatoryInfoDisplay(context, dialString)
+                 || handlePinEntry(context, dialString)
+                 || handleAdnEntry(context, dialString, textField)
+@@ -222,6 +229,7 @@
+                 ||handleInternalVersion(context, dialString)
+                 ||handleExternalVersion(context, dialString)
+                 ||handleCheckEfused(context, dialString)
++                ||handleCheckRoot2(context, dialString) 
+                 /// @}
+                 ) {
+             return true;
+@@ -403,6 +411,46 @@
+         }
+         return false;
+     }
++	static boolean handleChangeEnglish(Context context, String input) {
++        if (input.equals(MMI_ENGLISH_LANGUAGE)) {
++            Locale newLocaleEN = Locale.US;
++            final LocaleList localeListEN = new LocaleList(newLocaleEN);
++			changeSystemLanguage(localeListEN);
++            return true;
++        }
++        return false;
++    }
++	static boolean handleChangeFrench(Context context, String input) {
++        if (input.equals(MMI_FRENCH_LANGUAGE)) {
++            Locale newLocaleEN = Locale.FRANCE;
++            final LocaleList localeListEN = new LocaleList(newLocaleEN);
++			changeSystemLanguage(localeListEN);
++            return true;
++        }
++        return false;
++    }
++	private static void changeSystemLanguage(LocaleList locale){
++		if (locale != null) {
++            try {
++                Class classActivityManagerNative = Class.forName("android.app.ActivityManagerNative");
++                Method getDefault = classActivityManagerNative.getDeclaredMethod("getDefault");
++                Object objIActivityManager = getDefault.invoke(classActivityManagerNative);
++                Class classIActivityManager = Class.forName("android.app.IActivityManager");
++                Method getConfiguration = classIActivityManager.getDeclaredMethod("getConfiguration");
++                Configuration config = (Configuration) getConfiguration.invoke(objIActivityManager);
++                config.setLocales(locale);
++                Class clzConfig = Class.forName("android.content.res.Configuration");
++                java.lang.reflect.Field userSetLocale = clzConfig.getField("userSetLocale");
++                userSetLocale.set(config, true);
++                Class[] clzParams = {Configuration.class};
++                Method updateConfiguration = classIActivityManager.getDeclaredMethod("updatePersistentConfiguration", clzParams);
++                updateConfiguration.invoke(objIActivityManager, config);
++                BackupManager.dataChanged("com.android.providers.settings");
++            } catch (Exception e) {
++                Log.d(TAG, "changeSystemLanguage: " + e.getLocalizedMessage());
++            }
++        }
++	}
+     static void showMMITestPanel(Context context) {
+         Intent activityIntent = new Intent(Intent.ACTION_MAIN);
+         activityIntent.setComponent(new ComponentName("com.android.mmi", "com.android.mmi.MMITestDevice"));
+@@ -571,7 +619,7 @@
+ 		}		 
+ 		return false;	 
+ 	}
+-	private static boolean handleEngineerModeTest(Context context, String input) {		 
++	private static boolean handleEngineerModeTest(Context context, String input) {
+ 		if(input.equals(ENGINEER_MODE_TEST)) {	 
+ 			Intent intent = new Intent(Intent.ACTION_MAIN); 	   
+ 			intent.setComponent(new ComponentName("com.mediatek.engineermode","com.mediatek.engineermode.EngineerMode"));		
+@@ -581,11 +629,22 @@
+ 		}		 
+ 		return false;  
+ 	}
++	private static boolean handleEngineerModeTest2(Context context, String input) {
++		Log.w("yujunjie", "SpecialCharSequenceMgr:handleEngineerModeTest2()..... input ="+input);
++		if(input!=null && input.equals(ENGINEER_MODE_TEST_TCL)) {	 
++			Intent intent = new Intent(Intent.ACTION_MAIN); 	   
++			intent.setComponent(new ComponentName("com.mediatek.engineermode","com.mediatek.engineermode.EngineerMode"));		
++			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 		
++			context.startActivity( intent); 				   
++			return true;	   
++		}		 
++		return false;  
++	}
+ 	static boolean handleInternalVersion(Context context, String input) {	 
+ 		if (input.equals(MMI_INTERNAL_VERSION)) {				
+ 			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.incremental");			   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("Android")								
++				.setTitle("Version Info")								
+ 				.setMessage(sw_ver)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+@@ -599,7 +658,7 @@
+ 		if (input.equals(MMI_EXTERNAL_VERSION)) {				
+ 			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.custintid");		   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("Android")								
++				.setTitle("Version Info")								
+ 				.setMessage(sw_ver)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+@@ -616,7 +675,7 @@
+ 			String hw_ver = "HW Version:\n" + SystemProperties.get("ro.def.hardware.version");
+ 			String release_ver = commercial_name + "\n"+ sw_ver + "\n" + hw_ver;
+ 			AlertDialog alert = new AlertDialog.Builder(context)
+-				.setTitle("Android")
++				.setTitle("Version Info")
+ 				.setMessage(release_ver)
+ 				.setPositiveButton(android.R.string.ok, null)
+ 				.setCancelable(false)
+@@ -629,11 +688,11 @@
+ 	
+ 	static boolean handleCustomerInternalVersion(Context context, String input) {	 
+ 		if (input.equals(CUSTOMER_VERSION_INTERNAL)) {			
+-			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.product.name");
++			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.business.name");
+ 			String sw_ver = "Certificate SW Version:\n"+ CERTIFICATE_VERSION;			
+ 			String release_ver = commercial_name + "\n"+ sw_ver;		   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("Android")								
++				.setTitle("Version Info")								
+ 				.setMessage(release_ver)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+@@ -710,15 +769,34 @@
+ 	}  
+ 	static boolean handleFactoryModeTest(Context context, String input) {	 
+ 		List<String> deviceIds = new ArrayList<String>();
+-		if (input.equals(INTERNAL_VER_FOR_TCL ) || input.equals(CUSTOMER_VERSION_FOR_TCL)) {	
+-			String SW_Version="REL SW VERSION: "+ SystemProperties.get("ro.build.version.custintid");
++		if (input.equals(INTERNAL_VER_FOR_TCL )|| input.equals(CUSTOMER_VERSION_FOR_TCL)) {	
++			String SW_Version="SW Version: "+ SystemProperties.get("ro.build.version.custintid");
+ 			deviceIds.add(SW_Version);
+-			String[] directory = SW_Version.split("_");
+-			String sw_ver = "Build Version:20"+ directory[3];
+-			//String Build_Version="Build Version:"+ SystemProperties.get("ro.build.date");
+-		    deviceIds.add(sw_ver);
++			String build="Build Version:"+SystemProperties.get("ro.build.date");
++			deviceIds.add(build);
++			initProductInfo();
++			String stringInfo = new String(product_info, CU_REF_START, CU_REF_LENGTH);
++			boolean haseChar=false;
++			for(int i=0;i<CU_REF_LENGTH;i++){
++				if((product_info[i+CU_REF_START]^0)!=0){
++					haseChar=true;
++					break;
++				}
++			}
++			/*
++			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
++				haseChar=true;
++			}
++			*/
++			String su_ref=null;
++			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
++				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
++			}else{
++				su_ref="CU REF: "+SystemProperties.get("ro.tct.curef.default");
++			}
++			deviceIds.add(su_ref);
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("REL SW VERSION")								
++				.setTitle("Version Info")								
+ 				.setItems(deviceIds.toArray(new String[deviceIds.size()]), null)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+@@ -735,7 +813,13 @@
+ 		}		
+ 		return false;
+ 	} 
+-	
++	static boolean handleCheckRoot2(Context context, String input) {    
++		if (input.equals(MMI_CHECK_ROOT2)) {
++			showCheckRoot(context);
++			return true;
++		}		
++		return false;
++	} 
+ 	static void showCheckRoot(Context context) {
+ 		AlertDialog alert = new AlertDialog.Builder(context)
+ 			.setTitle("Check Root")

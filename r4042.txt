@@ -1,0 +1,64 @@
+Index: packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 4041)
++++ packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 4042)
+@@ -283,6 +283,21 @@
+ 					*/
+ 	  				modePrenference.edit().putInt(NIGHT_MODE_LEVEL,level).commit();
+ 	  			}
++			};
++			
++			@Override
++			public void onStartTouch (int level) {	
++					if(!automateSchedulePreference.isChecked() && !manuallyEnablePreference.isChecked() && !PictureQuality.isBlueLightEnabled()){
++						PictureQuality.enableBlueLight(true);
++						PictureQuality.setBlueLightStrength(level*40);
++					}
++			};
++
++			@Override
++			public void onEndTouch (int level) {	
++					if(!automateSchedulePreference.isChecked() && !manuallyEnablePreference.isChecked() && PictureQuality.isBlueLightEnabled()){
++						PictureQuality.enableBlueLight(false);	
++					}
+ 			}
+ 		});
+ 
+Index: packages/apps/Settings/src/com/android/settings/ColorTemperaturePreference.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/ColorTemperaturePreference.java	(revision 4041)
++++ packages/apps/Settings/src/com/android/settings/ColorTemperaturePreference.java	(revision 4042)
+@@ -85,15 +85,21 @@
+ 		
+ 		}  
+     }
+-
++	
+     @Override
+     public void onStartTrackingTouch(SeekBar seekBar) {
+-
++		if(callback!=null){
++			callback.onStartTouch(seekBar.getProgress());
++		
++		}  
+     }
+ 
+     @Override
+     public void onStopTrackingTouch(SeekBar seekBar) {
+-
++		if(callback!=null){
++			callback.onEndTouch(seekBar.getProgress());
++		
++		}  
+     }
+ 
+ 
+@@ -126,6 +132,8 @@
+ 
+    public interface Callback {
+         void onNightModeLevel(int level);
++		void onStartTouch(int level);
++		void onEndTouch(int level);
+         
+     }
+ 	public void setCallback(Callback callback){

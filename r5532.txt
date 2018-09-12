@@ -1,0 +1,68 @@
+Index: frameworks/base/core/java/android/app/WallpaperManager.java
+===================================================================
+--- frameworks/base/core/java/android/app/WallpaperManager.java	(revision 5531)
++++ frameworks/base/core/java/android/app/WallpaperManager.java	(revision 5532)
+@@ -266,6 +266,26 @@
+             return mHeight;
+         }
+     }
++    
++    /**
++     * Retrieve the current lockscreen wallpaper; if
++     * no wallpaper is set, the system built-in static wallpaper is returned.
++     * This is returned as an
++     * abstract Drawable that you can install in a View to display whatever
++     * wallpaper the user has currently set.
++     *
++     * @return Returns a Drawable object that will draw the wallpaper.
++     *@hide
++     */
++    public Drawable getLockDrawable() {
++        Bitmap bm = sGlobals.peekWallpaperBitmap(mContext, true, FLAG_LOCK);
++        if (bm != null) {
++            Drawable dr = new BitmapDrawable(mContext.getResources(), bm);
++            dr.setDither(false);
++            return dr;
++        }
++        return null;
++    }//added by zengjie for task 5756442 on 20171215 end
+ 
+     static class Globals extends IWallpaperManagerCallback.Stub {
+         private final IWallpaperManager mService;
+@@ -379,9 +399,15 @@
+                 Log.e(TAG, "Catch IWallpaperPlugin exception: ", e);
+             }
+             /// @}
+-            if (mWallpaperPlugin == null || mWallpaperPlugin.getPluginResources(context) == null) {
+-                is = context.getResources().openRawResource(
+-                        com.android.internal.R.drawable.default_wallpaper);
++            if (mWallpaperPlugin == null || mWallpaperPlugin.getPluginResources(context) == null) {	            	
++                Log.d(TAG, "xiawei openDefaultWallpaperRes which = " + which);
++                if(which == FLAG_LOCK){
++                    is = context.getResources().openRawResource(
++                            com.android.internal.R.drawable.default_lock_wallpaper);
++                }else {
++                    is = context.getResources().openRawResource(
++                            com.android.internal.R.drawable.default_wallpaper);
++                }
+             } else {
+                 Log.d(TAG, "get the wallpaper image from the plug-in");
+                 is = mWallpaperPlugin.getPluginResources(context).openRawResource(
+@@ -1639,12 +1665,14 @@
+     public static InputStream openDefaultWallpaper(Context context, @SetWallpaperFlags int which) {
+         final String whichProp;
+         final int defaultResId;
++        Log.d(TAG, "xiawei openDefaultWallpaper which = " + which);
++
+         if (which == FLAG_LOCK) {
+-            /* Factory-default lock wallpapers are not yet supported
++            // Factory-default lock wallpapers are not yet supported
+             whichProp = PROP_LOCK_WALLPAPER;
+             defaultResId = com.android.internal.R.drawable.default_lock_wallpaper;
+-            */
+-            return null;
++            
++            //return null;
+         } else {
+             whichProp = PROP_WALLPAPER;
+             defaultResId = com.android.internal.R.drawable.default_wallpaper;

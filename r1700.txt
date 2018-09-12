@@ -1,0 +1,79 @@
+Index: frameworks/opt/telephony/src/java/com/android/internal/telephony/MccTable.java
+===================================================================
+--- frameworks/opt/telephony/src/java/com/android/internal/telephony/MccTable.java	(revision 1699)
++++ frameworks/opt/telephony/src/java/com/android/internal/telephony/MccTable.java	(revision 1700)
+@@ -43,6 +43,8 @@
+ 
+ import libcore.icu.ICU;
+ import libcore.icu.TimeZoneNames;
++import android.provider.Settings;
++import android.os.LocaleList;
+ 
+ /**
+  * Mobile Country Code
+@@ -210,8 +212,10 @@
+             }
+ 
+             Slog.d(LOG_TAG, "updateMccMncConfiguration: mcc=" + mcc + ", mnc=" + mnc);
++			Locale mccLocale = null; 
+             if (mcc != 0) {
+                 setTimezoneFromMccIfNeeded(context, mcc);
++				mccLocale = getLocaleFromMcc(context, mcc, null); 
+             }
+             if (fromServiceState) {
+                 setWifiCountryCodeFromMcc(context, mcc);
+@@ -225,6 +229,15 @@
+                         config.mnc = mnc == 0 ? Configuration.MNC_ZERO : mnc;
+                         updateConfig = true;
+                     }
++					
++					if (mccLocale != null) { 
++					Configuration conLocale = new Configuration();
++					conLocale = ActivityManagerNative.getDefault().getConfiguration(); 
++					LocaleList userLocale = conLocale.getLocales();
++					LocaleList newUserLocale = new LocaleList(mccLocale,userLocale); 
++					config.setLocales(newUserLocale); 
++					updateConfig = true; 
++					} 
+ 
+                     if (updateConfig) {
+                         Slog.d(LOG_TAG, "updateMccMncConfiguration updateConfig config=" + config);
+@@ -243,7 +256,27 @@
+             }
+         }
+     }
++	
++	private static boolean canUpdateLocale(Context context) {
++	    return !(userHasPersistedLocale() /*|| isDeviceProvisioned(context)*/);
++	}
++	
++	private static boolean userHasPersistedLocale() {
++	    String persistSysLanguage = SystemProperties.get("persist.sys.locale", "");
++	    String persistSysCountry = SystemProperties.get("persist.sys.country", "");
++	    return !(persistSysLanguage.isEmpty() && persistSysCountry.isEmpty());
++	}
++	
++	private static boolean isDeviceProvisioned(Context context) {
++	    try {
++	        return Settings.Global.getInt(
++	        context.getContentResolver(), Settings.Global.DEVICE_PROVISIONED) != 0;
++	    } catch (Settings.SettingNotFoundException e) {
++	        return false;
++	    }
++	 }
+ 
++
+     /**
+      * Maps a given locale to a fallback locale that approximates it. This is a hack.
+      */
+@@ -299,6 +332,10 @@
+         if (country == null) {
+             country = ""; // The Locale constructor throws if passed null.
+         }
++		
++		if(!canUpdateLocale(context)){ 
++			return null; 
++		} 
+ 
+         final Locale target = new Locale(language, country);
+         try {

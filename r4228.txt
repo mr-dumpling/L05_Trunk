@@ -1,0 +1,34 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/LockIcon.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/LockIcon.java	(revision 4227)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/LockIcon.java	(revision 4228)
+@@ -252,7 +252,12 @@
+ 				return R.drawable.unlock_all_animation;
+ 				// modify end }
+ 			case STATE_FACE_UNLOCK:
+-                return com.android.internal.R.drawable.ic_account_circle;
++				if(Settings.System.getInt(mContext.getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0)!=0){
++					return com.android.internal.R.drawable.ic_account_circle;
++				}else{
++					return R.drawable.unlock_all_animation;
++				}
++				
+             case STATE_FINGERPRINT:
+                 // If screen is off and device asleep, use the draw on animation so the first frame
+                 // gets drawn.
+@@ -307,11 +312,14 @@
+         KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+         boolean fingerprintRunning = updateMonitor.isFingerprintDetectionRunning();
+         boolean unlockingAllowed = updateMonitor.isUnlockingWithFingerprintAllowed();
++		//add face lock
++		boolean faceUnlockDevice=Settings.System.getInt(mContext.getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0)!=0 ;
++		boolean facelockSuccess=Settings.System.getInt(mContext.getContentResolver(),Settings.System.FACE_STATE_ENABLED, 0)	!=0	;			
+         if (mTransientFpError) {
+             return STATE_FINGERPRINT_ERROR;
+         } else if (mUnlockMethodCache.canSkipBouncer()) {
+             return STATE_LOCK_OPEN;
+-        } else if (mUnlockMethodCache.isFaceUnlockRunning()) {
++        } else if (faceUnlockDevice && facelockSuccess /*mUnlockMethodCache.isFaceUnlockRunning()*/) {
+             return STATE_FACE_UNLOCK;
+         } else if (fingerprintRunning && unlockingAllowed) {
+             return STATE_FINGERPRINT;

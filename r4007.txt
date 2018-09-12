@@ -1,0 +1,71 @@
+Index: device/mediatek/mt6739/init.mt6739.rc
+===================================================================
+--- device/mediatek/mt6739/init.mt6739.rc	(revision 4006)
++++ device/mediatek/mt6739/init.mt6739.rc	(revision 4007)
+@@ -943,6 +943,12 @@
+ on property:sys.boot_completed=1
+     start perfd
+ 
++on property:persist.sys.bt.address.set=0
++    chown root system /data/nvram/APCFG/APRDEB/BT_Addr
++    
++on property:persist.sys.bt.address.set=1
++    chown root net_bt_stack /data/nvram/APCFG/APRDEB/BT_Addr
++    
+ # start EAS+
+ on property:sys.boot_completed=1
+     write /dev/stune/schedtune.boost 0
+Index: vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootCompleteServer.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootCompleteServer.java	(revision 4006)
++++ vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootCompleteServer.java	(revision 4007)
+@@ -61,9 +61,8 @@
+         readProductInfo();
+         setCuRefProperty();
+         //setSWRInfoToNV();
++        readWifiMACFromNvram();
+         readBTAddrFromNvram();
+-        readWifiMACFromNvram();
+-        
+         stopSelf();
+         return START_NOT_STICKY;
+     }
+@@ -120,6 +119,12 @@
+     }
+ 
+     private void readBTAddrFromNvram(){
++        boolean btAddrSet = SystemProperties.getBoolean("persist.sys.bt.address.set", false);
++        Log.d(TAG, "readBTAddrFromNvram btAddrSet = " + btAddrSet);
++        if(btAddrSet) {
++            return;
++        }
++        
+         byte[] buff = null;
+         IBinder binder = ServiceManager.getService("NvRAMAgent");
+         NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
+@@ -153,7 +158,9 @@
+             	  Log.d(TAG, "agent.writeFile error");
+                 e.printStackTrace();
+                 return ;
+-            }  
++            }
++            
++            SystemProperties.set("persist.sys.bt.address.set", "1");
+         }
+         
+     }
+Index: vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootupReceiver.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootupReceiver.java	(revision 4006)
++++ vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootupReceiver.java	(revision 4007)
+@@ -51,6 +51,10 @@
+ 
+        if(action.equals(BOOTCOMPLETED_ACTION)){
+             Log.d(TAG, "---BOOTCOMPLETED_ACTION");
++            boolean btAddrSet = SystemProperties.getBoolean("persist.sys.bt.address.set", false);
++            if(!btAddrSet) {
++                SystemProperties.set("persist.sys.bt.address.set", "0");
++            }
+             Intent newIntent = new Intent(context, FactoryModeBootCompleteServer.class);
+             context.startService(newIntent);
+        }

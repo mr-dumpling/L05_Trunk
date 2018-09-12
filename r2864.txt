@@ -1,0 +1,172 @@
+Index: device/mediatek/common/sepolicy/basic/init.te
+===================================================================
+--- device/mediatek/common/sepolicy/basic/init.te	(revision 2863)
++++ device/mediatek/common/sepolicy/basic/init.te	(revision 2864)
+@@ -64,3 +64,6 @@
+ # Operation : Access MET control node
+ # Purpose : enable MET feature
+ allow init sysfs_met:lnk_file rw_file_perms;
++
++allow init tp_gesture_device:chr_file rw_file_perms;
++allow init tp_glove_device:chr_file rw_file_perms;
+\ No newline at end of file
+Index: device/mediatek/mt6739/init.mt6739.rc
+===================================================================
+--- device/mediatek/mt6739/init.mt6739.rc	(revision 2863)
++++ device/mediatek/mt6739/init.mt6739.rc	(revision 2864)
+@@ -1014,6 +1014,13 @@
+ start atci_service
+ start atcid-daemon-u
+ 
++# monitor property gesture flag status start
++on property:persist.sys.double.flags=*
++    write /dev/tp_gesture ${persist.sys.double.flags}
++on property:persist.sys.glove.flags=*
++    write /dev/tp_glove ${persist.sys.glove.flags}
++# monitor property gesture flag status end
++
+ service audio-daemon /vendor/bin/audiocmdservice_atci
+     class main
+     socket atci-audio stream 660 root system
+Index: packages/apps/Settings/src/com/android/settings/Util.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/Util.java	(revision 2863)
++++ packages/apps/Settings/src/com/android/settings/Util.java	(revision 2864)
+@@ -13,77 +13,70 @@
+ import android.util.Log;
+ import java.io.FileWriter;
+ import java.io.DataOutputStream;
++import android.provider.Settings.Secure;
++import android.content.Intent;
++
+ public final class Util  {
+     private static final String TAG = "Gesture/Util";
+-    private static final String gfileName = "/sys/bus/i2c/drivers/fts_ts/0-0070/fts_gesture_mode";
+-	private static final String dfileName = "/sys/bus/i2c/drivers/fts_ts/0-0070/fts_glove_mode";
++	private static final String PROPERTY_NAME_DOUBLE = "persist.sys.double.flags";
++	private static final String PROPERTY_NAME_GLOVE = "persist.sys.glove.flags";
++    private static final String dfileName = "dev/tp_gesture";
++	private static final String gfileName = "dev/tp_glove";
+     public static final int FALG_GESTURE_GLOVE= 100;
+     public static final int KEY_GESTURE_DOUBLE_TAP= 101;
+ 	private static String fileName;
+-    public static void setFlags(Context mContext, int key,int vaule){
++    public static void setFlags(Context mContext, int key,int value){
+ 		if(key==FALG_GESTURE_GLOVE){
+ 			fileName=gfileName;
+-			Log.e("wqq-->glove", "fileName= "+fileName);
+ 		}else{
+ 			fileName=dfileName;
+-			Log.e("wqq-->doubleTap", "fileName= "+fileName);
+ 		}
+-        //writeFile(vaule);
+-        writeSysFile(fileName,vaule);
+-		Log.e("wqq-->writeSysFile", "vaule= "+vaule);
++       writeFile(fileName,String.valueOf(value));
+     }
+ 
+-   /* public static void writeFile(int gestureValue) {
+-        int value = gestureValue;
+-
+-        FileWriter file = null;
+-        try {
+-            file = new FileWriter(fileName);
+-            String buf = String.valueOf(value);
+-            file.write(buf);
+-            if (file != null) {
+-                file.close();
+-                file = null;
+-            }
+-        } catch (IOException e) {
+-            Log.e(TAG, "saveParamToFile " + e.getMessage());
+-            try {
+-                if (file != null) {
+-                    file.close();
+-                    file = null;
+-                }
+-            } catch (IOException io) {
+-                Log.e(TAG, "saveParamToFile fail");
+-            }
++	public static synchronized void writeFile(String path, String cmd) {
++        Log.d(TAG, "path: " + path + "; cmd: " + cmd);
++        File file = new File(path);
++        if (!file.exists()) {
++            Log.d(TAG, "the file is not exists");
++            return;
+         }
+-    }*/
+-
+-	public static void writeSysFile(String sys_path,int gretureVaule){
+-
+-        Process p = null;
+-        DataOutputStream os = null;
++        FileOutputStream fos = null;
++        BufferedOutputStream bos = null;
+         try {
+-            p = Runtime.getRuntime().exec("sh");
+-            os = new DataOutputStream(p.getOutputStream());
+-            os.writeBytes("echo"+ gretureVaule+" > "+sys_path + "\n");
+-			Log.e("wqq-->writeBytes", "sys_path= "+sys_path);
+-            os.writeBytes("exit\n");
+-            os.flush();
+-			Log.e("wqq-->writeSysFile", "gretureVaule= "+gretureVaule);
+-        } catch (IOException e) {
++            fos = new FileOutputStream(file);
++            bos = new BufferedOutputStream(fos);
++            byte[] bytes = cmd.getBytes();
++            bos.write(bytes);
++        } catch (Exception e) {
+             e.printStackTrace();
+-            Log.e(TAG, " can't write " + sys_path+e.getMessage());
+         } finally {
+-            if(p != null){
+-                p.destroy();
++            if (bos != null) {
++                try {
++                    bos.close();
++                } catch (Exception e) {
++                    e.printStackTrace();
++                }
+             }
+-            if(os != null){
++            if (fos != null) {
+                 try {
+-                    os.close();
+-                } catch (IOException e) {
++                    fos.close();
++                } catch (Exception e) {
+                     e.printStackTrace();
+                 }
+             }
+         }
+     }
++	
++	
++	public static void setFlag(String name,int flags) {
++        Log.d(TAG, "setFlags: flags = " + flags);
++        SystemProperties.set(name, String.valueOf(flags));
++    }
++    
++    public static int getFlag(String name) {
++        int ret = SystemProperties.getInt(name, 0);
++        Log.d(TAG, "getFlags: flags = " + ret);
++        return ret;
++    }
+ }
+Index: packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 2863)
++++ packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 2864)
+@@ -213,10 +213,12 @@
+ 			Secure.putInt(getContentResolver(),
+                     Secure.GLOVE_MODE_ENABLE, enabled ? 1 : 0);
+ 			Util.setFlags(mContext,Util.FALG_GESTURE_GLOVE,enabled ? 1 : 0)	;
++			Util.setFlag("persist.sys.glove.flags",enabled ? 1 : 0);
+ 		}else if(DOUBLE_TAP_SCREEN.equals(key)){
+ 			Secure.putInt(getContentResolver(),
+                     Secure.DOUBLE_TAP_SCREEN_ENABLE, enabled ? 1 : 0);
+ 			Util.setFlags(mContext,Util.KEY_GESTURE_DOUBLE_TAP,enabled ? 1 : 0)	;
++			Util.setFlag("persist.sys.double.flags",enabled ? 1 : 0);
+ 		}
+ 		//add by wqq end
+         return true;

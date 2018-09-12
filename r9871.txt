@@ -1,0 +1,56 @@
+Index: frameworks/av/services/camera/libcameraservice/CameraService.cpp
+===================================================================
+--- frameworks/av/services/camera/libcameraservice/CameraService.cpp	(revision 9870)
++++ frameworks/av/services/camera/libcameraservice/CameraService.cpp	(revision 9871)
+@@ -1213,10 +1213,24 @@
+ 
+         // Find clients that would be evicted
+         auto evicted = mActiveClientManager.wouldEvict(clientDescriptor);
++		
++		ALOGE("weixu###4.0 camera ID %s,(PID %d)",cameraId.string(), clientPid);
+ 
++        bool isNativeCameraApp = false;        
++		if(strcmp("com.android.systemui", packageName) == 0) {
++			ALOGE("weixu###5 (cameraId= %s)",cameraId.string());
++			sp<BasicClient> conflictingSp = mActiveClientManager.getCameraClient(String8("1"));
++			if(conflictingSp != NULL && strcmp("com.mediatek.hz.camera", String8(conflictingSp->getPackageName().string()))== 0){
++	              ALOGE("weixu###6 disconnect camera ID %s,(PID %d) (evicted %d)",cameraId.string(), conflictingSp->getClientPid(),std::find(evicted.begin(), evicted.end(), clientDescriptor) != evicted.end());
++                  isNativeCameraApp =true;
++			}
++     	}
++		
++		
++
+         // If the incoming client was 'evicted,' higher priority clients have the camera in the
+         // background, so we cannot do evictions
+-        if (std::find(evicted.begin(), evicted.end(), clientDescriptor) != evicted.end()) {
++        if (std::find(evicted.begin(), evicted.end(), clientDescriptor) != evicted.end()&& !isNativeCameraApp) {
+             ALOGE("CameraService::connect X (PID %d) rejected (existing client(s) with higher"
+                     " priority).", clientPid);
+ 
+@@ -1291,6 +1305,25 @@
+         // Disconnect is blocking, and should only have returned when HAL has cleaned up
+         i->getValue()->disconnect(); // Clients will remove themselves from the active client list
+     }
++	
++    //add by weixu begin
++    // solution system camera app�� open camera 0  ��camera 2 also open 
++      if(strcmp("com.mediatek.hz.camera", packageName) == 0) {
++						String8  conflictingid;
++						
++				        if(cameraIdToInt(cameraId) == 0) {
++				            conflictingid = String8("1");
++				        } else{
++				            conflictingid = String8("0");
++				        }
++						ALOGE("weixu###2 (conflictingid= %s)",conflictingid.string());
++					 sp<BasicClient> conflictingSp = mActiveClientManager.getCameraClient(conflictingid);
++					 if(conflictingSp != NULL && strcmp("com.android.systemui", String8(conflictingSp->getPackageName().string()))== 0){
++				              ALOGE("weixu###3 disconnect camera ID %s,(PID %d)",conflictingid.string(), conflictingSp->getClientPid());
++						conflictingSp->disconnect();
++					 }
++      }
++      //add by weixu end
+ 
+     IPCThreadState::self()->restoreCallingIdentity(token);
+ 

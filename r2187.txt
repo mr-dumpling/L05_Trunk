@@ -1,0 +1,33 @@
+Index: packages/apps/DeskClock/src/com/android/deskclock/data/SettingsDAO.java
+===================================================================
+--- packages/apps/DeskClock/src/com/android/deskclock/data/SettingsDAO.java	(revision 2186)
++++ packages/apps/DeskClock/src/com/android/deskclock/data/SettingsDAO.java	(revision 2187)
+@@ -89,15 +89,26 @@
+      *
+      * @param homeTimeZone the timezone to set as the user's home timezone if necessary
+      */
++    //lance add for bug 114562 @{
+     static void setDefaultHomeTimeZone(Context context, TimeZone homeTimeZone) {
+         final SharedPreferences prefs = getSharedPreferences(context);
+         final String homeTimeZoneId = prefs.getString(SettingsActivity.KEY_HOME_TZ, null);
+-        if (homeTimeZoneId == null) {
+-            prefs.edit().putString(SettingsActivity.KEY_HOME_TZ, homeTimeZone.getID()).apply();
++        final String currentHomeTimeZoneId = homeTimeZone.getID();
++        if (homeTimeZoneId == null || needResetDefaultHomeTimeZone(homeTimeZoneId, currentHomeTimeZoneId)) {
++            prefs.edit().putString(SettingsActivity.KEY_HOME_TZ, currentHomeTimeZoneId).apply();
+         }
+     }
+ 
+     /**
++     * setDefaultHomeTimeZone will be executed before timezone updated by sim at first time
++     * reset the default home timezone after get into DeskClock, in case setDefaultHomeTimeZone can not get right default time zone first time.
++     */
++    static boolean needResetDefaultHomeTimeZone(String homeTimeZoneId, String currentHomeTimeZoneId) {
++        return ("GMT".equals(homeTimeZoneId) && (currentHomeTimeZoneId != homeTimeZoneId));
++    }
++    // @}
++
++    /**
+      * @return a value indicating whether analog or digital clocks are displayed in the app
+      */
+     static ClockStyle getClockStyle(Context context) {

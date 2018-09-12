@@ -1,0 +1,464 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1390)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1391)
+@@ -1329,6 +1329,10 @@
+             </intent-filter>
+             <meta-data android:name="com.android.settings.category"
+                 android:value="com.android.settings.category.device" />
++            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
++                android:value="com.android.settings.navigationbar.NavigationBarSettings" />
++            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
++                android:value="true" />
+         </activity>
+         <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+ 
+Index: packages/apps/Settings/src/com/android/settings/SettingsActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1390)
++++ packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1391)
+@@ -99,6 +99,7 @@
+ import com.android.settings.inputmethod.UserDictionaryList;
+ import com.android.settings.localepicker.LocaleListEditor;
+ import com.android.settings.location.LocationSettings;
++import com.android.settings.navigationbar.NavigationBarSettings;
+ import com.android.settings.nfc.AndroidBeam;
+ import com.android.settings.nfc.PaymentSettings;
+ import com.android.settings.notification.AppNotificationSettings;
+@@ -255,6 +256,9 @@
+             //device_section
+             Settings.HomeSettingsActivity.class.getName(),
+             Settings.SoundSettingsActivity.class.getName(),
++            //ADD-S By Justin.Shen for Hide/Show navigation-bar
++            Settings.NavigationBarSettingsActivity.class.getName(),
++            //ADD-E By Justin.Shen for Hide/Show navigation-bar
+             Settings.DisplaySettingsActivity.class.getName(),
+             Settings.StorageSettingsActivity.class.getName(),
+             Settings.ManageApplicationsActivity.class.getName(),
+@@ -300,6 +304,9 @@
+             UserDictionaryList.class.getName(),
+             UserDictionarySettings.class.getName(),
+             HomeSettings.class.getName(),
++            //ADD-S By Justin.Shen for Hide/Show navigation-bar
++            NavigationBarSettings.class.getName(),
++            //ADD-E By Justin.Shen for Hide/Show navigation-bar
+             DisplaySettings.class.getName(),
+             DeviceInfoSettings.class.getName(),
+             ManageApplications.class.getName(),
+Index: packages/apps/Settings/src/com/android/settings/navigationbar/NavigationBarSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/navigationbar/NavigationBarSettings.java	(revision 1390)
++++ packages/apps/Settings/src/com/android/settings/navigationbar/NavigationBarSettings.java	(revision 1391)
+@@ -44,7 +44,7 @@
+             }
+         }
+         
+-        int layoutIndex = Settings.Global.getInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, 0);
++        int layoutIndex = Settings.Secure.getInt(getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0);
+         updateRadioButtonStatus(layoutIndex);
+         
+         mBackgroundList = new ImageView[] {
+@@ -75,7 +75,7 @@
+             }
+         }
+         
+-        int backgroundIndex = Settings.Global.getInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_INDEX, 0);
++        int backgroundIndex = Settings.Secure.getInt(getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_INDEX, 0);
+         updateBackgroundStatus(backgroundIndex);
+     }
+ 
+@@ -126,12 +126,12 @@
+                     break;
+                     
+                 case R.id.navigationbar_layout_4:
+-                    Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1);
++                    Settings.Secure.putInt(getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1);
+                     layoutIndex = 4;
+                     break;
+                     
+                 case R.id.navigationbar_layout_5:
+-                    Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1);
++                    Settings.Secure.putInt(getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1);
+                     layoutIndex = 5;
+                     break;
+                     
+@@ -139,12 +139,12 @@
+                     return;
+             }
+             
+-            int oldLayoutIndex = Settings.Global.getInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, 0);
++            int oldLayoutIndex = Settings.Secure.getInt(getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0);
+             Log.d(TAG, "mRadioOnClickListener: oldLayoutIndex = " + oldLayoutIndex);
+             Log.d(TAG, "mRadioOnClickListener: layoutIndex = " + layoutIndex);
+             if(oldLayoutIndex != layoutIndex) {
+                 updateRadioButtonStatus(layoutIndex);
+-                Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, layoutIndex);
++                Settings.Secure.putInt(getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, layoutIndex);
+                 Intent intent = new Intent("android.intent.action.RESET_NAVIGATION_BAR");
+                 sendBroadcast(intent);
+             }
+@@ -212,11 +212,11 @@
+                     return;
+             }
+             
+-            int oldBackgroundIndex = Settings.Global.getInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_INDEX, 0);
++            int oldBackgroundIndex = Settings.Secure.getInt(getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_INDEX, 0);
+             if(oldBackgroundIndex != backgroundIndex) {
+                 updateBackgroundStatus(backgroundIndex);
+-                Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_INDEX, backgroundIndex);
+-                Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_COLOR, mColorList[backgroundIndex]);
++                Settings.Secure.putInt(getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_INDEX, backgroundIndex);
++                Settings.Secure.putInt(getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, mColorList[backgroundIndex]);
+                 Intent intent = new Intent("android.intent.action.RESET_NAVIGATION_BAR");
+                 sendBroadcast(intent);
+             }
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 1390)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 1391)
+@@ -6945,6 +6945,13 @@
+          * @hide
+          */
+         public static final String WEB_ACTION_ENABLED = "web_action_enabled";
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        public static final String NAVIGATION_BAR_FIXED_STATUS      = "navigation_bar_fixed_status";
++        public static final String NAVIGATION_BAR_LAYOUT            = "navigation_bar_layout";
++        public static final String NAVIGATION_BAR_BACKGROUND_INDEX  = "navigation_bar_backbround_index";
++        public static final String NAVIGATION_BAR_BACKGROUND_COLOR  = "navigation_bar_backbround_color";
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         /**
+          * This are the settings to be backed up.
+@@ -7034,6 +7041,12 @@
+             DOZE_PULSE_ON_PICK_UP,
+             DOZE_PULSE_ON_DOUBLE_TAP,
+             THREE_FINGER_SHOTSCREEN_ENABLED,
++            //ADD-S By Justin.Shen for Hide/Show navigation-bar
++            NAVIGATION_BAR_FIXED_STATUS,
++            NAVIGATION_BAR_LAYOUT,
++            NAVIGATION_BAR_BACKGROUND_INDEX,
++            NAVIGATION_BAR_BACKGROUND_COLOR,
++            //ADD-E By Justin.Shen for Hide/Show navigation-bar
+             FILP_TO_MUTE_ENABLED,
+             FILP_TO_SNOOZE_ENABLED
+         };
+@@ -10322,13 +10335,6 @@
+          */
+         public static final String WFC_AID_VALUE = "wfc_aid_value";
+         /** MTK ADD END. @} */
+-        
+-        //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        public static final String NAVIGATION_BAR_FIXED_STATUS      = "navigation_bar_fixed_status";
+-        public static final String NAVIGATION_BAR_LAYOUT            = "navigation_bar_layout";
+-        public static final String NAVIGATION_BAR_BACKGROUND_INDEX  = "navigation_bar_backbround_index";
+-        public static final String NAVIGATION_BAR_BACKGROUND_COLOR  = "navigation_bar_backbround_color";
+-        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 
+     /**
+Index: frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+===================================================================
+--- frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 1390)
++++ frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 1391)
+@@ -2577,6 +2577,17 @@
+ 
+             loadIntegerSetting(stmt, Settings.Secure.SLEEP_TIMEOUT,
+                     R.integer.def_sleep_timeout);
++                    
++            //ADD-S By Justin.Shen for Hide/Show navigation-bar
++            loadIntegerSetting(stmt, Settings.Secure.NAVIGATION_BAR_FIXED_STATUS,
++                    R.integer.def_navigation_bar_fixed_status);
++            loadIntegerSetting(stmt, Settings.Secure.NAVIGATION_BAR_LAYOUT,
++                    R.integer.def_navigation_bar_layout);
++            loadIntegerSetting(stmt, Settings.Secure.NAVIGATION_BAR_BACKGROUND_INDEX,
++                    R.integer.def_navigation_bar_background_index);
++            loadIntegerSetting(stmt, Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR,
++                    R.integer.def_navigation_bar_background_color);
++            //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+             /// M: Add for AOD @{
+             if (SystemProperties.get("ro.mtk_aod_support").equals("1")) {
+@@ -2777,18 +2788,6 @@
+             loadSetting(stmt, Settings.Global.ENHANCED_4G_MODE_ENABLED_SIM4,
+                     ImsConfig.FeatureValueConstants.ON);
+ 
+-            //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-            loadIntegerSetting(stmt, Settings.Global.NAVIGATION_BAR_FIXED_STATUS,
+-                    R.integer.def_navigation_bar_fixed_status);
+-            loadIntegerSetting(stmt, Settings.Global.NAVIGATION_BAR_LAYOUT,
+-                    R.integer.def_navigation_bar_layout);
+-            loadIntegerSetting(stmt, Settings.Global.NAVIGATION_BAR_BACKGROUND_INDEX,
+-                    R.integer.def_navigation_bar_background_index);
+-            loadIntegerSetting(stmt, Settings.Global.NAVIGATION_BAR_BACKGROUND_COLOR,
+-                    R.integer.def_navigation_bar_background_color);
+-            //ADD-E By Justin.Shen for Hide/Show navigation-bar
+-
+-
+             /// M: Load MTK added Global providers before Android M.
+             mUtils.loadCustomGlobalSettings(stmt);
+ 
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1390)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1391)
+@@ -1293,6 +1293,10 @@
+     protected void inflateNavigationBarView(Context context) {
+         mNavigationBarView = (NavigationBarView) View.inflate(
+                 context, R.layout.navigation_bar, null);
++                
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        mNavigationBarView.setCurrentUserId(mCurrentUserId);
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 
+     protected void initSignalCluster(View containerView) {
+@@ -1669,7 +1673,7 @@
+         //CHG-E By Justin.Shen for Hide/Show navigation-bar
+         
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        int backgroundColor = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000);
++        int backgroundColor = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
+         mNavigationBarView.setBackgroundColor(backgroundColor);
+         mHandler.removeCallbacks(mHideNavigationBar);
+         mHandler.removeCallbacks(mShowNavigationBar);
+@@ -2868,6 +2872,12 @@
+         if (mHeadsUpManager != null) {
+             mHeadsUpManager.setUser(newUserId);
+         }
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if(mPreviousUserId != newUserId) {
++            hideNavigationBar();
++        }
++        mPreviousUserId = newUserId;
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 
+     public boolean isHeadsUp(String key) {
+@@ -3837,9 +3847,9 @@
+                 
+                 mHandler.removeCallbacks(mHideNavigationBar);
+                 mHandler.removeCallbacks(mShowNavigationBar);
+-                mOldNailStatus = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1);
++                mOldNailStatus = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
+                 if(mOldNailStatus == 0) {
+-                    Settings.Global.putInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1);
++                    Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
+                     if(mNavigationBarView != null) {
+                         mNavigationBarView.updateNailIcon();
+                     } else {
+@@ -3854,7 +3864,7 @@
+                 
+                 mCameraIsOn = false;
+                 if(mOldNailStatus == 0) {
+-                    Settings.Global.putInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, mOldNailStatus);
++                    Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, mOldNailStatus, mCurrentUserId);
+                     if(mNavigationBarView != null) {
+                         mNavigationBarView.updateNailIcon();
+                         mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
+@@ -4545,6 +4555,16 @@
+         mNotificationPanel.onAffordanceLaunchEnded();
+         mNotificationPanel.animate().cancel();
+         mNotificationPanel.setAlpha(1f);
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if (mNavigationBarView == null) {
++            boolean isFixed = checkNavigationBarFixed();
++            if(isFixed) {
++                mHandler.postDelayed(mShowNavigationBar, 300);
++            }
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
++            
+         Trace.endSection();
+         return staying;
+     }
+@@ -5517,6 +5537,7 @@
+     private boolean mCameraIsOn = false;
+     private int mOldNailStatus = 0;
+     private boolean mNavigationBarViewIsAdded = false;
++    protected int mPreviousUserId = 0;
+     
+     @Override
+     public void showNavigationBar() {
+@@ -5543,13 +5564,15 @@
+     
+     private void hideNavigationBar() {
+         Log.d(TAG, "mHideNavigationBar: mNavigationBarView = " + mNavigationBarView);
+-            if (mNavigationBarView == null) {
+-                return;
+-            }
+-            
++        if (mNavigationBarView == null) {
++            return;
++        }
++        
++        if(mNavigationBarViewIsAdded) {
+             mWindowManager.removeView(mNavigationBarView);
+-            mNavigationBarView = null;
+-            mNavigationBarViewIsAdded = false;
++        }
++        mNavigationBarView = null;
++        mNavigationBarViewIsAdded = false;
+     }
+     
+     private Runnable mHideNavigationBar = new Runnable() {
+@@ -5613,7 +5636,7 @@
+             switch (event.getAction()) {
+                 case MotionEvent.ACTION_DOWN:
+                     isFixed = checkNavigationBarFixed();
+-                    Settings.Global.putInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, isFixed ? 0 : 1);
++                    Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, isFixed ? 0 : 1, mCurrentUserId);
+                     if(mNavigationBarView != null) {
+                         mNavigationBarView.updateNailIcon();
+                     }
+@@ -5635,8 +5658,8 @@
+     };
+     
+     private boolean checkNavigationBarFixed() {
+-        boolean isFixed = Settings.Global.getInt(mContext.getContentResolver(), 
+-                            Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1) == 1 ? true : false;
++        boolean isFixed = Settings.Secure.getIntForUser(mContext.getContentResolver(), 
++                            Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId) == 1 ? true : false;
+         Log.d(TAG, "checkNavigationBarFixed: isFixed = " + isFixed);
+         return isFixed;
+     }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 1390)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 1391)
+@@ -141,7 +141,7 @@
+         //CHG-S By Justin.Shen for Hide/Show navigation-bar
+         //return mContext.getString(R.string.config_navBarLayout);
+         int resId = R.string.config_navBarLayout;
+-        int layoutIndex = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, 0);
++        int layoutIndex = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
+         if(0 == layoutIndex) {
+             resId = R.string.config_navBarLayout;
+         } else if(1 == layoutIndex) {
+@@ -429,4 +429,11 @@
+             ((ViewGroup) group.getChildAt(i)).removeAllViews();
+         }
+     }
++    
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    protected int mCurrentUserId = 0;
++    public void setCurrentUserId(int currentUserId) {
++        mCurrentUserId = currentUserId;
++    }
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 1390)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 1391)
+@@ -912,8 +912,11 @@
+     }
+     
+     //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    protected int mCurrentUserId = 0;
++    
+     public void updateNailIcon() {
+-        boolean isFixed = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1) == 1 ? true : false;
++        Log.d(TAG, "updateNailIcon: mCurrentUserId = " + mCurrentUserId);
++        boolean isFixed = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId) == 1 ? true : false;
+         getNailButton().setImageDrawable(
+                 mNavBarPlugin.getRecentImage(isFixed ? mNailFixedIcon : mNailUnFixedIcon));
+     }
+@@ -920,12 +923,17 @@
+     
+     public boolean isWithNailIcon() {
+         boolean bRet = false;
+-        int layoutIndex = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, 0);
++        int layoutIndex = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
+         if(layoutIndex == 0 || layoutIndex == 1 || layoutIndex == 2 || layoutIndex == 3) {
+             bRet = true;
+         }
+         return bRet;
+     }
++    
++    public void setCurrentUserId(int currentUserId) {
++        mCurrentUserId = currentUserId;
++        mNavigationInflaterView.setCurrentUserId(mCurrentUserId);
++    }
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+ }
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1390)
++++ frameworks/base/api/test-current.txt	(revision 1391)
+@@ -32566,10 +32566,6 @@
+     field public static final java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+     field public static final java.lang.String MODE_RINGER = "mode_ringer";
+-    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_COLOR = "navigation_bar_backbround_color";
+-    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_INDEX = "navigation_bar_backbround_index";
+-    field public static final java.lang.String NAVIGATION_BAR_FIXED_STATUS = "navigation_bar_fixed_status";
+-    field public static final java.lang.String NAVIGATION_BAR_LAYOUT = "navigation_bar_layout";
+     field public static final java.lang.String NETWORK_PREFERENCE = "network_preference";
+     field public static final java.lang.String RADIO_BLUETOOTH = "bluetooth";
+     field public static final java.lang.String RADIO_CELL = "cell";
+@@ -32652,6 +32648,10 @@
+     field public static final deprecated java.lang.String LOCK_PATTERN_TACTILE_FEEDBACK_ENABLED = "lock_pattern_tactile_feedback_enabled";
+     field public static final deprecated java.lang.String LOCK_PATTERN_VISIBLE = "lock_pattern_visible_pattern";
+     field public static final deprecated java.lang.String LOGGING_ID = "logging_id";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_COLOR = "navigation_bar_backbround_color";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_INDEX = "navigation_bar_backbround_index";
++    field public static final java.lang.String NAVIGATION_BAR_FIXED_STATUS = "navigation_bar_fixed_status";
++    field public static final java.lang.String NAVIGATION_BAR_LAYOUT = "navigation_bar_layout";
+     field public static final deprecated java.lang.String NETWORK_PREFERENCE = "network_preference";
+     field public static final java.lang.String PARENTAL_CONTROL_ENABLED = "parental_control_enabled";
+     field public static final java.lang.String PARENTAL_CONTROL_LAST_UPDATE = "parental_control_last_update";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1390)
++++ frameworks/base/api/current.txt	(revision 1391)
+@@ -32488,10 +32488,6 @@
+     field public static final java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+     field public static final java.lang.String MODE_RINGER = "mode_ringer";
+-    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_COLOR = "navigation_bar_backbround_color";
+-    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_INDEX = "navigation_bar_backbround_index";
+-    field public static final java.lang.String NAVIGATION_BAR_FIXED_STATUS = "navigation_bar_fixed_status";
+-    field public static final java.lang.String NAVIGATION_BAR_LAYOUT = "navigation_bar_layout";
+     field public static final java.lang.String NETWORK_PREFERENCE = "network_preference";
+     field public static final java.lang.String RADIO_BLUETOOTH = "bluetooth";
+     field public static final java.lang.String RADIO_CELL = "cell";
+@@ -32573,6 +32569,10 @@
+     field public static final deprecated java.lang.String LOCK_PATTERN_TACTILE_FEEDBACK_ENABLED = "lock_pattern_tactile_feedback_enabled";
+     field public static final deprecated java.lang.String LOCK_PATTERN_VISIBLE = "lock_pattern_visible_pattern";
+     field public static final deprecated java.lang.String LOGGING_ID = "logging_id";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_COLOR = "navigation_bar_backbround_color";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_INDEX = "navigation_bar_backbround_index";
++    field public static final java.lang.String NAVIGATION_BAR_FIXED_STATUS = "navigation_bar_fixed_status";
++    field public static final java.lang.String NAVIGATION_BAR_LAYOUT = "navigation_bar_layout";
+     field public static final deprecated java.lang.String NETWORK_PREFERENCE = "network_preference";
+     field public static final java.lang.String PARENTAL_CONTROL_ENABLED = "parental_control_enabled";
+     field public static final java.lang.String PARENTAL_CONTROL_LAST_UPDATE = "parental_control_last_update";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1390)
++++ frameworks/base/api/system-current.txt	(revision 1391)
+@@ -35244,10 +35244,6 @@
+     field public static final java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+     field public static final java.lang.String MODE_RINGER = "mode_ringer";
+-    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_COLOR = "navigation_bar_backbround_color";
+-    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_INDEX = "navigation_bar_backbround_index";
+-    field public static final java.lang.String NAVIGATION_BAR_FIXED_STATUS = "navigation_bar_fixed_status";
+-    field public static final java.lang.String NAVIGATION_BAR_LAYOUT = "navigation_bar_layout";
+     field public static final java.lang.String NETWORK_PREFERENCE = "network_preference";
+     field public static final java.lang.String OTA_DISABLE_AUTOMATIC_UPDATE = "ota_disable_automatic_update";
+     field public static final java.lang.String RADIO_BLUETOOTH = "bluetooth";
+@@ -35332,6 +35328,10 @@
+     field public static final deprecated java.lang.String LOCK_PATTERN_TACTILE_FEEDBACK_ENABLED = "lock_pattern_tactile_feedback_enabled";
+     field public static final deprecated java.lang.String LOCK_PATTERN_VISIBLE = "lock_pattern_visible_pattern";
+     field public static final deprecated java.lang.String LOGGING_ID = "logging_id";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_COLOR = "navigation_bar_backbround_color";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_INDEX = "navigation_bar_backbround_index";
++    field public static final java.lang.String NAVIGATION_BAR_FIXED_STATUS = "navigation_bar_fixed_status";
++    field public static final java.lang.String NAVIGATION_BAR_LAYOUT = "navigation_bar_layout";
+     field public static final deprecated java.lang.String NETWORK_PREFERENCE = "network_preference";
+     field public static final java.lang.String PARENTAL_CONTROL_ENABLED = "parental_control_enabled";
+     field public static final java.lang.String PARENTAL_CONTROL_LAST_UPDATE = "parental_control_last_update";

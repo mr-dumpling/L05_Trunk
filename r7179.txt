@@ -1,0 +1,45 @@
+Index: vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 7178)
++++ vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 7179)
+@@ -2213,11 +2213,11 @@
+             /// M: [CT VOLTE] @{
+             boolean enableForCtVolte = true;
+             int subId = mPhone.getSubId();
+-            if (TelephonyUtilsEx.isCtVolteEnabled() && TelephonyUtilsEx.isCtSim(subId)) {
+-                int settingsNetworkMode = android.provider.Settings.Global.getInt(mPhone
++            int settingsNetworkMode = android.provider.Settings.Global.getInt(mPhone
+                         .getContext().getContentResolver(),
+                         android.provider.Settings.Global.PREFERRED_NETWORK_MODE + subId,
+                         Phone.PREFERRED_NT_MODE);
++            if (TelephonyUtilsEx.isCtVolteEnabled() && TelephonyUtilsEx.isCtSim(subId)) {               
+                 enableForCtVolte = TelephonyUtilsEx.isCt4gSim(subId)
+                         && (settingsNetworkMode == Phone.NT_MODE_LTE_CDMA_EVDO_GSM_WCDMA ||
+                             settingsNetworkMode == Phone.NT_MODE_LTE_CDMA_AND_EVDO);
+@@ -2226,10 +2226,24 @@
+             /// M: [CMCC DUAl VOLTE] @{
+             enableForCtVolte = mExt.customizeDualVolteOpDisable(subId, enableForCtVolte);
+             /// @}
++
++            boolean enableForLTE = settingsNetworkMode == Phone.NT_MODE_LTE_CDMA_AND_EVDO
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_GSM_WCDMA
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_CDMA_EVDO_GSM_WCDMA
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_ONLY
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_WCDMA
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_TDSCDMA
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_TDSCDMA_GSM
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_TDSCDMA_WCDMA
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_TDSCDMA_GSM_WCDMA
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_TDSCDMA_CDMA_EVDO_GSM_WCDMA
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_GSM
++                                || settingsNetworkMode == Phone.NT_MODE_LTE_TDD_ONLY;
++
+             log("updateEnhanced4glteEnableState, incall = " + inCall + ", nontty = " + nontty
+-                    + ", enableForCtVolte = " + enableForCtVolte);
++                    + ", enableForCtVolte = " + enableForCtVolte + ", enableForLTE = " + enableForLTE);
+             mEnhancedButton4glte.setEnabled(!inCall && nontty && hasActiveSubscriptions()
+-                    && enableForCtVolte);
++                    && enableForCtVolte && enableForLTE);
+             /// M: [CMCC DUAl VOLTE] @{
+             mExt.customizeDualVolteOpHide(getPreferenceScreen(), mEnhancedButton4glte, enableForCtVolte);
+             /// @}

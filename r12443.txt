@@ -1,0 +1,96 @@
+Index: packages/apps/Nfc/Android.mk
+===================================================================
+--- packages/apps/Nfc/Android.mk	(revision 12442)
++++ packages/apps/Nfc/Android.mk	(revision 12443)
+@@ -18,6 +18,8 @@
+ 
+ LOCAL_JNI_SHARED_LIBRARIES := libnfc_nci_jni
+ 
++LOCAL_STATIC_JAVA_LIBRARIES := android-support-v4
++
+ LOCAL_PROGUARD_ENABLED := disabled
+ 
+ include $(BUILD_PACKAGE)
+Index: packages/apps/Nfc/AndroidManifest.xml
+===================================================================
+--- packages/apps/Nfc/AndroidManifest.xml	(revision 12442)
++++ packages/apps/Nfc/AndroidManifest.xml	(revision 12443)
+@@ -158,5 +158,13 @@
+ 
+         <service android:name=".handover.PeripheralHandoverService"
+         />
++    	<provider android:name="android.support.v4.content.FileProvider"
++            android:authorities="com.android.nfc.fileprovider"
++            android:grantUriPermissions="true"
++            android:exported="false">
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/file_paths" />
++        </provider>
+     </application>
+ </manifest>
+Index: packages/apps/Nfc/src/com/android/nfc/beam/BeamTransferManager.java
+===================================================================
+--- packages/apps/Nfc/src/com/android/nfc/beam/BeamTransferManager.java	(revision 12442)
++++ packages/apps/Nfc/src/com/android/nfc/beam/BeamTransferManager.java	(revision 12443)
+@@ -44,6 +44,10 @@
+ import java.util.HashMap;
+ import java.util.Locale;
+ 
++/// M: @ {
++import android.support.v4.content.FileProvider;
++/// }
++
+ /**
+  * A BeamTransferManager object represents a set of files
+  * that were received through NFC connection handover
+@@ -468,10 +472,18 @@
+ 
+         String filePath = mPaths.get(0);
+         Uri mediaUri = mMediaUris.get(filePath);
+-        Uri uri =  mediaUri != null ? mediaUri :
+-            Uri.parse(ContentResolver.SCHEME_FILE + "://" + filePath);
++		/// M: @ {
++        /*Uri uri =  mediaUri != null ? mediaUri :
++            Uri.parse(ContentResolver.SCHEME_FILE + "://" + filePath);*/
++		Uri uri =  mediaUri != null ? mediaUri :
++            FileProvider.getUriForFile(mContext, "com.android.nfc.fileprovider",
++                    new File(filePath));
++		/// M: }
+         viewIntent.setDataAndTypeAndNormalize(uri, mMimeTypes.get(filePath));
+-        viewIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
++		/// M: @ {
++        viewIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | 
++			Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
++		/// }
+         return viewIntent;
+     }
+ 
+Index: packages/apps/Nfc/res/xml/file_paths.xml
+===================================================================
+--- packages/apps/Nfc/res/xml/file_paths.xml	(revision 0)
++++ packages/apps/Nfc/res/xml/file_paths.xml	(revision 12443)
+@@ -0,0 +1,3 @@
++<paths xmlns:android="https://schemas.android.com/apk/res/android">
++    <external-path name="beam" path="/" />
++</paths>
+\ No newline at end of file
+Index: vendor/branch/5058Y/packages/apps/Nfc/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Nfc/AndroidManifest.xml	(revision 12442)
++++ vendor/branch/5058Y/packages/apps/Nfc/AndroidManifest.xml	(revision 12443)
+@@ -158,5 +158,14 @@
+ 
+         <service android:name=".handover.PeripheralHandoverService"
+         />
++	
++	<provider android:name="android.support.v4.content.FileProvider"
++            android:authorities="com.android.nfc.fileprovider"
++            android:grantUriPermissions="true"
++            android:exported="false">
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/file_paths" />
++        </provider>
+     </application>
+ </manifest>

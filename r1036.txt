@@ -1,0 +1,2131 @@
+Index: vendor/mediatek/proprietary/packages/apps/Camera2/host/src/com/mediatek/camera/CameraActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Camera2/host/src/com/mediatek/camera/CameraActivity.java	(revision 1035)
++++ vendor/mediatek/proprietary/packages/apps/Camera2/host/src/com/mediatek/camera/CameraActivity.java	(revision 1036)
+@@ -148,6 +148,10 @@
+     @Override
+     protected void onStartTasks() {
+         super.onStartTasks();
++        //ADD-S By Justin.Shen for don't hide navigation-bar when camera is opened
++        Intent intent = new Intent("android.intent.action.CAMERA_START");
++        sendBroadcast(intent);
++        //ADD-E By Justin.Shen for don't hide navigation-bar when camera is opened
+     }
+ 
+     @Override
+@@ -183,6 +187,10 @@
+     @Override
+     protected void onStopTasks() {
+         super.onStopTasks();
++        //ADD-S By Justin.Shen for don't hide navigation-bar when camera is opened
++        Intent intent = new Intent("android.intent.action.CAMERA_STOP");
++        sendBroadcast(intent);
++        //ADD-E By Justin.Shen for don't hide navigation-bar when camera is opened
+     }
+ 
+     @Override
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 1035)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 1036)
+@@ -18,6 +18,7 @@
+ import android.content.Context;
+ import android.content.res.Configuration;
+ import android.content.res.Resources;
++import android.provider.Settings;
+ import android.util.AttributeSet;
+ import android.util.SparseArray;
+ import android.view.LayoutInflater;
+@@ -46,6 +47,9 @@
+     public static final String BACK = "back";
+     public static final String HOME = "home";
+     public static final String RECENT = "recent";
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    public static final String NAIL = "nail";
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     public static final String NAVSPACE = "space";
+     public static final String CLIPBOARD = "clipboard";
+     public static final String KEY = "key";
+@@ -133,7 +137,28 @@
+             return mContext.getString(R.string.config_navBarLayout_float);
+         }
+         /// @}
+-        return mContext.getString(R.string.config_navBarLayout);
++        
++        //CHG-S By Justin.Shen for Hide/Show navigation-bar
++        //return mContext.getString(R.string.config_navBarLayout);
++        int resId = R.string.config_navBarLayout;
++        int layoutIndex = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, 0);
++        if(0 == layoutIndex) {
++            resId = R.string.config_navBarLayout;
++        } else if(1 == layoutIndex) {
++            resId = R.string.config_navBarLayout_1;
++        } else if(2 == layoutIndex) {
++            resId = R.string.config_navBarLayout_2;
++        } else if(3 == layoutIndex) {
++            resId = R.string.config_navBarLayout_3;
++        } else if(4 == layoutIndex) {
++            resId = R.string.config_navBarLayout_4;
++        } else if(5 == layoutIndex) {
++            resId = R.string.config_navBarLayout_5;
++        } else {
++            resId = R.string.config_navBarLayout;
++        }
++        return mContext.getString(resId);
++        //CHG-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 
+     @Override
+@@ -294,6 +319,13 @@
+             if (uri != null) {
+                 ((KeyButtonView) v).loadAsync(uri);
+             }
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        } else if(NAIL.equals(button)) {
++            v = inflater.inflate(R.layout.nail, parent, false);
++            if (landscape && isSw600Dp()) {
++                setupLandButton(v);
++            }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+         } else {
+             return null;
+         }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 1035)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 1036)
+@@ -31,6 +31,7 @@
+ import android.os.Handler;
+ import android.os.Message;
+ import android.os.RemoteException;
++import android.provider.Settings;
+ import android.util.AttributeSet;
+ import android.util.Log;
+ import android.util.SparseArray;
+@@ -96,6 +97,9 @@
+     private boolean mResizeMode;
+     private boolean mRestoreShow;
+     /// @}
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    private Drawable mNailFixedIcon, mNailUnFixedIcon;
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+     private NavigationBarGestureHelper mGestureHelper;
+     private DeadZone mDeadZone;
+@@ -235,6 +239,12 @@
+         mButtonDisatchers.put(R.id.back, new ButtonDispatcher(R.id.back));
+         mButtonDisatchers.put(R.id.home, new ButtonDispatcher(R.id.home));
+         mButtonDisatchers.put(R.id.recent_apps, new ButtonDispatcher(R.id.recent_apps));
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if(isWithNailIcon()) {
++            mButtonDisatchers.put(R.id.nail, new ButtonDispatcher(R.id.nail));
++            updateNailIcon();
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+         /// M: BMW @{
+         if (MultiWindowManager.isSupported()) {
+             mButtonDisatchers.put(R.id.restore, new ButtonDispatcher(R.id.restore));
+@@ -314,6 +324,12 @@
+         return mButtonDisatchers.get(R.id.restore);
+     }
+     /// @}
++    
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    public ButtonDispatcher getNailButton() {
++        return mButtonDisatchers.get(R.id.nail);
++    }
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+     private void updateCarModeIcons(Context ctx) {
+         mBackCarModeIcon = ctx.getDrawable(R.drawable.ic_sysbar_back_carmode);
+@@ -338,6 +354,14 @@
+             mRecentIcon = ctx.getDrawable(R.drawable.ic_sysbar_recent);
+             mMenuIcon = ctx.getDrawable(R.drawable.ic_sysbar_menu);
+             mImeIcon = ctx.getDrawable(R.drawable.ic_ime_switcher_default);
++            
++            //ADD-S By Justin.Shen for Hide/Show navigation-bar
++            if(isWithNailIcon()) {
++                mNailFixedIcon = ctx.getDrawable(R.drawable.ic_sysbar_nail_fixed);
++                mNailUnFixedIcon = ctx.getDrawable(R.drawable.ic_sysbar_nail_unfixed);
++            }
++            //ADD-E By Justin.Shen for Hide/Show navigation-bar
++            
+             /// M: BMW @{
+             if (MultiWindowManager.isSupported()) {
+                 mRestoreIcon = ctx.getDrawable(R.drawable.ic_sysbar_restore);
+@@ -353,6 +377,11 @@
+     public void setLayoutDirection(int layoutDirection) {
+         // Reload all the icons
+         updateIcons(getContext(), Configuration.EMPTY, mConfiguration);
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if(isWithNailIcon()) {
++            updateNailIcon();
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         super.setLayoutDirection(layoutDirection);
+     }
+@@ -425,6 +454,12 @@
+         // Update menu button in case the IME state has changed.
+         setMenuVisibility(mShowMenu, true);
+         getMenuButton().setImageDrawable(mMenuIcon);
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if(isWithNailIcon()) {
++            updateNailIcon();
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         setDisabledFlags(mDisabledFlags, true);
+     }
+@@ -465,6 +500,13 @@
+         getBackButton().setVisibility(disableBack      ? View.INVISIBLE : View.VISIBLE);
+         getHomeButton().setVisibility(disableHome      ? View.INVISIBLE : View.VISIBLE);
+         getRecentsButton().setVisibility(disableRecent ? View.INVISIBLE : View.VISIBLE);
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if(isWithNailIcon()) {
++            final boolean disableNail = ((disabledFlags & View.STATUS_BAR_DISABLE_HOME) != 0);
++            getNailButton().setVisibility(disableNail      ? View.INVISIBLE : View.VISIBLE);
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         /// M: BMW @{
+         //hide restore when keyguard is showing
+@@ -726,6 +768,12 @@
+         updateTaskSwitchHelper();
+         updateIcons(getContext(), mConfiguration, newConfig);
+         updateRecentsIcon();
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if(isWithNailIcon()) {
++            updateNailIcon();
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
++        
+         if (uiCarModeChanged || mConfiguration.densityDpi != newConfig.densityDpi) {
+             // If car mode or density changes, we need to reset the icons.
+             setNavigationIconHints(mNavigationIconHints, true);
+@@ -838,6 +886,11 @@
+         dumpButton(pw, "home", getHomeButton());
+         dumpButton(pw, "rcnt", getRecentsButton());
+         dumpButton(pw, "menu", getMenuButton());
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if(isWithNailIcon()) {
++            dumpButton(pw, "nail", getNailButton());
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         pw.println("    }");
+     }
+@@ -857,5 +910,22 @@
+     public interface OnVerticalChangedListener {
+         void onVerticalChanged(boolean isVertical);
+     }
++    
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    public void updateNailIcon() {
++        boolean isFixed = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1) == 1 ? true : false;
++        getNailButton().setImageDrawable(
++                mNavBarPlugin.getRecentImage(isFixed ? mNailFixedIcon : mNailUnFixedIcon));
++    }
++    
++    public boolean isWithNailIcon() {
++        boolean bRet = false;
++        int layoutIndex = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, 0);
++        if(layoutIndex == 0 || layoutIndex == 1 || layoutIndex == 2 || layoutIndex == 3) {
++            bRet = true;
++        }
++        return bRet;
++    }
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1035)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1036)
+@@ -1054,6 +1054,12 @@
+         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+         filter.addAction(Intent.ACTION_SCREEN_OFF);
+         filter.addAction(Intent.ACTION_SCREEN_ON);
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        filter.addAction("android.intent.action.RESET_NAVIGATION_BAR");
++        filter.addAction("android.intent.action.CAMERA_START");
++        filter.addAction("android.intent.action.CAMERA_STOP");
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
++		filter.addAction("battery_percentage_on_off");
+         context.registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null, null);
+ 
+         IntentFilter demoFilter = new IntentFilter();
+@@ -1464,6 +1470,10 @@
+             // and his ONLY options are to answer or reject the call.)
+             switch (event.getAction()) {
+                 case MotionEvent.ACTION_DOWN:
++                    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++                    mHandler.removeCallbacks(mHideNavigationBar);
++                    mHandler.removeCallbacks(mShowNavigationBar);
++                    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+                     mBlockedThisTouch = false;
+                     TelecomManager telecomManager = mContext.getSystemService(TelecomManager.class);
+                     if (telecomManager != null && telecomManager.isRinging()) {
+@@ -1477,6 +1487,12 @@
+                     break;
+                 case MotionEvent.ACTION_UP:
+                 case MotionEvent.ACTION_CANCEL:
++                    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++                    boolean isFixed = checkNavigationBarFixed();
++                    if(!isFixed) {
++                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++                    }
++                    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+                     awakenDreams();
+                     break;
+             }
+@@ -1499,11 +1515,17 @@
+ 
+         ButtonDispatcher recentsButton = mNavigationBarView.getRecentsButton();
+         recentsButton.setOnClickListener(mRecentsClickListener);
+-        recentsButton.setOnTouchListener(mRecentsPreloadOnTouchListener);
++        //CHG-S By Justin.Shen for Hide/Show navigation-bar
++        //recentsButton.setOnTouchListener(mRecentsPreloadOnTouchListener);
++        recentsButton.setOnTouchListener(mRecentsActionListener);
++        //CHG-E By Justin.Shen for Hide/Show navigation-bar
+         recentsButton.setLongClickable(true);
+         recentsButton.setOnLongClickListener(mRecentsLongClickListener);
+ 
+         ButtonDispatcher backButton = mNavigationBarView.getBackButton();
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        backButton.setOnTouchListener(mBackActionListener);
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+         backButton.setLongClickable(true);
+         backButton.setOnLongClickListener(mLongPressBackListener);
+ 
+@@ -1510,6 +1532,13 @@
+         ButtonDispatcher homeButton = mNavigationBarView.getHomeButton();
+         homeButton.setOnTouchListener(mHomeActionListener);
+         homeButton.setOnLongClickListener(mLongPressHomeListener);
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        if(mNavigationBarView.isWithNailIcon()) {
++            ButtonDispatcher nailButton = mNavigationBarView.getNailButton();
++            nailButton.setOnTouchListener(mNailActionListener);
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         /// M: BMW  restore button @{
+         if (MultiWindowManager.isSupported()) {
+@@ -1549,8 +1578,35 @@
+         }
+ 
+         prepareNavigationBarView();
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        mNavigationBarMode = 0;
++        int newVal = mSystemUiVisibility;
++        mSystemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE;
++        int hints = mNavigationIconHints;
++        mNavigationIconHints = 0;
++        setNavigationIconHints(hints);
++        topAppWindowChanged(mShowMenu);
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+-        mWindowManager.addView(mNavigationBarView, getNavigationBarLayoutParams());
++        //CHG-S By Justin.Shen for Hide/Show navigation-bar
++        //mWindowManager.addView(mNavigationBarView, getNavigationBarLayoutParams());
++        if(!mNavigationBarViewIsAdded) {
++            mWindowManager.addView(mNavigationBarView, getNavigationBarLayoutParams());
++        }
++        mNavigationBarViewIsAdded = true;
++        //CHG-E By Justin.Shen for Hide/Show navigation-bar
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        int backgroundColor = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000);
++        mNavigationBarView.setBackgroundColor(backgroundColor);
++        mHandler.removeCallbacks(mHideNavigationBar);
++        mHandler.removeCallbacks(mShowNavigationBar);
++        boolean isFixed = checkNavigationBarFixed();
++        if(!isFixed) {
++            mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++        }
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 
+     protected void repositionNavigationBar() {
+@@ -3351,6 +3407,11 @@
+         if (SPEW) {
+             Log.d(TAG, (showMenu?"showing":"hiding") + " the MENU button");
+         }
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        mShowMenu = showMenu;
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
++        
+         if (mNavigationBarView != null) {
+             mNavigationBarView.setMenuVisibility(showMenu);
+         }
+@@ -3684,6 +3745,44 @@
+             else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+                 notifyNavigationBarScreenOn(true);
+             }
++            //ADD-S By Justin.Shen for Hide/Show navigation-bar
++            else if ("android.intent.action.RESET_NAVIGATION_BAR".equals(action)) {
++                resetNavigationBar();
++            }
++            else if("android.intent.action.CAMERA_START".equals(action)) {
++                if(!mNavigationBarView.isWithNailIcon()) {
++                    return;
++                }
++                
++                mCameraIsOn = true;
++                
++                mHandler.removeCallbacks(mHideNavigationBar);
++                mHandler.removeCallbacks(mShowNavigationBar);
++                mOldNailStatus = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1);
++                if(mOldNailStatus == 0) {
++                    Settings.Global.putInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1);
++                    if(mNavigationBarView != null) {
++                        mNavigationBarView.updateNailIcon();
++                    } else {
++                        mHandler.postDelayed(mShowNavigationBar, 300);
++                    }
++                }
++            }
++            else if("android.intent.action.CAMERA_STOP".equals(action)) {
++                if(!mNavigationBarView.isWithNailIcon()) {
++                    return;
++                }
++                
++                mCameraIsOn = false;
++                if(mOldNailStatus == 0) {
++                    Settings.Global.putInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, mOldNailStatus);
++                    if(mNavigationBarView != null) {
++                        mNavigationBarView.updateNailIcon();
++                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++                    }
++                }
++            }
++            //ADD-E By Justin.Shen for Hide/Show navigation-bar
+         }
+     };
+ 
+@@ -4048,6 +4147,9 @@
+         if (mNavigationBarView != null) {
+             mWindowManager.removeViewImmediate(mNavigationBarView);
+             mNavigationBarView = null;
++            //ADD-S By Justin.Shen for Hide/Show navigation-bar
++            mNavigationBarViewIsAdded = false;
++            //ADD-E By Justin.Shen for Hide/Show navigation-bar
+         }
+         if (mHandlerThread != null) {
+             mHandlerThread.quitSafely();
+@@ -5287,4 +5389,148 @@
+         }
+     }
+     /// M: Support "Operator plugin - Customize Carrier Label for PLMN". @}
++    
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    private static int NAVIGATION_BAR_SHOW_TIMEOUT = 3200;
++    private boolean mShowMenu = false;
++    private boolean mCameraIsOn = false;
++    private int mOldNailStatus = 0;
++    private boolean mNavigationBarViewIsAdded = false;
++    
++    @Override
++    public void showNavigationBar() {
++        Log.d(TAG, "showNavigationBar: mNavigationBarView = " + mNavigationBarView);
++        if (mNavigationBarView != null) {
++            return;
++        }
++        
++        mHandler.removeCallbacks(mHideNavigationBar);
++        mHandler.removeCallbacks(mShowNavigationBar);
++        
++        createNavigationBarView(mContext);
++        
++        addNavigationBar();
++        
++    }
++    
++    private Runnable mShowNavigationBar = new Runnable() {
++        @Override
++        public void run() {
++            showNavigationBar();
++        }
++    };
++    
++    private void hideNavigationBar() {
++        Log.d(TAG, "mHideNavigationBar: mNavigationBarView = " + mNavigationBarView);
++            if (mNavigationBarView == null) {
++                return;
++            }
++            
++            mWindowManager.removeView(mNavigationBarView);
++            mNavigationBarView = null;
++            mNavigationBarViewIsAdded = false;
++    }
++    
++    private Runnable mHideNavigationBar = new Runnable() {
++        @Override
++        public void run() {
++            hideNavigationBar();
++        }
++    };
++    
++    private final View.OnTouchListener mBackActionListener = new View.OnTouchListener() {
++        @Override
++        public boolean onTouch(View v, MotionEvent event) {
++            switch (event.getAction()) {
++                case MotionEvent.ACTION_DOWN:
++                    mHandler.removeCallbacks(mHideNavigationBar);
++                    mHandler.removeCallbacks(mShowNavigationBar);
++                    break;
++                    
++                case MotionEvent.ACTION_UP:
++                case MotionEvent.ACTION_CANCEL:
++                    boolean isFixed = checkNavigationBarFixed();
++                    if(!isFixed) {
++                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++                    }
++                    break;
++            }
++            return false;
++        }
++    };
++    
++    private final View.OnTouchListener mRecentsActionListener = new View.OnTouchListener() {
++        @Override
++        public boolean onTouch(View v, MotionEvent event) {
++            switch (event.getAction()) {
++                case MotionEvent.ACTION_DOWN:
++                    mHandler.removeCallbacks(mHideNavigationBar);
++                    mHandler.removeCallbacks(mShowNavigationBar);
++                    break;
++                    
++                case MotionEvent.ACTION_UP:
++                case MotionEvent.ACTION_CANCEL:
++                    boolean isFixed = checkNavigationBarFixed();
++                    if(!isFixed) {
++                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++                    }
++                    break;
++            }
++            return false;
++        }
++    };
++    
++    private final View.OnTouchListener mNailActionListener = new View.OnTouchListener() {
++        @Override
++        public boolean onTouch(View v, MotionEvent event) {
++            if(mCameraIsOn) {
++                Log.d(TAG, "mNailActionListener: Camera is on, do nothing!");
++                return true;
++            }
++            
++            boolean isFixed = false;
++            switch (event.getAction()) {
++                case MotionEvent.ACTION_DOWN:
++                    isFixed = checkNavigationBarFixed();
++                    Settings.Global.putInt(mContext.getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, isFixed ? 0 : 1);
++                    if(mNavigationBarView != null) {
++                        mNavigationBarView.updateNailIcon();
++                    }
++                    
++                    mHandler.removeCallbacks(mHideNavigationBar);
++                    mHandler.removeCallbacks(mShowNavigationBar);
++                    break;
++                    
++                case MotionEvent.ACTION_UP:
++                case MotionEvent.ACTION_CANCEL:
++                    isFixed = checkNavigationBarFixed();
++                    if(!isFixed) {
++                        mHandler.postDelayed(mHideNavigationBar, NAVIGATION_BAR_SHOW_TIMEOUT);
++                    }
++                    break;
++            }
++            return false;
++        }
++    };
++    
++    private boolean checkNavigationBarFixed() {
++        boolean isFixed = Settings.Global.getInt(mContext.getContentResolver(), 
++                            Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1) == 1 ? true : false;
++        Log.d(TAG, "checkNavigationBarFixed: isFixed = " + isFixed);
++        return isFixed;
++    }
++    
++    private void resetNavigationBar() {
++        Log.d(TAG, "resetNavigationBar");
++        int delayTime = 300;
++        mHandler.removeCallbacks(mShowNavigationBar);
++        mHandler.removeCallbacks(mHideNavigationBar);
++        if(mNavigationBarView != null) {
++            hideNavigationBar();
++            delayTime = 600;
++        }
++        
++        mHandler.postDelayed(mShowNavigationBar, delayTime);
++    }
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/tv/TvStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/tv/TvStatusBar.java	(revision 1035)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/tv/TvStatusBar.java	(revision 1036)
+@@ -217,4 +217,10 @@
+     public void handleSystemNavigationKey(int arg1) {
+         // Not implemented
+     }
++    
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    @Override
++    public void showNavigationBar() {
++    }
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/CommandQueue.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/CommandQueue.java	(revision 1035)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/CommandQueue.java	(revision 1036)
+@@ -77,6 +77,9 @@
+     private static final int MSG_APP_TRANSITION_FINISHED       = 31 << MSG_SHIFT;
+     private static final int MSG_DISMISS_KEYBOARD_SHORTCUTS    = 32 << MSG_SHIFT;
+     private static final int MSG_HANDLE_SYSNAV_KEY             = 33 << MSG_SHIFT;
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    private static final int MSG_SHOW_NAVIGATIONBAR            = 34 << MSG_SHIFT;
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+     public static final int FLAG_EXCLUDE_NONE = 0;
+     public static final int FLAG_EXCLUDE_SEARCH_PANEL = 1 << 0;
+@@ -133,6 +136,9 @@
+         void clickTile(ComponentName tile);
+ 
+         void handleSystemNavigationKey(int arg1);
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        void showNavigationBar();
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 
+     public CommandQueue(Callbacks callbacks) {
+@@ -399,6 +405,16 @@
+         }
+     }
+ 
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    @Override
++    public void showNavigationBar() {
++        synchronized (mLock) {
++            mHandler.removeMessages(MSG_SHOW_NAVIGATIONBAR);
++            mHandler.sendEmptyMessage(MSG_SHOW_NAVIGATIONBAR);
++        }
++    }
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
++    
+     private final class H extends Handler {
+         public void handleMessage(Message msg) {
+             final int what = msg.what & MSG_MASK;
+@@ -517,6 +533,11 @@
+                 case MSG_HANDLE_SYSNAV_KEY:
+                     mCallbacks.handleSystemNavigationKey(msg.arg1);
+                     break;
++                //ADD-S By Justin.Shen for Hide/Show navigation-bar
++                case MSG_SHOW_NAVIGATIONBAR:
++                    mCallbacks.showNavigationBar();
++                    break;
++                //ADD-E By Justin.Shen for Hide/Show navigation-bar
+             }
+         }
+     }
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_fixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_fixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_fixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_fixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_fixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_unfixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_unfixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_sysbar_nail_unfixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_fixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_fixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_fixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_fixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_fixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_unfixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_unfixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_sysbar_nail_unfixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/values/config.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/config.xml	(revision 1035)
++++ frameworks/base/packages/SystemUI/res/values/config.xml	(revision 1036)
+@@ -281,7 +281,17 @@
+     <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIFactory</string>
+ 
+     <!-- Nav bar button default ordering/layout -->
++    <!-- CHG-S By Justin.Shen for Hide/Show navigation-bar -->
++    <!--
+     <string name="config_navBarLayout" translatable="false">space,back;home;recent,menu_ime</string>
++    -->
++    <string name="config_navBarLayout" translatable="false">space;nail,back,home,recent;menu_ime</string>
++    <string name="config_navBarLayout_1" translatable="false">space;nail,recent,home,back;menu_ime</string>
++    <string name="config_navBarLayout_2" translatable="false">space;back,home,recent,nail;menu_ime</string>
++    <string name="config_navBarLayout_3" translatable="false">space;recent,home,back,nail;menu_ime</string>
++    <string name="config_navBarLayout_4" translatable="false">space,back;home;recent,menu_ime</string>
++    <string name="config_navBarLayout_5" translatable="false">space,recent;home;back,menu_ime</string>
++    <!-- CHG-E By Justin.Shen for Hide/Show navigation-bar -->
+ 
+     <bool name="quick_settings_show_full_alarm">false</bool>
+ 
+Index: frameworks/base/packages/SystemUI/res/values-sw600dp/config.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-sw600dp/config.xml	(revision 1035)
++++ frameworks/base/packages/SystemUI/res/values-sw600dp/config.xml	(revision 1036)
+@@ -34,7 +34,17 @@
+     <bool name="config_keyguardUserSwitcher">true</bool>
+ 
+     <!-- Nav bar button default ordering/layout -->
++    <!-- CHG-S By Justin.Shen for Hide/Show navigation-bar -->
++    <!--
+     <string name="config_navBarLayout" translatable="false">space;back,home,recent;menu_ime</string>
++    -->
++    <string name="config_navBarLayout" translatable="false">space;nail,back,home,recent;menu_ime</string>
++    <string name="config_navBarLayout_1" translatable="false">space;nail,recent,home,back;menu_ime</string>
++    <string name="config_navBarLayout_2" translatable="false">space;back,home,recent,nail;menu_ime</string>
++    <string name="config_navBarLayout_3" translatable="false">space;recent,home,back,nail;menu_ime</string>
++    <string name="config_navBarLayout_4" translatable="false">space,back;home;recent,menu_ime</string>
++    <string name="config_navBarLayout_5" translatable="false">space,recent;home;back,menu_ime</string>
++    <!-- CHG-E By Justin.Shen for Hide/Show navigation-bar -->
+ 
+     <!-- Animation duration when using long press on recents to dock -->
+     <integer name="long_press_dock_anim_duration">290</integer>
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_fixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_fixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_fixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_fixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_fixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_unfixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_unfixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-mdpi/ic_sysbar_nail_unfixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_fixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_fixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_fixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_fixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_fixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_unfixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_unfixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_sysbar_nail_unfixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/values-sw360dp/dimens.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-sw360dp/dimens.xml	(revision 1035)
++++ frameworks/base/packages/SystemUI/res/values-sw360dp/dimens.xml	(revision 1036)
+@@ -17,7 +17,12 @@
+ <resources>
+ 
+     <!-- The width of the view containing navigation buttons -->
++    <!-- CHG-S By Justin.Shen for Hide/Show navigation-bar -->
++    <!--
+     <dimen name="navigation_key_width">80dip</dimen>
++    -->
++    <dimen name="navigation_key_width">70dip</dimen>
++    <!-- CHG-E By Justin.Shen for Hide/Show navigation-bar -->
+ 
+     <!-- The width of the view containing the menu/ime navigation bar icons -->
+     <dimen name="navigation_extra_key_width">40dip</dimen>
+Index: frameworks/base/packages/SystemUI/res/values-sw400dp/dimens.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-sw400dp/dimens.xml	(revision 1035)
++++ frameworks/base/packages/SystemUI/res/values-sw400dp/dimens.xml	(revision 1036)
+@@ -17,7 +17,12 @@
+ <resources>
+ 
+     <!-- The width of the view containing navigation buttons -->
++    <!-- CHG-S By Justin.Shen for Hide/Show navigation-bar -->
++    <!--
+     <dimen name="navigation_key_width">80dip</dimen>
++    -->
++    <dimen name="navigation_key_width">70dip</dimen>
++    <!-- CHG-E By Justin.Shen for Hide/Show navigation-bar -->
+ 
+     <!-- The padding on the side of the navigation bar. Must be greater than or equal to
+          navigation_extra_key_width -->
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_fixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_fixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_fixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_fixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_fixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_unfixed.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_unfixed.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_unfixed.png	(revision 1036)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_sysbar_nail_unfixed.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/layout/nail.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/nail.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/layout/nail.xml	(revision 1036)
+@@ -0,0 +1,30 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2016 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<com.android.systemui.statusbar.policy.KeyButtonView
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:systemui="http://schemas.android.com/apk/res-auto"
++    android:id="@+id/nail"
++    android:layout_width="@dimen/navigation_key_width"
++    android:layout_height="match_parent"
++    android:layout_weight="0"
++    android:src="@drawable/ic_sysbar_nail_unfixed"
++    systemui:keyCode="131"
++    android:scaleType="center"
++    android:contentDescription="@string/accessibility_home"
++    android:paddingStart="@dimen/navigation_key_padding"
++    android:paddingEnd="@dimen/navigation_key_padding"
++    />
++
+Index: frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+===================================================================
+--- frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 1035)
++++ frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 1036)
+@@ -2766,6 +2766,16 @@
+             loadSetting(stmt, Settings.Global.ENHANCED_4G_MODE_ENABLED_SIM4,
+                     ImsConfig.FeatureValueConstants.ON);
+ 
++            //ADD-S By Justin.Shen for Hide/Show navigation-bar
++            loadIntegerSetting(stmt, Settings.Global.NAVIGATION_BAR_FIXED_STATUS,
++                    R.integer.def_navigation_bar_fixed_status);
++            loadIntegerSetting(stmt, Settings.Global.NAVIGATION_BAR_LAYOUT,
++                    R.integer.def_navigation_bar_layout);
++            loadIntegerSetting(stmt, Settings.Global.NAVIGATION_BAR_BACKGROUND_INDEX,
++                    R.integer.def_navigation_bar_background_index);
++            loadIntegerSetting(stmt, Settings.Global.NAVIGATION_BAR_BACKGROUND_COLOR,
++                    R.integer.def_navigation_bar_background_color);
++            //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+ 
+             /// M: Load MTK added Global providers before Android M.
+Index: frameworks/base/packages/SettingsProvider/res/values/defaults.xml
+===================================================================
+--- frameworks/base/packages/SettingsProvider/res/values/defaults.xml	(revision 1035)
++++ frameworks/base/packages/SettingsProvider/res/values/defaults.xml	(revision 1036)
+@@ -216,4 +216,11 @@
+ 
+     <!-- Default setting for ability to add users from the lock screen -->
+     <bool name="def_add_users_from_lockscreen">false</bool>
++    
++    <!-- ADD-S By Justin.Shen for Hide/Show navigation-bar -->
++    <integer name="def_navigation_bar_fixed_status">1</integer>
++    <integer name="def_navigation_bar_layout">0</integer>
++    <integer name="def_navigation_bar_background_index">0</integer>
++    <integer name="def_navigation_bar_background_color">0x00000000</integer>
++    <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+ </resources>
+Index: frameworks/base/core/java/com/android/internal/statusbar/IStatusBar.aidl
+===================================================================
+--- frameworks/base/core/java/com/android/internal/statusbar/IStatusBar.aidl	(revision 1035)
++++ frameworks/base/core/java/com/android/internal/statusbar/IStatusBar.aidl	(revision 1036)
+@@ -114,4 +114,7 @@
+     void remQsTile(in ComponentName tile);
+     void clickQsTile(in ComponentName tile);
+     void handleSystemNavigationKey(in int key);
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    void showNavigationBar();
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ }
+Index: frameworks/base/core/java/com/android/internal/statusbar/IStatusBarService.aidl
+===================================================================
+--- frameworks/base/core/java/com/android/internal/statusbar/IStatusBarService.aidl	(revision 1035)
++++ frameworks/base/core/java/com/android/internal/statusbar/IStatusBarService.aidl	(revision 1036)
+@@ -67,4 +67,7 @@
+     void remTile(in ComponentName tile);
+     void clickTile(in ComponentName tile);
+     void handleSystemNavigationKey(in int key);
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    void showNavigationBar();
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ }
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 1035)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 1036)
+@@ -10286,6 +10286,13 @@
+          */
+         public static final String WFC_AID_VALUE = "wfc_aid_value";
+         /** MTK ADD END. @} */
++        
++        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++        public static final String NAVIGATION_BAR_FIXED_STATUS      = "navigation_bar_fixed_status";
++        public static final String NAVIGATION_BAR_LAYOUT            = "navigation_bar_layout";
++        public static final String NAVIGATION_BAR_BACKGROUND_INDEX  = "navigation_bar_backbround_index";
++        public static final String NAVIGATION_BAR_BACKGROUND_COLOR  = "navigation_bar_backbround_color";
++        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     }
+ 
+     /**
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1035)
++++ frameworks/base/api/test-current.txt	(revision 1036)
+@@ -32555,6 +32555,10 @@
+     field public static final java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+     field public static final java.lang.String MODE_RINGER = "mode_ringer";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_COLOR = "navigation_bar_backbround_color";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_INDEX = "navigation_bar_backbround_index";
++    field public static final java.lang.String NAVIGATION_BAR_FIXED_STATUS = "navigation_bar_fixed_status";
++    field public static final java.lang.String NAVIGATION_BAR_LAYOUT = "navigation_bar_layout";
+     field public static final java.lang.String NETWORK_PREFERENCE = "network_preference";
+     field public static final java.lang.String RADIO_BLUETOOTH = "bluetooth";
+     field public static final java.lang.String RADIO_CELL = "cell";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1035)
++++ frameworks/base/api/current.txt	(revision 1036)
+@@ -32477,6 +32477,10 @@
+     field public static final java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+     field public static final java.lang.String MODE_RINGER = "mode_ringer";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_COLOR = "navigation_bar_backbround_color";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_INDEX = "navigation_bar_backbround_index";
++    field public static final java.lang.String NAVIGATION_BAR_FIXED_STATUS = "navigation_bar_fixed_status";
++    field public static final java.lang.String NAVIGATION_BAR_LAYOUT = "navigation_bar_layout";
+     field public static final java.lang.String NETWORK_PREFERENCE = "network_preference";
+     field public static final java.lang.String RADIO_BLUETOOTH = "bluetooth";
+     field public static final java.lang.String RADIO_CELL = "cell";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1035)
++++ frameworks/base/api/system-current.txt	(revision 1036)
+@@ -35233,6 +35233,10 @@
+     field public static final java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+     field public static final java.lang.String MODE_RINGER = "mode_ringer";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_COLOR = "navigation_bar_backbround_color";
++    field public static final java.lang.String NAVIGATION_BAR_BACKGROUND_INDEX = "navigation_bar_backbround_index";
++    field public static final java.lang.String NAVIGATION_BAR_FIXED_STATUS = "navigation_bar_fixed_status";
++    field public static final java.lang.String NAVIGATION_BAR_LAYOUT = "navigation_bar_layout";
+     field public static final java.lang.String NETWORK_PREFERENCE = "network_preference";
+     field public static final java.lang.String OTA_DISABLE_AUTOMATIC_UPDATE = "ota_disable_automatic_update";
+     field public static final java.lang.String RADIO_BLUETOOTH = "bluetooth";
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1035)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1036)
+@@ -1272,6 +1272,23 @@
+                 <category android:name="android.intent.category.VOICE" />
+             </intent-filter>
+         </activity>
++        
++        <!-- ADD-S By Justin.Shen for Hide/Show navigation-bar -->
++        <activity android:name="Settings$NavigationBarSettingsActivity"
++                android:label="@string/navigationbar_settings_title"
++                android:icon="@drawable/ic_settings_navigationbar"
++                android:taskAffinity="">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <intent-filter android:priority="9">
++                <action android:name="com.android.settings.action.SETTINGS" />
++            </intent-filter>
++            <meta-data android:name="com.android.settings.category"
++                android:value="com.android.settings.category.device" />
++        </activity>
++        <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+ 
+         <!--
+         <activity android:name="Settings$AppOpsSummaryActivity"
+Index: packages/apps/Settings/src/com/android/settings/Settings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/Settings.java	(revision 1035)
++++ packages/apps/Settings/src/com/android/settings/Settings.java	(revision 1036)
+@@ -19,6 +19,7 @@
+ import com.android.settings.applications.AppOpsSummary;
+ import com.android.settings.fingerprint.FingerprintEnrollIntroduction;
+ import com.android.settings.fingerprint.FingerprintSettings;
++import com.android.settings.navigationbar.NavigationBarSettings;
+ 
+ /**
+  * Top-level Settings activity
+@@ -97,6 +98,9 @@
+     public static class WifiDisplaySettingsActivity extends SettingsActivity { /* empty */ }
+     public static class DreamSettingsActivity extends SettingsActivity { /* empty */ }
+     public static class NotificationStationActivity extends SettingsActivity { /* empty */ }
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    public static class NavigationBarSettingsActivity extends NavigationBarSettings { /* empty */ }
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     public static class UserSettingsActivity extends SettingsActivity { /* empty */ }
+     public static class NotificationAccessSettingsActivity extends SettingsActivity { /* empty */ }
+     public static class VrListenersSettingsActivity extends SettingsActivity { /* empty */ }
+Index: packages/apps/Settings/src/com/android/settings/navigationbar/NavigationBarSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/navigationbar/NavigationBarSettings.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/navigationbar/NavigationBarSettings.java	(revision 1036)
+@@ -0,0 +1,226 @@
++
++package com.android.settings.navigationbar;
++
++import android.app.Activity;
++import android.content.ContentResolver;
++import android.content.Context;
++import android.content.Intent;
++import android.os.Build;
++import android.os.Bundle;
++import android.provider.Settings;
++
++import android.util.Log;
++import android.view.View;
++import android.view.View.OnClickListener;
++import android.widget.ImageView;
++import android.widget.RadioButton;
++
++import com.android.settings.R;
++
++public class NavigationBarSettings extends Activity {
++    private static final String TAG = "NavigationBarSettings";
++    
++    private RadioButton[] mRadioButtonList;
++    private ImageView[] mBackgroundList;
++    private int[] mColorList;
++    
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.navigation_bar_settings);
++        
++        mRadioButtonList = new RadioButton[] {
++            (RadioButton) findViewById(R.id.navigationbar_layout_0),
++            (RadioButton) findViewById(R.id.navigationbar_layout_1),
++            (RadioButton) findViewById(R.id.navigationbar_layout_2),
++            (RadioButton) findViewById(R.id.navigationbar_layout_3),
++            (RadioButton) findViewById(R.id.navigationbar_layout_4),
++            (RadioButton) findViewById(R.id.navigationbar_layout_5)
++        };
++        
++        if(mRadioButtonList != null && mRadioButtonList.length > 0) {
++            for(int i = 0; i < mRadioButtonList.length; i++) {
++                mRadioButtonList[i].setOnClickListener(mRadioOnClickListener);
++            }
++        }
++        
++        int layoutIndex = Settings.Global.getInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, 0);
++        updateRadioButtonStatus(layoutIndex);
++        
++        mBackgroundList = new ImageView[] {
++            (ImageView) findViewById(R.id.color0), (ImageView) findViewById(R.id.color1),
++            (ImageView) findViewById(R.id.color2), (ImageView) findViewById(R.id.color3),
++            (ImageView) findViewById(R.id.color4), (ImageView) findViewById(R.id.color5),
++            (ImageView) findViewById(R.id.color6), (ImageView) findViewById(R.id.color7),
++            (ImageView) findViewById(R.id.color8), (ImageView) findViewById(R.id.color9)
++        };
++        
++        mColorList = new int[] {
++            getResources().getColor(R.color.navigationbar_color_0),
++            getResources().getColor(R.color.navigationbar_color_1),
++            getResources().getColor(R.color.navigationbar_color_2),
++            getResources().getColor(R.color.navigationbar_color_3),
++            getResources().getColor(R.color.navigationbar_color_4),
++            getResources().getColor(R.color.navigationbar_color_5),
++            getResources().getColor(R.color.navigationbar_color_6),
++            getResources().getColor(R.color.navigationbar_color_7),
++            getResources().getColor(R.color.navigationbar_color_8),
++            getResources().getColor(R.color.navigationbar_color_9)
++        };
++    
++        if(mBackgroundList != null && mBackgroundList.length > 0) {
++            for(int i = 0; i < mBackgroundList.length; i++) {
++                mBackgroundList[i].setOnClickListener(mBackgroundOnClickListener);
++                mBackgroundList[i].setImageResource(R.drawable.color_image_check);
++            }
++        }
++        
++        int backgroundIndex = Settings.Global.getInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_INDEX, 0);
++        updateBackgroundStatus(backgroundIndex);
++    }
++
++
++    @Override
++    public void onResume() {
++        super.onResume();
++        
++    }
++
++    @Override
++    public void onPause() {
++        super.onPause();
++       
++    }
++    
++    private void updateRadioButtonStatus(int layoutIndex) {
++        if(mRadioButtonList != null && mRadioButtonList.length > 0) {
++            for(int i = 0; i < mRadioButtonList.length; i++) {
++                if(layoutIndex == i) {
++                    mRadioButtonList[i].setChecked(true);
++                } else {
++                    mRadioButtonList[i].setChecked(false);
++                }
++            }
++        }
++    }
++    
++    private View.OnClickListener mRadioOnClickListener = new View.OnClickListener() {
++        @Override
++        public void onClick(View view) {
++            int layoutIndex = 0;
++            switch(view.getId()) {
++                case R.id.navigationbar_layout_0:
++                    layoutIndex = 0;
++                    break;
++                    
++                case R.id.navigationbar_layout_1:
++                    layoutIndex = 1;
++                    break;
++                    
++                case R.id.navigationbar_layout_2:
++                    layoutIndex = 2;
++                    break;
++                    
++                case R.id.navigationbar_layout_3:
++                    layoutIndex = 3;
++                    break;
++                    
++                case R.id.navigationbar_layout_4:
++                    Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1);
++                    layoutIndex = 4;
++                    break;
++                    
++                case R.id.navigationbar_layout_5:
++                    Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_FIXED_STATUS, 1);
++                    layoutIndex = 5;
++                    break;
++                    
++                default:
++                    return;
++            }
++            
++            int oldLayoutIndex = Settings.Global.getInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, 0);
++            Log.d(TAG, "mRadioOnClickListener: oldLayoutIndex = " + oldLayoutIndex);
++            Log.d(TAG, "mRadioOnClickListener: layoutIndex = " + layoutIndex);
++            if(oldLayoutIndex != layoutIndex) {
++                updateRadioButtonStatus(layoutIndex);
++                Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_LAYOUT, layoutIndex);
++                Intent intent = new Intent("android.intent.action.RESET_NAVIGATION_BAR");
++                sendBroadcast(intent);
++            }
++        }
++    };
++    
++    private void updateBackgroundStatus(int backgroundIndex) {
++        if(mBackgroundList != null && mBackgroundList.length > 0) {
++            for(int i = 0; i < mBackgroundList.length; i++) {
++                if(backgroundIndex == i) {
++                    mBackgroundList[i].setImageLevel(20);
++                } else {
++                    mBackgroundList[i].setImageLevel(0);
++                }
++            }
++        }
++    }
++    
++    private View.OnClickListener mBackgroundOnClickListener = new View.OnClickListener() {
++        @Override
++        public void onClick(View view) {
++            int backgroundIndex = 0;
++            switch(view.getId()) {
++                case R.id.color0:
++                    backgroundIndex = 0;
++                    break;
++                    
++                case R.id.color1:
++                    backgroundIndex = 1;
++                    break;
++                    
++                case R.id.color2:
++                    backgroundIndex = 2;
++                    break;
++                    
++                case R.id.color3:
++                    backgroundIndex = 3;
++                    break;
++                    
++                case R.id.color4:
++                    backgroundIndex = 4;
++                    break;
++                    
++                case R.id.color5:
++                    backgroundIndex = 5;
++                    break;
++                
++                case R.id.color6:
++                    backgroundIndex = 6;
++                    break;
++                    
++                case R.id.color7:
++                    backgroundIndex = 7;
++                    break;
++                    
++                case R.id.color8:
++                    backgroundIndex = 8;
++                    break;
++                    
++                case R.id.color9:
++                    backgroundIndex = 9;
++                    break;
++                    
++                default:
++                    return;
++            }
++            
++            int oldBackgroundIndex = Settings.Global.getInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_INDEX, 0);
++            if(oldBackgroundIndex != backgroundIndex) {
++                updateBackgroundStatus(backgroundIndex);
++                Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_INDEX, backgroundIndex);
++                Settings.Global.putInt(getContentResolver(), Settings.Global.NAVIGATION_BAR_BACKGROUND_COLOR, mColorList[backgroundIndex]);
++                Intent intent = new Intent("android.intent.action.RESET_NAVIGATION_BAR");
++                sendBroadcast(intent);
++            }
++        }
++    };
++
++}
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1035)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1036)
+@@ -7858,4 +7858,14 @@
+ 
+     <!-- Warning when activating the automatic storage manager on legacy devices. [CHAR LIMIT=NONE] -->
+     <string name="automatic_storage_manager_activation_warning">Your storage is now being managed by the storage manager</string>
++    
++    <!-- ADD-S By Justin.Shen for Hide/Show navigation-bar -->
++    <string name="navigationbar_settings_title">"Navigation bar"</string>
++    <string name="navigationbar_button_layout_title">"Button layout"</string>
++    <string name="navigationbar_button_layout_summary">"Change the icons’ position by your favorite."</string>
++    <string name="navigationbar_button_layout_type_general">"General"</string>
++    <string name="navigationbar_button_layout_type_hide">"Hide Navigation Bar"</string>
++    <string name="navigationbar_background_color_title">"Background color"</string>
++    <string name="navigationbar_background_color_summary">"Change the background color of navigation bar, but it may not be applied to all apps."</string>
++    <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+ </resources>
+Index: packages/apps/Settings/res/values/colors.xml
+===================================================================
+--- packages/apps/Settings/res/values/colors.xml	(revision 1035)
++++ packages/apps/Settings/res/values/colors.xml	(revision 1036)
+@@ -124,4 +124,17 @@
+     <!-- Gestures settings -->
+     <color name="gestures_setting_background_color">#f5f5f5</color>
+ 
++
++<!-- ADD-S By Justin.Shen for Hide/Show navigation-bar -->
++    <color name="navigationbar_color_0">#00000000</color>
++    <color name="navigationbar_color_1">#454545</color>
++    <color name="navigationbar_color_2">#fae5d7</color>
++    <color name="navigationbar_color_3">#fafaca</color>
++    <color name="navigationbar_color_4">#d7f7da</color>
++    <color name="navigationbar_color_5">#d0f9f4</color>
++    <color name="navigationbar_color_6">#d3e0f5</color>
++    <color name="navigationbar_color_7">#f0e4f7</color>
++    <color name="navigationbar_color_8">#fcddf2</color>
++    <color name="navigationbar_color_9">#f9e1e1</color>
++    <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+ </resources>
+Index: packages/apps/Settings/res/layout/navigation_bar_settings.xml
+===================================================================
+--- packages/apps/Settings/res/layout/navigation_bar_settings.xml	(revision 0)
++++ packages/apps/Settings/res/layout/navigation_bar_settings.xml	(revision 1036)
+@@ -0,0 +1,364 @@
++<?xml version="1.0" encoding="utf-8"?>
++
++<ScrollView
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="fill_parent"
++    android:layout_height="fill_parent"
++    android:scrollbars="vertical"
++    android:fadingEdge="vertical">
++    
++    <LinearLayout
++        android:orientation="vertical"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:paddingTop="5dip"
++        android:paddingBottom="5dip">
++        
++        <TextView
++            android:text="@string/navigationbar_button_layout_title"
++            android:textAppearance="?android:attr/textAppearanceMedium"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:textColor="#ff000000"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"/>
++            
++        <TextView
++            android:text="@string/navigationbar_button_layout_summary"
++            android:textAppearance="?android:attr/textAppearanceSmall"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:paddingBottom="5dip"/>
++            
++        <TextView
++            android:text="@string/navigationbar_button_layout_type_general"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:textColor="#ff000000"
++            android:textSize="16sp"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:paddingBottom="5dip"/>
++            
++        <View 
++            android:layout_width="fill_parent"
++            android:layout_height="1dp"
++            android:background="#ddd"/>
++            
++        <LinearLayout 
++            android:orientation="horizontal"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:paddingTop="5dip"
++            android:paddingBottom="5dip">
++            
++            <ImageView 
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"
++                android:src="@drawable/virtual_key_type_4"/>
++            <View 
++                android:layout_width="wrap_content"
++                android:layout_height="match_parent"
++                 android:layout_weight="1"/>
++            <RadioButton 
++                android:id="@+id/navigationbar_layout_4"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"/>
++        </LinearLayout>
++        
++        <View 
++            android:layout_width="fill_parent"
++            android:layout_height="1dp"
++            android:background="#ddd"/>
++        
++        <LinearLayout 
++            android:orientation="horizontal"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:paddingTop="5dip"
++            android:paddingBottom="5dip">
++            
++            <ImageView 
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"
++                android:src="@drawable/virtual_key_type_5"/>
++            <View 
++                android:layout_width="wrap_content"
++                android:layout_height="match_parent"
++                 android:layout_weight="1"/>
++            <RadioButton 
++                android:id="@+id/navigationbar_layout_5"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"/>
++        </LinearLayout>
++        
++        <View 
++            android:layout_width="fill_parent"
++            android:layout_height="1dp"
++            android:background="#ddd"/>
++            
++        <TextView
++            android:text="@string/navigationbar_button_layout_type_hide"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:textColor="#ff000000"
++            android:textSize="16sp"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:paddingTop="10dip"
++            android:paddingBottom="5dip"/>
++            
++        <View 
++            android:layout_width="fill_parent"
++            android:layout_height="1dp"
++            android:background="#ddd"/>
++         
++        <LinearLayout 
++            android:orientation="horizontal"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:paddingTop="5dip"
++            android:paddingBottom="5dip">
++            
++            <ImageView 
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"
++                android:src="@drawable/virtual_key_type_0"/>
++            <View 
++                android:layout_width="wrap_content"
++                android:layout_height="match_parent"
++                 android:layout_weight="1"/>
++            <RadioButton 
++                android:id="@+id/navigationbar_layout_0"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"/>
++        </LinearLayout>
++        
++        <View 
++            android:layout_width="fill_parent"
++            android:layout_height="1dp"
++            android:background="#ddd"/>
++        
++        <LinearLayout 
++            android:orientation="horizontal"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:paddingTop="5dip"
++            android:paddingBottom="5dip">
++            
++            <ImageView 
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"
++                android:src="@drawable/virtual_key_type_1"/>
++            <View 
++                android:layout_width="wrap_content"
++                android:layout_height="match_parent"
++                 android:layout_weight="1"/>
++            <RadioButton 
++                android:id="@+id/navigationbar_layout_1"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"/>
++        </LinearLayout>
++        
++        <View 
++            android:layout_width="fill_parent"
++            android:layout_height="1dp"
++            android:background="#ddd"/>
++            
++        <LinearLayout 
++            android:orientation="horizontal"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:paddingTop="5dip"
++            android:paddingBottom="5dip">
++            
++            <ImageView 
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"
++                android:src="@drawable/virtual_key_type_2"/>
++            <View 
++                android:layout_width="wrap_content"
++                android:layout_height="match_parent"
++                 android:layout_weight="1"/>
++            <RadioButton 
++                android:id="@+id/navigationbar_layout_2"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"/>
++        </LinearLayout>
++        
++        <View 
++            android:layout_width="fill_parent"
++            android:layout_height="1dp"
++            android:background="#ddd"/>
++            
++        <LinearLayout 
++            android:orientation="horizontal"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:paddingTop="5dip"
++            android:paddingBottom="5dip">
++            
++            <ImageView 
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"
++                android:src="@drawable/virtual_key_type_3"/>
++            <View 
++                android:layout_width="wrap_content"
++                android:layout_height="match_parent"
++                 android:layout_weight="1"/>
++            <RadioButton 
++                android:id="@+id/navigationbar_layout_3"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_vertical"/>
++        </LinearLayout>
++        
++        <View 
++            android:layout_width="fill_parent"
++            android:layout_height="1dp"
++            android:background="#ddd"/>
++            
++        <TextView
++            android:text="@string/navigationbar_background_color_title"
++            android:textAppearance="?android:attr/textAppearanceMedium"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:textColor="#ff000000"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content" 
++            android:paddingTop="10dip"/>
++            
++        <TextView
++            android:text="@string/navigationbar_background_color_summary"
++            android:textAppearance="?android:attr/textAppearanceSmall"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content" 
++            android:paddingTop="5dip"
++            android:paddingBottom="5dip"/>
++            
++        <GridLayout
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_gravity="center"
++            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++            android:columnCount="5">
++
++            <ImageView
++                android:id="@+id/color0"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:layout_marginRight="10dp"
++                android:background="@drawable/circle_navigationbar_color_0"
++                android:padding="1dp" />
++
++            <ImageView
++                android:id="@+id/color1"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:layout_marginRight="10dp"
++                android:background="@drawable/circle_navigationbar_color_1"
++                android:padding="1dp" />
++
++            <ImageView
++                android:id="@+id/color2"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:layout_marginRight="10dp"
++                android:background="@drawable/circle_navigationbar_color_2"
++                android:padding="1dp" />
++
++            <ImageView
++                android:id="@+id/color3"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:layout_marginRight="10dp"
++                android:background="@drawable/circle_navigationbar_color_3"
++                android:padding="1dp" />
++
++            <ImageView
++                android:id="@+id/color4"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:background="@drawable/circle_navigationbar_color_4"
++                android:padding="1dp" />
++
++            <ImageView
++                android:id="@+id/color5"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:layout_marginRight="10dp"
++                android:background="@drawable/circle_navigationbar_color_5"
++                android:padding="1dp" />
++
++            <ImageView
++                android:id="@+id/color6"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:layout_marginRight="10dp"
++                android:background="@drawable/circle_navigationbar_color_6"
++                android:padding="1dp" />
++
++            <ImageView
++                android:id="@+id/color7"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:layout_marginRight="10dp"
++                android:background="@drawable/circle_navigationbar_color_7"
++                android:padding="1dp" />
++
++            <ImageView
++                android:id="@+id/color8"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:layout_marginRight="10dp"
++                android:background="@drawable/circle_navigationbar_color_8"
++                android:padding="1dp" />
++
++            <ImageView
++                android:id="@+id/color9"
++                android:layout_width="@dimen/circle_width"
++                android:layout_height="@dimen/circle_height"
++                android:layout_marginBottom="@dimen/circle_margin_bottom"
++                android:background="@drawable/circle_navigationbar_color_9"
++                android:padding="1dp" />
++        </GridLayout>
++        
++    </LinearLayout>
++</ScrollView>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/ic_settings_navigationbar.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/ic_settings_navigationbar.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/ic_settings_navigationbar.xml	(revision 1036)
+@@ -0,0 +1,49 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="40dp"
++    android:height="40dp"
++    android:viewportWidth="40"
++    android:viewportHeight="40">
++
++    <path
++        android:fillColor="#009587"
++        android:pathData="M27.143,10.781c0-1.138-0.926-2.063-2.063-2.063H14.908c-1.138,0-2.063,0.925-2.063,2.063v2.727h14.298
++V10.781L27.143,10.781z" />
++    <path
++        android:fillColor="#009587"
++        android:pathData="M 10.938 20.294 L 10.938 20.294 L 11.907 20.854 L 12.877 21.414 L 12.877 19.174 L 11.907 19.734 L 10.938 20.294 Z" />
++    <path
++        android:fillColor="#009587"
++        android:pathData="M19.639,18.594L19.639,18.594c-0.979,0-1.774,0.796-1.774,1.775c0,0.978,0.796,1.775,1.774,1.775
++c0.475,0,0.92-0.186,1.256-0.521c0.334-0.335,0.519-0.781,0.519-1.255c0-0.475-0.185-0.92-0.52-1.256
++C20.559,18.778,20.113,18.594,19.639,18.594L19.639,18.594z" />
++    <path
++        android:fillColor="#009587"
++        android:pathData="M12.844,29.207L12.844,29.207c0,1.138,0.926,2.063,2.063,2.063h10.171c1.138,0,2.063-0.925,2.063-2.063
++v-2.728H12.844V29.207L12.844,29.207z" />
++    <path
++        android:fillColor="#009587"
++        android:pathData="M27.666,18.594L27.666,18.594c-0.979,0-1.774,0.796-1.774,1.775c0,0.978,0.796,1.775,1.774,1.775
++c0.474,0,0.92-0.186,1.255-0.521c0.336-0.335,0.52-0.781,0.52-1.255c0-0.475-0.184-0.92-0.52-1.256
++C28.586,18.778,28.14,18.594,27.666,18.594L27.666,18.594z" />
++    <path
++        android:fillColor="#009587"
++        android:pathData="M30.458,15.277H9.528c-1.138,0-2.064,0.926-2.064,2.064v5.307c0,1.138,0.926,2.063,2.064,2.063h20.93
++c1.139,0,2.064-0.925,2.064-2.063v-5.307C32.522,16.203,31.597,15.277,30.458,15.277z
++M14.056,23.456l-0.884-0.51l-3.709-2.142
++l-0.884-0.51l0.884-0.511l3.709-2.141l0.884-0.51V23.456z
++M21.728,22.458c-0.558,0.558-1.299,0.865-2.089,0.865
++c-1.628,0-2.954-1.325-2.954-2.954c0-1.629,1.325-2.955,2.954-2.955c0.79,0,1.531,0.307,2.089,0.865
++c0.559,0.558,0.866,1.3,0.866,2.09C22.594,21.157,22.286,21.899,21.728,22.458z
++M29.755,22.458
++c-0.558,0.558-1.301,0.865-2.089,0.865c-1.629,0-2.954-1.325-2.954-2.954c0-1.629,1.325-2.955,2.954-2.955
++c0.788,0,1.531,0.307,2.089,0.865c0.559,0.558,0.865,1.3,0.865,2.09C30.62,21.157,30.313,21.899,29.755,22.458z" />
++    <path
++        android:fillColor="#009587"
++        android:pathData="M25.541,0H14.445C6.468,0,0,6.468,0,14.446v11.096c0,7.978,6.468,14.445,14.445,14.445h11.096
++c7.978,0,14.445-6.468,14.445-14.445V14.446C39.986,6.468,33.519,0,25.541,0z
++M34.291,22.647c0,2.112-1.72,3.832-3.833,3.832h-1.547
++v2.728c0,2.112-1.72,3.832-3.832,3.832H14.908c-2.113,0-3.832-1.72-3.832-3.832v-2.728H9.528c-2.113,0-3.832-1.72-3.832-3.832
++v-5.307c0-2.114,1.719-3.833,3.832-3.833h1.548v-2.727c0-2.113,1.719-3.832,3.832-3.832h10.171c2.112,0,3.832,1.719,3.832,3.832
++v2.727h1.547c2.113,0,3.833,1.719,3.833,3.833V22.647z" />
++</vector>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_1.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_1.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_1.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_1" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_3.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_3.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_3.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_3" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_5.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_5.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_5.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_5" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_7.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_7.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_7.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_7" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_9.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_9.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_9.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_9" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/virtual_key_type_0.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/Settings/res/drawable/virtual_key_type_0.png
+===================================================================
+--- packages/apps/Settings/res/drawable/virtual_key_type_0.png	(revision 0)
++++ packages/apps/Settings/res/drawable/virtual_key_type_0.png	(revision 1036)
+
+Property changes on: packages/apps/Settings/res/drawable/virtual_key_type_0.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/Settings/res/drawable/virtual_key_type_2.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/Settings/res/drawable/virtual_key_type_2.png
+===================================================================
+--- packages/apps/Settings/res/drawable/virtual_key_type_2.png	(revision 0)
++++ packages/apps/Settings/res/drawable/virtual_key_type_2.png	(revision 1036)
+
+Property changes on: packages/apps/Settings/res/drawable/virtual_key_type_2.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/Settings/res/drawable/virtual_key_type_4.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/Settings/res/drawable/virtual_key_type_4.png
+===================================================================
+--- packages/apps/Settings/res/drawable/virtual_key_type_4.png	(revision 0)
++++ packages/apps/Settings/res/drawable/virtual_key_type_4.png	(revision 1036)
+
+Property changes on: packages/apps/Settings/res/drawable/virtual_key_type_4.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_0.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_0.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_0.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_0" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_2.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_2.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_2.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_2" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_4.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_4.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_4.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_4" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_6.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_6.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_6.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_6" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/circle_navigationbar_color_8.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/circle_navigationbar_color_8.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/circle_navigationbar_color_8.xml	(revision 1036)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/navigationbar_color_8" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/virtual_key_type_1.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/Settings/res/drawable/virtual_key_type_1.png
+===================================================================
+--- packages/apps/Settings/res/drawable/virtual_key_type_1.png	(revision 0)
++++ packages/apps/Settings/res/drawable/virtual_key_type_1.png	(revision 1036)
+
+Property changes on: packages/apps/Settings/res/drawable/virtual_key_type_1.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/Settings/res/drawable/virtual_key_type_3.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/Settings/res/drawable/virtual_key_type_3.png
+===================================================================
+--- packages/apps/Settings/res/drawable/virtual_key_type_3.png	(revision 0)
++++ packages/apps/Settings/res/drawable/virtual_key_type_3.png	(revision 1036)
+
+Property changes on: packages/apps/Settings/res/drawable/virtual_key_type_3.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/Settings/res/drawable/virtual_key_type_5.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/Settings/res/drawable/virtual_key_type_5.png
+===================================================================
+--- packages/apps/Settings/res/drawable/virtual_key_type_5.png	(revision 0)
++++ packages/apps/Settings/res/drawable/virtual_key_type_5.png	(revision 1036)
+
+Property changes on: packages/apps/Settings/res/drawable/virtual_key_type_5.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property

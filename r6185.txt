@@ -1,0 +1,141 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 6184)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 6185)
+@@ -269,6 +269,10 @@
+ import java.io.IOException;
+ //End added by zengjie for XR5756442 && XR5429900 on 12/15/17
+ 
++import android.text.TextPaint;
++import android.graphics.Paint;
++import android.graphics.Path;
++
+ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
+         DragDownHelper.DragDownCallback, ActivityStarter, OnUnlockMethodChangedListener,
+         HeadsUpManager.OnHeadsUpChangedListener {
+@@ -5969,10 +5973,11 @@
+     
+     //ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9
+     private LinearLayout mSwitchScreenModeView = null;
+-    private TextView mSwitchFullScreenTextView = null;
++    //private TextView mSwitchFullScreenTextView = null;
+     private String mPackageName = null;
+     private String mClassName = null;
+     private IFullscreenSwitchManager mFullscreenSwitchManager = null;
++    private RotateTextView rotateTextView = null;
+     
+     private void showToast() {
+         Toast.makeText(mContext, R.string.switch_screen_mode_toast, Toast.LENGTH_LONG).show();
+@@ -6036,9 +6041,9 @@
+         mSwitchScreenModeView = (LinearLayout) View.inflate(
+                 context, R.layout.switch_full_screen_mode, null);
+                 
+-        mSwitchFullScreenTextView = (TextView)mSwitchScreenModeView.findViewById(R.id.switch_full_screen_butn);
++        //mSwitchFullScreenTextView = (TextView)mSwitchScreenModeView.findViewById(R.id.switch_full_screen_butn);
+         
+-        mSwitchFullScreenTextView.setOnTouchListener(new View.OnTouchListener() {
++        /*mSwitchFullScreenTextView.setOnTouchListener(new View.OnTouchListener() {
+             @Override
+             public boolean onTouch(View v, MotionEvent event) {
+                 checkUserAutohide(v, event);
+@@ -6061,8 +6066,26 @@
+                 }
+                 return false;
+             }
++        });*/
++
++        rotateTextView = new RotateTextView(mContext);
++        String rotateText = mContext.getResources().getString(R.string.switch_screen_mode);
++        rotateTextView.setText(rotateText);
++        rotateTextView.setOnClickListener(new View.OnClickListener() {
++			public void onClick(View v) {
++                setFullscreenMode();
++                removeSwitchScreenModeView();
++                mHandler.postDelayed(new Runnable() {
++                    @Override
++                    public void run() {
++                        restartApplication();
++                        showToast();
++                    }
++                }, 10);
++			}
+         });
+-        
++        mSwitchScreenModeView.addView(rotateTextView);
++
+         try {
+             WindowManagerGlobal.getWindowManagerService()
+                     .watchRotation(new IRotationWatcher.Stub() {
+@@ -6116,7 +6139,8 @@
+         } else if(rotation == Surface.ROTATION_270) {
+             w = 80;
+             h = LayoutParams.MATCH_PARENT;
+-            xpos = -656;
++            //xpos = -656;
++            xpos = 1312;
+             ypos = 0;
+         }
+         
+@@ -6160,5 +6184,43 @@
+             }
+         }
+     };
++
++    private class RotateTextView extends View {
++        private TextPaint mTextPaint;
++        private String mText;
++        final static int DEFAULT_TEXT_SIZE = 25;
++        final static int DEFAULT_TEXT_COLOR = 0xFFFFFFFF;
++    
++        public RotateTextView(Context context) {
++            super(context);
++            mTextPaint = new TextPaint();
++            mTextPaint.setAntiAlias(true);
++            mTextPaint.setTextSize(DEFAULT_TEXT_SIZE);
++            mTextPaint.setColor(DEFAULT_TEXT_COLOR);
++            mTextPaint.setTextAlign(Paint.Align.CENTER);
++        }
++    
++        public void setText(String text) {
++            mText = text;
++            requestLayout();
++            invalidate();
++        }
++    
++        @Override
++        protected void onDraw(Canvas canvas) {
++            Path path = new Path();
++            final float hOffset = 0;
++            final float vOffset = 10;
++			if (getMeasuredHeight() < getMeasuredWidth()) {
++				path.moveTo(0, getMeasuredHeight() / 2);
++				path.lineTo(getMeasuredWidth(), getMeasuredHeight() / 2);
++			} else {
++				path.moveTo(getMeasuredWidth() / 2, getMeasuredHeight());
++				path.lineTo(getMeasuredWidth() / 2, 0);
++			}
++            canvas.drawTextOnPath(mText,path,hOffset,vOffset,mTextPaint);
++            super.onDraw(canvas);
++        }
++    }
+     //ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9
+ }
+Index: frameworks/base/packages/SystemUI/res/layout/switch_full_screen_mode.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/switch_full_screen_mode.xml	(revision 6184)
++++ frameworks/base/packages/SystemUI/res/layout/switch_full_screen_mode.xml	(revision 6185)
+@@ -4,7 +4,7 @@
+     android:layout_width="match_parent"
+     android:layout_height="match_parent"
+     android:background="#FF888888">
+-
++<!--
+     <TextView
+         android:id="@+id/switch_full_screen_butn"
+         android:layout_width="match_parent"
+@@ -13,4 +13,5 @@
+         android:textSize="16dp"
+         android:gravity="center"
+         android:background="#00000000"/>
++-->
+ </LinearLayout>

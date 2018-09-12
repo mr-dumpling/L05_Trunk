@@ -1,0 +1,571 @@
+Index: vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/FingerPrintActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/FingerPrintActivity.java	(revision 2403)
++++ vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/FingerPrintActivity.java	(revision 2404)
+@@ -47,6 +47,8 @@
+     Button btn_previous,btn_next;
+     private Intent intentServise;
+     private boolean mResult = false;
++	private boolean isToAddFace;
++	private boolean isToAddFinger;
+     @Override
+     protected int getLayoutResID() {
+         Log.e("BootWizard_welcome", "FingerPrintActivity");
+@@ -116,7 +118,14 @@
+     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+         super.onActivityResult(requestCode, resultCode, data);
+         Log.d("kaikai","finger--resultCode"+resultCode);
+-        destoryed();
++		if (REQUEST_FINGERPRINT_CODE == requestCode&& 1 == resultCode) {
++			Intent mIntent = new Intent(FingerPrintActivity.this,FaceCodeActivity.class);
++				mIntent.putExtra("isToAddFace", true);
++				startActivity(mIntent);
++				overridePendingTransition(R.anim.gome_activity_close_enter,R.anim.gome_activity_close_exit);
++				finish();
++		}
++        //destoryed();
+   /*      if (REQUEST_FINGERPRINT_CODE == requestCode&& Activity.RESULT_FIRST_USER== resultCode) {
+ //            if (RESULT_OK == resultCode) {
+             FingerprintManager fpm = (FingerprintManager) getSystemService(Context.FINGERPRINT_SERVICE);
+@@ -143,7 +152,7 @@
+         if (!mResult){
+             hideHomeRecent();
+         }
+-        start();
++       // start();
+ //        startService(intentServise);
+     }
+     private void hideHomeRecent(){
+@@ -171,115 +180,48 @@
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
+-
+-        // ATTENTION: This was auto-generated to implement the App Indexing API.
+-        // See https://g.co/AppIndexing/AndroidStudio for more information.
+-   //     client = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
++		final Intent intent = getIntent();
++		isToAddFinger =  intent.getBooleanExtra("isToAddFinger", false);		
+     }
+ 
+-    /**
+-     * ATTENTION: This was auto-generated to implement the App Indexing API.
+-     * See https://g.co/AppIndexing/AndroidStudio for more information.
+-     */
+-	 /*
+-    public Action getIndexApiAction() {
+-        Thing object = new Thing.Builder()
+-                .setName("FingerPrint Page") // TODO: Define a title for the content shown.
+-                // TODO: Make sure this auto-generated URL is correct.
+-                .setUrl(Uri.parse("http://[ENTER-YOUR-URL-HERE]"))
+-                .build();
+-        return new Action.Builder(Action.TYPE_VIEW)
+-                .setObject(object)
+-                .setActionStatus(Action.STATUS_TYPE_COMPLETED)
+-                .build();
+-    }
+-*/
+     @Override
+     public void onStart() {
+         super.onStart();
+-
+-        // ATTENTION: This was auto-generated to implement the App Indexing API.
+-        // See https://g.co/AppIndexing/AndroidStudio for more information.
+- //       client.connect();
+-//        AppIndex.AppIndexApi.start(client, getIndexApiAction());
+     }
+ 
+     @Override
+     public void onStop() {
+         super.onStop();
+-
+-        // ATTENTION: This was auto-generated to implement the App Indexing API.
+-        // See https://g.co/AppIndexing/AndroidStudio for more information.
+-  //      AppIndex.AppIndexApi.end(client, getIndexApiAction());
+-   //     client.disconnect();
+     }
+ 
+     @Override
+     protected void initData(Bundle savedInstanceState) {
+         super.initData(savedInstanceState);
+-       // getWindow().setNavigationBarColor(getResources().getColor(R.color.navigationbarcolor));
+-        intentServise = new Intent(this, ScreenOffService.class);
+-		btn_previous = (Button) findViewById(R.id.btn_previous);
+-		btn_previous.setOnClickListener(this);
+-		btn_previous.setText(getString(R.string.skip));
+-		btn_next = (Button) findViewById(R.id.btn_next);
+-		btn_next.setOnClickListener(this);
+-		btn_next.setText(R.string.input_finger_print);
+-		
+     }
+ 
+     @Override
+     protected void onResume() {
+         super.onResume();
+-//        if (mResult){
+-//            getWindow().setNavigationBarColor(getResources().getColor(R.color.navigationbarcolor));
+-//            hideHomeRecentNoShow();
+-//        }else{
+-            Intent intentAction2 = new Intent();
+-            intentAction2.setPackage("com.android.systemui");
+-            intentAction2.setAction("hide_navigationbar");
+-            sendBroadcast(intentAction2);
+-//        }
+-//        intentServise = new Intent(this, ScreenOffService.class);
+-//        stopService(intentServise);
+-
+-    }
+-    private  void start(){
+-
+-        MybTimeTask.getInstance().setTimerStateChangeListener(new MybTimeTask.OnTimerStateChangeListener() {
+-
+-            public void run() {
+-                if (mResult){
+-                    Intent intentAction = new Intent();
+-                    intentAction.setPackage("com.android.systemui");
+-                    intentAction.setAction("action_show_back");
+-                    sendBroadcast(intentAction);
+-                    Intent  intentAction3 =  new Intent();
+-                    intentAction3.setPackage("com.android.systemui");
+-                    intentAction3.setAction("action_hide_recent");
+-                    sendBroadcast(intentAction3);
+-                    Intent  intentAction2 =  new Intent();
+-                    intentAction2.setPackage("com.android.systemui");
+-                    intentAction2.setAction("action_hide_home");
+-                    sendBroadcast(intentAction2);
+-                }else{
+-                    Intent  intentAction3 =  new Intent();
+-                    intentAction3.setPackage("com.android.systemui");
+-                    intentAction3.setAction("action_hide_recent");
+-                    sendBroadcast(intentAction3);
+-                    Intent  intentAction2 =  new Intent();
+-                    intentAction2.setPackage("com.android.systemui");
+-                    intentAction2.setAction("action_hide_home");
+-                    sendBroadcast(intentAction2);
+-                }
+-            }
+-        });
+-        MybTimeTask.getInstance().start(true);
+-    }
+-
+-    private  void destoryed(){
+-        MybTimeTask.getInstance().destroyed();
+-    }
++		final Intent intent = getIntent();
++		isToAddFace = intent.getBooleanExtra("isToAddFace", false);
++        if(isToAddFinger){
++			   Intent mIntent = new Intent();
++               mIntent.setAction("android.settings.FINGERPRINT_SETUP");
++			   mIntent.putExtra("is_from_boot_wizard", true);
++		       startActivityForResult(mIntent,REQUEST_FINGERPRINT_CODE);
++			   //overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
++			   isToAddFinger = false;
++			   //finish();
++		}else {
++				
++			Intent mIntent = new Intent(FingerPrintActivity.this,WelcomeActivity.class);
++			mIntent.putExtra(LAST_PAGE, true);
++			startActivity(mIntent);
++			overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
++			finish();
++		}
++	}
++	
+     @Override
+     public void finish() {
+         super.finish();
+Index: vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/FaceCodeActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/FaceCodeActivity.java	(revision 2403)
++++ vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/FaceCodeActivity.java	(revision 2404)
+@@ -43,10 +43,12 @@
+ public class FaceCodeActivity extends BaseActivity implements HasRequest, HasPreferences,OnClickListener {
+ 
+     private boolean b;
++	private boolean isAddFaceComplete;
++	private boolean isToAddFace;
+     private boolean mResult = false;
+ 	boolean isNext =false;
+ //    @BindView(R.id.btn_previous)
+-    Button btn_previous;
++    Button btn_previous,btn_next;
+     private Intent intentServise1;
+     private Timer timer;
+ 	BottomActionBarf mBottomActionBar;
+@@ -71,37 +73,19 @@
+ 	// TODO Auto-generated method stub
+ 	switch (view.getId()) {
+ 		 case R.id.btn_previous:
+-   /*            FingerprintManager fpm = (FingerprintManager) this.getSystemService(Context.FINGERPRINT_SERVICE);
+-                int mFingerprintSize = fpm.getEnrolledFingerprints().size();
+-                IrisManager mIrisManager = (IrisManager) getSystemService(Context.IRIS_SERVICE);
+-              final boolean hasFeature = mIrisManager.isHasFeature();
+-                if (!hasFeature) {
+-                    mNavigator.navigateToIrisActivity(this);
+-                    overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+-                }else if (mFingerprintSize==0&&hasFeature){
+-                    mNavigator.navigateToFingerPrintActivity(this);
+-                    overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+-                }else if (mFingerprintSize>0&&hasFeature){
+-                    mNavigator.navigateToWelcomeActivity(this,true);
+-                    overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+-                }
+-
+-//                stopService(intentServise1);
+-*/
+-				Intent intent = new Intent();
+-               intent.setAction("android.settings.FINGERPRINT_SETUP");
+-		       startActivity(intent);
+-		        isNext = true;
+-				//mNavigator.navigateToFingerPrintActivity(this);
+-				overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+-                //finish();
+-                break;
+-            case R.id.btn_next:
+-               // moveToFace();
+-                //     mNavigator.navigateToFaceCodeSettings(this, REQUEST_FACE_CODE_CODE);
+-                 mNavigator.navigateToSafePasswordActivity(this, true);
+-                Log.e("REQUEST_FACE_Skip",REQUEST_FACE_CODE_CODE+"");
+-                break;
++			Intent mIntent = new Intent(FaceCodeActivity.this,FingerPrintActivity.class);
++			mIntent.putExtra("isToAddFinger", true);
++			startActivity(mIntent);
++			overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
++			finish();
++            break;
++        case R.id.btn_next:
++            Intent intent = new Intent();
++            intent.setAction("android.settings.FaceUnlock_SETUP");
++			intent.putExtra("is_from_boot_wizard", true);
++		    startActivity(intent);
++			overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);  
++            break;
+ 	}
+ 	
+ 	}
+@@ -141,51 +125,23 @@
+     @Override
+     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+         super.onActivityResult(requestCode, resultCode, data);
+-        Log.d("kaikai","facecode--resultCode"+resultCode);
+-//        timer.cancel();
+-        destoryed();
+- /*       FacecodeManager mfacecodemanager = (FacecodeManager)this.getSystemService(Context.FACECODE_SERVICE);
+-        b = mfacecodemanager.hasFaces();
+-        if (requestCode==REQUEST_FACE_CODE_CODE&&resultCode==Activity.RESULT_OK){
+-            if (b) {
+-                mNavigator.navigateToSuccessfulSettingActivity(this, Navigator.TYPE_FACE_CODE);
+-                overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+-                finish();
+-            }
+-        }else if (REQUEST_FACE_CODE_CODE == requestCode && resultCode== Activity.RESULT_CANCELED){
+-//            mResult=true;
+-//            hideHomeRecent();
+-            Log.d("zhaokaikai","onActivityResult"+mResult);
+-        }
+-		*/
+-
++ 
++      //  destoryed();
+     }
+-/*
+-    private void moveToFace(){
+ 
+-        Intent intent = new Intent();
+-        intent.setClassName("com.android.settings", "com.android.settings.PasswordManagerActivity");
+-        intent.putExtra("requestType", REQUEST_FACE_CODE_CODE);
+-        intent.putExtra("from_bootwizard_activity",true);
+-        startActivityForResult(intent,REQUEST_FACE_CODE_CODE);
+-        overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+-        if (!mResult){
+-            hideHomeRecent();
+-        }
+-        start();
+-//        startService(intentServise1);
+-    }
+-
+-   @Override
+-    public void onBackPressed() {
+-        backToActivity();
+-        stopService(intentServise1);
+-    }*/
+     private void backToActivity(){
+       //  mNavigator.navigateToProtocolActivity(this);
+         overridePendingTransition(R.anim.gome_activity_close_enter,R.anim.gome_activity_close_exit);
+         finish();
+     }
++	
++	@Override
++    protected void onDestroy() {
++        super.onDestroy();
++    }
++	
++	
++	
+     private void saveFaceCodeState() {
+         SharedPreferences preferences = getDefaultSharedPreferences();
+         SharedPreferences.Editor editor = preferences.edit();
+@@ -262,73 +218,56 @@
+     @Override
+     protected void initData(Bundle savedInstanceState) {
+         super.initData(savedInstanceState);
+-       // getWindow().setNavigationBarColor(getResources().getColor(R.color.navigationbarcolor));
+         intentServise1 = new Intent(this, ScreenOffService.class);
+ 		mBottomActionBar =(BottomActionBarf) findViewById(R.id.mBottomActionBarf);
+ 		mBottomActionBar.setButtonText(getString(R.string.skip),getString(R.string.input_face_code));
+ 		btn_previous = (Button) findViewById(R.id.btn_previous);
+ 		btn_previous.setOnClickListener(this);
+-        Log.d("zhaokaikai","oncreate");
+-        Log.e("FaceCodeActivity","----FaceCodeActivity-->");
++		btn_next = (Button) findViewById(R.id.btn_next);
++		btn_next.setOnClickListener(this);
+     }
++	
++	@Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++		final Intent intent = getIntent();
++		isToAddFace =  intent.getBooleanExtra("isToAddFace", false);
++		isAddFaceComplete = intent.getBooleanExtra("isAddFaceComplete", false);
++		
++    }
++	
++	@Override
++    public void onBackPressed() {
++		final boolean mBooleanConnect = WifiUtils.isConnect(FaceCodeActivity.this);
++        Intent intent = new Intent();
++        intent.setAction("android.net.wifi.PICK_WIFI_NETWORK");
++        intent.putExtra("extra_prefs_show_button_bar", true);
+ 
++        if (mBooleanConnect){
++            intent.putExtra("extra_prefs_set_next_text", getResources().getString(R.string.forward));
++        }else{
++            intent.putExtra("extra_prefs_set_next_text", getResources().getString(R.string.skip));
++        }
++        intent.putExtra("extra_prefs_set_back_text", getResources().getString(R.string.back));
++        intent.putExtra("wifi_enable_next_on_connect", true);
++        intent.putExtra("wifi_from_boot_wizard", true);
++        startActivity(intent);
++		overridePendingTransition(R.anim.gome_activity_close_enter,R.anim.gome_activity_close_exit);
++		finish();
++	}
++	
+     @Override
+     protected void onResume() {
+         super.onResume();
+-        Log.d("zhaokaikai","onResume"+mResult);
+-		if(isNext){
+-			Intent mIntent = new Intent(FaceCodeActivity.this,WelcomeActivity.class);
+-            mIntent.putExtra(LAST_PAGE, true);
+-            startActivity(mIntent);
++		if(isAddFaceComplete){
++			Intent mIntent = new Intent(FaceCodeActivity.this,FingerPrintActivity.class);
++			mIntent.putExtra("isToAddFinger", true);
++			startActivity(mIntent);
++			overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+ 			finish();
+ 		}
+-//        if (mResult){
+-//            getWindow().setNavigationBarColor(getResources().getColor(R.color.navigationbarcolor));
+-//            hideHomeRecentNoShowTimer();
+-//        }else {
+-            Intent intentAction2 = new Intent();
+-            intentAction2.setPackage("com.android.systemui");
+-            intentAction2.setAction("hide_navigationbar");
+-            sendBroadcast(intentAction2);
+-//        }
+-//        stopService(intentServise1);
+     }
+-    private  void start(){
+-         if(true) return;
+-        MybTimeTask.getInstance().setTimerStateChangeListener(new MybTimeTask.OnTimerStateChangeListener() {
+-
+-            public void run() {
+-//                if (mResult){
+-//                    Intent intentAction = new Intent();
+-//                    intentAction.setPackage("com.android.systemui");
+-//                    intentAction.setAction("action_show_back");
+-//                    sendBroadcast(intentAction);
+-//                    Intent  intentAction3 =  new Intent();
+-//                    intentAction3.setPackage("com.android.systemui");
+-//                    intentAction3.setAction("action_hide_recent");
+-//                    sendBroadcast(intentAction3);
+-//                    Intent  intentAction2 =  new Intent();
+-//                    intentAction2.setPackage("com.android.systemui");
+-//                    intentAction2.setAction("action_hide_home");
+-//                    sendBroadcast(intentAction2);
+-//                }else{
+-                    Intent  intentAction3 =  new Intent();
+-                    intentAction3.setPackage("com.android.systemui");
+-                    intentAction3.setAction("action_hide_recent");
+-                    sendBroadcast(intentAction3);
+-                    Intent  intentAction2 =  new Intent();
+-                    intentAction2.setPackage("com.android.systemui");
+-                    intentAction2.setAction("action_hide_home");
+-                    sendBroadcast(intentAction2);
+-//                }
+-            }
+-        });
+-        MybTimeTask.getInstance().start(true);
+-    }
+-
+-    private  void destoryed(){
+-        MybTimeTask.getInstance().destroyed();
+-    }
++  
+     @Override
+     protected void onStop() {
+         super.onStop();
+@@ -339,8 +278,5 @@
+         super.finish();
+     }
+ 
+-    @Override
+-    protected void onDestroy() {
+-        super.onDestroy();
+-    }
++   
+ }
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/WelcomeActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/WelcomeActivity.java	(revision 2403)
++++ vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/WelcomeActivity.java	(revision 2404)
+@@ -99,7 +99,7 @@
+         if (mIsLastPage) btnStart.setText(getString(R.string.start_launch));
+         
+ 		//onClickStart();
+-    Log.d("WelcomeActivity", "dhq initData");
++    Log.d("WelcomeActivity", "initData");
+         //startWelcomeAnimation();
+ 
+     }
+@@ -111,7 +111,7 @@
+ //            final Object obj= aClass.newInstance();
+             final Method setSystemControlCenterEnable =Class.forName("android.app.StatusBarManager").getMethod("setSystemControlCenterEnable",new Class[]{boolean.class});
+             setSystemControlCenterEnable.invoke(mStatusBarManager,new Object[]{new Boolean(flag)});
+-			Log.d("WelcomeActivity", "dhq changeNavigation flag =" +flag);
++			Log.d("WelcomeActivity", "changeNavigation flag =" +flag);
+         }catch (Exception e){
+             e.printStackTrace();
+         }
+@@ -119,7 +119,7 @@
+     @Override
+     protected void onStart() {
+         super.onStart();
+-		Log.d("WelcomeActivity", "dhq changeNavigation mIsLastPage =" +mIsLastPage);
++		Log.d("WelcomeActivity", "changeNavigation mIsLastPage =" +mIsLastPage);
+         if (!mIsLastPage) {
+             Intent intentAction = new Intent();
+             intentAction.setAction("bootwizardstart");
+@@ -196,7 +196,7 @@
+         anim.setDuration(2080);
+         anim.setStartOffset(100);
+         btnStart.startAnimation(anim);
+-		Log.d("WelcomeActivity", "dhq showStartButton ");
++		Log.d("WelcomeActivity", "showStartButton ");
+     }
+ 
+ @Override
+@@ -211,9 +211,20 @@
+ 	
+ 	}
+ 	
+-   
++   @Override
++    public void onBackPressed() {
++		if(mIsLastPage)
++		{
++			Intent mIntent = new Intent(WelcomeActivity.this,FingerPrintActivity.class);
++			mIntent.putExtra("isToAddFinger", true);
++			startActivity(mIntent);
++			overridePendingTransition(R.anim.gome_activity_close_enter,R.anim.gome_activity_close_exit);
++			finish();
++		}
++	}
++	
+     void onClickStart() {
+-	Log.d("WelcomeActivity", "dhq onClickStart mIsLastPage="+mIsLastPage);
++	Log.d("WelcomeActivity", "onClickStart mIsLastPage="+mIsLastPage);
+         if (mIsLastPage) {  //boot wizard finish
+             //modify for send broadcast: start kaikai.zhao 2017.7.11
+             Intent intent = new Intent();
+@@ -246,7 +257,7 @@
+         //replace the second param:Settings.Secure.USER_SETUP_COMPLETE with "user_setup_complete"
+         Settings.Secure.putInt(getContentResolver(), "user_setup_complete", 1);
+ 		//setupDefaultLauncher();
+-		Log.d("WelcomeActivity", "dhq setupComplete ");
++		Log.d("WelcomeActivity", "setupComplete ");
+     }
+ 	
+ private void setupDefaultLauncher() {  
+@@ -304,7 +315,7 @@
+             PackageManager pm = getPackageManager();
+             ComponentName name = new ComponentName(this, WelcomeActivity.class);
+             pm.setComponentEnabledSetting(name, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+-			Log.d("WelcomeActivity", "dhq finishBootWizard ");
++			Log.d("WelcomeActivity", "finishBootWizard ");
+         } catch (Exception e) {
+             Log.e(TAG, "finishBootWizard: " + e.getMessage());
+         } finally {
+@@ -349,7 +360,7 @@
+     @Override
+     protected void onResume() {
+         super.onResume();
+-		Log.d("WelcomeActivity", "dhq onResume mIsLastPage="+mIsLastPage);
++		Log.d("WelcomeActivity", "onResume mIsLastPage="+mIsLastPage);
+         if (!mIsLastPage) {
+             Intent intentAction = new Intent();
+             intentAction.setAction("bootwizardstart");
+Index: vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/SIMCardActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/SIMCardActivity.java	(revision 2403)
++++ vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/SIMCardActivity.java	(revision 2404)
+@@ -62,6 +62,15 @@
+             finish();
+         }
+     }
++	
++	@Override
++    public void onBackPressed() {
++		mNavigator.navigateToLanguageSelectActivity(this);
++        overridePendingTransition(R.anim.gome_activity_close_enter,R.anim.gome_activity_close_exit);
++        finish();
++	}
++
++	
+     private void MoveToWlan(){
+         final boolean mBooleanConnect = WifiUtils.isConnect(SIMCardActivity.this);
+         Intent intent = new Intent();
+@@ -77,6 +86,7 @@
+         intent.putExtra("wifi_enable_next_on_connect", true);
+         intent.putExtra("wifi_from_boot_wizard", true);
+         startActivity(intent);
++		overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+     }
+ 	
+ 	@Override
+Index: vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/LanguageActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/LanguageActivity.java	(revision 2403)
++++ vendor/mediatek/proprietary/packages/apps/BootWizard/src/com/gome/bootwizard/activity/LanguageActivity.java	(revision 2404)
+@@ -231,6 +231,19 @@
+         tvEnglish.setSelected(false);
+     }
+ 
++	@Override
++    public void onBackPressed() {
++		 if (mIndex != DEFAULT_LANGUAGE) {//language has been changed
++//                    mNavigator.navigateToWelcomeActivity(this, false);
++            Intent intent = new Intent(LanguageActivity.this,WelcomeActivity.class);
++            intent.putExtra(LAST_PAGE, false);
++            intent.putExtra("fromlanguage", true);
++            startActivity(intent);
++            overridePendingTransition(R.anim.gome_activity_close_enter,R.anim.gome_activity_close_exit);
++        }
++        finish();
++        hasLanguange = false;
++	}
+ 
+ 
+     @SuppressWarnings("unchecked")

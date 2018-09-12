@@ -1,0 +1,294 @@
+Index: frameworks/base/telecomm/java/com/android/internal/telecom/IInCallAdapter.aidl
+===================================================================
+--- frameworks/base/telecomm/java/com/android/internal/telecom/IInCallAdapter.aidl	(revision 1344)
++++ frameworks/base/telecomm/java/com/android/internal/telecom/IInCallAdapter.aidl	(revision 1345)
+@@ -94,4 +94,5 @@
+     ///M: For blind/assured ECT @{
+     void blindAssuredEct(String callId, String number, int type);
+     /// @}
++	void playIncomingCallRingtone();
+ }
+Index: frameworks/base/telecomm/java/android/telecom/InCallAdapter.java
+===================================================================
+--- frameworks/base/telecomm/java/android/telecom/InCallAdapter.java	(revision 1344)
++++ frameworks/base/telecomm/java/android/telecom/InCallAdapter.java	(revision 1345)
+@@ -492,4 +492,21 @@
+         }
+     }
+     /// @}
++    
++	/**
++	 
++	 * Add For synchronize ringer and UI
++	 
++	*
++	 
++	*/
++	 
++	 public void playIncomingCallRingtone() {
++		try {
++			 mAdapter.playIncomingCallRingtone();
++	 
++		 } catch (RemoteException e) {
++	 
++		 }
++	}
+ }
+Index: frameworks/base/telecomm/java/android/telecom/Call.java
+===================================================================
+--- frameworks/base/telecomm/java/android/telecom/Call.java	(revision 1344)
++++ frameworks/base/telecomm/java/android/telecom/Call.java	(revision 1345)
+@@ -1793,4 +1793,12 @@
+         }
+         return true;
+     }
++	
++	//Add For synchronize ringer and UI
++	
++	public void playIncomingCallRingtone() {
++	
++		mInCallAdapter.playIncomingCallRingtone();
++	
++	}
+ }
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallActivity.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallActivity.java	(revision 1344)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallActivity.java	(revision 1345)
+@@ -43,6 +43,8 @@
+ import android.hardware.SensorManager;
+ import android.os.Bundle;
+ import android.os.Trace;
++import android.os.PowerManager;
++
+ import android.telecom.DisconnectCause;
+ import android.telecom.PhoneAccountHandle;
+ import android.text.TextUtils;
+@@ -318,6 +320,12 @@
+         mCurrentConfig = new Configuration(getResources().getConfiguration());
+         /// @}
+         /// M: Enhance multi-window log for debugging.
++        
++		//begin Add For synchronize ringer and UI
++		 
++		Log.d(this, "AAAscreen is on ? ----- " + InCallPresenter.getInstance().getPowerManager().isScreenOn());
++		 
++		//end Add For synchronize ringer and UI  
+         Log.d(this, "onCreate(): exit, multi-window is "
+                 + getResources().getBoolean(R.bool.enable_multi_window));
+     }
+@@ -451,6 +459,35 @@
+             mShowCallCardRequest = REQUEST_NONE;
+        }
+        ///@}
++       
++	   	//begin Add For synchronize ringer and UI
++		
++	   	final PowerManager pm = InCallPresenter.getInstance().getPowerManager();
++		
++	   	final Call call = CallList.getInstance().getIncomingCall();
++		
++	   	Log.d(this, "onResum:call: " + call);
++		
++	   	if(call != null){
++		
++	   	boolean isInCallActivityStop =	  InCallPresenter.getInstance().getInCallActivityStop();
++		
++	   	Log.d(this, "BBBscreen is on ? ----- " + pm.isScreenOn());
++		
++	   	Log.d(this, "BBBscreen call.getState(): " + call.getState() + " isInCallActivityStop: " + isInCallActivityStop); 		  
++		
++	   	if((call.getState() == Call.State.CALL_WAITING)
++		
++	   		||((call.getState() == Call.State.INCOMING)&&(pm.isScreenOn() && isInCallActivityStop))){
++		
++	   		InCallPresenter.getInstance().playIncomingCallRingtone(call.getTelecomCall());						  
++		
++		  	InCallPresenter.getInstance().setInCallActivityStop(false);																		
++		
++	   	}
++		
++	  }			 
++	  //end Add For synchronize ringer and UI
+     }
+ 
+     // onPause is guaranteed to be called when the InCallActivity goes
+@@ -508,6 +545,7 @@
+         InCallPresenter.getInstance().notifyDisableVideoCallFullScreen();
+         /// @}
+         super.onStop();
++		InCallPresenter.getInstance().setInCallActivityStop(true);
+     }
+ 
+     @Override
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/TelecomAdapter.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/TelecomAdapter.java	(revision 1344)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/TelecomAdapter.java	(revision 1345)
+@@ -404,5 +404,17 @@
+             Log.e(this, "inviteConferenceParticipants()... mInCallService is null");
+         }
+     }
++	
++	//Add For synchronize ringer and UI
++	 
++	void playIncomingCallRingtone(android.telecom.Call call) {
++	 
++		if (call != null) {
++			call.playIncomingCallRingtone();
++	 
++		}else{
++			 Log.e(this, "error playIncomingCallRingtone, call is null");
++		}	
++	 }
+ 
+ }
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallPresenter.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallPresenter.java	(revision 1344)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallPresenter.java	(revision 1345)
+@@ -37,6 +37,8 @@
+ import android.net.Uri;
+ import android.os.Bundle;
+ import android.os.Handler;
++import android.os.PowerManager;
++
+ import android.provider.CallLog;
+ import android.telecom.DisconnectCause;
+ import android.telecom.PhoneAccount;
+@@ -193,6 +195,10 @@
+      * Determines if the InCall UI is in fullscreen mode or not.
+      */
+     private boolean mIsFullScreen = false;
++	
++	private PowerManager pm = null;
++	 
++	private boolean isInCallActivityStop = false;
+ 
+     private final android.telecom.Call.Callback mCallCallback = new android.telecom.Call
+             .Callback() {
+@@ -859,11 +865,23 @@
+         /// M: for ALPS01945830. Force set theme colors. @{
+         setThemeColors();
+         /// @}
++        
++		Log.i(this, " onIncomingCall set isInCallActivityStop = false "); 
++		isInCallActivityStop = false;
++		
+         InCallState newState = startOrFinishUi(InCallState.INCOMING);
+         InCallState oldState = mInCallState;
+ 
+         Log.i(this, "Phone switching state: " + oldState + " -> " + newState);
+         mInCallState = newState;
++		
++		//begin Add For synchronize ringer and UI
++		Log.d(this, "onIncomingCall the screen is on ? ----- " + getPowerManager().isScreenOn());
++		if(getPowerManager()!=null&&getPowerManager().isScreenOn()){
++			Log.d(this, "onIncomingCall the screen is on!");			   
++			playIncomingCallRingtone(call.getTelecomCall());
++		}
++		//end Add For synchronize ringer and UI
+ 
+         for (IncomingCallListener listener : mIncomingCallListeners) {
+             listener.onIncomingCall(oldState, mInCallState, call);
+@@ -2705,5 +2723,36 @@
+         }
+         return false;
+     }
+-
++	
++	/**
++	   * Add For synchronize ringer and UI
++	
++	   *
++	
++	   * @param call
++	
++	   */
++	public void playIncomingCallRingtone(android.telecom.Call call){
++	
++		Log.i(this, "playIncomingCallRingtone()");
++		TelecomAdapter.getInstance().playIncomingCallRingtone(call);
++	}
++	
++	public PowerManager getPowerManager(){
++	 
++		if(pm == null){
++			pm = (PowerManager)mContext.getSystemService(Context.POWER_SERVICE);
++		}
++		return pm;
++	}
++	
++	public void setInCallActivityStop (boolean isStop ){
++		Log.d(this, " setInCallActivityStop : " + isStop);
++		isInCallActivityStop = isStop;
++	}
++	
++	public boolean getInCallActivityStop ( ){
++		Log.d(this, " getInCallActivityStop: " + isInCallActivityStop);
++		return isInCallActivityStop;
++	}
+ }
+Index: packages/services/Telecomm/src/com/android/server/telecom/CallAudioManager.java
+===================================================================
+--- packages/services/Telecomm/src/com/android/server/telecom/CallAudioManager.java	(revision 1344)
++++ packages/services/Telecomm/src/com/android/server/telecom/CallAudioManager.java	(revision 1345)
+@@ -180,8 +180,12 @@
+         }
+         updateForegroundCall();
+         mCalls.add(call);
+-
+-        onCallEnteringState(call, call.getState());
++		if(call.getState() == CallState.RINGING){
++			Log.d(LOG_TAG, "MT Call  RINGING");
++		}else{
++			onCallEnteringState(call, call.getState());
++		}
++        
+     }
+ 
+     private void removeCall(Call call) {
+Index: packages/services/Telecomm/src/com/android/server/telecom/CallsManager.java
+===================================================================
+--- packages/services/Telecomm/src/com/android/server/telecom/CallsManager.java	(revision 1344)
++++ packages/services/Telecomm/src/com/android/server/telecom/CallsManager.java	(revision 1345)
+@@ -3646,4 +3646,23 @@
+         return false;
+     }
+     /// @}
++    
++	//Add For synchronize ringer and UI
++	 
++	public void playIncomingCallRingtone(){
++	 
++		Log.v(this, "playIncomingCallRingtone()");
++	 
++		// check whether exist RINGING call.
++	 
++		for(Call call : mCalls) {
++	 
++			if(call.getState() == CallState.RINGING) {
++	 
++				mCallAudioManager.onCallEnteringState(call,CallState.RINGING);
++	 
++				break;
++			}
++		}
++	}
+ }
+Index: packages/services/Telecomm/src/com/android/server/telecom/InCallAdapter.java
+===================================================================
+--- packages/services/Telecomm/src/com/android/server/telecom/InCallAdapter.java	(revision 1344)
++++ packages/services/Telecomm/src/com/android/server/telecom/InCallAdapter.java	(revision 1345)
+@@ -774,4 +774,11 @@
+ 
+         return callList;
+     }
++	
++	@Override
++	public void playIncomingCallRingtone() {
++	
++		mCallsManager.playIncomingCallRingtone();
++	
++	}
+ }

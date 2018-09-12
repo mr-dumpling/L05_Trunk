@@ -1,0 +1,102 @@
+Index: packages/apps/Email/AndroidManifest.xml
+===================================================================
+--- packages/apps/Email/AndroidManifest.xml	(revision 3871)
++++ packages/apps/Email/AndroidManifest.xml	(revision 3872)
+@@ -55,7 +55,7 @@
+ 
+ 
+     <!-- This needs to be present when we are doing unbundled releases. -->
+-    <uses-sdk android:targetSdkVersion="24" android:minSdkVersion="14" />
++    <uses-sdk android:targetSdkVersion="21" android:minSdkVersion="14" />
+ 
+     <!-- additional uses -->
+ 
+@@ -101,6 +101,7 @@
+         <!-- M: Disable Compose Activity initially to avoid sharing from other App -->
+         <activity
+             android:name="com.android.email.activity.ComposeActivityEmail"
++			android:configChanges="orientation|keyboardHidden|screenSize"
+             android:label="@string/app_name"
+             android:documentLaunchMode="intoExisting"
+             android:autoRemoveFromRecents="true"
+Index: packages/apps/Email/src/com/android/email2/ui/MailActivityEmail.java
+===================================================================
+--- packages/apps/Email/src/com/android/email2/ui/MailActivityEmail.java	(revision 3871)
++++ packages/apps/Email/src/com/android/email2/ui/MailActivityEmail.java	(revision 3872)
+@@ -52,14 +52,6 @@
+ import com.android.mail.utils.PDebug;
+ import com.android.mail.utils.Utils;
+ 
+-import android.Manifest;
+-import com.android.email.R;
+-import android.widget.Toast;
+-import java.util.ArrayList;
+-import android.app.Activity;
+-import android.support.v4.app.ActivityCompat;
+-import android.support.v4.content.ContextCompat;
+-
+ public class MailActivityEmail extends com.android.mail.ui.MailActivity {
+ 
+     public static final String LOG_TAG = LogTag.getLogTag();
+@@ -73,35 +65,6 @@
+         sUrlMatcher.addURI(
+                 EmailProvider.LEGACY_AUTHORITY, "view/mailbox", MATCH_LEGACY_SHORTCUT_INTENT);
+     }
+-	
+-	    public boolean checkAndRequestForEmail(Activity activity) {
+-        // get permissions needed in current scenario
+-        ArrayList<String> permissionsNeeded = new ArrayList<String>();
+-        permissionsNeeded.add(Manifest.permission.READ_CONTACTS);
+-		permissionsNeeded.add(Manifest.permission.READ_PHONE_STATE);
+-		permissionsNeeded.add(Manifest.permission.READ_CALENDAR);
+-		permissionsNeeded.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+-        // check status of permissions, get which permissions need to request
+-        ArrayList<String> permissionsNeedRequest = new ArrayList<String>();
+-        for (String permission : permissionsNeeded) {
+-            if (ContextCompat.checkSelfPermission(activity, permission)
+-                    == PackageManager.PERMISSION_GRANTED) {
+-                continue;
+-            }
+-            permissionsNeedRequest.add(permission);
+-        }
+-        // request permissions
+-        if (permissionsNeedRequest.size() == 0) {
+-            log("<checkAndRequestForEmail> all permissions are granted");
+-            return true;
+-        } else {
+-            log("<checkAndRequestForEmail> not all permissions are granted, reuqest");
+-            String[] permissions = new String[permissionsNeedRequest.size()];
+-            permissions = permissionsNeedRequest.toArray(permissions);
+-            ActivityCompat.requestPermissions(activity, permissions, 0);
+-            return false;
+-        }
+-    }
+ 
+ 
+     /**
+@@ -115,14 +78,7 @@
+ 
+     @Override
+     public void onCreate(Bundle bundle) {
+-        PDebug.Start("MailActivityEmail.onCreate");		
+-		super.onCreate(bundle);
+-        
+-        boolean hasReadContactsPermission = checkAndRequestForEmail(this);
+-    	  if (!hasReadContactsPermission) {
+-    	  	Toast.makeText(this, "You have disabled a required permission", Toast.LENGTH_SHORT).show();
+-            finish();
+-		 }
++        PDebug.Start("MailActivityEmail.onCreate");
+         final Intent intent = getIntent();
+         final Uri data = intent != null ? intent.getData() : null;
+         if (data != null) {
+@@ -149,7 +105,8 @@
+                 }
+             }
+         }
+-		
++
++        super.onCreate(bundle);
+         TempDirectory.setTempDirectory(this);
+ 
+         // Make sure all required services are running when the app is started (can prevent

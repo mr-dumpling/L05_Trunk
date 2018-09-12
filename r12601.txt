@@ -1,0 +1,94 @@
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/gsensor/Gsensor.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/gsensor/Gsensor.java	(revision 12600)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/gsensor/Gsensor.java	(revision 12601)
+@@ -1,6 +1,7 @@
+ package com.android.mmi.gsensor;
+ 
+ import android.app.Activity;
++import android.app.ActivityManager;
+ import android.app.AlertDialog;
+ import android.app.AlertDialog.Builder;
+ import android.content.Context;
+@@ -11,6 +12,7 @@
+ import android.hardware.SensorEventListener;
+ import android.hardware.SensorManager;
+ import android.os.Bundle;
++import android.util.Log;
+ import android.view.KeyEvent;
+ import android.view.View;
+ import android.view.View.OnClickListener;
+@@ -21,7 +23,7 @@
+ import android.widget.LinearLayout;
+ import android.widget.RelativeLayout;
+ import android.widget.TextView;
+-
++import java.util.List;
+ import com.android.mmi.MMITestDevice;
+ import com.android.mmi.R;
+ 
+@@ -43,7 +45,7 @@
+ 	float x;
+ 	float y;
+ 	float z;
+-
++	boolean isChanged;
+ 	@Override
+ 	protected void onCreate(Bundle savedInstanceState) {
+ 		super.onCreate(savedInstanceState);
+@@ -57,6 +59,11 @@
+ 		sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+ 
+ 		gSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
++		if (isServiceRunning(this,"com.android.settings.WakeService")) {
++			this.stopService(new Intent().setClassName("com.android.settings","com.android.settings.WakeService")
++			.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
++			isChanged = true;
++		}
+ 		tv_base_title = (TextView) this.findViewById(R.id.tv_base_title);
+ 		tv_base_title.setText(R.string.gsensor_name);
+ 		tv_base_swn = (TextView) this.findViewById(R.id.tv_base_swn);
+@@ -98,6 +105,16 @@
+ 		super.onPause();
+ 		sensorManager.unregisterListener(this, gSensor);
+ 	}
++	
++	@Override
++	protected void onDestroy() {
++		super.onDestroy();
++		if (isChanged) {
++			this.startService(new Intent().setClassName("com.android.settings","com.android.settings.WakeService")
++			.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
++			isChanged = false;
++		}
++	}
+ 
+ 	@Override
+ 	public void onSensorChanged(SensorEvent event) {
+@@ -207,4 +224,25 @@
+ 		}
+ 		return super.onKeyUp(keyCode, event);
+ 	}
++	public boolean isServiceRunning(Context mContext, String className) {
++
++        boolean isRunning = false;
++        ActivityManager activityManager = (ActivityManager) mContext
++                .getSystemService(Context.ACTIVITY_SERVICE);
++        List<ActivityManager.RunningServiceInfo> serviceList = activityManager
++                .getRunningServices(35);
++
++        if (!(serviceList.size() > 0)) {
++            return false;
++        }
++        Log.e("OnlineService��",className);
++        for (int i = 0; i < serviceList.size(); i++) {
++            Log.e("serviceName��",serviceList.get(i).service.getClassName());
++            if (serviceList.get(i).service.getClassName().contains(className) == true) {
++                isRunning = true;
++                break;
++            }
++        }
++        return isRunning;
++    }
+ }
+\ No newline at end of file

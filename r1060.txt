@@ -1,0 +1,107 @@
+Index: packages/apps/Settings/res/drawable/home.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/home.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/home.xml	(revision 1060)
+@@ -0,0 +1,25 @@
++<!--
++    Copyright (C) 2016 The Android Open Source Project
++
++    Licensed under the Apache License, Version 2.0 (the "License");
++    you may not use this file except in compliance with the License.
++    You may obtain a copy of the License at
++
++         http://www.apache.org/licenses/LICENSE-2.0
++
++    Unless required by applicable law or agreed to in writing, software
++    distributed under the License is distributed on an "AS IS" BASIS,
++    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++    See the License for the specific language governing permissions and
++    limitations under the License.
++-->
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++        android:width="24.0dp"
++        android:height="24.0dp"
++        android:viewportWidth="24.0"
++        android:viewportHeight="24.0"
++        android:tint="?android:attr/colorAccent">
++    <path
++        android:fillColor="#FFFFFFFF"
++        android:pathData="M10.0,20.0l0.0,-6.0l4.0,0.0l0.0,6.0l5.0,0.0l0.0,-8.0l3.0,0.0L12.0,3.0 2.0,12.0l3.0,0.0l0.0,8.0z"/>
++</vector>
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1059)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1060)
+@@ -942,6 +942,34 @@
+                 android:value="true" />
+         </activity>
+ 
++		<activity android:name="Settings$HomeSettingsActivity"
++                android:label="@string/home_settings"
++                android:icon="@drawable/home"
++                android:taskAffinity=""
++				>
++            <intent-filter android:priority="1">
++                <action android:name="com.android.settings.LAUNCHER_SETTINGS" />
++                <action android:name="android.settings.LAUNCHER_SETTINGS" />
++              
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.VOICE_LAUNCH" />
++                <category android:name="com.android.settings.SHORTCUT" />
++            </intent-filter>
++            <intent-filter android:priority="10">
++                <action android:name="com.android.settings.action.SETTINGS" />
++            </intent-filter>
++            <meta-data android:name="com.android.settings.category"
++                android:value="com.android.settings.category.device" />
++            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
++                android:value="com.android.settings.HomeSettings" />
++            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
++                android:value="true" />
++        </activity>
++
++
+         <activity android:name="Settings$DisplaySettingsActivity"
+                 android:label="@string/display_settings"
+                 android:icon="@drawable/ic_settings_display"
+Index: packages/apps/Settings/src/com/android/settings/HomeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/HomeSettings.java	(revision 1059)
++++ packages/apps/Settings/src/com/android/settings/HomeSettings.java	(revision 1060)
+@@ -166,7 +166,15 @@
+     private void buildHomeActivitiesList() {
+         ArrayList<ResolveInfo> homeActivities = new ArrayList<ResolveInfo>();
+         ComponentName currentDefaultHome  = mPm.getHomeActivities(homeActivities);
+-
++		
++		for(int i=0;i<homeActivities.size();i++){
++			if(homeActivities.get(i).activityInfo.packageName.equals("com.android.settings")&& 
++				homeActivities.get(i).activityInfo.name.equals("com.android.settings.FallbackHome") ){
++				homeActivities.remove(i);
++			}
++			
++		}
++		
+         Context context = getPrefContext();
+         mCurrentHome = null;
+         mPrefGroup.removeAll();
+@@ -385,7 +393,15 @@
+                 final PackageManager pm = context.getPackageManager();
+                 final ArrayList<ResolveInfo> homeActivities = new ArrayList<ResolveInfo>();
+                 pm.getHomeActivities(homeActivities);
+-
++				
++				for(int i=0;i<homeActivities.size();i++){
++					if(homeActivities.get(i).activityInfo.packageName.equals("com.android.settings")&& 
++						homeActivities.get(i).activityInfo.name.equals("com.android.settings.FallbackHome") ){
++					homeActivities.remove(i);
++					}
++			
++				}
++				
+                 final SharedPreferences sp = context.getSharedPreferences(
+                         HomeSettings.HOME_PREFS, Context.MODE_PRIVATE);
+                 final boolean doShowHome = sp.getBoolean(HomeSettings.HOME_PREFS_DO_SHOW, false);

@@ -1,0 +1,127 @@
+Index: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 2025)
++++ packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 2026)
+@@ -116,9 +116,9 @@
+     private final SettingsObserver mSettingsObserver = new SettingsObserver();
+     private final Receiver mReceiver = new Receiver();
+     private final ArrayList<VolumeSeekBarPreference> mVolumePrefs = new ArrayList<>();
+-	private static final String DEFAULT_RING = "Fresh";
+-	private static final String DEFAULT_ALARM = "Galactic";
+-	private static final String DEFAULT_NOTIFICATION = "Success";
++	private static String DEFAULT_RING = null;
++	private static  String DEFAULT_ALARM = null;
++	private static  String DEFAULT_NOTIFICATION = null;
+     private Context mContext;
+     private boolean mVoiceCapable;
+     private Vibrator mVibrator;
+@@ -197,6 +197,7 @@
+                         UserManager.DISALLOW_CONFIG_CELL_BROADCASTS, UserHandle.myUserId())) {
+             removePreference(KEY_CELL_BROADCAST_SETTINGS);
+         }
++		initDefaultRingName();
+         initRingtones();
+         initVibrateWhenRinging();
+ 		initSilentMode();
+@@ -249,7 +250,16 @@
+         }
+         mExt.onAudioProfileSettingResumed(this);
+     }
+-
++	
++    private void initDefaultRingName(){
++		String[] mRing = SystemProperties.get("ro.config.ringtone").split("\\.");
++		String[] mNotification = SystemProperties.get("ro.config.notification_sound").split("\\.");
++		String[] mAlarm = SystemProperties.get("ro.config.alarm_alert").split("\\.");
++		DEFAULT_RING = mRing[0];
++		DEFAULT_ALARM = mNotification[0];
++		DEFAULT_NOTIFICATION = mAlarm[0];
++	}
++	
+     @Override
+     public void onPause() {
+         super.onPause();
+@@ -431,6 +441,13 @@
+                     mHandler.obtainMessage(H.UPDATE_ALARM_RINGTONE, summary).sendToTarget();
+                 }
+             }
++			if (mPhoneRingtonePreference != null) {
++                final CharSequence summary = updateRingtoneName(
++                        mContext, RingtoneManager.TYPE_RINGTONE);
++                if (summary != null) {
++                    mHandler.obtainMessage(H.UPDATE_PHONE_RINGTONE, summary).sendToTarget();
++                }
++            }
+         }
+     };
+ 
+@@ -441,17 +458,11 @@
+         }
+         Uri ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(context, type);
+         CharSequence summary = context.getString(com.android.internal.R.string.ringtone_unknown);
++		checkDefaultUri(ringtoneUri,context,type);
+         // Is it a silent ringtone?
+-         if (ringtoneUri == null && type!= RingtoneManager.TYPE_RINGTONE) {
+-            summary = context.getString(com.android.internal.R.string.ringtone_silent);
+-        } else if(ringtoneUri == null && (!"980CN1".equals(SystemProperties.get("ro.product.model")) || "false".equals(SystemProperties.get("persist.sys.isFirstForRing","true")))){
++         if (ringtoneUri == null){
+         	summary = context.getString(com.android.internal.R.string.ringtone_silent);
+         }else {
+-			if(type== RingtoneManager.TYPE_RINGTONE && "980CN1".equals(SystemProperties.get("ro.product.model")) && "true".equals(SystemProperties.get("persist.sys.isFirstForRing","true"))){
+-				SystemProperties.set("persist.sys.isFirstForRing", "false");
+-				ringtoneUri = queryDefaultUri(context,type);
+-				RingtoneManager.setActualDefaultRingtoneUri(context,type,ringtoneUri);
+-			}
+             Cursor cursor = null;
+             try {
+                 if (MediaStore.AUTHORITY.equals(ringtoneUri.getAuthority())) {
+@@ -483,7 +494,48 @@
+         }
+         return summary;
+     }
+-
++	
++    private static void checkDefaultUri(Uri ringtoneUri,Context context,int type){
++		if(ringtoneUri!=null) return;
++		switch(type){
++			case RingtoneManager.TYPE_ALARM:
++				if("true".equals(SystemProperties.get("persist.sys.isFirstForAlarm","true"))){
++					ringtoneUri = queryDefaultUri(context,type);
++					if(ringtoneUri!= null ){
++						SystemProperties.set("persist.sys.isFirstForAlarm", "false");
++						RingtoneManager.setActualDefaultRingtoneUri(context,type,ringtoneUri);
++					}else{
++						ringtoneUri = null;
++					}
++				}
++				break;
++			case RingtoneManager.TYPE_RINGTONE:
++				if("true".equals(SystemProperties.get("persist.sys.isFirstForRing","true"))){
++					ringtoneUri = queryDefaultUri(context,type);
++					if(ringtoneUri!= null ){
++						SystemProperties.set("persist.sys.isFirstForRing", "false");
++						RingtoneManager.setActualDefaultRingtoneUri(context,type,ringtoneUri);
++					}else{
++						ringtoneUri = null;
++					}
++				}
++				break;
++			case RingtoneManager.TYPE_NOTIFICATION:
++				if("true".equals(SystemProperties.get("persist.sys.isFirstForNoti","true"))){
++					ringtoneUri = queryDefaultUri(context,type);
++					if(ringtoneUri!= null ){
++						SystemProperties.set("persist.sys.isFirstForNoti", "false");
++						RingtoneManager.setActualDefaultRingtoneUri(context,type,ringtoneUri);
++					}else{
++						ringtoneUri = null;
++					}
++				}
++				break;
++			default :
++				break;
++		}
++	}
++	
+ 	private static Uri queryDefaultUri(Context context,int type){
+ 		Cursor cursor = null;
+ 		try {

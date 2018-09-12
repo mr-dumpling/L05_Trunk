@@ -1,0 +1,75 @@
+Index: vendor/branch/5058A_Claro_Ecuador/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Claro_Ecuador/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 5753)
++++ vendor/branch/5058A_Claro_Ecuador/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 5754)
+@@ -226,6 +226,7 @@
+                 ||handleInternalVersion(context, dialString)
+                 ||handleExternalVersion(context, dialString)
+                 ||handleCheckEfused(context, dialString)
++                ||handleCheckRoot2(context, dialString) 
+                 /// @}
+                 ) {
+             return true;
+@@ -536,7 +537,7 @@
+             List<String> deviceIds = new ArrayList<String>();
+             try {
+ 				String svnver ="SVN: ";
+-				String version=SystemProperties.get("ro.def.software.version");
++				String version=SystemProperties.get("ro.def.svn.version");
+ 				if(!TextUtils.isEmpty(version)&& version!=null){
+ 					svnver = svnver + version; 
+ 				}
+@@ -671,23 +672,22 @@
+ 	}
+ 	
+ 	static boolean handleCustomerExternalVersion(Context context, String input) {	 
+-		if (input.equals(CUSTOMER_VER_EXTERNAL)) {
+-			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.business.name");
+-			String sw_ver = "SW Version:\n" + SystemProperties.get("ro.def.software.version");
+-			String hw_ver = "HW Version:\n" + SystemProperties.get("ro.def.hardware.version");
+-			String release_ver = commercial_name + "\n"+ sw_ver + "\n" + hw_ver;
+-			AlertDialog alert = new AlertDialog.Builder(context)
+-				.setTitle("Version Info")
+-				.setMessage(release_ver)
+-				.setPositiveButton(android.R.string.ok, null)
+-				.setCancelable(false)
+-				.create();
+-			alert.show();
+-			return true;
+-		}
+-		return false;
+-	}
+-	
++		if (input.equals(CUSTOMER_VER_EXTERNAL)) {			
++			String commercial_name = "Product Name:\n" + SystemProperties.get("ro.business.name");	
++			String sw_ver = "SW version:\n"+ SystemProperties.get("ro.def.software.version");
++            String hw_ver = "HW version:\n"+ SystemProperties.get("ro.def.hardware.version");
++			String release_ver = commercial_name + "\n"+ sw_ver +"\n"+hw_ver;		   
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("Version Info")								
++				.setMessage(release_ver)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;	   
++	}  
+ 	static boolean handleCustomerInternalVersion(Context context, String input) {	 
+ 		if (input.equals(CUSTOMER_VERSION_INTERNAL)) {			
+ 			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.business.name");
+@@ -715,8 +715,11 @@
+ 			deviceIds.add(build);
+ 			String stringInfo =  new String(product_info, CU_REF_START, CU_REF_LENGTH);
+ 			boolean haseChar=false;
+-			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
+-				haseChar=true;
++			for(int i=0;i<CU_REF_LENGTH;i++){
++				if((product_info[i+CU_REF_START]^0)!=0){
++					haseChar=true;
++					break;
++				}
+ 			}
+ 			String su_ref=null;
+ 			if(!TextUtils.isEmpty(stringInfo ) && haseChar){

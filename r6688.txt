@@ -1,0 +1,208 @@
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java	(revision 6687)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java	(revision 6688)
+@@ -64,8 +64,10 @@
+ import com.mediatek.incallui.CallDetailChangeHandler.CallDetailChangeListener;
+ import com.mediatek.incallui.volte.InCallUIVolteUtils;
+ /// @}
++import android.database.Cursor;
++import android.content.ContentResolver;
++import com.mediatek.incallui.InCallUtils;
+ 
+-
+ /// M: add for Volte.
+ import java.util.ArrayList;
+ import java.util.HashMap;
+@@ -100,6 +102,9 @@
+     private Drawable mConferencePhotoDrawable;
+     private ContactUtils mContactUtils;
+ 
++    private static final Uri FDN_CONTENT_URI = Uri.parse("content://icc/fdn");
++    private static final String FDN_CONTENT_PATH_WITH_SUB_ID = "content://icc/fdn/subId/";
++
+     public static synchronized ContactInfoCache getInstance(Context mContext) {
+         if (sCache == null) {
+             sCache = new ContactInfoCache(mContext.getApplicationContext());
+@@ -254,6 +259,16 @@
+         findInfoQueryComplete(call, callerInfo, isIncoming, false);
+     }
+ 
++    public String  fetchMinNumber(String str){
++        Log.d(TAG, "fetchMinNumber ");
++        String num,num2,num3,num4;
++        num = str.replace(" ", "");
++        num2 = num.replace("-", "");
++        num3 = num2.replace("+", "");
++        num4 = PhoneNumberUtils.toCallerIDMinMatch(num3);
++        return num4;
++    }
++
+     private void findInfoQueryComplete(Call call, CallerInfo callerInfo, boolean isIncoming,
+             boolean didLocalLookup) {
+         final String callId = call.getId();
+@@ -279,7 +294,45 @@
+             cacheEntry = buildEntry(mContext, callId, callerInfo, presentationMode, isIncoming);
+             mInfoMap.put(callId, cacheEntry);
+         }
++        
++         int mSubId = InCallUtils.getSubId(call);
++        Uri mFdnUri = (mSubId != -1) ? Uri.parse(FDN_CONTENT_PATH_WITH_SUB_ID + mSubId): FDN_CONTENT_URI;
+ 
++        if (didLocalLookup) {
++           String name = null;
++           Cursor locFdnContact;
++           ContentResolver cr = mContext.getContentResolver();    
++           locFdnContact = cr.query(mFdnUri,
++             new String[] {"name","number","emails"},null,null, null);
++
++           if(locFdnContact != null && cacheEntry.number!=null && cacheEntry.number.length() > 0){
++              try {
++                  if(locFdnContact.moveToFirst()) {
++                     do {
++                            int numColumnIndex = locFdnContact.getColumnIndex("number");
++                            String tempNum = locFdnContact.getString(numColumnIndex);
++                            Log.d(TAG, "cacheEntry.number: "+ cacheEntry.number+"; tempNum:"+tempNum);
++                            
++                            String mintempNum = fetchMinNumber(tempNum);
++                            String minNum = fetchMinNumber(cacheEntry.number);
++                            Log.d(TAG, "minNum: "+ minNum+"; mintempNum:"+mintempNum);
++                            if(TextUtils.equals(minNum, mintempNum)){
++                               name = locFdnContact.getString(locFdnContact.getColumnIndex("name"));
++                               Log.d(TAG, "name: "+ name);
++                            }
++
++                        } while(locFdnContact.moveToNext());
++                    }
++                } catch (Exception e) {
++                    Log.w(TAG, "locFdnContact error:" + e.getMessage());
++                } finally {
++                    locFdnContact.close();
++                }
++            }
++            cacheEntry.namePrimary = name;
++            Log.d(TAG, "cacheEntry.namePrimary: "+ cacheEntry.namePrimary);
++        }
++
+         sendInfoNotifications(callId, cacheEntry);
+ 
+         if (didLocalLookup) {
+Index: packages/apps/Dialer/src/com/android/dialer/contactinfo/ContactInfoCache.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/contactinfo/ContactInfoCache.java	(revision 6687)
++++ packages/apps/Dialer/src/com/android/dialer/contactinfo/ContactInfoCache.java	(revision 6688)
+@@ -28,6 +28,8 @@
+ import com.mediatek.dialer.util.DialerFeatureOptions;
+ 
+ import java.util.LinkedList;
++import com.android.dialer.calllog.CallLogFragment;
++import android.telephony.PhoneNumberUtils;
+ 
+ /**
+  * This is a cache of contact details for the phone numbers in the c all log. The key is the
+@@ -219,6 +221,17 @@
+         boolean updated = (existingInfo != ContactInfo.EMPTY || isRemoteSource) &&
+                 !info.equals(existingInfo);
+ 
++        for (int i = 0; i < CallLogFragment.list.size(); i++) {
++            String fdnNumber = CallLogFragment.list.get(i).get("number");
++            String fdnName = CallLogFragment.list.get(i).get("name");
++            Log.d(TAG, "fdnNumber: "+ fdnNumber+"; fdnName="+fdnName);
++
++            String minNum = fetchMinNumber(number);
++            String minfdnNumber = fetchMinNumber(fdnNumber);          
++            Log.d(TAG, "minNum: "+ minNum+"; minfdnNumber:"+minfdnNumber);
++            if(TextUtils.equals(minfdnNumber, minNum)) info.name = fdnName;
++        }
++
+         // Store the data in the cache so that the UI thread can use to display it. Store it
+         // even if it has not changed so that it is marked as not expired.
+         mCache.put(numberCountryIso, info);
+@@ -229,6 +242,16 @@
+         return updated;
+     }
+ 
++    public String  fetchMinNumber(String str){
++        Log.d(TAG, "fetchMinNumber ");
++        String num,num2,num3,num4;
++        num = str.replace(" ", "");
++        num2 = num.replace("-", "");
++        num3 = num2.replace("+", "");
++        num4 = PhoneNumberUtils.toCallerIDMinMatch(num3);
++        return num4;
++    }
++
+     /**
+      * After a delay, start the thread to begin processing requests. We perform lookups on a
+      * background thread, but this must be called to indicate the thread should be running.
+Index: packages/apps/Dialer/src/com/android/dialer/calllog/CallLogFragment.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/calllog/CallLogFragment.java	(revision 6687)
++++ packages/apps/Dialer/src/com/android/dialer/calllog/CallLogFragment.java	(revision 6688)
+@@ -63,6 +63,10 @@
+ import com.mediatek.dialer.util.DialerFeatureOptions;
+ 
+ import java.util.List;
++import java.util.ArrayList;
++import java.util.HashMap;
++import android.database.Cursor;
++import android.content.ContentResolver;
+ 
+ /**
+  * Displays a list of call log entries. To filter for a particular kind of call
+@@ -138,6 +142,17 @@
+         }
+     }
+ 
++    protected class FdnContentObserver extends ContentObserver {
++        public FdnContentObserver() {
++            super(mHandler);
++        }
++        @Override
++        public void onChange(boolean selfChange) {
++            Log.d(TAG, "onChange()");
++            FetchFdnContact();
++        }
++    }
++
+     // See issue 6363009
+     private final ContentObserver mCallLogObserver = new CustomContentObserver();
+     private final ContentObserver mContactsObserver = new CustomContentObserver();
+@@ -164,7 +179,7 @@
+     private View mNoticeTextDivider;
+     /// @}
+ 
+-
++    public static ArrayList<HashMap<String, String>> list = new ArrayList<HashMap<String, String>>();
+     /*
+      * True if this instance of the CallLogFragment shown in the CallLogActivity.
+      */
+@@ -235,8 +250,28 @@
+         /// M: [Call Log Account Filter] add account change listener
+         PhoneAccountInfoHelper.getInstance(getActivity()).registerForAccountChange(this);
+         /// @}
++        resolver.registerContentObserver(Uri.parse("content://icc/fdn"), true, new FdnContentObserver());
++        FetchFdnContact();
+     }
+ 
++    public void FetchFdnContact(){
++        Log.d(TAG, "FetchFdnContact()");
++        list.clear();
++        final Activity activity = getActivity();
++        Log.d(TAG, "activity ="+activity);
++        if(activity != null){
++            ContentResolver cr = activity.getContentResolver();    
++            Cursor locFdnContact = cr.query(Uri.parse("content://icc/fdn"),
++               new String[] {"name","number","emails"},null,null, null);
++            while(locFdnContact.moveToNext()) {
++               HashMap<String, String> map = new HashMap<String, String>();
++               map.put("name", locFdnContact.getString(1));
++               map.put("number", locFdnContact.getString(2));
++               map.put("emails", locFdnContact.getString(3));
++               list.add(map);
++            }
++         }
++    }  
+     /** Called by the CallLogQueryHandler when the list of calls has been fetched or updated. */
+     @Override
+     public boolean onCallsFetched(Cursor cursor) {

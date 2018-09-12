@@ -1,0 +1,70 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationList.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationList.java	(revision 8319)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationList.java	(revision 8320)
+@@ -134,6 +134,7 @@
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.HashSet;
++import android.net.Uri;
+ /**
+  * This activity provides a list view of existing conversations.
+  */
+@@ -266,6 +267,36 @@
+     // add for mutli user
+     private boolean isUserHasPerUsingMms = true;
+ 
++	private int getNewMmsCount() { 
++		int result = 0; 
++		Cursor csr = getContentResolver().query(Uri.parse("content://mms/inbox"), null, "read = 0", null, null); 
++		if (csr != null) { 
++			result = csr.getCount(); 
++			csr.close(); 
++		} 
++		return result; 
++	} 
++	
++	private int getNewSmsCount() { 
++		int result = 0; 
++		Cursor csr = getContentResolver().query(Uri.parse("content://sms"), null, "type = 1 and read = 0", null, null); 
++		if (csr != null) { 
++			result = csr.getCount(); 
++			csr.close(); 
++		} 
++		return result; 
++	}
++	private void sendUnreadAction(){
++		int mNewSmsCount = getNewSmsCount() + getNewMmsCount(); 
++		Context context = ConversationList.this;
++		Log.e(TAG, "sendUnreadAction mNewSmsCount="+mNewSmsCount); 
++		ComponentName component = new ComponentName("com.android.mms","com.android.mms.ui.ConversationList");
++		Intent mIntent = new Intent("com.intent.unread");
++		mIntent.putExtra("componentName",component);
++		mIntent.putExtra("unreadNum",mNewSmsCount);
++		context.sendBroadcast(mIntent);
++		return;
++	}
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
+@@ -1920,7 +1951,8 @@
+     protected void onResume() {
+         super.onResume();
+         PDebug.EndAndStart("onStart -> onResume", "ConversationList.onResume");
+-
++        sendUnreadAction();
++		
+         boolean isSmsEnabled = MmsConfig.isSmsEnabled(this);
+         if (isSmsEnabled != mIsSmsEnabled) {
+             mIsSmsEnabled = isSmsEnabled;
+@@ -1965,8 +1997,9 @@
+     /// M: Code analyze 001, For new feature ALPS00242732, SIM indicator UI is not good . @{
+     @Override
+     protected void onPause() {
++	
+         super.onPause();
+-
++        sendUnreadAction();
+         /// Google JB MR1.1 patch. conversation list can restore scroll position
+         // Remember where the list is scrolled to so we can restore the scroll position
+         // when we come back to this activity and *after* we complete querying for the

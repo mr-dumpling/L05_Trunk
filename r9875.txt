@@ -1,0 +1,63 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/quickcontact/QuickContactActivity.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/quickcontact/QuickContactActivity.java	(revision 9874)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/quickcontact/QuickContactActivity.java	(revision 9875)
+@@ -3240,8 +3240,32 @@
+     /// @}
+ 	
+ 	//add block number start
+-	final boolean[] checkedItems={false,false};
++	boolean[] checkedItems = new boolean []{false,false};
+ 	private void addBlockNumberDialog() {
++		
++		String phoneNumber = blockNumber;
++		if (TextUtils.isEmpty(phoneNumber)) {
++			Toast.makeText(QuickContactActivity.this,getResources().getString(R.string.empty_contact_phone_number),0).show();
++			return;
++		}
++
++		if (BlockedNumberContract.isBlocked(QuickContactActivity.this, phoneNumber)) {
++			String mBlockType = BlockedNumberContract.SystemContract.getBlockNumberType(QuickContactActivity.this,phoneNumber);
++			//update checkedItems state
++			Log.d(TAG,"mBlockType="+mBlockType);
++			if (!TextUtils.isEmpty(mBlockType)) {								
++				if ("call".equals(mBlockType)) {
++					checkedItems = new boolean []{true,false};
++				} else if ("message".equals(mBlockType)) {
++					checkedItems = new boolean []{false,true};
++				} else {
++					checkedItems = new boolean []{true,true};
++				}
++			} else {
++				checkedItems = new boolean []{false,false};
++			}
++		}
++	
+ 		final String[] items = {getResources().getString(R.string.block_item_call),
+ 								getResources().getString(R.string.block_item_message)};		
+ 		final String[] resultItems = {"call", "message"};
+@@ -3249,7 +3273,10 @@
+ 		builder.setTitle(getResources().getString(R.string.block_number_dialog_title))
+ 		.setMultiChoiceItems(items, checkedItems, new DialogInterface.OnMultiChoiceClickListener() {
+ 			@Override
+-			public void onClick(DialogInterface dialog, int which, boolean isChecked) {	}					
++			public void onClick(DialogInterface dialog, int which, boolean isChecked) {	
++				
++					checkedItems[which] = isChecked;
++				}					
+ 			})
+ 			.setPositiveButton("BLOCK", new DialogInterface.OnClickListener() {
+ 				@Override
+@@ -3265,11 +3292,7 @@
+ 						Toast.makeText(QuickContactActivity.this, getResources().getString(R.string.select_block_type),0).show();
+ 						return;
+ 					}
+-					String phoneNumber = blockNumber;
+-					if (TextUtils.isEmpty(phoneNumber)) {
+-						Toast.makeText(QuickContactActivity.this,getResources().getString(R.string.empty_contact_phone_number),0).show();
+-						return;
+-					}
++					
+ 					addBlockedNumber(phoneNumber,type.toString());
+ 					dialog.dismiss();					
+ 				}

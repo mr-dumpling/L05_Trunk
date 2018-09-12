@@ -1,0 +1,66 @@
+Index: frameworks/base/packages/SystemUI/src/com/face/scanner/LiteManager.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/face/scanner/LiteManager.java	(revision 11588)
++++ frameworks/base/packages/SystemUI/src/com/face/scanner/LiteManager.java	(revision 11589)
+@@ -9,7 +9,7 @@
+ import com.megvii.facepp.sdk.Lite;
+ import com.sensetime.faceunlock.util.ConUtil;
+ import com.android.systemui.R;
+-
++import com.sensetime.faceunlock.util.SharedUtil;
+ import java.io.File;
+ 
+ public class LiteManager implements LiteService {
+@@ -22,6 +22,7 @@
+     private volatile Status mStatus = Status.idle;
+     private volatile StatusObserver mStatusObserver;
+     private static LiteManager sInstance;
++	protected SharedUtil shareUtil;
+ 
+ 
+     public synchronized static LiteManager getInstance(Context context) {
+@@ -76,31 +77,35 @@
+         String livePath2 = "";
+         File dir = mContext.getExternalFilesDir("megvii");
+         if (dir == null || !dir.exists()) {
+-            Log.i("zxp","dir.exists()");
+ 			return;
+         }
+ 		livePath1 = dir + "/model/liveness1.dlc";
+ 		if ( !new File(livePath1).exists() ){
+-			Log.d("zxp", "FaceService:onCreate start 1...");
+ 			livePath1 = ConUtil.saveRaw(mContext, R.raw.panorama_mgba,
+                     "model", "liveness1.dlc");
+-			Log.d("zxp", "FaceService:onCreate start 2...");
+ 		}
+ 					
+         Lite.getInstance().initHandle(dir.getAbsolutePath());
+ 		
+-
++       
+ 		Lite.getInstance().setConfig(-8, 8, -13, 13,false);
+ 		
+-		Log.d("zxp", "FaceService:onCreate start 3...");
+         byte[] faceppContent = ConUtil.getFileContent(mContext, R.raw
+                 .megviifacepp_modela);
+ 				
+-		Log.d("zxp", "FaceService:onCreate start 4...");
+-		
+-		Log.i("zxp", "init all start ");
+         final long result = Lite.getInstance().initAll(livePath1, livePath2, faceppContent);
+-		Log.i("zxp", "init all end ");
++		shareUtil = new SharedUtil(mContext);
++		String newsdkveision = Lite.getInstance().getVersion();
++        String oldsdkveision = shareUtil.getStringValueByKey("sdkveision");	
++		Log.i(TAG, "newsdkveision="+newsdkveision);
++		Log.i(TAG, "oldsdkveision="+oldsdkveision);
++		if(oldsdkveision == null || !oldsdkveision.equals(newsdkveision)){
++			Lite.getInstance().prepare();
++			int restore = Lite.getInstance().restoreFeature();
++			shareUtil.saveStringValue("sdkveision", newsdkveision);
++			Log.i(TAG, "sdkveision");
++			Lite.getInstance().reset();
++		}	
+     }
+ 
+     @Override

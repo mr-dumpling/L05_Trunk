@@ -1,0 +1,40 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/mediatek/contacts/activities/ContactImportExportActivity.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/mediatek/contacts/activities/ContactImportExportActivity.java	(revision 8059)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/mediatek/contacts/activities/ContactImportExportActivity.java	(revision 8060)
+@@ -71,6 +71,8 @@
+ import java.io.File;
+ import java.util.ArrayList;
+ import java.util.List;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
+ 
+ public class ContactImportExportActivity extends BaseEventHandlerActivity
+         implements View.OnClickListener, AdapterView.OnItemClickListener {
+@@ -352,8 +354,9 @@
+         }
+ 
+         public View getView(int position, View convertView, ViewGroup parent) {
+-            final ImportExportItem view;
+-
++            final ImportExportItem view;			
++			SubscriptionManager mSubscriptionManager = SubscriptionManager.from(mContext);
++			SubscriptionInfo mSubInfoRecord ;
+             if (convertView != null) {
+                 view = (ImportExportItem) convertView;
+             } else {
+@@ -369,11 +372,12 @@
+             Drawable icon = null;
+             String type = itemObj.getName();
+             final int subId = itemObj.mAccount.getSubId();
+-            Log.d(TAG, "[getView]dataSet: " + account.dataSet + ",subId: " + subId);
++			mSubInfoRecord = mSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(subId - 1);
++            Log.d(TAG, "[getView]dataSet: " + account.dataSet + ",subId: " + subId + ",mSubInfoRecord="+mSubInfoRecord+",mSubscriptionManager="+mSubscriptionManager);
+             if (accountType != null && accountType.isIccCardAccount()) {
+                 icon = accountType.getDisplayIconBySubId(mContext, subId);
+                 //type = (String) accountType.getDisplayLabel(mContext);
+-				type = "SIM";
++				type = mSubInfoRecord.getDisplayName().toString();//"SIM";
+             } else if (accountType != null) {
+                 icon = accountType.getDisplayIcon(mContext);
+             }

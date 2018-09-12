@@ -1,0 +1,3127 @@
+Index: packages/apps/Settings/src/com/android/settings/applications/ManageApplications.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/applications/ManageApplications.java	(revision 1100)
++++ packages/apps/Settings/src/com/android/settings/applications/ManageApplications.java	(revision 1101)
+@@ -87,6 +87,10 @@
+ import java.util.List;
+ import java.util.Locale;
+ 
++//add by dongdongli 20170828 start {
++import com.android.settings.notification.CustomizedDialog;
++//add end }
++
+ /**
+  * Activity to pick an application that will be used to display installation information and
+  * options to uninstall/delete user data for system applications. This activity
+@@ -138,6 +142,7 @@
+     public static final int FILTER_APPS_USAGE_ACCESS = 13;
+     public static final int FILTER_APPS_WITH_OVERLAY = 14;
+     public static final int FILTER_APPS_WRITE_SETTINGS = 15;
++	public static final int FILTER_APPS_CUSTOMIZE_COLOR_NOTIFICATION = 16;
+ 
+     // This is the string labels for the filter modes above, the order must be kept in sync.
+     public static final int[] FILTER_LABELS = new int[]{
+@@ -157,6 +162,7 @@
+             R.string.filter_all_apps,      // Usage access screen, never displayed
+             R.string.filter_overlay_apps,   // Apps with overlay permission
+             R.string.filter_write_settings_apps,   // Apps that can write system settings
++			R.string.filter_customize_color_notifications_apps // Highlighted color Notification app
+     };
+     // This is the actual mapping to filters from FILTER_ constants above, the order must
+     // be kept in sync.
+@@ -179,6 +185,7 @@
+             AppStateUsageBridge.FILTER_APP_USAGE, // Apps with Domain URLs
+             AppStateOverlayBridge.FILTER_SYSTEM_ALERT_WINDOW,   // Apps that can draw overlays
+             AppStateWriteSettingsBridge.FILTER_WRITE_SETTINGS,  // Apps that can write system settings
++			AppStateNotificationBridge.FILTER_APP_NOTIFICATION_CUSTOMIZE_COLOR, // Customize Color Notifications 
+     };
+ 
+     // sort order
+@@ -357,6 +364,7 @@
+             mFilterAdapter.enableFilter(FILTER_APPS_SENSITIVE);
+             mFilterAdapter.enableFilter(FILTER_APPS_HIDE_NOTIFICATIONS);
+             mFilterAdapter.enableFilter(FILTER_APPS_PRIORITY);
++			mFilterAdapter.enableFilter(FILTER_APPS_CUSTOMIZE_COLOR_NOTIFICATION);  // add Highlighted in color notification
+         }
+         if (mListType == LIST_TYPE_HIGH_POWER) {
+             mFilterAdapter.enableFilter(FILTER_APPS_POWER_WHITELIST_ALL);
+@@ -720,9 +728,14 @@
+      * the getId methods via the package name into the internal maps and indices.
+      * The order of applications in the list is mirrored in mAppLocalList
+      */
+-    static class ApplicationsAdapter extends BaseAdapter implements Filterable,
++	//modify by dongdongli 20170828 start {
++	static class ApplicationsAdapter extends BaseAdapter implements Filterable,
+             ApplicationsState.Callbacks, AppStateBaseBridge.Callback,
+-            AbsListView.RecyclerListener, SectionIndexer {
++            AbsListView.RecyclerListener, SectionIndexer, CustomizedDialog.ColorSelectLinstener {
++    //static class ApplicationsAdapter extends BaseAdapter implements Filterable,
++    //        ApplicationsState.Callbacks, AppStateBaseBridge.Callback,
++    //        AbsListView.RecyclerListener, SectionIndexer {
++	//modify end } 
+         private static final SectionInfo[] EMPTY_SECTIONS = new SectionInfo[0];
+ 
+         private final ApplicationsState mState;
+@@ -1077,6 +1090,27 @@
+                 }
+             }
+         }
++		
++		//add by dongdongli 20170828 start {
++		// color selected callback update the app list notification image
++		@Override
++        public void colorSelectCallBack(String packageName, int color) {
++            for (int i = 0; i < mActive.size(); i++) {
++                AppViewHolder holder = (AppViewHolder) mActive.get(i).getTag();
++                if (holder.entry.info.packageName.equals(packageName)) {
++                    synchronized (holder.entry) {
++						holder.notificationColorImage.setImageLevel(color);
++						if (color > 1 && mFilterMode == 16){
++							holder.notificationColorImage.setVisibility(View.VISIBLE);
++                        } else {
++							holder.notificationColorImage.setVisibility(View.GONE);
++						}
++						rebuild(false);
++                    }
++                }
++            }
++        }
++		//add end }
+ 
+         @Override
+         public void onLauncherInfoChanged() {
+@@ -1150,6 +1184,16 @@
+                 } else {
+                     holder.disabled.setVisibility(View.GONE);
+                 }
++				// add dongdongli 20170828 start {
++				// only filter highlight app show notification color image
++				entry.extraInfo = new NotificationBackend().loadAppRow(mContext, mPm, entry.info);
++				if (((AppRow) entry.extraInfo).notificationColor > 1 && ((AppRow) entry.extraInfo).notificationColor <= 20 && mFilterMode == 16) {
++					holder.notificationColorImage.setVisibility(View.VISIBLE);
++					holder.notificationColorImage.setImageLevel(((AppRow) entry.extraInfo).notificationColor);
++				} else {
++					holder.notificationColorImage.setVisibility(View.GONE);
++				}
++				//add end }
+             }
+             mActive.remove(convertView);
+             mActive.add(convertView);
+Index: packages/apps/Settings/src/com/android/settings/applications/AppStateNotificationBridge.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/applications/AppStateNotificationBridge.java	(revision 1100)
++++ packages/apps/Settings/src/com/android/settings/applications/AppStateNotificationBridge.java	(revision 1101)
+@@ -140,4 +140,21 @@
+                     && ((AppRow) info.extraInfo).appVisOverride == Notification.VISIBILITY_SECRET;
+         }
+     };
++	
++	// add by dongdongli 20170823 start {
++	// filter the highlight notification app
++	public static final AppFilter FILTER_APP_NOTIFICATION_CUSTOMIZE_COLOR = new AppFilter() {
++        @Override
++        public void init() {
++        }
++
++        @Override
++        public boolean filterApp(AppEntry info) {
++            if (info == null || info.extraInfo == null) {
++                return false;
++            }
++            return ((AppRow) info.extraInfo).notificationColor > 1 && ((AppRow) info.extraInfo).notificationColor <= 20;
++        }
++    };
++	// add end }
+ }
+Index: packages/apps/Settings/src/com/android/settings/applications/AppViewHolder.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/applications/AppViewHolder.java	(revision 1100)
++++ packages/apps/Settings/src/com/android/settings/applications/AppViewHolder.java	(revision 1101)
+@@ -34,6 +34,9 @@
+     public ImageView appIcon;
+     public TextView summary;
+     public TextView disabled;
++	//add by dongdongli 20170828 start {
++	public ImageView notificationColorImage;
++	//add end }
+ 
+     static public AppViewHolder createOrRecycle(LayoutInflater inflater, View convertView) {
+         if (convertView == null) {
+@@ -49,6 +52,9 @@
+             holder.appIcon = (ImageView) convertView.findViewById(android.R.id.icon);
+             holder.summary = (TextView) convertView.findViewById(R.id.widget_text1);
+             holder.disabled = (TextView) convertView.findViewById(R.id.widget_text2);
++			//add by dongdongli 20170828 start {
++			holder.notificationColorImage = (ImageView) convertView.findViewById(R.id.notification_color_image);
++			//add end }
+             convertView.setTag(holder);
+             return holder;
+         } else {
+Index: packages/apps/Settings/src/com/android/settings/notification/NotificationBackend.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/NotificationBackend.java	(revision 1100)
++++ packages/apps/Settings/src/com/android/settings/notification/NotificationBackend.java	(revision 1101)
+@@ -54,6 +54,9 @@
+         row.appVisOverride = getVisibilityOverride(row.pkg, row.uid);
+         row.lockScreenSecure = new LockPatternUtils(context).isSecure(
+                 UserHandle.myUserId());
++		//add by dongdongli 20170818 start {
++		row.notificationColor = getNotificationColor(row.pkg, row.uid);
++		//add end }
+         return row;
+     }
+ 
+@@ -140,6 +143,28 @@
+             return NotificationListenerService.Ranking.IMPORTANCE_UNSPECIFIED;
+         }
+     }
++	
++	//add by dongdongli 20170818 start {
++	public boolean setNotificationColor(String pkg, int uid, int color) {
++		try {
++			sINM.setNotificationColor(pkg, uid, color);
++			return true;
++		} catch (Exception e) {
++			Log.w(TAG, "Error calling NoMan", e);
++			return false;
++		}
++		
++	}
++	
++	public int getNotificationColor(String pkg, int uid) {
++		try {
++			return sINM.getNotificationColor(pkg, uid);
++		} catch (Exception e) {
++			Log.w(TAG, "Error calling NoMan", e);
++            return 1;
++		}
++	}
++	//add end }
+ 
+     static class Row {
+         public String section;
+@@ -159,5 +184,8 @@
+         public boolean appBypassDnd;
+         public int appVisOverride;
+         public boolean lockScreenSecure;
++		//add by dongdongli 20170818 start {
++		public int notificationColor = 1;
++		//add end }
+     }
+ }
+Index: packages/apps/Settings/src/com/android/settings/notification/CustomizedDialog.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/CustomizedDialog.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/notification/CustomizedDialog.java	(revision 1101)
+@@ -0,0 +1,303 @@
++package com.android.settings.notification;
++
++import android.app.DialogFragment;
++import android.os.Bundle;
++import android.util.Log;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.view.Window;
++import android.widget.ImageView;
++import android.widget.TextView;
++import android.content.Context;
++
++import com.android.settings.R;
++
++/**
++ * Created by liddo on 2017/8/23.
++ */
++
++public class CustomizedDialog extends DialogFragment implements View.OnClickListener {
++	
++	public static final String TAG = "CustomizedDialog";
++
++    public static final String NOTIFICATION_DEFAULT_COLOR = "notification_default_color";
++	
++	public static final String NOTIFICATION_PACKAGE_NAME = "notification_package_name";
++	
++	public static final String NOTIFICATION_UID = "notification_uid";
++
++    private ImageView[] colorSelectView = new ImageView[20];
++
++    private TextView btnCancel, btnDone;
++
++    private boolean[] colorSeletor = new boolean[]{
++            true, false, false, false, false,
++            false, false, false, false, false,
++            false, false, false, false, false,
++            false, false, false, false, false, };
++
++    private int defaultColor = 1;
++	private int colorTmp = 1;
++	private int doneColor = 0;
++
++    private ColorSelectLinstener linstener;
++	private static ColorSelectLinstener linstener_copy;
++	
++	private String pkg;
++	private int uid;
++	private NotificationBackend mBackend = new NotificationBackend();
++
++    public CustomizedDialog() {}
++
++	// interface for color select callback
++    public interface ColorSelectLinstener {
++        void colorSelectCallBack(String packageName, int color);
++    }
++
++    public void setColorSelectLinstener(ColorSelectLinstener linstener){
++        this.linstener = linstener;
++		linstener_copy = linstener;
++    }
++
++    public static CustomizedDialog newInstance(String pkg, int uid) {
++        CustomizedDialog dialog = new CustomizedDialog();
++        Bundle bundle = new Bundle();
++        //bundle.putInt(NOTIFICATION_DEFAULT_COLOR, color);
++		bundle.putString(NOTIFICATION_PACKAGE_NAME, pkg);
++		bundle.putInt(NOTIFICATION_UID, uid);
++        dialog.setArguments(bundle);
++        return dialog;
++    }
++
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++		Log.i(TAG,"onCreate()");
++        super.onCreate(savedInstanceState);
++        if (getArguments() != null) {
++            //defaultColor = getArguments().getInt(NOTIFICATION_DEFAULT_COLOR);
++			pkg = getArguments().getString(NOTIFICATION_PACKAGE_NAME);
++			uid = getArguments().getInt(NOTIFICATION_UID);
++			defaultColor = mBackend.getNotificationColor(pkg, uid);
++			Log.i("dongdong","onCreate defaultColor = " + defaultColor);
++        }
++		
++		Log.i("dongdong","onCreate doneColor == 1" + "  " + (doneColor==1));
++		
++		if (savedInstanceState != null) {
++			if (doneColor == 0){
++				Log.i("dongdong","onCreate colorTmp ---1");
++				colorTmp = savedInstanceState.getInt("color_tmp", 0);
++				savedInstanceState = null;
++			} else {
++				Log.i("dongdong","onCreate colorTmp ---2");
++				doneColor=0;
++			}
++		} else {
++			if(doneColor == 0){
++				Log.i("dongdong","onCreate colorTmp ---3");
++				colorTmp = defaultColor;
++			} else {
++				Log.i("dongdong","onCreate colorTmp ---4");
++				doneColor=0;
++			}
++		}
++		
++		Log.i("dongdong","onCreate colorTmp =" + colorTmp);
++    }
++
++    @Override
++    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
++		Log.i(TAG,"onCreateView()");
++        getDialog().requestWindowFeature(Window.FEATURE_NO_TITLE);
++        View view = inflater.inflate(R.layout.dialog_layout, null);
++
++        colorSelectView =new ImageView[]{
++                (ImageView)view.findViewById(R.id.color1), (ImageView)view.findViewById(R.id.color2), (ImageView)view.findViewById(R.id.color3), (ImageView)view.findViewById(R.id.color4), (ImageView)view.findViewById(R.id.color5),
++                (ImageView)view.findViewById(R.id.color6), (ImageView)view.findViewById(R.id.color7), (ImageView)view.findViewById(R.id.color8), (ImageView)view.findViewById(R.id.color9), (ImageView)view.findViewById(R.id.color10),
++                (ImageView)view.findViewById(R.id.color11), (ImageView)view.findViewById(R.id.color12), (ImageView)view.findViewById(R.id.color13), (ImageView)view.findViewById(R.id.color14), (ImageView)view.findViewById(R.id.color15),
++                (ImageView)view.findViewById(R.id.color16), (ImageView)view.findViewById(R.id.color17), (ImageView)view.findViewById(R.id.color18), (ImageView)view.findViewById(R.id.color19), (ImageView)view.findViewById(R.id.color20)};
++
++        btnCancel = (TextView)view.findViewById(R.id.btn_cancel);
++        btnDone = (TextView)view.findViewById(R.id.btn_done);
++
++        btnCancel.setOnClickListener(this);
++        btnDone.setOnClickListener(this);
++
++        for(int i = 0; i<20; i++){
++            colorSelectView[i].setOnClickListener(this);
++            colorSelectView[i].setImageResource(R.drawable.color_image_check);
++        }
++
++        setImageViewChecked(colorTmp-1);
++
++        return view;
++    }
++	
++	@Override
++    public void onResume() {
++        super.onResume();
++		Log.i(TAG,"onResume()");
++    }
++
++    // set the selected image
++    private void setImageViewChecked(int colorNumber) {
++        if(colorNumber < 0 || colorNumber > 19) return ;
++        for (int i = 0;i < 20; i++){
++            if(i == colorNumber) {
++                colorSeletor[i] = true;
++                colorSelectView[i].setImageLevel(20);
++            } else {
++                colorSeletor[i] = false;
++                colorSelectView[i].setImageLevel(0);
++            }
++        }
++    }
++
++    // get the checked color id
++    private int getCheckedColor(){
++        for(int i=0; i < 20; i++){
++            if(colorSeletor[i]) return i+1;
++        }
++        return 1;
++    }
++
++    @Override
++    public void onClick(View view) {
++        switch (view.getId()){
++            case R.id.color1:
++				colorTmp = 1;
++                setImageViewChecked(0);
++                break;
++            case R.id.color2:
++				colorTmp = 2;
++                setImageViewChecked(1);
++                break;
++            case R.id.color3:
++				colorTmp = 3;
++                setImageViewChecked(2);
++                break;
++            case R.id.color4:
++				colorTmp = 4;
++                setImageViewChecked(3);
++                break;
++            case R.id.color5:
++				colorTmp = 5;
++                setImageViewChecked(4);
++                break;
++            case R.id.color6:
++				colorTmp = 6;
++                setImageViewChecked(5);
++                break;
++            case R.id.color7:
++				colorTmp = 7;
++                setImageViewChecked(6);
++                break;
++            case R.id.color8:
++				colorTmp = 8;
++                setImageViewChecked(7);
++                break;
++            case R.id.color9:
++				colorTmp = 9;
++                setImageViewChecked(8);
++                break;
++            case R.id.color10:
++				colorTmp = 10;
++                setImageViewChecked(9);
++                break;
++            case R.id.color11:
++				colorTmp = 11;
++                setImageViewChecked(10);
++                break;
++            case R.id.color12:
++				colorTmp = 12;
++                setImageViewChecked(11);
++                break;
++            case R.id.color13:
++				colorTmp = 13;
++                setImageViewChecked(12);
++                break;
++            case R.id.color14:
++				colorTmp = 14;
++                setImageViewChecked(13);
++                break;
++            case R.id.color15:
++				colorTmp = 15;
++                setImageViewChecked(14);
++                break;
++            case R.id.color16:
++				colorTmp = 16;
++                setImageViewChecked(15);
++                break;
++            case R.id.color17:
++				colorTmp = 17;
++                setImageViewChecked(16);
++                break;
++            case R.id.color18:
++				colorTmp = 18;
++                setImageViewChecked(17);
++                break;
++            case R.id.color19:
++				colorTmp = 19;
++                setImageViewChecked(18);
++                break;
++            case R.id.color20:
++				colorTmp = 20;
++                setImageViewChecked(19);
++                break;
++            case R.id.btn_cancel:
++                setImageViewChecked(defaultColor-1);
++                this.dismiss();
++                break;
++            case R.id.btn_done:
++                Log.i("dongdong",getCheckedColor() + "");
++				doneColor = 1;
++				Log.i("dongdong","doneColor == 1" + "  " + (doneColor==1));
++				if(linstener == null) linstener = linstener_copy;
++				defaultColor = getCheckedColor();
++				colorTmp = defaultColor;
++                linstener.colorSelectCallBack(pkg, getCheckedColor());
++                this.dismiss();
++                break;
++            default:
++                break;
++        }
++    }
++
++	@Override
++    public void onSaveInstanceState(Bundle outState) {
++		Log.i(TAG,"onSaveInstanceState()");
++        outState.putInt("color_tmp", colorTmp);
++        super.onSaveInstanceState(outState);
++    }
++	
++	@Override
++    public void onStart() {
++        super.onStart();
++		Log.i(TAG,"onStart()");
++    }
++
++    @Override
++    public void onStop() {
++        super.onStop();
++		Log.i(TAG,"onStop()");
++    }
++
++    @Override
++    public void onDestroyView() {
++        super.onDestroyView();
++		Log.i(TAG,"onDestoryView");
++    }
++
++    @Override
++    public void onDetach() {
++        super.onDetach();
++		Log.i(TAG,"onDetach()");
++    }
++
++    @Override
++    public void onAttach(Context context) {
++        super.onAttach(context);
++		Log.i(TAG,"onAttach()");
++    }
++}
+Index: packages/apps/Settings/src/com/android/settings/notification/AppNotificationSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/AppNotificationSettings.java	(revision 1100)
++++ packages/apps/Settings/src/com/android/settings/notification/AppNotificationSettings.java	(revision 1101)
+@@ -36,6 +36,7 @@
+ import com.android.settings.notification.NotificationBackend.AppRow;
+ import com.android.settingslib.RestrictedSwitchPreference;
+ 
++import android.support.v7.preference.Preference;
+ 
+ import java.util.List;
+ 
+@@ -50,6 +51,10 @@
+ 
+     private AppRow mAppRow;
+     private boolean mDndVisualEffectsSuppressed;
++	
++	// add by dongdongli 20170824 start {
++	private CustomizedDialog colorDialog;
++	// add end }
+ 
+     @Override
+     public void onActivityCreated(Bundle savedInstanceState) {
+@@ -77,6 +82,11 @@
+                         KEY_VISIBILITY_OVERRIDE);
+         mBlock = (RestrictedSwitchPreference) getPreferenceScreen().findPreference(KEY_BLOCK);
+         mSilent = (RestrictedSwitchPreference) getPreferenceScreen().findPreference(KEY_SILENT);
++		
++		//add by dongdongli 20170818 start {
++		mNotificationColor = (AppNotificationColorPreference) getPreferenceScreen().findPreference(KEY_NOTIFICATION_COLOR);	
++		
++		//add end }
+ 
+         if (mPkgInfo != null) {
+             mAppRow = mBackend.loadAppRow(mContext, mPm, mPkgInfo);
+@@ -95,8 +105,34 @@
+             setupPriorityPref(mAppRow.appBypassDnd);
+             setupVisOverridePref(mAppRow.appVisOverride);
+             updateDependents(mAppRow.appImportance);
++			//add by dongdongli 20170818 start {
++			setupColorPrefs(mAppRow.notificationColor);
++			colorDialog = CustomizedDialog.newInstance(mPkg, mUid);
++			colorDialog.setColorSelectLinstener(new CustomizedDialog.ColorSelectLinstener() {
++				@Override
++				public void colorSelectCallBack(String packageName, int color) {
++					mBackend.setNotificationColor(mPkg, mUid, color);
++					mNotificationColor.setColorImage(color);
++					Log.i(TAG,"colorSelectCallBack ---" + color);
++				}
++			});
++			setPreferenceOnClickEvent();
++			//add end }
+         }
+     }
++	
++	// add by dongdongli 20170818 start {
++	// define preference onClick Event (show Dialog)
++	public void setPreferenceOnClickEvent(){
++		mNotificationColor.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++            @Override
++            public boolean onPreferenceClick(Preference preference) {
++				colorDialog.show(getFragmentManager(), "Color_Settings");
++				return true;
++            }
++        });
++	}
++	//add end }
+ 
+     @Override
+     protected void updateDependents(int importance) {
+Index: packages/apps/Settings/src/com/android/settings/notification/AppNotificationColorPreference.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/AppNotificationColorPreference.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/notification/AppNotificationColorPreference.java	(revision 1101)
+@@ -0,0 +1,80 @@
++/*
++ * Copyright (C) 2015 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings.notification;
++
++import android.content.Context;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.PreferenceViewHolder;
++import android.text.TextUtils;
++import android.util.AttributeSet;
++import android.view.View;
++import android.widget.TextView;
++import android.widget.ImageView;
++import android.util.Log;
++import android.app.FragmentManager;
++
++import com.android.settings.R;
++
++public class AppNotificationColorPreference extends Preference {
++
++	private Context mContext;
++	private int notification_color = 1;
++	private OnNotificationColorChangedListener listener;
++	private ImageView colorImage;
++	
++	private FragmentManager fragmentManager;
++
++    public void setFragmentManager(FragmentManager fragmentManager) {
++        this.fragmentManager = fragmentManager;
++    }
++	
++	public interface OnNotificationColorChangedListener {
++		void onNotificationColorChangedListener(int color);
++	}
++
++    public AppNotificationColorPreference(Context context, AttributeSet attrs) {
++        super(context, attrs);
++		mContext = context;
++		setLayoutResource(R.layout.app_notification_color_preference);	
++    }
++	
++	@Override
++    public void onBindViewHolder(PreferenceViewHolder holder) {
++        super.onBindViewHolder(holder);
++        colorImage = (ImageView) holder.findViewById(R.id.color_image);
++        colorImage.setImageResource(R.drawable.color_rect);
++		colorImage.setImageLevel(notification_color);
++    }
++	
++	public void setColorImage(int color) {
++		if (colorImage != null)
++		colorImage.setImageLevel(color);
++	}
++	
++	public void setOnNotificationColorChangedListener(OnNotificationColorChangedListener listener){
++		this.listener = listener;
++	}
++	
++	public int getNotificationColor() {
++		return notification_color;
++	}
++	
++	public void setNotificationColor(int color) {
++		notification_color = color;
++	}
++
++}
+\ No newline at end of file
+Index: packages/apps/Settings/src/com/android/settings/notification/NotificationSettingsBase.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/NotificationSettingsBase.java	(revision 1100)
++++ packages/apps/Settings/src/com/android/settings/notification/NotificationSettingsBase.java	(revision 1101)
+@@ -44,6 +44,10 @@
+ import static com.android.settings.notification.RestrictedDropDownPreference.RestrictedItem;
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+ 
++//add by dongdongli 20170823 start {
++import android.content.res.Configuration;
++//add end }
++
+ abstract public class NotificationSettingsBase extends SettingsPreferenceFragment {
+     private static final String TAG = "NotifiSettingsBase";
+     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+@@ -71,6 +75,12 @@
+     protected RestrictedSwitchPreference mSilent;
+     protected EnforcedAdmin mSuspendedAppsAdmin;
+     protected boolean mShowSlider = false;
++	
++	//add by dongdongli 20170818 start {
++	protected static final String KEY_NOTIFICATION_COLOR = "color_settings";
++	protected AppNotificationColorPreference mNotificationColor;
++	protected int default_color = 1;
++	//add end }
+ 
+     @Override
+     public void onActivityCreated(Bundle savedInstanceState) {
+@@ -153,6 +163,13 @@
+             mVisibilityOverride.setDisabledByAdmin(mSuspendedAppsAdmin);
+         }
+     }
++	
++	//add by dongdongli 20170818 start {
++	protected void setupColorPrefs(int color) {
++		default_color = color;
++		mNotificationColor.setNotificationColor(color);
++	}
++	//add end }
+ 
+     protected void setupImportancePrefs(boolean notBlockable, boolean notSilenceable,
+                                         int importance, boolean banned) {
+Index: packages/apps/Settings/res/layout-land/dialog_layout.xml
+===================================================================
+--- packages/apps/Settings/res/layout-land/dialog_layout.xml	(revision 0)
++++ packages/apps/Settings/res/layout-land/dialog_layout.xml	(revision 1101)
+@@ -0,0 +1,226 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:orientation="vertical"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent">
++
++    <TextView
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginLeft="20dp"
++        android:layout_marginTop="24dp"
++        android:layout_marginBottom="20dp"
++        android:text="@string/notification_color_settings"
++        android:textSize="20sp"
++        android:textColor="#000000"
++        android:typeface="normal" />
++
++    <GridLayout
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_gravity="center"
++        android:layout_marginLeft="20dp"
++        android:layout_marginRight="20dp"
++        android:columnCount="7">
++
++        <ImageView
++            android:id="@+id/color1"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/white_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color2"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/teal200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color3"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/orange200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color4"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:background="@drawable/amber200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color5"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/lime200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color6"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/light_green200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color7"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/green200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color8"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:background="@drawable/cyan200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color9"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/light_blue200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color10"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/blue200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color11"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/indigo200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color12"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:background="@drawable/deep_purple100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color13"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/purple100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color14"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/red100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color15"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/red200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color16"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:background="@drawable/deep_orange100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color17"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/brown100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color18"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/blue_grey200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color19"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/grey300_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color20"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:background="@drawable/grey400_circle"
++            android:padding="1dp" />
++    </GridLayout>
++
++    <RelativeLayout
++        android:layout_marginTop="24dp"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginBottom="10dp"
++        android:orientation="horizontal">
++        <TextView
++            android:id="@+id/btn_cancel"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginRight="10dp"
++            android:layout_toLeftOf="@+id/btn_done"
++            android:text="@string/notification_color_settings_cancel_btn"
++            android:textColor="#009688"
++            android:textSize="14sp" />
++
++        <TextView
++            android:id="@+id/btn_done"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginRight="25dp"
++            android:layout_alignParentEnd="true"
++            android:text="@string/notification_color_settings_done_btn"
++            android:textColor="#009688"
++            android:textSize="14sp" />
++
++    </RelativeLayout>
++
++</LinearLayout>
+\ No newline at end of file
+Index: packages/apps/Settings/res/values/colors.xml
+===================================================================
+--- packages/apps/Settings/res/values/colors.xml	(revision 1100)
++++ packages/apps/Settings/res/values/colors.xml	(revision 1101)
+@@ -124,7 +124,6 @@
+     <!-- Gestures settings -->
+     <color name="gestures_setting_background_color">#f5f5f5</color>
+ 
+-
+ <!-- ADD-S By Justin.Shen for Hide/Show navigation-bar -->
+     <color name="navigationbar_color_0">#00000000</color>
+     <color name="navigationbar_color_1">#454545</color>
+@@ -137,4 +136,27 @@
+     <color name="navigationbar_color_8">#fcddf2</color>
+     <color name="navigationbar_color_9">#f9e1e1</color>
+     <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
++
++    <!-- add by dongdongli 20170817 start { -->
++    <color name="white">#ffffff</color>
++    <color name="teal200">#80cbc4</color>
++    <color name="orange200">#ffcc80</color>
++    <color name="amber200">#ffe082</color>
++    <color name="lime200">#e6ee9c</color>
++    <color name="light_green200">#c5e1a5</color>
++    <color name="green200">#a5d6a7</color>
++    <color name="cyan200">#80deea</color>
++    <color name="light_blue200">#81d4fa</color>
++    <color name="blue200">#90caf9</color>
++    <color name="indigo200">#9fa8da</color>
++    <color name="deep_purple100">#d1c4e9</color>
++    <color name="purple100">#e1bee7</color>
++    <color name="red100">#ffcdd2</color>
++    <color name="red200">#ef9a9a</color>
++    <color name="deep_orange100">#ffccbc</color>
++    <color name="brown100">#d7ccc8</color>
++    <color name="blue_grey200">#b0bec5</color>
++    <color name="grey300">#e0e0e0</color>
++    <color name="grey400">#bdbdbd</color>
++    <!-- add end } -->
+ </resources>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1100)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1101)
+@@ -7883,6 +7883,16 @@
+     <string name="navigationbar_background_color_summary">"Change the background color of navigation bar, but it may not be applied to all apps."</string>
+     <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+ 	<string name="regulartory_safety_title">Regulatory &amp; Safety</string>
++    
++    <!-- customize color notification apps -->
++    <string name="notification_color_settings">Colour settings</string>
++    <string name="notification_color_settings_cancel_btn">CANCEL</string>
++    <string name="notification_color_settings_done_btn">DONE</string>
++    <string name="notification_color_preference_title">Colour settings</string>
++    <string name="notification_color_preference_summary">Set a colour for the app notification.</string>
++    <string name="filter_customize_color_notifications_apps">Highlighted in colour</string>
++
++
+     <string name="reset_attention">Erase all data and reset to factory defaults? Your device will restart to perform a factory reset. This action can not be undone.</string>
+     <string name="reset_confirm">RESET</string>
+     <string name="reset_cancel">CANCEL</string>	
+Index: packages/apps/Settings/res/values/dimens.xml
+===================================================================
+--- packages/apps/Settings/res/values/dimens.xml	(revision 1100)
++++ packages/apps/Settings/res/values/dimens.xml	(revision 1101)
+@@ -316,4 +316,13 @@
+     <!-- Visible vertical space we want to show below password edittext field when ime is shown.
+          The unit is sp as it is related to the text size of password requirement item. -->
+     <dimen name="visible_vertical_space_below_password">20sp</dimen>
++    
++    <!-- add by dongdongli 20170817 start { -->
++    <dimen name="circle_width">55dp</dimen>
++    <dimen name="circle_height">52dp</dimen>
++    <dimen name="circle_margin_bottom">6dp</dimen>
++    <dimen name="circle_margin_right">20dp</dimen>	
++    <dimen name="rect_width">40dp</dimen>
++    <dimen name="rect_height">40dp</dimen>
++    <!-- add end } -->
+ </resources>
+Index: packages/apps/Settings/res/xml/app_notification_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/app_notification_settings.xml	(revision 1100)
++++ packages/apps/Settings/res/xml/app_notification_settings.xml	(revision 1101)
+@@ -54,5 +54,11 @@
+             android:summary="@string/app_notification_override_dnd_summary"
+             android:order="6"
+             settings:useAdditionalSummary="true" />
++			
++	<com.android.settings.notification.AppNotificationColorPreference
++			android:key="color_settings"
++			android:title="@string/notification_color_preference_title"
++            android:summary="@string/notification_color_preference_summary"
++			android:order="7"/>
+ 
+ </PreferenceScreen>
+Index: packages/apps/Settings/res/drawable/amber200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/amber200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/amber200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/amber200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/red200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/red200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/red200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/red200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/blue_grey200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/blue_grey200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/blue_grey200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/blue_grey200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/ic_uncheck_black_24dp.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/ic_uncheck_black_24dp.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/ic_uncheck_black_24dp.xml	(revision 1101)
+@@ -0,0 +1,4 @@
++<vector android:height="52dp" android:viewportHeight="24.0"
++    android:viewportWidth="24.0" android:width="52dp" xmlns:android="http://schemas.android.com/apk/res/android">
++    <path android:fillColor="#00000000" android:pathData="M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z"/>
++</vector>
+Index: packages/apps/Settings/res/drawable/brown100_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/brown100_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/brown100_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/brown100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/white_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/white_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/white_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/white" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/green200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/green200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/green200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/green200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/purple100_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/purple100_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/purple100_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/purple100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/grey400_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/grey400_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/grey400_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/grey400" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/red100_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/red100_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/red100_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/red100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/amber200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/amber200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/amber200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/amber200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/blue200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/blue200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/blue200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/blue200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/teal200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/teal200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/teal200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/teal200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/blue200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/blue200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/blue200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/blue200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/ic_check_black_24dp.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/ic_check_black_24dp.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/ic_check_black_24dp.xml	(revision 1101)
+@@ -0,0 +1,4 @@
++<vector android:height="52dp" android:viewportHeight="24.0"
++    android:viewportWidth="24.0" android:width="52dp" xmlns:android="http://schemas.android.com/apk/res/android">
++    <path android:fillColor="#FF000000" android:pathData="M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z"/>
++</vector>
+Index: packages/apps/Settings/res/drawable/brown100_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/brown100_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/brown100_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/brown100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/light_green200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/light_green200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/light_green200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/light_green200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/light_green200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/light_green200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/light_green200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/light_green200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/white_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/white_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/white_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/white" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/indigo200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/indigo200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/indigo200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/indigo200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/lime200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/lime200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/lime200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/lime200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/deep_purple100_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/deep_purple100_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/deep_purple100_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/deep_purple100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/deep_purple100_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/deep_purple100_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/deep_purple100_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/deep_purple100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/grey300_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/grey300_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/grey300_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/grey300" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/grey300_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/grey300_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/grey300_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/grey300" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/blue_grey200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/blue_grey200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/blue_grey200_rect.xml	(revision 1101)
+@@ -0,0 +1,20 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/blue_grey200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/light_blue200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/light_blue200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/light_blue200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/light_blue200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/cyan200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/cyan200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/cyan200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/cyan200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/red100_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/red100_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/red100_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/red100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/color_image_check.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/color_image_check.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/color_image_check.xml	(revision 1101)
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<level-list xmlns:android="http://schemas.android.com/apk/res/android">
++    <item android:maxLevel="0" android:drawable="@drawable/ic_uncheck_black_24dp" />
++    <item android:maxLevel="20" android:drawable="@drawable/ic_check_black_24dp" />
++</level-list>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/teal200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/teal200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/teal200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/teal200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/lime200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/lime200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/lime200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/lime200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/deep_orange100_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/deep_orange100_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/deep_orange100_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/deep_orange100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/orange200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/orange200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/orange200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/orange200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/deep_orange100_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/deep_orange100_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/deep_orange100_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/deep_orange100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/light_blue200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/light_blue200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/light_blue200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/light_blue200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/red200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/red200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/red200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/red200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/orange200_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/orange200_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/orange200_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/orange200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/cyan200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/cyan200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/cyan200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/cyan200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/color_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/color_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/color_rect.xml	(revision 1101)
+@@ -0,0 +1,23 @@
++<?xml version="1.0" encoding="utf-8"?>
++<level-list xmlns:android="http://schemas.android.com/apk/res/android">
++    <item android:maxLevel="1" android:drawable="@drawable/white_rect" />
++    <item android:maxLevel="2" android:drawable="@drawable/teal200_rect" />
++    <item android:maxLevel="3" android:drawable="@drawable/orange200_rect" />
++    <item android:maxLevel="4" android:drawable="@drawable/amber200_rect" />
++    <item android:maxLevel="5" android:drawable="@drawable/lime200_rect" />
++    <item android:maxLevel="6" android:drawable="@drawable/light_green200_rect" />
++    <item android:maxLevel="7" android:drawable="@drawable/green200_rect" />
++    <item android:maxLevel="8" android:drawable="@drawable/cyan200_rect" />
++    <item android:maxLevel="9" android:drawable="@drawable/light_blue200_rect" />
++    <item android:maxLevel="10" android:drawable="@drawable/blue200_rect" />
++    <item android:maxLevel="11" android:drawable="@drawable/indigo200_rect" />
++    <item android:maxLevel="12" android:drawable="@drawable/deep_purple100_rect" />
++    <item android:maxLevel="13" android:drawable="@drawable/purple100_rect" />
++    <item android:maxLevel="14" android:drawable="@drawable/red100_rect" />
++    <item android:maxLevel="15" android:drawable="@drawable/red200_rect" />
++    <item android:maxLevel="16" android:drawable="@drawable/deep_orange100_rect" />
++    <item android:maxLevel="17" android:drawable="@drawable/brown100_rect" />
++    <item android:maxLevel="18" android:drawable="@drawable/blue_grey200_rect" />
++    <item android:maxLevel="19" android:drawable="@drawable/grey300_rect" />
++    <item android:maxLevel="20" android:drawable="@drawable/grey400_rect" />
++</level-list>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/green200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/green200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/green200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/green200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/grey400_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/grey400_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/grey400_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/grey400" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/indigo200_rect.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/indigo200_rect.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/indigo200_rect.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle"
++    android:useLevel="false">
++    <solid android:color="@color/indigo200" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/rect_width"
++        android:height="@dimen/rect_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/drawable/purple100_circle.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/purple100_circle.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/purple100_circle.xml	(revision 1101)
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="oval"
++    android:useLevel="false">
++    <solid android:color="@color/purple100" />
++
++    <padding
++        android:left="2dp"
++        android:top="1dp"
++        android:right="2dp"
++        android:bottom="1dp" />
++
++    <stroke
++        android:width="1dp"
++        android:color="@color/black" />
++
++    <size
++        android:width="@dimen/circle_width"
++        android:height="@dimen/circle_height" />
++
++</shape>
+\ No newline at end of file
+Index: packages/apps/Settings/res/layout/app_item.xml
+===================================================================
+--- packages/apps/Settings/res/layout/app_item.xml	(revision 1100)
++++ packages/apps/Settings/res/layout/app_item.xml	(revision 1101)
+@@ -77,5 +77,18 @@
+         android:layout_alignParentEnd="true"
+         android:layout_gravity="fill_horizontal|top"
+         android:duplicateParentState="true" />
++		
++	<ImageView
++        android:id="@+id/notification_color_image"
++        android:layout_width="40dp"
++        android:layout_height="40dp"
++        android:layout_alignParentEnd="true"
++        android:layout_gravity="center"
++        android:scaleType="fitXY"
++        android:layout_marginEnd="8dip"
++        android:contentDescription="@null"
++        android:duplicateParentState="true"
++		android:src="@drawable/color_rect"
++        android:visibility="gone"/>
+ 
+ </RelativeLayout>
+Index: packages/apps/Settings/res/layout/app_notification_color_preference.xml
+===================================================================
+--- packages/apps/Settings/res/layout/app_notification_color_preference.xml	(revision 0)
++++ packages/apps/Settings/res/layout/app_notification_color_preference.xml	(revision 1101)
+@@ -0,0 +1,47 @@
++<?xml version="1.0" encoding="utf-8"?>
++<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="wrap_content"
++    android:layout_height="wrap_content"
++    >
++
++    <RelativeLayout
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++		android:layout_marginLeft="18dp"
++        android:layout_weight="1"
++        android:paddingTop="16dip"
++        android:paddingBottom="16dip">
++
++        <TextView
++            android:id="@+android:id/title"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:singleLine="true"
++            android:textAppearance="@android:style/TextAppearance.Material.Subhead"
++            android:textColor="?android:attr/textColorPrimary"
++            android:ellipsize="marquee"
++            android:fadingEdge="horizontal" />
++
++        <TextView
++            android:id="@android:id/summary"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_below="@android:id/title"
++            android:layout_alignStart="@android:id/title"
++            android:visibility="gone"
++            android:textAlignment="viewStart"
++            android:textAppearance="@android:style/TextAppearance.Material.Body1"
++            android:textColor="?android:attr/textColorSecondary"
++            android:maxLines="10" />
++
++    </RelativeLayout>
++
++    <ImageView
++        android:id="@+id/color_image"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_alignParentEnd="true"
++        android:layout_centerVertical="true"
++        android:layout_marginRight="@dimen/circle_margin_right"
++        android:src="@drawable/teal200_rect" />
++</RelativeLayout>
+\ No newline at end of file
+Index: packages/apps/Settings/res/layout/dialog_layout.xml
+===================================================================
+--- packages/apps/Settings/res/layout/dialog_layout.xml	(revision 0)
++++ packages/apps/Settings/res/layout/dialog_layout.xml	(revision 1101)
+@@ -0,0 +1,226 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:orientation="vertical"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent">
++
++    <TextView
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginLeft="20dp"
++        android:layout_marginTop="24dp"
++        android:layout_marginBottom="20dp"
++        android:text="@string/notification_color_settings"
++        android:textSize="20sp"
++        android:textColor="#000000"
++        android:typeface="normal" />
++
++    <GridLayout
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_gravity="center"
++        android:layout_marginLeft="20dp"
++        android:layout_marginRight="20dp"
++        android:columnCount="4">
++
++        <ImageView
++            android:id="@+id/color1"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/white_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color2"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/teal200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color3"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/orange200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color4"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:background="@drawable/amber200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color5"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/lime200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color6"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/light_green200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color7"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/green200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color8"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:background="@drawable/cyan200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color9"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/light_blue200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color10"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/blue200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color11"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/indigo200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color12"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:background="@drawable/deep_purple100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color13"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/purple100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color14"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/red100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color15"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/red200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color16"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginBottom="@dimen/circle_margin_bottom"
++            android:background="@drawable/deep_orange100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color17"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/brown100_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color18"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/blue_grey200_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color19"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:layout_marginRight="@dimen/circle_margin_right"
++            android:background="@drawable/grey300_circle"
++            android:padding="1dp" />
++
++        <ImageView
++            android:id="@+id/color20"
++            android:layout_width="@dimen/circle_width"
++            android:layout_height="@dimen/circle_height"
++            android:background="@drawable/grey400_circle"
++            android:padding="1dp" />
++    </GridLayout>
++
++    <RelativeLayout
++        android:layout_marginTop="24dp"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginBottom="10dp"
++        android:orientation="horizontal">
++        <TextView
++            android:id="@+id/btn_cancel"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginRight="10dp"
++            android:layout_toLeftOf="@+id/btn_done"
++            android:text="@string/notification_color_settings_cancel_btn"
++            android:textColor="#009688"
++            android:textSize="14sp" />
++
++        <TextView
++            android:id="@+id/btn_done"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginRight="25dp"
++            android:layout_alignParentEnd="true"
++            android:text="@string/notification_color_settings_done_btn"
++            android:textColor="#009688"
++            android:textSize="14sp" />
++
++    </RelativeLayout>
++
++</LinearLayout>
+\ No newline at end of file
+Index: frameworks/base/services/core/java/com/android/server/notification/RankingConfig.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/notification/RankingConfig.java	(revision 1100)
++++ frameworks/base/services/core/java/com/android/server/notification/RankingConfig.java	(revision 1101)
+@@ -28,4 +28,10 @@
+     void setImportance(String packageName, int uid, int importance);
+ 
+     int getImportance(String packageName, int uid);
++	
++	//add by dongdongli 20170818 start {
++	void setNotificationColor(String packageName, int uid, int color);
++
++    int getNotificationColor(String packageName, int uid);	
++	//add end }
+ }
+Index: frameworks/base/services/core/java/com/android/server/notification/RankingHelper.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/notification/RankingHelper.java	(revision 1100)
++++ frameworks/base/services/core/java/com/android/server/notification/RankingHelper.java	(revision 1101)
+@@ -61,6 +61,11 @@
+     private static final int DEFAULT_PRIORITY = Notification.PRIORITY_DEFAULT;
+     private static final int DEFAULT_VISIBILITY = Ranking.VISIBILITY_NO_OVERRIDE;
+     private static final int DEFAULT_IMPORTANCE = Ranking.IMPORTANCE_UNSPECIFIED;
++	
++	//add by dongdongli 20170818 start {
++		private static final String ATT_NOTIFICATION_COLOR = "notification_color";
++	private static final int DEFAULT_NOTIFICATION_COLOR = 1;
++	//add end }
+ 
+     private final NotificationSignalExtractor[] mSignalExtractors;
+     private final NotificationComparator mPreliminaryComparator = new NotificationComparator();
+@@ -166,6 +171,9 @@
+                         r.importance = safeInt(parser, ATT_IMPORTANCE, DEFAULT_IMPORTANCE);
+                         r.priority = safeInt(parser, ATT_PRIORITY, DEFAULT_PRIORITY);
+                         r.visibility = safeInt(parser, ATT_VISIBILITY, DEFAULT_VISIBILITY);
++						//add by dongdongli 20170818 start {
++						r.notificationColor = safeInt(parser, ATT_NOTIFICATION_COLOR, DEFAULT_NOTIFICATION_COLOR);
++						//add end }
+                     }
+                 }
+             }
+@@ -214,8 +222,12 @@
+             if (forBackup && UserHandle.getUserId(r.uid) != UserHandle.USER_SYSTEM) {
+                 continue;
+             }
+-            final boolean hasNonDefaultSettings = r.importance != DEFAULT_IMPORTANCE
+-                    || r.priority != DEFAULT_PRIORITY || r.visibility != DEFAULT_VISIBILITY;
++			// modify by dongdongli 20170818 start {
++			//final boolean hasNonDefaultSettings = r.importance != DEFAULT_IMPORTANCE
++            //        || r.priority != DEFAULT_PRIORITY || r.visibility != DEFAULT_VISIBILITY;
++			final boolean hasNonDefaultSettings = r.importance != DEFAULT_IMPORTANCE
++                    || r.priority != DEFAULT_PRIORITY || r.visibility != DEFAULT_VISIBILITY || r.notificationColor != DEFAULT_NOTIFICATION_COLOR;
++			// modify end }
+             if (hasNonDefaultSettings) {
+                 out.startTag(null, TAG_PACKAGE);
+                 out.attribute(null, ATT_NAME, r.pkg);
+@@ -228,6 +240,12 @@
+                 if (r.visibility != DEFAULT_VISIBILITY) {
+                     out.attribute(null, ATT_VISIBILITY, Integer.toString(r.visibility));
+                 }
++				
++				//add by dongdongli 20170818 start { 
++				if (r.notificationColor != DEFAULT_NOTIFICATION_COLOR) {
++                    out.attribute(null, ATT_NOTIFICATION_COLOR, Integer.toString(r.notificationColor));
++                }
++				//add end }
+ 
+                 if (!forBackup) {
+                     out.attribute(null, ATT_UID, Integer.toString(r.uid));
+@@ -378,7 +396,26 @@
+         getOrCreateRecord(pkgName, uid).importance = importance;
+         updateConfig();
+     }
++	
++	//add by dongdongli 20170818 start {
++	/**
++     * Gets notification color.
++     */
++    @Override
++    public int getNotificationColor(String packageName, int uid) {
++        return getOrCreateRecord(packageName, uid).notificationColor;
++    }
+ 
++    /**
++     * Sets notification color.
++     */
++    @Override
++    public void setNotificationColor(String pkgName, int uid, int color) {
++        getOrCreateRecord(pkgName, uid).notificationColor = color;
++        updateConfig();
++    }	
++	//add end }
++
+     public void setEnabled(String packageName, int uid, boolean enabled) {
+         boolean wasEnabled = getImportance(packageName, uid) != Ranking.IMPORTANCE_NONE;
+         if (wasEnabled == enabled) {
+@@ -433,6 +470,13 @@
+                     pw.print(" visibility=");
+                     pw.print(Notification.visibilityToString(r.visibility));
+                 }
++				//add by dongdongli 20170818 start {
++				if (r.notificationColor != DEFAULT_NOTIFICATION_COLOR) {
++					pw.print(" notification_color=");
++					pw.print(String.valueOf(r.notificationColor));
++				}
++				//add end }
++				 
+                 pw.println();
+             }
+         }
+@@ -463,6 +507,11 @@
+                     if (r.visibility != DEFAULT_VISIBILITY) {
+                         record.put("visibility", Notification.visibilityToString(r.visibility));
+                     }
++					//add by dongdongli 20170818 start {
++					if (r.notificationColor != DEFAULT_NOTIFICATION_COLOR) {
++						record.put("notification_color", String.valueOf(r.notificationColor));
++					}
++					//add end }
+                 } catch (JSONException e) {
+                    // pass
+                 }
+@@ -552,6 +601,7 @@
+         int importance = DEFAULT_IMPORTANCE;
+         int priority = DEFAULT_PRIORITY;
+         int visibility = DEFAULT_VISIBILITY;
++		int notificationColor = DEFAULT_NOTIFICATION_COLOR;
+ 
+         /// M: [ALPS02808648] Add some logs for getting NPE root cause @{
+         @Override
+Index: frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 1100)
++++ frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 1101)
+@@ -1536,6 +1536,20 @@
+             enforceSystemOrSystemUI("Caller not system or systemui");
+             return mRankingHelper.getImportance(pkg, uid);
+         }
++		
++		// add by dongdongli 20170818 start {
++		// override the methods in INotitification.aidl for set/get Notification color
++		@Override
++		public void setNotificationColor(String pkg, int uid, int color){
++			mRankingHelper.setNotificationColor(pkg, uid, color);
++			savePolicyFile();
++		}
++		
++		@Override
++		public int getNotificationColor(String pkg, int uid){
++			return mRankingHelper.getNotificationColor(pkg, uid);
++		}
++		// add end }
+ 
+         /**
+          * System-only API for getting a list of current (i.e. not cleared) notifications.
+@@ -1543,6 +1557,13 @@
+          * Requires ACCESS_NOTIFICATIONS which is signature|system.
+          * @returns A list of all the notifications, in natural order.
+          */
++
++        /**
++         * System-only API for getting a list of current (i.e. not cleared) notifications.
++         *
++         * Requires ACCESS_NOTIFICATIONS which is signature|system.
++         * @returns A list of all the notifications, in natural order.
++         */
+         @Override
+         public StatusBarNotification[] getActiveNotifications(String callingPkg) {
+             // enforce() will ensure the calling uid has the correct permission
+Index: frameworks/base/core/java/android/app/INotificationManager.aidl
+===================================================================
+--- frameworks/base/core/java/android/app/INotificationManager.aidl	(revision 1100)
++++ frameworks/base/core/java/android/app/INotificationManager.aidl	(revision 1101)
+@@ -56,6 +56,11 @@
+     void setImportance(String pkg, int uid, int importance);
+     int getImportance(String pkg, int uid);
+     int getPackageImportance(String pkg);
++	
++    // add by dongdongli 20170818 start {
++    void setNotificationColor(String pkg, int uid, int color);
++    int getNotificationColor(String pkg, int uid);
++    // add end }
+ 
+     // TODO: Remove this when callers have been migrated to the equivalent
+     // INotificationListener method.
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/ActivatableNotificationView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/ActivatableNotificationView.java	(revision 1100)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/ActivatableNotificationView.java	(revision 1101)
+@@ -943,4 +943,91 @@
+         void onActivated(ActivatableNotificationView view);
+         void onActivationReset(ActivatableNotificationView view);
+     }
++	
++	// add by dongdongli 20170822 start {
++	// set SystemUI notification background color
++	public void setCustomBackground(int color){
++		if(color < 2 || color > 20) return;
++		switch (color) {
++			case 2:
++				mBackgroundNormal.setCustomBackground(R.drawable.teal200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.teal200);
++				break;
++			case 3:
++				mBackgroundNormal.setCustomBackground(R.drawable.orange200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.orange200);
++				break;
++			case 4:
++				mBackgroundNormal.setCustomBackground(R.drawable.amber200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.amber200);
++				break;
++			case 5:
++				mBackgroundNormal.setCustomBackground(R.drawable.lime200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.lime200);
++				break;
++			case 6:
++				mBackgroundNormal.setCustomBackground(R.drawable.light_green200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.light_green200);
++				break;
++			case 7:
++				mBackgroundNormal.setCustomBackground(R.drawable.green200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.green200);
++				break;
++			case 8:
++				mBackgroundNormal.setCustomBackground(R.drawable.cyan200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.cyan200);
++				break;
++			case 9:
++				mBackgroundNormal.setCustomBackground(R.drawable.light_blue200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.light_blue200);
++				break;
++			case 10:
++				mBackgroundNormal.setCustomBackground(R.drawable.blue200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.blue200);
++				break;
++			case 11:
++				mBackgroundNormal.setCustomBackground(R.drawable.indigo200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.indigo200);
++				break;
++			case 12:
++				mBackgroundNormal.setCustomBackground(R.drawable.deep_purple100);
++				mBackgroundDimmed.setCustomBackground(R.drawable.deep_purple100);
++				break;
++			case 13:
++				mBackgroundNormal.setCustomBackground(R.drawable.purple100);
++				mBackgroundDimmed.setCustomBackground(R.drawable.purple100);
++				break;
++			case 14:
++				mBackgroundNormal.setCustomBackground(R.drawable.red100);
++				mBackgroundDimmed.setCustomBackground(R.drawable.red100);
++				break;
++			case 15:
++				mBackgroundNormal.setCustomBackground(R.drawable.red200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.red200);
++				break;
++			case 16:
++				mBackgroundNormal.setCustomBackground(R.drawable.deep_orange100);
++				mBackgroundDimmed.setCustomBackground(R.drawable.deep_orange100);
++				break;
++			case 17:
++				mBackgroundNormal.setCustomBackground(R.drawable.brown100);
++				mBackgroundDimmed.setCustomBackground(R.drawable.brown100);
++				break;
++			case 18:
++				mBackgroundNormal.setCustomBackground(R.drawable.blue_grey200);
++				mBackgroundDimmed.setCustomBackground(R.drawable.blue_grey200);
++				break;
++			case 19:
++				mBackgroundNormal.setCustomBackground(R.drawable.grey300);
++				mBackgroundDimmed.setCustomBackground(R.drawable.grey300);
++				break;
++			case 20:
++				mBackgroundNormal.setCustomBackground(R.drawable.grey400);
++				mBackgroundDimmed.setCustomBackground(R.drawable.grey400);
++				break;
++			default:
++				break;
++		}
++	}
++	// add end }
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 1100)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 1101)
+@@ -126,6 +126,9 @@
+ 
+ import static android.service.notification.NotificationListenerService.Ranking.IMPORTANCE_HIGH;
+ 
++//add by dongdongli 20170822 start {
++import android.app.INotificationManager;
++//add end }
+ 
+ public abstract class BaseStatusBar extends SystemUI implements
+         CommandQueue.Callbacks, ActivatableNotificationView.OnActivatedListener,
+@@ -601,6 +604,12 @@
+             }
+         }
+     };
++	
++	//add by dongdongli 20170822 start {
++	// Get The NotificationManagerService
++	static INotificationManager sINM = INotificationManager.Stub.asInterface(
++            ServiceManager.getService(Context.NOTIFICATION_SERVICE));
++	//add end }
+ 
+     private final BroadcastReceiver mAllUsersReceiver = new BroadcastReceiver() {
+         @Override
+@@ -1648,6 +1657,21 @@
+ 
+         if (entry.row != null) {
+             row = entry.row;
++			//add by dongdongli 20170821 start {
++			// when the notification inflate to statusbar, set the notification background color
++			try {
++				int uid = pmUser.getPackageUidAsUser(sbn.getPackageName() , UserHandle.USER_SYSTEM);
++				int notificationColor = sINM.getNotificationColor(sbn.getPackageName(), uid);
++				Log.i(TAG,"notifyAsUser color =" + notificationColor);
++				row.setCustomBackground(notificationColor);                   
++			} catch (NameNotFoundException e) {
++				// noop
++			} catch (RemoteException e) {
++				throw e.rethrowFromSystemServer();
++			} catch (Exception e) {
++				Log.w(TAG, "Error calling NoMan", e);
++			}
++			//add end }
+             hasUserChangedExpansion = row.hasUserChangedExpansion();
+             userExpanded = row.isUserExpanded();
+             userLocked = row.isUserLocked();
+@@ -1666,6 +1690,22 @@
+             row.setHeadsUpManager(mHeadsUpManager);
+             row.setRemoteInputController(mRemoteInputController);
+             row.setOnExpandClickListener(this);
++			
++			//add by dongdongli 20170821 start {
++			// when the notification inflate to statusbar, set the notification background color
++			try {
++				int uid = pmUser.getPackageUidAsUser(sbn.getPackageName() , UserHandle.USER_SYSTEM);
++				int notificationColor = sINM.getNotificationColor(sbn.getPackageName(), uid);
++				Log.i(TAG,"notifyAsUser color =" + notificationColor);
++				row.setCustomBackground(notificationColor);                   
++			} catch (NameNotFoundException e) {
++				// noop
++			} catch (RemoteException e) {
++				throw e.rethrowFromSystemServer();
++			} catch (Exception e) {
++				Log.w(TAG, "Error calling NoMan", e);
++			}
++			//add end }
+ 
+             // Get the app name.
+             // Note that Notification.Builder#bindHeaderAppName has similar logic
+Index: frameworks/base/packages/SystemUI/res/drawable/grey300.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/grey300.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/grey300.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/grey300.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/grey300.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/orange200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/orange200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/orange200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/orange200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/orange200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/light_green200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/light_green200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/light_green200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/light_green200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/light_green200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/purple100.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/purple100.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/purple100.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/purple100.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/purple100.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/green200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/green200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/green200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/green200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/green200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/deep_orange100.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/deep_orange100.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/deep_orange100.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/deep_orange100.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/deep_orange100.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/blue200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/blue200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/blue200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/blue200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/blue200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/red200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/red200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/red200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/red200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/red200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/teal200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/teal200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/teal200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/teal200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/teal200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/grey400.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/grey400.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/grey400.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/grey400.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/grey400.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/cyan200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/cyan200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/cyan200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/cyan200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/cyan200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/light_blue200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/light_blue200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/light_blue200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/light_blue200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/light_blue200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/lime200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/lime200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/lime200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/lime200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/lime200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/amber200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/amber200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/amber200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/amber200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/amber200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/red100.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/red100.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/red100.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/red100.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/red100.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/brown100.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/brown100.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/brown100.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/brown100.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/brown100.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/deep_purple100.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/deep_purple100.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/deep_purple100.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/deep_purple100.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/deep_purple100.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/indigo200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/indigo200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/indigo200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/indigo200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/indigo200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable/blue_grey200.9.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable/blue_grey200.9.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/blue_grey200.9.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/blue_grey200.9.png	(revision 1101)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable/blue_grey200.9.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property

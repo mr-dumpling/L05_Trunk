@@ -1,0 +1,60 @@
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastMainSettings.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastMainSettings.java	(revision 8243)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastMainSettings.java	(revision 8244)
+@@ -205,7 +205,11 @@
+                 }
+                 Log.d(TAG, "refreshEnableCheckBox canReceiveMessage " + canReceiveMessage);
+                 if (canReceiveMessage) {
+-                    mEnableCBCheckBox.setEnabled(true);
++					if(getResources().getBoolean(R.bool.cb_tcl_customer_config)){
++						mEnableCBCheckBox.setEnabled(false);
++					} else {
++						mEnableCBCheckBox.setEnabled(true);
++					}
+                     setCheckBoxPreferenceEnable(mEnableCBCheckBox.isChecked());
+                 } else {
+                     mEnableCBCheckBox.setEnabled(false);
+@@ -219,8 +223,13 @@
+     public void setCheckBoxPreferenceEnable(boolean enabled) {
+         mImminentCheckBox.setEnabled(enabled && (!mEnableAllCheckBox.isChecked()));
+         mAmberCheckBox.setEnabled(enabled && (!mEnableAllCheckBox.isChecked()));
+-        mSpeechCheckBox.setEnabled(enabled);
+-        mEnableAllCheckBox.setEnabled(enabled);
++        if (getResources().getBoolean(R.bool.cb_tcl_customer_config)){
++			mSpeechCheckBox.setEnabled(false);
++			mEnableAllCheckBox.setEnabled(false);
++		} else {
++			mSpeechCheckBox.setEnabled(enabled);
++			mEnableAllCheckBox.setEnabled(enabled);
++		}
+     }
+ 
+     @Override
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/GeneralPreferenceActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/GeneralPreferenceActivity.java	(revision 8243)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/GeneralPreferenceActivity.java	(revision 8244)
+@@ -277,8 +277,8 @@
+ 							//Germany cellbroadcast reception deactivated by default					
+ 							Settings.System.putInt(context.getContentResolver(),Settings.System.CELLBROADCAST_SWITCH, 1);
+ 							if(mCBSwitchPref != null && mCBsettingPref != null) {				    	
+-								mCBSwitchPref.setChecked(false);
+-								mCBsettingPref.setEnabled(false);
++								mCBSwitchPref.setChecked(true);
++								mCBsettingPref.setEnabled(true);
+ 							}				
+ 						}
+ 					} 				
+@@ -394,7 +394,10 @@
+ 	});
+ 	cb_switch = Settings.System.getInt(getContentResolver(),Settings.System.CELLBROADCAST_SWITCH, 0)==1;
+ 	if (mCBSwitchPref != null) {
+-	   mCBSwitchPref.setChecked(cb_switch); 	
++		if(getResources().getBoolean(R.bool.def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile)){
++			mCBSwitchPref.setEnabled(false);
++		}
++		mCBSwitchPref.setChecked(cb_switch);
+ 	}
+ 	
+         mCBsettingPref = findPreference(CELL_BROADCAST);

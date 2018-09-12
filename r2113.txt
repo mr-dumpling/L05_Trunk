@@ -1,0 +1,58 @@
+Index: packages/apps/Settings/src/com/android/settings/users/UserDetailsSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/users/UserDetailsSettings.java	(revision 2112)
++++ packages/apps/Settings/src/com/android/settings/users/UserDetailsSettings.java	(revision 2113)
+@@ -35,7 +35,9 @@
+ import com.android.settings.R;
+ import com.android.settings.SettingsPreferenceFragment;
+ import com.android.settingslib.RestrictedLockUtils;
+-
++import android.content.SharedPreferences;
++import android.content.SharedPreferences.Editor;
++import android.util.Log;
+ import java.util.List;
+ 
+ /**
+@@ -70,6 +72,7 @@
+     private UserInfo mUserInfo;
+     private boolean mGuestUser;
+     private Bundle mDefaultGuestRestrictions;
++    private SharedPreferences mGuestpref;
+ 
+     @Override
+     protected int getMetricsCategory() {
+@@ -146,8 +149,10 @@
+             // Default title is for calling and SMS. Change to calling-only here
+             mPhonePref.setTitle(R.string.user_enable_calling);
+             mDefaultGuestRestrictions = mUserManager.getDefaultGuestRestrictions();
+-            mPhonePref.setChecked(
+-                    !mDefaultGuestRestrictions.getBoolean(UserManager.DISALLOW_OUTGOING_CALLS));
++            //mPhonePref.setChecked(!mDefaultGuestRestrictions.getBoolean(UserManager.DISALLOW_OUTGOING_CALLS));
++            SharedPreferences SpGuestValues = getActivity().getSharedPreferences("mGuestFlag",Context.MODE_PRIVATE);
++            mPhonePref.setChecked(SpGuestValues.getBoolean("mGuestValue",false));
++            Log.e("faker:", "SharedPreferences++++++++++++++++++++");
+         }
+         if (RestrictedLockUtils.hasBaseUserRestriction(context,
+                 UserManager.DISALLOW_REMOVE_USER, UserHandle.myUserId())) {
+@@ -207,6 +212,10 @@
+                     : DIALOG_CONFIRM_ENABLE_CALLING_AND_SMS);
+             return false;
+         }
++        mGuestpref = getActivity().getSharedPreferences("mGuestFlag",Context.MODE_PRIVATE); 
++        SharedPreferences.Editor editor = mGuestpref.edit(); 
++        editor.putBoolean("mGuestValue",false); 
++        editor.commit();
+         enableCallsAndSms(false);
+         return true;
+     }
+@@ -256,6 +265,10 @@
+                 return UserDialogs.createEnablePhoneCallsDialog(getActivity(),
+                         new DialogInterface.OnClickListener() {
+                             public void onClick(DialogInterface dialog, int which) {
++                                mGuestpref = getActivity().getSharedPreferences("mGuestFlag",Context.MODE_PRIVATE); 
++                                SharedPreferences.Editor editor = mGuestpref.edit(); 
++                                editor.putBoolean("mGuestValue",true); 
++                                editor.commit();
+                                 enableCallsAndSms(true);
+                             }
+                         });

@@ -1,0 +1,443 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/AndroidManifest.xml	(revision 8187)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/AndroidManifest.xml	(revision 8188)
+@@ -305,6 +305,7 @@
+             android:launchMode="singleTop"
+             android:excludeFromRecents="true"
+             android:taskAffinity=""
++			android:process="com.android.phone"
+             android:windowSoftInputMode="stateUnchanged">
+ 
+             <intent-filter>
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/quickcontact/QuickContactActivity.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/quickcontact/QuickContactActivity.java	(revision 8187)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/quickcontact/QuickContactActivity.java	(revision 8188)
+@@ -26,6 +26,8 @@
+ import android.animation.ObjectAnimator;
+ import android.app.Activity;
+ import android.app.Fragment;
++import android.app.AlertDialog;
++import android.app.Dialog;
+ import android.app.LoaderManager.LoaderCallbacks;
+ import android.app.SearchManager;
+ import android.content.ActivityNotFoundException;
+@@ -34,11 +36,13 @@
+ import android.content.Context;
+ import android.content.Intent;
+ import android.content.Loader;
++import android.content.DialogInterface;
+ import android.content.pm.PackageManager;
+ import android.content.pm.ResolveInfo;
+ import android.content.res.ColorStateList;
+ import android.content.res.Configuration;
+ import android.content.res.Resources;
++import android.content.ContentResolver;
+ import android.graphics.Bitmap;
+ import android.graphics.BitmapFactory;
+ import android.graphics.Color;
+@@ -51,6 +55,7 @@
+ import android.os.AsyncTask;
+ import android.os.Bundle;
+ import android.os.Trace;
++import android.provider.BlockedNumberContract;
+ import android.provider.CalendarContract;
+ import android.provider.ContactsContract;
+ import android.provider.ContactsContract.CommonDataKinds.Email;
+@@ -79,6 +84,7 @@
+ import android.support.v7.widget.CardView;
+ import android.telecom.PhoneAccount;
+ import android.telecom.TelecomManager;
++import android.telephony.PhoneNumberUtils;
+ import android.text.BidiFormatter;
+ import android.text.Spannable;
+ import android.text.SpannableString;
+@@ -123,6 +129,7 @@
+ import com.android.contacts.common.compat.CompatUtils;
+ import com.android.contacts.common.compat.EventCompat;
+ import com.android.contacts.common.compat.MultiWindowCompat;
++import com.android.contacts.common.compat.TelecomManagerUtil;
+ import com.android.contacts.common.dialog.CallSubjectDialog;
+ import com.android.contacts.common.editor.SelectAccountDialogFragment;
+ import com.android.contacts.common.interactions.TouchPointManager;
+@@ -274,7 +281,8 @@
+     private boolean mHasAlreadyBeenOpened;
+     private boolean mOnlyOnePhoneNumber;
+     private boolean mOnlyOneEmail;
+-
++	private String blockNumber;
++	
+     private QuickContactImageView mPhotoView;
+     private ExpandingEntryCardView mContactCard;
+     /// M:[for RCS-e] show Joyn Card(rcs-e plugin) under ContactCard.
+@@ -303,7 +311,7 @@
+     private SelectAccountDialogFragmentListener mSelectAccountFragmentListener;
+     private AsyncTask<Void, Void, Cp2DataCardModel> mEntriesAndActionsTask;
+     private AsyncTask<Void, Void, Void> mRecentDataTask;
+-
++	private BlockNumberTask mTask;
+     private AggregationSuggestionEngine mAggregationSuggestionEngine;
+     private List<Suggestion> mSuggestions;
+ 
+@@ -1284,15 +1292,16 @@
+     private void setHeaderNameText(int resId) {
+         if (mScroller != null) {
+             mScroller.setTitle(getText(resId) == null ? null : getText(resId).toString(),
++			getText(resId) == null ? null : getText(resId).toString(),
+                     /* isPhoneNumber= */ false);
+         }
+     }
+ 
+     /** Assign this string to the view if it is not empty. */
+-    private void setHeaderNameText(String value, boolean isPhoneNumber) {
++    private void setHeaderNameText(String phoneNumber, String value, boolean isPhoneNumber) {
+         if (!TextUtils.isEmpty(value)) {
+             if (mScroller != null) {
+-                mScroller.setTitle(value, isPhoneNumber);
++                mScroller.setTitle(phoneNumber, value, isPhoneNumber);
+             }
+         }
+     }
+@@ -1326,19 +1335,6 @@
+         mPhotoView.setIsBusiness(mContactData.isDisplayNameFromOrganization());
+         mPhotoSetter.setupContactPhoto(data, mPhotoView);
+         extractAndApplyTintFromPhotoViewAsynchronously();
+-        final String displayName = ContactDisplayUtils.getDisplayName(this, data).toString();
+-        setHeaderNameText(
+-                displayName, mContactData.getDisplayNameSource() == DisplayNameSources.PHONE);
+-        final String phoneticName = ContactDisplayUtils.getPhoneticName(this, data);
+-        if (mScroller != null) {
+-            // Show phonetic name only when it doesn't equal the display name.
+-            if (!TextUtils.isEmpty(phoneticName) && !phoneticName.equals(displayName)) {
+-                mScroller.setPhoneticName(phoneticName);
+-            } else {
+-                mScroller.setPhoneticNameGone();
+-            }
+-        }
+-
+         Trace.endSection();
+ 
+         mEntriesAndActionsTask = new AsyncTask<Void, Void, Cp2DataCardModel>() {
+@@ -1368,8 +1364,9 @@
+                 /// @}
+                 }
+             }
+-        };
++        };		
+         mEntriesAndActionsTask.execute();
++		
+         Log.d(TAG, "[bindContactData] mEntriesAndActionsTask.execute()");
+     }
+ 
+@@ -1393,7 +1390,22 @@
+             for (int i = 0; i < phoneDataItems.size(); ++i) {
+                 phoneNumbers[i] = ((PhoneDataItem) phoneDataItems.get(i)).getNumber();
+             }
++			blockNumber = phoneNumbers[0];
+         }
++		
++		final String displayName = ContactDisplayUtils.getDisplayName(this, mContactData).toString();
++        setHeaderNameText(blockNumber,
++                displayName, mContactData.getDisplayNameSource() == DisplayNameSources.PHONE);
++        final String phoneticName = ContactDisplayUtils.getPhoneticName(this, mContactData);
++		if (mScroller != null) {
++            // Show phonetic name only when it doesn't equal the display name.
++            if (!TextUtils.isEmpty(phoneticName) && !phoneticName.equals(displayName)) {
++                mScroller.setPhoneticName(phoneticName,blockNumber);
++            } else {
++                mScroller.setPhoneticNameGone();
++            }
++        }
++		
+         final Bundle phonesExtraBundle = new Bundle();
+         phonesExtraBundle.putStringArray(KEY_LOADER_EXTRA_PHONES, phoneNumbers);
+ 
+@@ -1974,6 +1986,7 @@
+             final PhoneDataItem phone = (PhoneDataItem) dataItem;
+             String phoneLabel = null;
+             if (!TextUtils.isEmpty(phone.getNumber())) {
++				Log.d(TAG,"phone number:"+phone.getNumber());
+                 primaryContentDescription.append(res.getString(R.string.call_other)).append(" ");
+                 header = sBidiFormatter.unicodeWrap(phone.buildDataStringForDisplay(context, kind),
+                         TextDirectionHeuristics.LTR);
+@@ -2861,6 +2874,9 @@
+         if (mAggregationSuggestionEngine != null) {
+             mAggregationSuggestionEngine.quit();
+         }
++		if (mTask != null) {
++            mTask.cancel(true /* mayInterruptIfRunning */);
++        }
+         ///M: Video Entry @{
+         ExtensionManager.getInstance().getOp01Extension().resetVideoState();
+         ///@}
+@@ -3179,11 +3195,20 @@
+             case R.id.menu_help:
+                 HelpUtils.launchHelpAndFeedbackForContactScreen(this);
+                 return true;
++			 case R.id.menu_blocked_numbers: 
++				addBlockNumberDialog();
++                /*final Intent intent = TelecomManagerUtil.createManageBlockedNumbersIntent(
++                        (TelecomManager) getSystemService(Context.TELECOM_SERVICE));
++                if (intent != null) {
++                    startActivity(intent);
++                }*/
++                return true;            
+             default:
+                 return super.onOptionsItemSelected(item);
+         }
+     }
+-
++	
++	
+     /// M: ALPS02782438.not support to show email for sim,Ruim and Usim which not support email
+     /// field. @{
+     private boolean isSupportShowEmailData(Contact contactsData) {
+@@ -3213,4 +3238,125 @@
+         return true;
+     }
+     /// @}
++	
++	//add block number start
++	private void addBlockNumberDialog() {
++		final String[] items = {getResources().getString(R.string.block_item_call),
++								getResources().getString(R.string.block_item_message)};
++		final boolean[] checkedItems={false,false};
++		final String[] resultItems = {"call", "message"};
++		AlertDialog.Builder builder = new AlertDialog.Builder(this);
++		builder.setTitle(getResources().getString(R.string.block_number_dialog_title))
++		.setMultiChoiceItems(items, checkedItems, new DialogInterface.OnMultiChoiceClickListener() {
++			@Override
++			public void onClick(DialogInterface dialog, int which, boolean isChecked) {	}					
++			})
++			.setPositiveButton("BLOCK", new DialogInterface.OnClickListener() {
++				@Override
++				public void onClick(DialogInterface dialog, int which) {
++					
++					StringBuilder type = new StringBuilder();
++					for (int i = 0; i < items.length; i++) {
++						if (checkedItems[i]) {
++							type.append(resultItems[i]);
++						}
++					}
++					if (TextUtils.isEmpty(type)) {
++						Toast.makeText(QuickContactActivity.this, getResources().getString(R.string.select_block_type),0).show();
++						return;
++					}
++					String phoneNumber = blockNumber;
++					if (TextUtils.isEmpty(phoneNumber)) {
++						Toast.makeText(QuickContactActivity.this,getResources().getString(R.string.empty_contact_phone_number),0).show();
++						return;
++					}
++					addBlockedNumber(phoneNumber,type.toString());
++					dialog.dismiss();					
++				}
++			})
++			.setNegativeButton("CANCEL", new DialogInterface.OnClickListener() {
++				@Override
++				public void onClick(DialogInterface dialog, int which) {
++					dialog.dismiss();
++				}
++			});
++		builder.show();
++	}
++	
++	/**
++     * Add blocked number if it does not exist.
++     */
++    private void addBlockedNumber(String number,String type) {
++        if (PhoneNumberUtils.isEmergencyNumber(number)) {
++            Toast.makeText(
++                    this,
++                    getString(R.string.blocked_numbers_block_emergency_number_message),
++                    Toast.LENGTH_SHORT).show();
++        } else {
++            // We disable the add button, to prevent the user from adding other numbers until the
++            // current number is added.
++            blockIfNotAlreadyBlocked(number, type, mScroller);
++        }
++    }	
++	
++	/**
++     * Runs an async task to write the number to the blocked numbers provider if it does not already
++     * exist.
++     *
++     * Triggers {@link Listener#onBlocked(String, boolean)} when task finishes to show proper UI.
++     */
++    public void blockIfNotAlreadyBlocked(String number, String type, Listener listener) {
++        mListener = listener;
++        mTask = new BlockNumberTask();
++        mTask.execute(number,type);
++    }
++	
++	
++	/**
++     * Task to block a number.
++     */
++    private class BlockNumberTask extends AsyncTask<String, Void, Boolean> {
++        private String mNumber;
++		private String mType;
++        /**
++         * @return true if number was blocked; false if number is already blocked.
++         */
++        @Override
++        protected Boolean doInBackground(String... params) {
++            mNumber = params[0];
++			mType = params[1];
++			/**
++			*we do not check the repeated number,cause we will add to list more times
++			***/
++            //if (BlockedNumberContract.isBlocked(QuickContactActivity.this, mNumber)) {
++            //    return false;
++            //} else {
++                ContentResolver contentResolver = QuickContactActivity.this.getContentResolver();
++                ContentValues newValues = new ContentValues();
++                newValues.put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER,
++                        mNumber);
++				newValues.put(BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE,
++                        mType);
++                contentResolver.insert(BlockedNumberContract.BlockedNumbers.CONTENT_URI,
++                        newValues);
++                return true;
++            //}
++        }
++
++        @Override
++        protected void onPostExecute(Boolean result) {
++            mTask = null;
++            if (mListener != null) {
++                mListener.onBlocked(mNumber, result);
++            }
++            mListener = null;
++        }
++    }
++	
++	Listener mListener;
++	
++	public interface Listener {
++        void onBlocked(String number, boolean isBlocked);
++    }
++	//add block number end
+ }
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/widget/MultiShrinkScroller.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/widget/MultiShrinkScroller.java	(revision 8187)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/widget/MultiShrinkScroller.java	(revision 8188)
+@@ -24,6 +24,7 @@
+ import android.hardware.display.DisplayManager;
+ import android.net.Uri;
+ import android.os.Trace;
++import android.text.TextUtils;
+ import android.support.v4.view.ViewCompat;
+ import android.support.v4.view.animation.PathInterpolatorCompat;
+ import android.util.AttributeSet;
+@@ -45,9 +46,11 @@
+ import android.widget.ScrollView;
+ import android.widget.TextView;
+ import android.widget.Toolbar;
++import android.widget.Toast;
++import android.provider.BlockedNumberContract;
+ 
+ import com.mediatek.contacts.ExtensionManager;
+-
++import com.android.contacts.quickcontact.QuickContactActivity;
+ /**
+  * A custom {@link ViewGroup} that operates similarly to a {@link ScrollView}, except with multiple
+  * subviews. These subviews are scrolled or shrinked one at a time, until each reaches their
+@@ -68,7 +71,7 @@
+  * order to track velocity, modify EdgeEffect color & perform the originally specified animations.
+  * As a result this ViewGroup has non-standard talkback and keyboard support.
+  */
+-public class MultiShrinkScroller extends FrameLayout {
++public class MultiShrinkScroller extends FrameLayout implements QuickContactActivity.Listener{
+ 
+     /**
+      * 1000 pixels per second. Ie, 1 pixel per millisecond.
+@@ -441,22 +444,37 @@
+         mTitleGradientView.setLayoutParams(titleGradientLayoutParams);
+     }
+ 
+-    public void setTitle(String title, boolean isPhoneNumber) {
++    public void setTitle(String number, String title, boolean isPhoneNumber) {
+         mLargeTextView.setText(title);
++		Toast.makeText(getContext(),"title:"+title+",number:"+number,0).show();		
+         // We have a phone number as "mLargeTextView" so make it always LTR.
+         if (isPhoneNumber) {
+-            mLargeTextView.setTextDirection(View.TEXT_DIRECTION_LTR);
++            mLargeTextView.setTextDirection(View.TEXT_DIRECTION_LTR);			
+         }
+         mPhotoTouchInterceptOverlay.setContentDescription(title);
++		if (!TextUtils.isEmpty(number)) {
++			if (BlockedNumberContract.isBlocked(getContext(), number)) {
++			mLargeTextView.setCompoundDrawablesRelativeWithIntrinsicBounds(
++                    R.drawable.ic_call_detail_block, 0, 0, 0);
++			}
++		}
++		
+     }
+ 
+-    public void setPhoneticName(String phoneticName) {
++    public void setPhoneticName(String phoneticName,String displayName) {
+         // Set phonetic name only when it was gone before or got changed.
+         if (mPhoneticNameView.getVisibility() == View.VISIBLE
+                 && phoneticName.equals(mPhoneticNameView.getText())) {
+             return;
+         }
++		Toast.makeText(getContext(),"phoneticName:"+phoneticName +",displayName:"+displayName,0).show();
+         mPhoneticNameView.setText(phoneticName);
++		if (!TextUtils.isEmpty(displayName)) {
++			if (BlockedNumberContract.isBlocked(getContext(), displayName)) {
++			mPhoneticNameView.setCompoundDrawablesRelativeWithIntrinsicBounds(
++                    R.drawable.ic_call_detail_block, 0, 0, 0);
++			}
++		}		
+         // Every time the phonetic name is changed, set mPhoneticNameView as visible,
+         // in case it just changed from Visibility=GONE.
+         mPhoneticNameView.setVisibility(View.VISIBLE);
+@@ -1401,4 +1419,20 @@
+         mIsTouchDisabledForSuppressLayout = areTouchesDisabled;
+     }
+ 
++	@Override
++    public void onBlocked(String number, boolean isBlocked) {
++        if (isBlocked) {
++            if (mLargeTextView != null && mLargeTextView.getVisibility() == View.VISIBLE) {
++				mLargeTextView.setCompoundDrawablesRelativeWithIntrinsicBounds(
++                    R.drawable.ic_call_detail_block, 0, 0, 0);
++			}
++			if (mPhoneticNameView !=null && mPhoneticNameView.getVisibility() == View.VISIBLE) {
++				mPhoneticNameView.setCompoundDrawablesRelativeWithIntrinsicBounds(
++                    R.drawable.ic_call_detail_block, 0, 0, 0);
++			}
++        } else {
++            
++        }       
++    }
++	
+ }
+Index: vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/BlockedNumberBackupAgent.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/BlockedNumberBackupAgent.java	(revision 8187)
++++ vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/BlockedNumberBackupAgent.java	(revision 8188)
+@@ -135,7 +135,7 @@
+         dataOutputStream.writeInt(VERSION);
+         writeString(dataOutputStream, blockedNumber.originalNumber);
+         writeString(dataOutputStream, blockedNumber.e164Number);
+-		writeString(dataOutputStream, blockedNumber.e164Number);
++		writeString(dataOutputStream, blockedNumber.blockType);
+         dataOutputStream.flush();
+ 
+         output.writeEntityHeader(Integer.toString(blockedNumber.id), outputStream.size());
+Index: vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/BlockedNumberProvider.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/BlockedNumberProvider.java	(revision 8187)
++++ vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/BlockedNumberProvider.java	(revision 8188)
+@@ -61,7 +61,7 @@
+ public class BlockedNumberProvider extends ContentProvider {
+     static final String TAG = "BlockedNumbers";
+ 
+-    private static final boolean DEBUG = true; // DO NOT SUBMIT WITH TRUE.
++    private static final boolean DEBUG = false; // DO NOT SUBMIT WITH TRUE.
+ 
+     private static final int BLOCKED_LIST = 1000;
+     private static final int BLOCKED_ID = 1001;

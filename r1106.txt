@@ -1,0 +1,172 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java	(revision 1105)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java	(revision 1106)
+@@ -66,7 +66,7 @@
+ import android.widget.SeekBar;
+ import android.widget.SeekBar.OnSeekBarChangeListener;
+ import android.widget.TextView;
+-
++import android.view.MotionEvent;
+ import com.android.settingslib.Utils;
+ import com.android.systemui.Interpolators;
+ import com.android.systemui.R;
+@@ -83,6 +83,11 @@
+ import static android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK;
+ import static android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_GENERIC;
+ 
++import android.content.BroadcastReceiver;
++import android.content.IntentFilter;
++import android.content.Intent;
++import android.widget.Switch;
++import android.provider.Settings;
+ /**
+  * Visual presentation of the volume dialog.
+  *
+@@ -105,6 +110,8 @@
+     private Window mWindow;
+     private CustomDialog mDialog;
+     private ViewGroup mDialogView;
++    private Switch mSilentSwitch;
++    private final Receiver mReceiver = new Receiver();
+     private ViewGroup mDialogRowsView;
+     private ViewGroup mDialogContentView;
+     private ImageButton mExpandButton;
+@@ -234,7 +241,8 @@
+                         }
+                     }
+                 });
+-
++        initSilentMode();
++        mReceiver.register(true);
+         if (mRows.isEmpty()) {
+             addRow(AudioManager.STREAM_RING,
+                     R.drawable.ic_volume_ringer, R.drawable.ic_volume_ringer_mute, true);
+@@ -260,7 +268,55 @@
+         mZenPanel.init(mZenModeController);
+         mZenPanel.setCallback(mZenPanelCallback);
+     }
++	
++    private class Receiver extends BroadcastReceiver {
++        private boolean mRegistered;
++        public void register(boolean register) {
++            if (mRegistered == register) return;
++            if (register) {
++                final IntentFilter filter = new IntentFilter();
++                filter.addAction(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION);
++                mContext.registerReceiver(this, filter);
++            } else {
++                mContext.unregisterReceiver(this);
++            }
++            mRegistered = register;
++        }
+ 
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            final String action = intent.getAction();
++            if (AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION.equals(action)) {
++				updateSilentMode();
++            }
++        }
++    }
++
++    private void updateSilentMode() {
++        mSilentSwitch.setChecked(mAudioManager.getRingerModeInternal()==AudioManager.RINGER_MODE_SILENT);
++    }
++    private void initSilentMode(){
++        mSilentSwitch =  (Switch) mDialog.findViewById(R.id.silent_mode);
++        updateSilentMode();
++		mSilentSwitch.setOnTouchListener(new OnTouchListener() {
++			@Override
++			public boolean onTouch(View arg0, MotionEvent event) {
++				if(event.getAction() != MotionEvent.ACTION_UP) 
++				    return true;
++				if(mAudioManager.getRingerModeInternal() != AudioManager.RINGER_MODE_SILENT){
++                    mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_SILENT);
++					Settings.System.putInt(mContext.getContentResolver(), Settings.System.VIBRATE_IN_SILENT,  1 );
++				}else {
++					mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
++					Settings.System.putInt(mContext.getContentResolver(), Settings.System.VIBRATE_IN_SILENT,  0 );
++				}
++				
++				updateSilentMode();
++				return true;
++			}
++		});    
++    }
++
+     @Override
+     public void onTuningChanged(String key, String newValue) {
+         if (SHOW_FULL_ZEN.equals(key)) {
+@@ -453,6 +509,7 @@
+     }
+ 
+     public void dismiss(int reason) {
++        mReceiver.register(false);
+         mHandler.obtainMessage(H.DISMISS, reason, 0).sendToTarget();
+     }
+ 
+@@ -462,6 +519,7 @@
+         mHandler.removeMessages(H.DISMISS);
+         rescheduleTimeoutH();
+         if (mShowing) return;
++        updateSilentMode();
+         mShowing = true;
+         mMotion.startShow();
+         Events.writeEvent(mContext, Events.EVENT_SHOW_DIALOG, reason, mKeyguard.isKeyguardLocked());
+Index: frameworks/base/packages/SystemUI/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 1105)
++++ frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 1106)
+@@ -26,7 +26,7 @@
+ 
+     <!-- Title shown in recents popup for removing an application from the list -->
+     <string name="status_bar_recent_remove_item_title">Remove from list</string>
+-
++    <string name="silent_mode_option_title">Silent mode</string>
+     <!-- Title shown in recents popup for inspecting an application's properties -->
+     <string name="status_bar_recent_inspect_item_title">App info</string>
+ 
+@@ -1121,7 +1121,7 @@
+         <item>Ring</item> <!-- STREAM_RING -->
+         <item>Media</item> <!-- STREAM_MUSIC -->
+         <item>Alarm</item> <!-- STREAM_ALARM -->
+-        <item></item> <!-- STREAM_NOTIFICATION -->
++        <item>Notification</item> <!-- STREAM_NOTIFICATION -->
+         <item>Bluetooth</item> <!-- STREAM_BLUETOOTH_SCO -->
+         <item></item> <!-- STREAM_SYSTEM_ENFORCED -->
+         <item></item> <!-- STREAM_DTMF -->
+Index: frameworks/base/packages/SystemUI/res/layout/volume_dialog.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/volume_dialog.xml	(revision 1105)
++++ frameworks/base/packages/SystemUI/res/layout/volume_dialog.xml	(revision 1106)
+@@ -28,6 +28,15 @@
+         android:layout_height="wrap_content"
+         android:orientation="vertical" >
+ 
++      <Switch android:id="@+id/silent_mode"
++                android:textSize="14sp"
++                android:layout_marginTop="8dip"
++                android:layout_width="match_parent"
++                android:layout_marginLeft ="20dip"
++                android:layout_height="wrap_content"
++                android:text="@string/silent_mode_option_title"/>
++
++   
+         <LinearLayout
+                 android:id="@+id/volume_dialog_rows"
+                 android:layout_width="match_parent"
+@@ -60,9 +69,11 @@
+             android:src="@drawable/ic_volume_collapse_animation"
+             android:background="@drawable/ripple_drawable"
+             tools:ignore="RtlHardcoded"
++            android:layout_marginTop="42dip"
++
+             android:layout_alignParentEnd="true"
+-            android:layout_alignParentTop="true"
+-            android:layout_marginTop="@dimen/volume_expander_margin_top"
++            android:layout_below ="@id/silent_mode"
++            
+             android:layout_marginEnd="@dimen/volume_expander_margin_end"/>
+ 
+ </RelativeLayout>

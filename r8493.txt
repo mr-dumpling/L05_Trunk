@@ -1,0 +1,75 @@
+Index: packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java	(revision 8492)
++++ packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java	(revision 8493)
+@@ -27,6 +27,8 @@
+ import android.content.IntentFilter;
+ import android.content.res.Resources;
+ import android.os.Bundle;
++import android.os.Handler;
++import android.os.Message;
+ import android.provider.Settings;
+ import android.support.v7.preference.Preference;
+ import android.support.v7.preference.PreferenceCategory;
+@@ -81,6 +83,8 @@
+ 
+     private static final String KEY_PAIRED_DEVICES = "paired_devices";
+ 
++    public static final String EXTRA_FROM_DRAWER = "from_drawer";
++
+     private static View mSettingsDialogView = null;
+ 
+     private BluetoothEnabler mBluetoothEnabler;
+@@ -96,10 +100,20 @@
+ 
+     private final IntentFilter mIntentFilter;
+ 
++    private boolean fromDrawer;
+ 
++
+     // accessed from inner class (not private to avoid thunks)
+     Preference mMyDevicePreference;
+ 
++    private Handler mHandler = new Handler(){
++        public void handleMessage(Message msg) {
++            super.handleMessage(msg);
++            MetricsLogger.action(getActivity(), MetricsEvent.ACTION_BLUETOOTH_SCAN);
++            startScanning();
++        }
++    };
++
+     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+         @Override
+         public void onReceive(Context context, Intent intent) {
+@@ -187,6 +201,11 @@
+         if (mBluetoothEnabler != null) {
+             mBluetoothEnabler.resume(getActivity());
+         }
++        Intent intent = getIntent();
++        if (intent != null) {
++            fromDrawer = intent.getBooleanExtra(EXTRA_FROM_DRAWER, false);
++        }
++
+         super.onResume();
+ 
+         mInitiateDiscoverable = true;
+@@ -359,7 +378,7 @@
+                         R.string.bluetooth_preference_found_devices,
+                         BluetoothDeviceFilter.UNBONDED_DEVICE_FILTER, mInitialScanStarted);
+ 
+-                if (!mInitialScanStarted) {
++                if (!mInitialScanStarted && !fromDrawer) {
+                     startScanning();
+                 }
+ 
+@@ -379,6 +398,10 @@
+                     mLocalAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+                     mInitiateDiscoverable = false;
+                 }
++                if (fromDrawer) {
++                    Message message = Message.obtain();
++                    mHandler.sendMessageDelayed(message, 1000);
++                }
+                 return; // not break
+ 
+             case BluetoothAdapter.STATE_TURNING_OFF:

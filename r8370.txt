@@ -1,0 +1,386 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/power/BatteryWarning.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/power/BatteryWarning.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/power/BatteryWarning.java	(revision 8370)
+@@ -0,0 +1,86 @@
++/*
++ * Copyright (C) 2012 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.systemui.power;
++
++import com.android.systemui.R;
++
++import android.app.Activity;
++import android.app.NotificationManager;
++import android.content.Intent;
++import android.os.Bundle;
++import android.view.View;
++import android.content.Context;
++import android.widget.Button;
++import android.widget.TextView;
++/**
++ * This is an activity that provides an interstitial UI for the notification
++ * that is posted by {@link IncomingMessage}.  It allows the user to switch
++ * to the app in its appropriate state if they want.
++ */
++public class BatteryWarning extends Activity {
++	private int ID = 0;
++	private NotificationManager mNotificationManager;
++	
++	
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++
++        setContentView(R.layout.battery_warning);
++		initFromIntent();
++        Button button = (Button) findViewById(R.id.confirm);
++        button.setOnClickListener(new Button.OnClickListener() {
++            public void onClick(View v) {
++                closeActivity();
++            }
++        });
++    }
++
++	private void initFromIntent(){
++		ID = getIntent().getIntExtra("notification_id",-1);
++		int information = -1;
++		switch(ID){
++			case 1:
++				information = R.string.low_temp_stop_charge;
++				break;
++			case 2:
++				information = R.string.high_temp_stop_charge;
++				break;
++			case 3:
++				information = R.string.battery_too_low_temp;
++				break;
++			case 4:
++				information = R.string.battery_too_low_temp;
++				break;
++			default:
++				break;
++		}
++		TextView mBody = (TextView) findViewById(R.id.battery_info);
++		if(information!=-1){
++			mBody.setText(information);
++		}
++	}
++
++    void closeActivity() {
++		mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
++        if(ID!=-1){
++			mNotificationManager.cancel(ID);
++		}	
++        finish();
++    }
++
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/power/PowerUI.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/power/PowerUI.java	(revision 8369)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/power/PowerUI.java	(revision 8370)
+@@ -37,6 +37,11 @@
+ import java.io.FileDescriptor;
+ import java.io.PrintWriter;
+ import java.util.Arrays;
++import android.support.v7.app.NotificationCompat;
++import android.support.v4.app.NotificationCompat.BigTextStyle;
++import android.app.NotificationManager;
++import com.android.systemui.R;
++import android.app.PendingIntent;
+ 
+ public class PowerUI extends SystemUI {
+     static final String TAG = "PowerUI";
+@@ -55,9 +60,37 @@
+     private int mLowBatteryAlertCloseLevel;
+     private final int[] mLowBatteryReminderLevels = new int[2];
+ 
++	private final int MAX_SHUTDOWN_VALUE = 600;
++	private final int MIN_SHUTDOWN_VALUE = -200;
++	
++	private final int MAX_SHUTDOWN_WARNING_INFO = 580;
++	private final int MIN_SHUTDOWN_WARNING_INFO = -180;
++	
++	private final int MIN_WARNING_INFO = 0;
++	private final int MAX_WARNING_INFO = 550;
++	
++    private static int lastTemperature = -500; //default value
++	private NotificationManager mNotificationManager;
++	
++	public static final int NOTIFI_LOW = 1;
++	public static final int NOTIFI_HIGH = 2;
++	public static final int NOTIFI_TOO_LOW = 3;
++	public static final int NOTIFI_TOO_HIGH = 4;
++	
++	private static boolean isTooHighDisplaying = false;
++	private static boolean isTooLowDisplaying = false;
++	
++	private static boolean isLowTemperatureDisplayed = false;
++	private static boolean isHighTemperatureDisplayed = false;
++	
++	int status = -1;
++
++	private boolean isConnectedPower = false;
+     private long mScreenOffTime = -1;
+ 
+     public void start() {
++		mNotificationManager = (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
++
+         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+         mScreenOffTime = mPowerManager.isScreenOn() ? -1 : SystemClock.elapsedRealtime();
+         mWarnings = new PowerNotificationWarnings(mContext, getComponent(PhoneStatusBar.class));
+@@ -136,6 +169,8 @@
+             filter.addAction(Intent.ACTION_USER_SWITCHED);
+             filter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGING);
+             filter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
++			filter.addAction(Intent.ACTION_POWER_CONNECTED);
++			filter.addAction(Intent.ACTION_POWER_DISCONNECTED);
+             mContext.registerReceiver(this, filter, null, mHandler);
+         }
+ 
+@@ -197,6 +232,7 @@
+                 } else {
+                     mWarnings.updateLowBatteryWarning();
+                 }
++				temperatureDeal(intent);
+             } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                 mScreenOffTime = SystemClock.elapsedRealtime();
+             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+@@ -203,12 +239,145 @@
+                 mScreenOffTime = -1;
+             } else if (Intent.ACTION_USER_SWITCHED.equals(action)) {
+                 mWarnings.userSwitched();
++            } else if (Intent.ACTION_POWER_CONNECTED.equals(action) && !isConnectedPower) {
++			    Log.d(TAG, "ACTION_POWER_CONNECTED");	 
++				isConnectedPower = true;
++                isLowTemperatureDisplayed = false;
++			    isHighTemperatureDisplayed = false;
++            } else if (Intent.ACTION_POWER_DISCONNECTED.equals(action) && isConnectedPower) {
++				isConnectedPower = false;
++                Log.d(TAG, "ACTION_POWER_DISCONNECTED");	 
+             } else {
+                 Slog.w(TAG, "unknown intent: " + intent);
+             }
+         }
+     };
++	
++    private void temperatureDeal(Intent intent){
++		int nowTemperature = intent.getIntExtra("temperature", 0);
++		int new_status = intent.getIntExtra("status", 0);
++		status = new_status;
++		Log.d(TAG, "now_temperature = " + nowTemperature +",last_temperature =" + lastTemperature +",status=" + status + ",BATTERY_STATUS_CHARGING=" +BatteryManager.BATTERY_STATUS_CHARGING);	 
++		if(nowTemperature == lastTemperature ){
++			Log.d(TAG, "old temperature equals new temperature, return directly");
++		    return;
++		}
++		
++		if(nowTemperature >= MAX_SHUTDOWN_VALUE || nowTemperature <= MIN_SHUTDOWN_VALUE){
++			Log.d(TAG, "temperature is too high or too low, will shutdown immediately");
++			lightScreen();
++			isLowTemperatureDisplayed = false;
++			isHighTemperatureDisplayed = false;
++			notifyWarning(nowTemperature <= MIN_SHUTDOWN_VALUE ? NOTIFI_LOW : NOTIFI_HIGH);	
++			Intent newIntent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
++            newIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++            mContext.startActivity(newIntent);
++			return;
++		}
++		
++		if(nowTemperature <= MIN_SHUTDOWN_WARNING_INFO && !isConnectedPower && BatteryManager.BATTERY_STATUS_CHARGING != status){
++			if(!isTooLowDisplaying){
++				Log.d(TAG, "temperature is too low, maybe shutdown, notify user");
++				notifyWarning(NOTIFI_TOO_LOW);
++			}
++		    //�����¹ػ�����
++		}else if(isTooLowDisplaying){
++			Log.d(TAG, "temperature is not too low, remove too low notification");
++			mNotificationManager.cancel(NOTIFI_TOO_LOW);
++			isTooLowDisplaying = false;
++		}
++		
++		if(nowTemperature >= MAX_SHUTDOWN_WARNING_INFO && !isConnectedPower && BatteryManager.BATTERY_STATUS_CHARGING != status){
++			if(!isTooHighDisplaying){
++				Log.d(TAG, "temperature is too high, maybe shutdown, notify user");
++				notifyWarning(NOTIFI_TOO_HIGH);
++			}
++			//�����¹ػ�����
++		}else if(isTooHighDisplaying){
++			Log.d(TAG, "temperature is not too high, remove too high notification");
++			mNotificationManager.cancel(NOTIFI_TOO_HIGH);
++			isTooHighDisplaying = false;
++		}
++		
++		if(nowTemperature < MIN_WARNING_INFO ){
++			if(!isLowTemperatureDisplayed){
++				Log.d(TAG, "temperature is too low, stop charge, notify user");
++				notifyWarning(NOTIFI_LOW);	
++			}			
++			//�����¾���
++		}else if(isLowTemperatureDisplayed){
++			Log.d(TAG, "temperature is not low, reset low notification");
++			mNotificationManager.cancel(NOTIFI_LOW);
++			isLowTemperatureDisplayed = false;
++		}
++		
++		if(nowTemperature >= MAX_WARNING_INFO || (nowTemperature >500 && nowTemperature < lastTemperature)){
++			if(!isHighTemperatureDisplayed){
++				Log.d(TAG, "temperature is too high, stop charge, notify user");
++				notifyWarning(NOTIFI_HIGH);		
++			}
++			//�����¾���
++		}else if(isHighTemperatureDisplayed){
++			Log.d(TAG, "temperature is not high, reset high notification");
++			mNotificationManager.cancel(NOTIFI_HIGH);
++			isHighTemperatureDisplayed = false;
++		}
+ 
++		if(lastTemperature != nowTemperature){
++			lastTemperature = nowTemperature;
++		}
++	}
++	
++	private void lightScreen(){
++		PowerManager.WakeLock screenOnLock = mPowerManager.newWakeLock(
++                        PowerManager.FULL_WAKE_LOCK
++                        | PowerManager.ACQUIRE_CAUSES_WAKEUP
++                        | PowerManager.ON_AFTER_RELEASE, TAG + ":screenOn");
++		screenOnLock.acquire();
++		screenOnLock.release();
++	}
++	
++	private void notifyWarning(int category){
++		Intent intent = new Intent(mContext, BatteryWarning.class);		
++		BigTextStyle bigTextStyle = new NotificationCompat.BigTextStyle();
++		NotificationCompat.Builder notification = new NotificationCompat.Builder(mContext);
++		notification.setSmallIcon(R.drawable.ic_power_low);
++		int ID = 0;
++		switch(category){
++			case NOTIFI_LOW:
++			    ID = NOTIFI_LOW;
++				bigTextStyle.bigText(mContext.getResources().getString(R.string.low_temp_stop_charge));
++				intent.putExtra("notification_id",ID);
++				isLowTemperatureDisplayed = true;			
++				intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
++				break;
++			case NOTIFI_HIGH:
++				ID = NOTIFI_HIGH;
++				bigTextStyle.bigText(mContext.getResources().getString(R.string.high_temp_stop_charge));
++				intent.putExtra("notification_id",ID);
++				isHighTemperatureDisplayed = true;
++				intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
++				break;
++			case NOTIFI_TOO_LOW:
++			    ID = NOTIFI_TOO_LOW;
++				isTooLowDisplaying = true;
++				bigTextStyle.bigText(mContext.getResources().getString(R.string.battery_too_low_temp));
++				break;
++			case NOTIFI_TOO_HIGH:
++				ID = NOTIFI_TOO_HIGH;
++				isTooHighDisplaying = true;
++				bigTextStyle.bigText(mContext.getResources().getString(R.string.battery_too_high_temp));
++				break;
++		}	
++		notification.setStyle(bigTextStyle);
++		if(NOTIFI_HIGH == category || NOTIFI_LOW == category){
++			Log.d(TAG, "PendingIntent notification");
++			PendingIntent contentIntent = PendingIntent.getActivity(mContext, 0,
++					intent, PendingIntent.FLAG_CANCEL_CURRENT);;
++			notification.setContentIntent(contentIntent); 
++		}
++		mNotificationManager.notify(ID, notification.build());
++	}
+     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+         pw.print("mLowBatteryAlertCloseLevel=");
+         pw.println(mLowBatteryAlertCloseLevel);
+Index: frameworks/base/packages/SystemUI/res/xml/battery_warning.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/xml/battery_warning.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/xml/battery_warning.xml	(revision 8370)
+@@ -0,0 +1,41 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2012 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++  
++          http://www.apache.org/licenses/LICENSE-2.0
++  
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:orientation="vertical"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++	
++    android:padding="8dp">
++
++    <TextView
++		android:id="@+id/battery_info"
++        android:layout_width="wrap_content"
++		
++        android:layout_height="wrap_content"
++        android:layout_gravity="center"
++        android:paddingBottom="4dp"
++        android:textAppearance="?android:attr/textAppearanceMedium"
++        />
++
++    <Button
++        android:id="@+id/confirm"
++        android:layout_width="wrap_content"
++		android:layout_gravity="center"
++        android:layout_height="wrap_content"
++        android:text="@string/func_dialog_button" />
++
++</LinearLayout>
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_warning_large.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_warning_large.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_warning_large.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_warning_large.png	(revision 8370)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_warning_large.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/AndroidManifest.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 8369)
++++ frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 8370)
+@@ -259,7 +259,11 @@
+             <meta-data android:name="com.android.settings.category"
+                     android:value="com.android.settings.category.system" />
+         </activity>
+-
++		<activity
++			android:name=".power.BatteryWarning"
++			android:theme="@android:style/Theme.Dialog"
++			>
++		</activity>
+         <activity-alias android:name=".DemoMode"
+                   android:targetActivity=".tuner.TunerActivity"
+                   android:icon="@drawable/tuner"

@@ -1,0 +1,259 @@
+Index: vendor/branch/apn_add.sh
+===================================================================
+--- vendor/branch/apn_add.sh	(revision 6795)
++++ vendor/branch/apn_add.sh	(revision 6796)
+@@ -33,6 +33,9 @@
+ 	print "-" x 50;print "\n";
+ 	exit;
+ }
++
++#$re = removeRevSym("abc,\"s1,s2\",defs");
++#print "$re\n";exit;
+ ## code
+ #print "##################### BEGIN ######################\n";
+ $my_count = 0;
+@@ -39,7 +42,7 @@
+ $idx = 0;
+ $apn_max = 22;
+ $spl_sym = ",";
+-$open_file = "apn.txt";
++$open_file = "apn.csv";
+ $add_file = ">add_apn.xml";
+ $BRANCH = "".$ARGV[0]; #vendor/branch/
+ if("ROOT" eq $ARGV[0]){
+@@ -87,10 +90,12 @@
+ print "-" x 50;
+ print "\n";
+ 
+-print F_SAVE "  <!-- ---------- APN_ADD_BEGIN ---------- -->\n";
++#print F_SAVE "<xml>";
++print F_SAVE "  <!-- APN_ADD_BEGIN -->\n";
+ #print @flist;
+ foreach $apn (@apns){
+ 	@items = split($spl_sym, $apn);
++	$apn = removeRevSym($apn);
+ 	$my_c_it = @items;
+ 	if($my_c_it > 0){
+ 		$idx++;
+@@ -121,7 +126,8 @@
+ 	}
+ }
+ 
+-print F_SAVE "  <!-- ---------- APN_ADD_END ---------- -->\n";
++print F_SAVE "  <!-- APN_ADD_END -->\n";
++#print F_SAVE "</xml>";
+ close(F_SAVE);
+ 
+ print "-" x 50;
+@@ -161,6 +167,8 @@
+ 			$itm = $its[$j];
+ 			#print $a_23[$i];
+ 			$itm =~ s/\r\n//g;
++			$itm =~ s/\^/,/g;
++			$itm =~ s/\\\"//g;
+ 			chomp($itm);
+ 			
+ 			if($arCfg[$i][1] eq ""){
+@@ -185,6 +193,15 @@
+ 				print F_SAVE  $itm. " ";
+ 				next;
+ 			}
++			if($arCfg[$i][1] eq "carrier"){
++				if("" eq $itm){
++					@c_its = split($spl_sym, $a_23[$i-1]);
++					$itm = $c_its[$j];
++					$itm =~ s/\r\n//g;
++					print F_SAVE  "carrier=\"".$itm. "\" ";
++					next;
++				}
++			}
+ 			if($arCfg[$i][1] eq "mmsproxy"){
+ 				if("0.0.0.0" eq $itm){
+ 					next;
+@@ -239,7 +256,7 @@
+ 		}
+ 	}
+ 	$my_count = $my_count + $my_cols;
+-	print F_SAVE "  <!-- -- $my_count -- -->\n";
++	print F_SAVE "  <!-- $my_count -->\n";
+ 	#print @a_23[$i]."\n";
+ 	
+ 	
+@@ -380,4 +397,32 @@
+ sub getAppendNormalItem(){
+ 	$sNormal = "protocol=\"IP\" roaming_protocol=\"IP\" bearer_bitmask=\"\" mvno_type=\"\" mvno_match_data=\"\" csdnum=\"0\"";
+ 	return $sNormal;
++}
++
++sub removeRevSym(){
++	my ($s_sym) = @_;
++	
++	my $cont = 0;
++	my @ar_sym =split "", $s_sym;
++	$len = length($s_sym);
++	$ret = "";
++	for($i = 0; $i < $len; $i++){
++		if($ar_sym[$i] eq "\""){
++			$cont ++;
++			#print "== cont = [".$cont."]\n";
++			$ret = $ret.'\"';
++			next;
++		}
++		if((($cont%2)==1) && ($ar_sym[$i] eq ",")){
++			$ar_sym[$i] = '^';
++		}
++		$ret = $ret.$ar_sym[$i];
++		#$ar_sym[$i] = $cont++;
++		#print $s_sym[$i]."\n";
++	}
++	#print "s_sym = [$ret]\n";
++	if($s_sym ne $ret){
++		print "$ret\n";
++	}
++	return $ret;
+ }
+\ No newline at end of file
+Index: vendor/branch/5058I_ALAE1/device/mediatek/common/apns-conf.xml
+===================================================================
+--- vendor/branch/5058I_ALAE1/device/mediatek/common/apns-conf.xml	(revision 6795)
++++ vendor/branch/5058I_ALAE1/device/mediatek/common/apns-conf.xml	(revision 6796)
+@@ -2638,6 +2638,23 @@
+       bearer_bitmask ="1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19"
+   />
+   
++  <apn mcc="419" mnc="02"  mmsproxy="194.126.53.64" mmsport="9201" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Orange WAP" mcc="416" mnc="77" type="Internet"  user="wap" password="wap" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn mcc="415" mnc="03" type="default"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn mcc="425" mnc="05"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Internet" mcc="427" mnc="02"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn mcc="420" mnc="03"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn mcc="432" mnc="35" type="supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  
++  <apn mcc="415" mnc="03"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Ooredoo " mcc="422" mnc="03"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn mcc="425" mnc="05"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn mcc="427" mnc="01"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn mcc="424" mnc="01"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  
++  
++  
++  <!-- APN_ADD_BEGIN -->
+   <apn carrier="DATA Package" mcc="424" mnc="02" apn="etisalat.ae" authtype="1" mmsc="http://mobile.weyak.ae" mmsproxy="10.12.0.32" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="DATA Package" mcc="424" mnc="01" apn="etisalat.ae" authtype="1" mmsc="http://mobile.weyak.ae" mmsproxy="10.12.0.32" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="du WAP" mcc="424" mnc="03" apn="Du" authtype="1" mmsc="http://myworld.du.ae" mmsproxy="10.19.18.4" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+@@ -2649,30 +2666,30 @@
+   <apn carrier="Vodafone WAP" mcc="602" mnc="02" apn="wap.vodafone.com.eg" authtype="1" user="wap" password="wap" mmsc="http://live.vodafone.com" mmsproxy="163.121.178.2" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="isurf" mcc="415" mnc="03" apn="Wap.Libancell.com.lb" authtype="1" mmsc="http://device:home" mmsproxy="192.168.4.11" mmsport="9201" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Action WAP" mcc="419" mnc="03" apn="wap.wataniya.com" authtype="1" mmsc="http://wapaction/" mmsproxy="194.126.53.64" mmsport="9201" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="419" mnc="04" apn="pps"  user="pps" password="pps" mmsproxy="172.16.128.228" mmsport="8080/9201" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="419" mnc="02"  mmsproxy="194.126.53.64" mmsport="9201" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="VIVA" mcc="419" mnc="04" apn="pps"  user="pps" password="pps" mmsproxy="172.16.128.228" mmsport="8080/9201" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Zain Kuwait" mcc="419" mnc="02"  mmsproxy="194.126.53.64" mmsport="9201" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Wataniya_internet      " mcc="425" mnc="06" apn="internet" authtype="1" mmsc="http://wap.wataniya.ps" mmsproxy="10.100.129.111" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="426" mnc="01" apn="internet.batelco.com"  user="WAP" password="WAP" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Zain BH WAP" mcc="426" mnc="02" apn="http://wap.bh.zain" type="default"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="VIVAWAP" mcc="426" mnc="04" apn="vivawap.bh" type="supl"  mmsproxy="172.18.142.36" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Orange WAP" mcc="416" mnc="77" type="Internet"  user="wap" password="wap" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Umniah WAP" mcc="416" mnc="03" apn="wap"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="415" mnc="03" type="default"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Oman Mobile" mcc="422" mnc="02" apn="wap" type="supl"  user="wap" password="wap" mmsproxy="192.168.203.034" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Batelco" mcc="426" mnc="01" apn="internet.batelco.com"  user="WAP" password="WAP" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Zain BH WAP" mcc="426" mnc="02" apn="http://wap.bh.zain" type="default,supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="VIVAWAP" mcc="426" mnc="04" apn="vivawap.bh" type="Internet"  mmsproxy="172.18.142.36" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Orange WAP" mcc="416" mnc="77"  user="wap" password="wap" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Umniah WAP" mcc="416" mnc="03" apn="wap" type="default,supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Touch" mcc="415" mnc="03"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Oman Mobile" mcc="422" mnc="02" apn="wap"  user="wap" password="wap" mmsproxy="192.168.203.034" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Ooredoo " mcc="422" mnc="03" apn="Ooredoo"  user="test" password="test" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="425" mnc="05"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Jawwal Palestine" mcc="425" mnc="05"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Ooredoo Internet" mcc="427" mnc="01" apn="data"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Internet" mcc="427" mnc="02"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Jawal net" mcc="424" mnc="01" apn="jawalnet.com.sa"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="420" mnc="03"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="zain WAP" mcc="424" mnc="04" apn="zain" type="default"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Telenor Internet" mcc="410" mnc="06" apn="wap" type="supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Jawal net" mcc="424" mnc="01" apn="jawalnet.com.sa" type="default,supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Mobily(Saudi Arabia)" mcc="420" mnc="03"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="zain WAP" mcc="424" mnc="04" apn="zain" type="default,supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Telenor Internet" mcc="410" mnc="06" apn="wap" type="default,supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Ufone Internet" mcc="410" mnc="03" apn="ufone.pwap"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Zong Internet" mcc="410" mnc="04" apn="Zongwap" type="default"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Warid Internet" mcc="410" mnc="07" apn="wap.warid" type="supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Mobilink Internet" mcc="410" mnc="01" apn="jazzwap.mobilinkworld.com" type="default"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="432" mnc="35" type="supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  
++  <apn carrier="Zong Internet" mcc="410" mnc="04" apn="Zongwap"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Warid Internet" mcc="410" mnc="07" apn="wap.warid"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Mobilink Internet" mcc="410" mnc="01" apn="jazzwap.mobilinkworld.com"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="MTNIrancell" mcc="432" mnc="35"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <!-- 36 -->
+   <apn carrier="DATA Package" mcc="424" mnc="02" apn="etisalat.ae" authtype="1" mmsport="0" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="DATA Package" mcc="424" mnc="01" apn="etisalat.ae" authtype="1" mmsport="0" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="du Internet" mcc="424" mnc="03" apn="du" authtype="1" mmsport="0" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+@@ -2687,27 +2704,27 @@
+   <apn carrier="Viva internet " mcc="419" mnc="04" apn="VIVA" authtype="1" mmsport="0" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Zain internet" mcc="419" mnc="02" apn="pps"  user="pps" password="pps" mmsport="0" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Wataniya_internet" mcc="425" mnc="06" apn="internet"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="426" mnc="01" apn="internet.batelco.com"  user="wap" password="wap" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Zain BH Internet" mcc="426" mnc="02" apn="internet" type="default"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="VIVAGPRS" mcc="426" mnc="04" apn="viva.bh" type="supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Orange Internet" mcc="416" mnc="77" apn="net.orange.jo" type="Internet"  user="net" password="net" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Batelco" mcc="426" mnc="01" apn="internet.batelco.com"  user="wap" password="wap" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Zain BH Internet" mcc="426" mnc="02" apn="internet" type="default,supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="VIVAGPRS" mcc="426" mnc="04" apn="viva.bh" type="Internet"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Orange Internet" mcc="416" mnc="77" apn="net.orange.jo"  user="net" password="net" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Umniah internet" mcc="416" mnc="03" apn="net"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="415" mnc="03"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Touch" mcc="415" mnc="03"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Oman Mobile" mcc="422" mnc="02" apn="taif"  user="taif" password="taif" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Ooredoo " mcc="422" mnc="03"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="425" mnc="05"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="427" mnc="01"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Jawwal Palestine" mcc="425" mnc="05"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Ooredoo Qatar" mcc="427" mnc="01"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="VFQ Mobile Internet" mcc="427" mnc="02" apn="web.vodafone.com.qa"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="424" mnc="01"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="mobily web" mcc="420" mnc="03" apn="web2"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="424" mnc="04" apn="zain" type="default"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Telenor Internet" mcc="410" mnc="06" apn="wap" type="supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="STC(Saudi Arabia)" mcc="424" mnc="01"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="mobily web" mcc="420" mnc="03" apn="web2" type="default,supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Zain(Saudi Arabia)" mcc="424" mnc="04" apn="zain"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Telenor Internet" mcc="410" mnc="06" apn="wap" type="default,supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Ufone Internet" mcc="410" mnc="03" apn="ufone.internet"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Zong Internet" mcc="410" mnc="04" apn="zonginternet" type="default"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Warid Internet" mcc="410" mnc="07" apn="warid" type="supl"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Zong Internet" mcc="410" mnc="04" apn="zonginternet"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Warid Internet" mcc="410" mnc="07" apn="warid"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Mobilink Internet" mcc="410" mnc="01" apn="connect.mobilinkworld.com"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Irancell-Internet" mcc="432" mnc="35" apn="mtnirancell"  protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  
++  <!-- 72 -->
+   <apn carrier="Etiaslat MMS" mcc="424" mnc="02" apn="etisalat.ae" authtype="1" user="mms" password="mms " mmsc="http://mms/servlets/mms" mmsproxy="10.12.0.30" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Etiaslat MMS" mcc="424" mnc="01" apn="etisalat.ae" authtype="1" user="mms" password="mms " mmsc="http://mms/servlets/mms" mmsproxy="10.12.0.30" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="du MMS" mcc="424" mnc="03" apn="Du" authtype="1" mmsc="http://mms.du.ae:8002/" mmsproxy="10.19.18.4" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+@@ -2727,10 +2744,10 @@
+   <apn carrier="VIVAMMS" mcc="426" mnc="04" apn="vivawap.bh" type="MMS" authtype="1" mmsc="http://mms.viva.com.bh:38090" mmsproxy="172.18.142.36" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Orange MMS" mcc="416" mnc="77" apn="mms.orange.jo" authtype="1" user="mmc" password="mmc" mmsc="http://172.16.1.96/servlets/mms" mmsproxy="172.16.1.2" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Umniah MMS" mcc="416" mnc="03" apn="mms" authtype="1" mmsc="http://mms.umniah.com" mmsproxy="10.1.1.10" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="touch_MMS" mcc="415" mnc="03" apn="touch_MMS" type="default" authtype="1" mmsc="http://mms:8088/mms/" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn carrier="Oman Mobile MMS" mcc="422" mnc="02" apn="taif" type="supl" authtype="1" user="taif" password="taif" mmsc="http://mmsc.omanmobile.com:10021/mmsc" mmsproxy="192.168.203.035" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="touch_MMS" mcc="415" mnc="03" apn="touch_MMS" type="default,supl" authtype="1" mmsc="http://mms:8088/mms/" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Oman Mobile MMS" mcc="422" mnc="02" apn="taif" type="mms" authtype="1" user="taif" password="taif" mmsc="http://mmsc.omanmobile.com:10021/mmsc" mmsproxy="192.168.203.035" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Ooredoo MMS" mcc="422" mnc="03" apn="mms.ooredoo.com.om" type="mms" authtype="1" mmsc="http://10.128.240.16/servlets/mms" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  <apn mcc="425" mnc="05" apn="MMS" type="mms" authtype="1" mmsc="mms.jawwal.ps/servlets/mms" mmsproxy="213.244.118.129" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
++  <apn carrier="Jawwal Palestine" mcc="425" mnc="05" apn="MMS" authtype="1" mmsc="mms.jawwal.ps/servlets/mms" mmsproxy="213.244.118.129" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Ooredoo MMS" mcc="427" mnc="01" apn="data" authtype="1" mmsc="http://mmsr.ooredoomms.qa" mmsproxy="10.23.8.3" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="VFQ MMS" mcc="427" mnc="02" apn="vodafone.com.qa" authtype="1" mmsc="http://mms.vodafone.com.qa/mmsc " mmsproxy="10.101.97.102" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Jawal mms" mcc="424" mnc="01" apn="mms.net.sa" authtype="1" mmsc="http://mms.net.sa:8002" mmsproxy="10.1.1.1" mmsport="9201" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+@@ -2742,7 +2759,7 @@
+   <apn carrier="Warid MMS" mcc="410" mnc="07" apn="mms.warid" authtype="1" mmsc="http://10.4.0.132/servlets/mms" mmsproxy="10.4.2.1" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Mobilink MMS" mcc="410" mnc="01" apn="mms.mobilinkworld.com" authtype="1" user="mobilink" password="mobilink" mmsc="http://mms" mmsproxy="172.025.020.012" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+   <apn carrier="Irancell-MMS" mcc="432" mnc="35" apn="mtnirancell" authtype="1" mmsc="http://mms:8002" mmsproxy="10.131.26.138" mmsport="8080" protocol="IP" roaming_protocol="IP" bearer_bitmask="" mvno_type="" mvno_match_data="" csdnum="0"/>
+-  
+-  
++  <!-- 108 -->
++  <!-- APN_ADD_END -->
+   </apns>
+ 

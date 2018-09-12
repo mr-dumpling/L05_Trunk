@@ -1,0 +1,31 @@
+Index: frameworks/base/services/core/java/com/android/server/fingerprint/AuthenticationClient.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/fingerprint/AuthenticationClient.java	(revision 3101)
++++ frameworks/base/services/core/java/com/android/server/fingerprint/AuthenticationClient.java	(revision 3102)
+@@ -28,6 +28,7 @@
+ import android.os.RemoteException;
+ import android.system.ErrnoException;
+ import android.util.Slog;
++import android.os.SystemProperties;
+ 
+ /**
+  * A class to keep track of the authentication state for a given client.
+@@ -34,7 +35,7 @@
+  */
+ public abstract class AuthenticationClient extends ClientMonitor {
+     private long mOpId;
+-
++	private static final String PROPERTY_FINGERPRINT_ID = "persist.sys.fingerprint.id";
+     public abstract boolean handleFailedAttempt();
+     public abstract void resetFailedAttempts();
+ 
+@@ -62,6 +63,9 @@
+                         Slog.v(TAG, "onAuthenticated(owner=" + getOwnerString()
+                                 + ", id=" + fingerId + ", gp=" + groupId + ")");
+                     }
++					//add for app function
++					SystemProperties.set(PROPERTY_FINGERPRINT_ID, String.valueOf(fingerId));
++					Slog.v(TAG, "SystemProperties" + SystemProperties.getInt(PROPERTY_FINGERPRINT_ID, 0) );
+                     /// M: Soter support @{
+                     Fingerprint fp = !getIsRestricted()
+                             ? new Fingerprint("" /* TODO */, groupId, fingerId,

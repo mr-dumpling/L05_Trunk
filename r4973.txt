@@ -1,0 +1,129 @@
+Index: vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java
+===================================================================
+--- vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 4972)
++++ vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 4973)
+@@ -4366,17 +4366,40 @@
+                         (apn == null ? "unknown" : apn.apn), cause));
+             }
+ 
+-            //Feature-ClearCode 33/29,pop the dialog,Add-begin by Xulei,2015/12/23
++            //Feature-ClearCode 33/29,pop the dialog,Add-begin by chnehu,2018/01/03
+             if (cause == DcFailCause.USER_AUTHENTICATION
+             || cause == DcFailCause.SERVICE_OPTION_NOT_SUBSCRIBED){
+             	//after 3rd retry,add dialog here with judgement whether is 29 or 33
+-            	final AlertDialog alertDialog = new AlertDialog.Builder(mPhone.getContext())
+-            	        .setMessage(cause.getErrorCode()).setCancelable(false)
+-            			.setPositiveButton(mPhone.getContext().getResources().getString(com.android.
+-            					internal.R.string.ok), null).create();
+-            	alertDialog.show();
++                String text = mPhone.getContext().getResources().getString(com.android.
++                            internal.R.string.data_clearcode_33);
++                if (cause == DcFailCause.USER_AUTHENTICATION) {
++                    text = mPhone.getContext().getResources().getString(com.android.
++                            internal.R.string.data_clearcode_29);;
++                }
++
++                AlertDialog dlg = null;
++                AlertDialog.Builder builder = new AlertDialog.Builder(mPhone.getContext());
++                builder.setMessage(text);
++                builder.setPositiveButton(
++                        mPhone.getContext().getResources().getString(com.android.
++                                internal.R.string.ok),null);
++                builder.setOnDismissListener(new DialogInterface.OnDismissListener() {
++                    public void onDismiss(final DialogInterface dialog) {
++                        log("onDataSetupComplete Dialog dimiss");
++                    }
++                });
++                dlg = builder.create();
++                dlg.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG);
++                dlg.show();
++                dlg.setCanceledOnTouchOutside(false);
++                if (dlg.isShowing()){
++                    log("onDataSetupComplete: dialog is show");
++                }else {
++                    log("onDataSetupComplete: dialog is no");
++                }
++                log("onDataSetupComplete: SETUP complete OK");
+             }
+-            //Feature-ClearCode 33/29,pop the dialog,Add-end by Xulei,2015/12/23
++            //Feature-ClearCode 33/29,pop the dialog,Add-end by chenhu,2018/01/03
+ 
+             if (cause.isEventLoggable()) {
+                 // Log this failure to the Event Logs.
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 4972)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 4973)
+@@ -2766,4 +2766,6 @@
+   <java-symbol type="string" name="start_demo_mode_inactivity_timeout_right_button" />
+   <!--End added by Xutao.Wu for TASK5709544 on 2017/11/28-->
+ 
++  <java-symbol type="string" name="data_clearcode_29" />
++  <java-symbol type="string" name="data_clearcode_33" />
+ </resources>
+Index: frameworks/base/core/res/res/values/public.xml
+===================================================================
+--- frameworks/base/core/res/res/values/public.xml	(revision 4972)
++++ frameworks/base/core/res/res/values/public.xml	(revision 4973)
+@@ -2666,7 +2666,8 @@
+     <public type="string" name="free_memory_free_up_space_btn" id="0x01040021" />
+     <public type="string" name="def_stk_name_for_telcel" id="0x01040022" />
+     <public type="string" name="gsm_stk_title_unicode" id="0x01040023" />
+-    <public type="string" name="def_stk_name_for_wom" id="0x01040024" />
++    <public type="string" name="data_clearcode_29" id="0x01040024" />
++    <public type="string" name="data_clearcode_33" id="0x01040025" />
+ 
+   <!-- ===============================================================
+        Resources added in version N of the platform
+Index: frameworks/base/core/res/res/values/strings.xml
+===================================================================
+--- frameworks/base/core/res/res/values/strings.xml	(revision 4972)
++++ frameworks/base/core/res/res/values/strings.xml	(revision 4973)
+@@ -4177,4 +4177,6 @@
+   <string name="def_stk_name_for_telcel">SIM Telcel</string>
+   <string name="def_stk_name_for_wom">SIM WOM</string>
+   <string name="gsm_stk_title_unicode">stk unicode</string>
+-</resources>
++  <string name="data_clearcode_29">"Falla de Autenticación -29-"</string>
++  <string name="data_clearcode_33">"Sin subscripcion al servicio -33-"</string>
++</resources>
+\ No newline at end of file
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 4972)
++++ frameworks/base/api/system-current.txt	(revision 4973)
+@@ -1988,6 +1988,8 @@
+     field public static final int copy = 17039361; // 0x1040001
+     field public static final int copyUrl = 17039362; // 0x1040002
+     field public static final int cut = 17039363; // 0x1040003
++    field public static final int data_clearcode_29 = 17039396; // 0x1040024
++    field public static final int data_clearcode_33 = 17039397; // 0x1040025
+     field public static final int def_stk_name_for_telcel = 17039394; // 0x1040022
+     field public static final int def_stk_name_for_wom = 17039396; // 0x1040024
+     field public static final int defaultMsisdnAlphaTag = 17039365; // 0x1040005
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 4972)
++++ frameworks/base/api/test-current.txt	(revision 4973)
+@@ -1874,6 +1874,8 @@
+     field public static final int copy = 17039361; // 0x1040001
+     field public static final int copyUrl = 17039362; // 0x1040002
+     field public static final int cut = 17039363; // 0x1040003
++    field public static final int data_clearcode_29 = 17039396; // 0x1040024
++    field public static final int data_clearcode_33 = 17039397; // 0x1040025
+     field public static final int def_stk_name_for_telcel = 17039394; // 0x1040022
+     field public static final int def_stk_name_for_wom = 17039396; // 0x1040024
+     field public static final int defaultMsisdnAlphaTag = 17039365; // 0x1040005
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 4972)
++++ frameworks/base/api/current.txt	(revision 4973)
+@@ -1874,6 +1874,8 @@
+     field public static final int copy = 17039361; // 0x1040001
+     field public static final int copyUrl = 17039362; // 0x1040002
+     field public static final int cut = 17039363; // 0x1040003
++    field public static final int data_clearcode_29 = 17039396; // 0x1040024
++    field public static final int data_clearcode_33 = 17039397; // 0x1040025
+     field public static final int def_stk_name_for_telcel = 17039394; // 0x1040022
+     field public static final int def_stk_name_for_wom = 17039396; // 0x1040024
+     field public static final int defaultMsisdnAlphaTag = 17039365; // 0x1040005

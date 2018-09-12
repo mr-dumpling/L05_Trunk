@@ -1,0 +1,39 @@
+Index: vendor/branch/5058J_Brazil_OpenMarket/frameworks/base/core/java/com/android/internal/app/LocaleHelper.java
+===================================================================
+--- vendor/branch/5058J_Brazil_OpenMarket/frameworks/base/core/java/com/android/internal/app/LocaleHelper.java	(revision 8392)
++++ vendor/branch/5058J_Brazil_OpenMarket/frameworks/base/core/java/com/android/internal/app/LocaleHelper.java	(revision 8393)
+@@ -25,11 +25,15 @@
+ import java.text.Collator;
+ import java.util.Comparator;
+ import java.util.Locale;
++import android.util.Slog;
++import android.os.SystemProperties;
+ 
+ /**
+  * This class implements some handy methods to process with locales.
+  */
+ public class LocaleHelper {
++    
++     static final String LOG_TAG = "LocaleHelper";
+ 
+     /**
+      * Sentence-case (first character uppercased).
+@@ -114,7 +118,17 @@
+         String result = shouldUseDialectName(locale)
+                 ? ULocale.getDisplayNameWithDialect(locale.toLanguageTag(), displayULocale)
+                 : ULocale.getDisplayName(locale.toLanguageTag(), displayULocale);
+-        return sentenceCase ? toSentenceCase(result, displayLocale) : result;
++        //return sentenceCase ? toSentenceCase(result, displayLocale) : result;
++                //Modify  begin
++        String displayName = sentenceCase ? toSentenceCase(result, displayLocale) : result;
++        Slog.d(LOG_TAG, "enter getDisplayName and locale language is "+locale.getLanguage());
++        //if(!SystemProperties.getBoolean("def.settings.locale.summary",true) && "es".equals(locale.getLanguage())){
++        if("es".equals(locale.getLanguage())){
++                       Slog.d(LOG_TAG, "langauge is es, set displayName is Spanish");
++                       displayName = "Español";
++               }
++        return displayName;
++        //Modify  end
+     }
+ 
+     /**

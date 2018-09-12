@@ -1,0 +1,56 @@
+Index: vendor/branch/5058A_Etecsa_Cuba/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java
+===================================================================
+--- vendor/branch/5058A_Etecsa_Cuba/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 12968)
++++ vendor/branch/5058A_Etecsa_Cuba/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 12969)
+@@ -812,7 +812,9 @@
+ 
+     public int getVoiceMessageCount() {
+         boolean voiceMailWaiting = false;
+-        int countVoiceMessages = 0;
++        //modified by ruyi.guo for incorrect voicemailcount
++        //int countVoiceMessages = 0;
++        int countVoiceMessages = -2;
+         if (mEfMWIS != null) {
+             // Use this data if the EF[MWIS] exists and
+             // has been loaded
+@@ -820,7 +822,9 @@
+             voiceMailWaiting = ((mEfMWIS[0] & 0x01) != 0);
+             countVoiceMessages = mEfMWIS[1] & 0xff;
+ 
+-            if (voiceMailWaiting && countVoiceMessages == 0) {
++            //modified by ruyi.guo for incorrect voicemailcount
++            //if (voiceMailWaiting && countVoiceMessages == 0) {
++            if (voiceMailWaiting && (countVoiceMessages == 0 || countVoiceMessages == 0xff)) {
+                 // Unknown count = -1
+                 countVoiceMessages = -1;
+             }
+Index: vendor/branch/5058A_Etecsa_Cuba/frameworks/opt/telephony/src/java/com/android/internal/telephony/GsmCdmaPhone.java
+===================================================================
+--- vendor/branch/5058A_Etecsa_Cuba/frameworks/opt/telephony/src/java/com/android/internal/telephony/GsmCdmaPhone.java	(revision 12968)
++++ vendor/branch/5058A_Etecsa_Cuba/frameworks/opt/telephony/src/java/com/android/internal/telephony/GsmCdmaPhone.java	(revision 12969)
+@@ -696,16 +696,24 @@
+     @Override
+     public void updateVoiceMail() {
+         if (isPhoneTypeGsm()) {
+-            int countVoiceMessages = 0;
++            //modified by ruyi.guo for incorrect voicemailcount
++            //int countVoiceMessages = 0;
++            int countVoiceMessages = -2;
+             IccRecords r = mIccRecords.get();
+             if (r != null) {
+                 // get voice mail count from SIM
+                 countVoiceMessages = r.getVoiceMessageCount();
+             }
++            //modified by ruyi.guo for incorrect voicemailcount begin
++            /*
+             int countVoiceMessagesStored = getStoredVoiceMessageCount();
+             if (countVoiceMessages == -1 && countVoiceMessagesStored != 0) {
+                 countVoiceMessages = countVoiceMessagesStored;
+             }
++            */
++            if (countVoiceMessages == -2) {
++                countVoiceMessages = getStoredVoiceMessageCount();
++            }
+             logd("updateVoiceMail countVoiceMessages = " + countVoiceMessages
+                     + " subId " + getSubId());
+             setVoiceMessageCount(countVoiceMessages);

@@ -1,0 +1,260 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 5318)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 5319)
+@@ -264,6 +264,10 @@
+ import android.text.TextUtils;
+ import android.view.Gravity;
+ //add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 end
++//Begin added by zengjie for XR5756442 && XR5429900 on 12/15/17
++import android.app.WallpaperManager;
++import java.io.IOException;
++//End added by zengjie for XR5756442 && XR5429900 on 12/15/17
+ 
+ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
+         DragDownHelper.DragDownCallback, ActivityStarter, OnUnlockMethodChangedListener,
+@@ -632,7 +636,10 @@
+     private int mLastCameraLaunchSource;
+     private PowerManager.WakeLock mGestureWakeLock;
+     private Vibrator mVibrator;
+-
++    //added by zengjie for task 5756442 on 20171215 begin
++    private int mLockscreenWallpaperValue = 0;
++    public static final String LOCKSCREEN_DEFAULT_SET = "lockscreen_default_set";
++    //added by zengjie for task 5756442 on 20171215 end
+     // Fingerprint (as computed by getLoggingFingerprint() of the last logged state.
+     private int mLastLoggedStateFingerprint;
+ 
+@@ -1205,6 +1212,27 @@
+ 
+         return mStatusBarView;
+     }
++	
++	//added by zengjie for task 5756442 && XR5429900 on 2017.12.15 begin
++    public boolean  shouldCustomLockscreenWallpaper(Context context){
++        boolean mShouldCustomLockScreenWallpaper = false;
++        Log.d(TAG," customLockscreenWallpaper "+ mShouldCustomLockScreenWallpaper);
++        if (!mShouldCustomLockScreenWallpaper){
++            return  false;
++        }
++        try {
++            mLockscreenWallpaperValue = android.provider.Settings.System.getInt(context.getContentResolver(),
++                    LOCKSCREEN_DEFAULT_SET, 0);
++            Log.d(TAG,"shouldCustomLockscreenWallpaper  "+ mLockscreenWallpaperValue);
++        } catch (Exception e) {
++            Log.e(TAG,"read LOCKSCREEN_DEFAULT_SET fail"+e);
++        }
++        if (mLockscreenWallpaperValue == 0){
++            return true;
++        }
++        return false;
++    }
++    //added by zengjie for task 5756442 && XR5429900 on 2017.12.15 end
+ 
+     private void initEmergencyCryptkeeperText() {
+         View emergencyViewStub = mStatusBarWindow.findViewById(R.id.emergency_cryptkeeper_text);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java	(revision 5318)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java	(revision 5319)
+@@ -81,7 +81,14 @@
+ import com.tcl.mie.launcher.lscreen.IUnlockResultCallBack;
+ import base.packages.SystemUI.src.com.android.systemui.statusbar.phone.JoyLscreenProxy;
+ import android.widget.FrameLayout;
++import com.android.systemui.statusbar.CommandQueue;
+ import android.util.Log;
++import android.text.TextUtils;
++import android.graphics.drawable.BitmapDrawable;
++import java.io.IOException;
++import android.app.WallpaperManager;
++import android.graphics.Bitmap;
++import android.graphics.drawable.Drawable;
+ //End added by zengjie for joylockscreen task 5429900 on 10/21/17
+ 
+ public class NotificationPanelView extends PanelView implements
+@@ -134,6 +141,9 @@
+     private float absMoveX;
+     private float absMoveY;
+     private MotionEventPos lastMotionEventPos = null;
++	private int mLockscreenWallpaperValue = 0;
++	public static final String LOCKSCREEN_DEFAULT_SET = "lockscreen_default_set";
++    private WallpaperManager mWallpaperManager;
+     //End added by zengjie for joylockscreen task 5429900 on 10/21/17
+ 
+     /**
+@@ -2554,9 +2564,14 @@
+      */
+     @Override
+     public void unLock(IUnlockResultCallBack unlockResultCallBack){
+-        Log.d("joylockscreen","unLock ");
+-        mStatusBar.onTrackingStopped(false);
++        Log.d(TAG,"unLock ");
+         JoyLscreenProxy.createIUnlockResultCallBack(unlockResultCallBack);
++        if (mStatusBar.isKeyguardSecure()){
++            mStatusBar.onTrackingStopped(false);
++        }else { //if screen lock is not security,unlock screen
++            mStatusBar.animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE, true /* force */,
++                    false /* delayed */, 1.3f);
++        }
+     }
+ 
+     /**
+@@ -2596,7 +2611,47 @@
+         mStatusBar.cancelNotification(notificationKey);
+     }
+     //End added by zengjie for XR5451355 on 11/27/17
++    /**private Bitmap setDefaultLockscreenWallpaper(Context context){
++        mWallpaperManager = WallpaperManager.getInstance(context);
++        Drawable wallpaper = getLockWallpaperDrawable();
++        Bitmap wallpaperBitmap = ((BitmapDrawable)wallpaper).getBitmap();
++        try {
++            mWallpaperManager.setBitmap(wallpaperBitmap,null, true,WallpaperManager.FLAG_LOCK);
++            if (JoyLscreenProxy.getLScreen() != null ) {
++                Log.d(TAG,"system onWallpaper change  onLockWallpaperChange");
++                JoyLscreenProxy.getLScreen().onLockWallpaperChange(wallpaperBitmap);
++                android.provider.Settings.System.putInt(context.getContentResolver(),
++                        LOCKSCREEN_DEFAULT_SET, 1);
++            }
++        } catch (IOException e) {
++            Log.e(TAG,"setBitmap fail "+e);
++        }
++        return wallpaperBitmap;
++    }
++    private Drawable getLockWallpaperDrawable(){
++        Drawable drawable = mWallpaperManager.getLockDrawable();
+ 
++        if (!(drawable instanceof BitmapDrawable)) {
++            // This should never happen.  The BitmapDrawable is created in WallpaperManager.
++            return null;
++        }
++
++        Drawable.ConstantState constantState = drawable.getConstantState();
++
++        if (null == constantState) {
++            return null;
++        }
++
++        Drawable newDrawable = constantState.newDrawable();
++
++        if (null == newDrawable) {
++            return null;
++        }
++
++        BitmapDrawable bitmapDrawable = (BitmapDrawable)newDrawable.mutate();
++
++        return bitmapDrawable;
++    } **/
+     public View getJoyContainer(){
+         if (mJoyContainer != null){
+             return mJoyContainer;
+@@ -2628,9 +2683,19 @@
+     }
+ 	
+ 	public void setNotificationImportance(String packageName, int uid, int flag) {
+-		
++		//To do
++        if (!TextUtils.isEmpty(packageName)) {
++            mStatusBar.setImportance(packageName,uid,flag);
++        }
+ 	}
+ 	
+-	public void onInitCompleted() {}
++	public void onInitCompleted() {
++		//To do
++        //Log.d(TAG," onInitCompleted  ");
++        //boolean mShouldCustomLockWallpaper = mStatusBar.shouldCustomLockscreenWallpaper(mContext);
++        //if (mShouldCustomLockWallpaper){
++        //     setDefaultLockscreenWallpaper(mContext);
++        //}
++	}
+ 	//end added by zengjie for joylockscreen task 5429900 on 10/19/17
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 5318)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 5319)
+@@ -731,7 +731,19 @@
+         }
+     }
+     //End added by zengjie for XR5451355 on 11/27/17
+-
++    //Begin added by zengjie for XR5429900 on 12/19/17
++    public void setImportance(String packageName, int uid, int flag){
++        try {
++            INotificationManager mNoMan =  INotificationManager.Stub.asInterface(
++                ServiceManager.getService(Context.NOTIFICATION_SERVICE));
++            if (mNoMan != null){
++                mNoMan.setImportance(packageName, uid, flag);
++            }
++        } catch (android.os.RemoteException ex) {
++            Log.v(TAG, "Unable to contact notification manager", ex);
++        }
++    }
++    //End added by zengjie for XR5429900 on 12/19/17
+     private void updateCurrentProfilesCache() {
+         synchronized (mCurrentProfiles) {
+             mCurrentProfiles.clear();
+@@ -2379,8 +2391,16 @@
+                 }
+             } else {
+                 boolean wasGone = entry.row.getVisibility() == View.GONE;
+-                entry.row.setVisibility(View.VISIBLE);
+-                if (!childNotification && !entry.row.isRemoved()) {
++                //entry.row.setVisibility(View.VISIBLE);
++                //Begin modified by zengjie for XR5607393 on 11/21/17
++                    //entry.row.setVisibility(View.VISIBLE);
++                    if (!onKeyguard && SystemProperties.getBoolean("ro.tcl.lscreen", false)) {
++                        entry.row.setVisibility(View.VISIBLE);
++                    }else {
++                        entry.row.setVisibility(View.GONE);
++                    }
++                    //End modified by zengjie for XR5607393 on 11/21/17
++				if (!childNotification && !entry.row.isRemoved()) {
+                     if (wasGone) {
+                         // notify the scroller of a child addition
+                         mStackScroller.generateAddAnimation(entry.row,
+@@ -2389,15 +2409,6 @@
+                     visibleNotifications++;
+                 }
+             }
+-            //Begin added by zengjie for joylockscreen task 5429900 on 10/16/17
+-            if(SystemProperties.getBoolean("ro.tcl.lscreen", false)){
+-				if (onKeyguard) {
+-					entry.row.setVisibility(View.GONE);
+-				} else {
+-					entry.row.setVisibility(View.VISIBLE);
+-				}
+-			}
+-            //End added by zengjie for joylockscreen task 5429900 on 10/16/17
+ 		}
+         //Begin modified by zengjie for joylockscreen task 5429900 on 10/16/17
+         if(SystemProperties.getBoolean("ro.tcl.lscreen", false)){
+Index: frameworks/base/packages/SystemUI/assets/lscreen.version
+===================================================================
+--- frameworks/base/packages/SystemUI/assets/lscreen.version	(revision 5318)
++++ frameworks/base/packages/SystemUI/assets/lscreen.version	(revision 5319)
+@@ -1 +1 @@
+-1075
+\ No newline at end of file
++1077
+\ No newline at end of file
+Index: vendor/branch/5058Y/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058A/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058I/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058J/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058T/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream

@@ -1,0 +1,46 @@
+Index: frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- frameworks/base/core/res/res/values/features.xml	(revision 7296)
++++ frameworks/base/core/res/res/values/features.xml	(revision 7297)
+@@ -14,6 +14,9 @@
+ 	<!-- feature for sms encoding -->
+ 	<bool name="FR_SMS_ENCODING">false</bool> 
+ 	
++	<!-- feature for fmradio call music, BUG: 119814 -->
++	<bool name="FR_MUSIC_STOP_FM_DELETE_BUG">false</bool>
++	
+ 	<!-- feature for other -->
+     
+ </resources>
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 7296)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 7297)
+@@ -2811,5 +2811,6 @@
+   <java-symbol type="bool" name="FR_DATEFORMAT" />
+   <java-symbol type="string" name="STR_DATEFORMAT" />
+   <java-symbol type="bool" name="FR_SMS_ENCODING" />
++  <java-symbol type="bool" name="FR_MUSIC_STOP_FM_DELETE_BUG" />  
+   <!-- feature techain end -->
+ </resources>
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java	(revision 7296)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java	(revision 7297)
+@@ -1529,8 +1529,15 @@
+         Intent playMusicIntent = new Intent(Intent.ACTION_VIEW);
+                 int playlistId = FmRecorder.getPlaylistId(mContext);
+                 Bundle extras = new Bundle();
+-                extras.putInt("playlist", playlistId);
+                 try {
++					//for bug:119814{
++					boolean bFrBug = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_MUSIC_STOP_FM_DELETE_BUG);
++					if(bFrBug){
++						extras.putString("playlist", String.valueOf(playlistId));
++					}else{
++						extras.putInt("playlist", playlistId);
++					}
++					//}end by javen
+                     playMusicIntent.putExtras(extras);
+                     playMusicIntent.setClassName("com.google.android.music",
+                             "com.google.android.music.ui.TrackContainerActivity");

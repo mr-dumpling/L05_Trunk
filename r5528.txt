@@ -1,0 +1,135 @@
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 5527)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 5528)
+@@ -1510,6 +1510,7 @@
+   <java-symbol type="bool" name="config_showNavigationBar" />
+   <java-symbol type="bool" name="config_supportAutoRotation" />
+   <java-symbol type="bool" name="target_honeycomb_needs_options_menu" />
++  <java-symbol type="bool" name="def_wheather_custom_lockscreen_wallpaper"/>
+   <java-symbol type="dimen" name="docked_stack_divider_thickness" />
+   <java-symbol type="dimen" name="docked_stack_divider_insets" />
+   <java-symbol type="dimen" name="docked_stack_minimize_thickness" />
+Index: frameworks/base/core/res/res/values/bools.xml
+===================================================================
+--- frameworks/base/core/res/res/values/bools.xml	(revision 5527)
++++ frameworks/base/core/res/res/values/bools.xml	(revision 5528)
+@@ -24,4 +24,5 @@
+     <bool name="show_ongoing_ime_switcher">true</bool>
+     <bool name="action_bar_expanded_action_views_exclusive">true</bool>
+     <bool name="target_honeycomb_needs_options_menu">true</bool>
++    <bool name="def_wheather_custom_lockscreen_wallpaper">true</bool>
+ </resources>
+Index: frameworks/base/core/res/res/drawable-nodpi/default_lock_wallpaper.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/core/res/res/drawable-nodpi/default_lock_wallpaper.png
+===================================================================
+--- frameworks/base/core/res/res/drawable-nodpi/default_lock_wallpaper.png	(revision 0)
++++ frameworks/base/core/res/res/drawable-nodpi/default_lock_wallpaper.png	(revision 5528)
+
+Property changes on: frameworks/base/core/res/res/drawable-nodpi/default_lock_wallpaper.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 5527)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 5528)
+@@ -497,6 +497,7 @@
+ 
+     private int mNavigationIconHints = 0;
+     private HandlerThread mHandlerThread;
++    private boolean  mShouldCustomLockWallpaper = false;
+ 
+     // ensure quick settings is disabled until the current user makes it through the setup wizard
+     private boolean mUserSetup = false;
+@@ -640,6 +641,7 @@
+     private int mLockscreenWallpaperValue = 0;
+     public static final String LOCKSCREEN_DEFAULT_SET = "lockscreen_default_set";
+     //added by zengjie for task 5756442 on 20171215 end
++
+     // Fingerprint (as computed by getLoggingFingerprint() of the last logged state.
+     private int mLastLoggedStateFingerprint;
+ 
+@@ -1207,6 +1209,7 @@
+ 
+         // Private API call to make the shadows look better for Recents
+         ThreadedRenderer.overrideProperty("ambientRatio", String.valueOf(1.5f));
++        
+         mStatusBarPlmnPlugin.addPlmn((LinearLayout)mStatusBarView.
+                                      findViewById(R.id.status_bar_contents), mContext);
+ 
+@@ -1214,8 +1217,8 @@
+     }
+ 	
+ 	//added by zengjie for task 5756442 && XR5429900 on 2017.12.15 begin
+-    public boolean  shouldCustomLockscreenWallpaper(Context context){
+-        boolean mShouldCustomLockScreenWallpaper = false;
++    public boolean shouldCustomLockscreenWallpaper(Context context){
++        boolean mShouldCustomLockScreenWallpaper = context.getResources().getBoolean(com.android.internal.R.bool.def_wheather_custom_lockscreen_wallpaper);
+         Log.d(TAG," customLockscreenWallpaper "+ mShouldCustomLockScreenWallpaper);
+         if (!mShouldCustomLockScreenWallpaper){
+             return  false;
+@@ -2569,6 +2572,21 @@
+                         && mStatusBarKeyguardViewManager.isShowing();
+             }
+         }
++        
++        //Begin added by zengjie for XR5429900 on 11/2/17
++        final boolean  mHasJoyWallpaper = JoyLscreenProxy.getLScreen().getPictorialEnable();
++        mShouldCustomLockWallpaper = shouldCustomLockscreenWallpaper(mContext);
++         if  (mHasJoyWallpaper && !mShouldCustomLockWallpaper){
++            try{
++                Bitmap  mJoyWallpaper = JoyLscreenProxy.getLScreen().getPictorialBitmap();
++                if (mJoyWallpaper != null){
++                            artworkDrawable = new BitmapDrawable(mJoyWallpaper);
++                }
++            }catch (Exception e){
++                Log.w(TAG, "Can't get PictorialBitmap", e);
++            }
++        }
++        //End added by zengjie for XR5429900 on 11/2/17
+ 
+         boolean hideBecauseOccluded = mStatusBarKeyguardViewManager != null
+                 && mStatusBarKeyguardViewManager.isOccluded();
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java	(revision 5527)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java	(revision 5528)
+@@ -2611,7 +2611,7 @@
+         mStatusBar.cancelNotification(notificationKey);
+     }
+     //End added by zengjie for XR5451355 on 11/27/17
+-    /**private Bitmap setDefaultLockscreenWallpaper(Context context){
++    private Bitmap setDefaultLockscreenWallpaper(Context context){
+         mWallpaperManager = WallpaperManager.getInstance(context);
+         Drawable wallpaper = getLockWallpaperDrawable();
+         Bitmap wallpaperBitmap = ((BitmapDrawable)wallpaper).getBitmap();
+@@ -2651,7 +2651,7 @@
+         BitmapDrawable bitmapDrawable = (BitmapDrawable)newDrawable.mutate();
+ 
+         return bitmapDrawable;
+-    } **/
++    } 
+     public View getJoyContainer(){
+         if (mJoyContainer != null){
+             return mJoyContainer;
+@@ -2692,10 +2692,10 @@
+ 	public void onInitCompleted() {
+ 		//To do
+         //Log.d(TAG," onInitCompleted  ");
+-        //boolean mShouldCustomLockWallpaper = mStatusBar.shouldCustomLockscreenWallpaper(mContext);
+-        //if (mShouldCustomLockWallpaper){
+-        //     setDefaultLockscreenWallpaper(mContext);
+-        //}
++        boolean mShouldCustomLockWallpaper = mStatusBar.shouldCustomLockscreenWallpaper(mContext);
++        if (mShouldCustomLockWallpaper){
++             setDefaultLockscreenWallpaper(mContext);
++        }
+ 	}
+ 	//end added by zengjie for joylockscreen task 5429900 on 10/19/17
+ }

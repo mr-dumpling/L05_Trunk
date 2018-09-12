@@ -1,0 +1,828 @@
+Index: vendor/branch/5058A_Entel_Chile/diff.txt
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/diff.txt	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/diff.txt	(revision 7292)
+@@ -14,7 +14,7 @@
+ vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/ProjectConfig.mk:
+ > CUSTOM_HAL_MSENSORLIB = mmc328x akm8975 ami304 yamaha530 mag3110 akmd8963 bmm050 mc6420 mmc3416x s62xd lsm303md qmc5983 akmd09911 mc64xx bmm056 mc41xx akmd09918 memsicd3680x
+ > CUSTOM_KERNEL_ORIENTATION_SENSOR = no
+-> MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P43
++> MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P48
+ > MTK_C2K_LTE_MODE = 2
+ > MTK_CMAS_SUPPORT = no
+ > MTK_CUSTOM_USERLOAD_ENGINEERMODE = no
+@@ -25,9 +25,7 @@
+ > MTK_MULTI_SIM_SUPPORT = dsds
+ > MTK_PROTOCOL1_RAT_CONFIG = C/Lf/Lt/W/T/G
+ > MTK_SIGNATURE_CUSTOMIZATION = no
+-> MTK_VILTE_SUPPORT = yes
+-> MTK_VIWIFI_SUPPORT = yes
+-> MTK_WEEK_NO = W18.03
++> MTK_WEEK_NO = W18.04
+ > #ST_NFC_FM_SE_CONFIG = 3
+ > OP01SOUNDRECORDER_APP = yes
+ 
+@@ -34,6 +32,11 @@
+ vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/system.prop:
+ > ro.mtk_gemini_support = 1
+ 
++vendor/branch/5058A_Entel_Chile/device/mediatek/mt6739/device.mk:
++> PRODUCT_PACKAGES += Calculator
++> PRODUCT_PACKAGES += Email
++> PRODUCT_PACKAGES += Videos
++
+ vendor/branch/5058A_Entel_Chile/device/mediatek/common/device.mk:
+ >       ro.com.google.clientidbase.am=alps-$(TARGET_PRODUCT)-{country}
+ > ifneq ($(strip $(MTK_BSP_PACKAGE)), yes)
+@@ -188,6 +191,10 @@
+ >         context.startActivity(activityIntent);
+ >     }
+ > 				String version=SystemProperties.get("ro.def.software.version");
++>                         String imeisv = telephonyManager.getDeviceSoftwareVersion(slot);
++>                         }
++> 					String imeisv = telephonyManager.getDeviceSoftwareVersion();
++>                     }
+ > 	private static boolean handleEngineerModeTest(Context context, String input) {
+ > 	private static boolean handleEngineerModeTest2(Context context, String input) {
+ > 		Log.w("yujunjie", "SpecialCharSequenceMgr:handleEngineerModeTest2()..... input ="+input);
+@@ -224,9 +231,31 @@
+ >                         DialerFeatureOptions.isIpPrefixSupport() && enable
+ >                         && !PhoneNumberHelper.isUriNumber(mDigits.getText().toString()));
+ 
++vendor/branch/5058A_Entel_Chile/packages/apps/Settings/ext/src/com/mediatek/settings/ext/DefaultApnSettingsExt.java:
++>         return true;
++
++vendor/branch/5058A_Entel_Chile/packages/apps/Settings/src/com/android/settings/DeviceInfoSettings.java:
++>         setStringSummary(KEY_BUILD_NUMBER, Build.DISPLAY);
++
+ vendor/branch/5058A_Entel_Chile/packages/apps/Settings/src/com/android/settings/DateTimeSettings.java:
+->         mDatePref.setSummary(DateFormat.getLongDateFormat(context).format(now.getTime()));
++> 		//Add feature [FR_DATEFORMAT] for different date format type {
++> 		boolean bDateFr = getResources().getBoolean(com.android.internal.R.bool.FR_DATEFORMAT);
++> 		if(bDateFr){
++> 			mDatePref.setSummary(dateToStrLong(now.getTime()));
++> 		}else{
++> 			mDatePref.setSummary(DateFormat.getLongDateFormat(context).format(now.getTime()));
++> 		}
++> 		//End feature [FR_DATEFORMAT] by javen 2018.01.29
++>         
++>     private String dateToStrLong(Date dateDate) {
++> 		String sFormat = getResources().getString(com.android.internal.R.string.STR_DATEFORMAT);
++>         SimpleDateFormat formatter = new SimpleDateFormat(sFormat);  
+ 
++vendor/branch/5058A_Entel_Chile/packages/apps/Settings/src/com/android/settings/ApnSettings.java:
++
++vendor/branch/5058A_Entel_Chile/packages/apps/Settings/src/com/mediatek/settings/deviceinfo/DeviceInfoSettingsExts.java:
++>         if (FeatureOption.MTK_A1_FEATURE) {
++
+ vendor/branch/5058A_Entel_Chile/packages/providers/ContactsProvider/src/com/android/providers/contacts/DefaultCallLogInsertionHelper.java:
+ >                 return cityName;
+ >             return getPhoneNumberOfflineGeocoder().getDescriptionForNumber(
+@@ -285,93 +314,18 @@
+ >     <string name="def_browser_bookmark1_name">"Alcatel Portal"</string>
+ >     <string name="def_browser_bookmark1_url">"http://3g.my-alcatel.com"</string>
+ 
++vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/ELabelOverlay/res/values/isdm_ElabelRes_defaults.xml:
++>     <string name="def_jrdelabel_ift">"IFT:TBD"</string>
++>     <string name="def_jrdelabel_ifetel">"México"</string>
++>     <string name="def_jrdelabel_sarfcc_headvalue">"0.41"</string>
++>     <string name="def_jrdelabel_sarfcc_bodyvalue">"0.90"</string>
++>     <string name="def_jrdelabel_sarfcc_distancevalue">"10"</string>
++>     <string name="feature_jrdelabel_celogo_index">"2"</string>
++>     <string name="def_jrdelabel_manufacturer_address">"5/F, Building 22E, 22 Science Park East Avenue, Hong Kong Science Park, Shatin, NT, Hong Kong"</string>
++
+ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/JoyLauncherOverlay/res/xml/jrd_default_workspace.xml:
+ >         launcher:className="com.android.music.activitymanagement.TopLevelActivity"
+ >         launcher:packageName="com.google.android.music"
+->         launcher:className="com.google.android.apps.chrome.Main"
+->         launcher:container="1"
+->         launcher:icon=""
+->         launcher:packageName="com.android.chrome"
+->         launcher:screen="0"
+->         launcher:spanX="1"
+->         launcher:spanY="1"
+->         launcher:title=""
+->         launcher:type="1"
+->         launcher:uri=""
+->         launcher:x="1"
+->         launcher:y="0"/>
+-> 
+->     <item
+->         launcher:id=""
+->         launcher:x="2"
+->         launcher:x="0"
+->         launcher:y="1"/>
+->         launcher:x="1"
+->         launcher:x="2"
+->         launcher:className="com.android.music.activitymanagement.TopLevelActivity"
+->         launcher:container="1"
+->         launcher:icon=""
+->         launcher:packageName="com.google.android.music"
+->         launcher:screen="0"
+->         launcher:spanX="1"
+->         launcher:spanY="1"
+->         launcher:title=""
+->         launcher:type="1"
+->         launcher:uri=""
+->         launcher:x="0"
+->         launcher:y="2"/>
+-> 
+->     <item
+->         launcher:id=""
+->         launcher:x="1"
+->         launcher:y="2"/>
+->         launcher:x="2"
+->         launcher:x="0"
+->         launcher:y="3"/>
+-> 
+->     <item
+->         launcher:id=""
+->         launcher:className="com.google.android.keep.activities.BrowseActivity"
+->         launcher:container="1"
+->         launcher:icon=""
+->         launcher:packageName="com.google.android.keep"
+->         launcher:screen="1"
+->         launcher:spanX="1"
+->         launcher:spanY="1"
+->         launcher:title=""
+->         launcher:type="1"
+->         launcher:uri=""
+->         launcher:y="3"/>
+-> 
+->     <item
+->         launcher:id=""
+->         launcher:className="com.android.calendar.AllInOneActivity"
+->         launcher:container="1"
+->         launcher:icon=""
+->         launcher:packageName="com.google.android.calendar"
+->         launcher:screen="1"
+->         launcher:spanX="1"
+->         launcher:spanY="1"
+->         launcher:title=""
+->         launcher:type="1"
+->         launcher:uri=""
+->         launcher:x="2"
+->         launcher:y="3"/>
+-> 
+->     <item
+->         launcher:id=""
+->         launcher:className="com.android.deskclock.DeskClock"
+->         launcher:container="1"
+->         launcher:icon=""
+->         launcher:packageName="com.google.android.deskclock"
+->         launcher:screen="1"
+->         launcher:spanX="1"
+->         launcher:spanY="1"
+->         launcher:title=""
+->         launcher:type="1"
+->         launcher:uri=""
+->         launcher:x="0"
+->         launcher:y="4"/>
+ >     <!-- Screen 1 begin -->
+ >     <item
+ >         launcher:id=""
+@@ -403,8 +357,6 @@
+ >         launcher:x="1"
+ >         launcher:y="0"/>
+ > 
+->     <item
+->         launcher:id=""
+ >         launcher:className="com.hawk.android.browser.BrowserActivity"
+ >         launcher:container=""
+ >         launcher:icon=""
+@@ -451,10 +403,7 @@
+ >     <item
+ >         launcher:id="2"
+ >         launcher:className=""
+->         launcher:container=""
+->         launcher:icon=""
+ >         launcher:packageName=""
+->         launcher:screen="1"
+ >         launcher:spanX="1"
+ >         launcher:spanY="1"
+ >         launcher:title="Tools"
+@@ -472,11 +421,7 @@
+ >         launcher:screen="0"
+ >         launcher:spanX="1"
+ >         launcher:spanY="1"
+->         launcher:title=""
+ >         launcher:type="1"
+->         launcher:uri=""
+->         launcher:x="0"
+->         launcher:y="0"/>
+ > 
+ >     <item
+ >         launcher:id=""
+@@ -538,6 +483,8 @@
+ >         launcher:x="1"
+ >         launcher:y="1"/>
+ > 
++>     <item
++>         launcher:id=""
+ >         launcher:className="com.android.soundrecorder.SoundRecorder"
+ >         launcher:container="2"
+ >         launcher:icon=""
+@@ -569,7 +516,10 @@
+ >     <item
+ >         launcher:id="3"
+ >         launcher:className=""
++>         launcher:container=""
++>         launcher:icon=""
+ >         launcher:packageName=""
++>         launcher:screen="1"
+ >         launcher:spanX="1"
+ >         launcher:spanY="1"
+ >         launcher:title="Games"
+@@ -587,7 +537,11 @@
+ >         launcher:screen="0"
+ >         launcher:spanX="1"
+ >         launcher:spanY="1"
++>         launcher:title=""
+ >         launcher:type="1"
++>         launcher:uri=""
++>         launcher:x="0"
++>         launcher:y="0"/>
+ > 
+ >     <item
+ >         launcher:id=""
+@@ -697,24 +651,77 @@
+ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/JoyLauncherOverlay/res/values/extra_wallpapers.xml:
+ 
+ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpSmsSingleRecipientSenderExt.java:
+->         return codingType;
+ 
+ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java:
+->         return encodingType;
++> 		boolean bFrSmsEncoding = context.getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++> 		if(bFrSmsEncoding){
++> 			int type = SmsMessage.ENCODING_UNKNOWN;
++> 			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++> 			String encodingTypeStr = null;
++> 			encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++> 			if ("Unicode".equals(encodingTypeStr)) {
++> 				type = SmsMessage.ENCODING_16BIT;
++> 			} else if ("GSM alphabet".equals(encodingTypeStr)) {
++> 				type = SmsMessage.ENCODING_7BIT;
++> 			}
++> 			return type;
++> 		}else{
++> 			return encodingType;
++> 		}
++> 		boolean bFrSmsEncoding = context.getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++> 		if(bFrSmsEncoding){
++> 			int type = SmsMessage.ENCODING_UNKNOWN;
++> 			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++> 			String encodingTypeStr = null;
++> 			encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++> 			if ("Unicode".equals(encodingTypeStr)) {
++> 				type = SmsMessage.ENCODING_16BIT;
++> 			} else if ("GSM alphabet".equals(encodingTypeStr)) {
++> 				type = SmsMessage.ENCODING_7BIT;
++> 			}
++> 			return type;
++> 		}else{
++> 			return encodingType;
++> 		}
+ 
+ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java:
+-> 
+->         params = SmsMessage.calculateLength(text, false, encodingType);
+ 
+ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java:
+ >     private static int sSmsToMmsTextThreshold = 4;
+ 
+ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java:
+->                 smsCategory.removePreference(mSmsInputMode);
++> 				boolean bFrSmsEncoding = getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++> 				if(bFrSmsEncoding){
++> 					mSmsInputMode.setOnPreferenceChangeListener(this);
++> 				}else{
++> 					smsCategory.removePreference(mSmsInputMode);
++> 				}
++>                 
+ >                                 mNumberText.setInputType(
+ >                                         EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_CLASS_PHONE);
+->         if (preference == mSmsLocation && !(SimStateMonitor.getInstance().getSubCount() > 1)) {
++> 		boolean bFrSmsEncoding = getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++> 		if(bFrSmsEncoding){
++> 			editor.putString(SMS_INPUT_MODE, "Automatic"); // Add this
++> 		}
++>             if (SMS_INPUT_MODE.equals(key)) {
++>                 MmsLog.d(TAG, "Input Mode Changed");
++>                 mSmsInputMode.setValue((String) arg1);
++>             }else if (preference == mSmsLocation && !(SimStateMonitor.getInstance().getSubCount() > 1)) {
++> 				if (!getResources().getBoolean(R.bool.isTablet)) {
++> 					mSmsLocation.setSummary(MessageUtils.getVisualTextName(this, (String) arg1,
++> 							R.array.pref_sms_save_location_choices,
++> 							R.array.pref_sms_save_location_values));
++> 				} else {
++> 					mSmsLocation.setSummary(MessageUtils.getVisualTextName(this, (String) arg1,
++> 							R.array.pref_tablet_sms_save_location_choices,
++> 							R.array.pref_tablet_sms_save_location_values));
++> 				}
+ 
++vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/GeneralPreferenceActivity.java:
++
++vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/generalpreferences.xml:
++>     <PreferenceCategory android:title="@string/cell_broadcast_title">
++
+ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/external/EccList/ecc_list.xml:
+ 
+ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/hardware/ril/gsm/mtk-ril/ril_callbacks.c:
+@@ -725,9 +732,52 @@
+ 
+ vendor/branch/5058A_Entel_Chile/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java:
+ > 
++>                 fetchPnn();
++>                 isRecordLoadResponse = false;
+ > 
++>                 mRecordsEventsRegistrants.notifyResult(EVENT_OPL);
++> 
++>         fetchOpl();
++> 
++>     private void fetchPnn() {
++>         if (DBG) log("fetchPnn()");
++>         }
++>     }
++> 
++>     private void fetchOpl() {
++>         if (DBG) log("fetchOpl()");
++>         //boolean bPnnOplActive = false;
++>         boolean bPnnActive = false;
++>         boolean bOplActive = false;
++> 
++>         if (mEfSST != null) {
++>             if (mParentApp.getType() == AppType.APPTYPE_USIM) {
++>                 if (mEfSST.length >= 6) {
++>                     bPnnActive = ((mEfSST[5] & 0x10) == 0x10);
++>                     if (bPnnActive) {
++>                         bOplActive = ((mEfSST[5] & 0x20) == 0x20);
++>                     }
++>                 }
++>             } else if (mEfSST.length >= 13) {
++>                 bPnnActive = ((mEfSST[12] & 0x30) == 0x30);
++>                 if (bPnnActive) {
++>                     bOplActive = ((mEfSST[12] & 0xC0) == 0xC0);
++>                 }
++>             }
++>         }
++>         if (DBG) log("bPnnActive = " + bPnnActive + ", bOplActive = " + bOplActive);
++> 
++>         if (bPnnActive) {
+ 
+ vendor/branch/5058A_Entel_Chile/frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java:
++> 			
++> 			//add by javen for 24 hours or 12 hours format{
++> 			boolean bFrTimeFmt = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_TIMEFORMAT);
++> 			if(bFrTimeFmt){
++> 				loadStringSetting(stmt, Settings.System.TIME_12_24, com.android.internal.R.string.STR_TIMEFORMAT_24);//add for 12 hours
++> 			}
++> 			//end by javen 2018.01.26 }
++> 			
+ >                     R.string.enabled_input_methods);
+ 
+ vendor/branch/5058A_Entel_Chile/frameworks/base/packages/SettingsProvider/res/values/defaults.xml:
+@@ -786,8 +836,11 @@
+ 
+ vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/config.xml:
+ >     <string name="default_browser" translatable="false"></string>
++>     <string name="config_mms_user_agent" translatable="false">Android-Mms/0.1</string>
++>     <string name="config_mms_user_agent_profile_url" translatable="false">http://www.google.com/oha/rdf/ua-profile-kila.xml</string>
+ >     <string translatable="false" name="config_ntpServer">asia.pool.ntp.org</string>
+->     <bool name="config_cellBroadcastAppLinks">true</bool>
++>     <bool name="config_dreamsActivatedOnDockByDefault">false</bool>
++>     <bool name="config_dreamsActivatedOnSleepByDefault">true</bool>
+ >     <bool name="config_camera_sound_forced">true</bool>
+-> 	<bool name="def_cb_channel_50_behaviour_brazil">true</bool>
++>     <bool name="config_cameraDoubleTapPowerGestureEnabled">false</bool>
+ 
+Index: vendor/branch/5058A_Entel_Chile/diff_5058A.txt
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/diff_5058A.txt	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/diff_5058A.txt	(revision 7292)
+@@ -1,8 +1,8 @@
+ vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/full_aus6739_66_n1.mk:
+-> PRODUCT_LOCALES :=es_US es en_US en_GB pt_BR pt_PT fr_FR
++> PRODUCT_LOCALES :=es_MX es_US es en_US en_GB pt_BR pt_PT fr_FR
+ 
+ vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/ProjectConfig.mk:
+-> MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P42
++> MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P48
+ 
+ vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/system.prop:
+ > ro.tct.curef.default=5058A-2*ALOP1
+@@ -14,6 +14,9 @@
+ > 
+ > ro.com.google.clientidbase.cr=android-alcatel
+ 
++vendor/branch/5058A_Entel_Chile/device/mediatek/mt6739/device.mk:
++> PRODUCT_PACKAGES += Email
++
+ vendor/branch/5058A_Entel_Chile/device/mediatek/common/spn-conf.xml:
+ > <spnOverride numeric="72424" spn="AMAZONIA"/>
+ > <spnOverride numeric="73008" spn="CHL VTR"/>
+@@ -24,18 +27,18 @@
+ vendor/branch/5058A_Entel_Chile/build/target/product/full_base.mk:
+ >     ro.config.ringtone=Fresh.ogg \
+ > # Put en_ES first in the list, so make it default.
+-> PRODUCT_LOCALES :=es_US en_ES en_US en_GB pt_BR pt_PT fr_FR
++> PRODUCT_LOCALES :=es_MX es_US en_ES en_US en_GB pt_BR pt_PT fr_FR
+ 
+ vendor/branch/5058A_Entel_Chile/build/tools/buildinfo.sh:
+-> echo "ro.build.display.id=5058A_LATAM_V2.2_180124"
+-> echo "ro.build.version.custintid=5058A_LATAM_V2.2_180124"
+-> echo "ro.build.version.incremental=LATAM_5058A_L030_S17_180124"
+-> echo "ro.tct.sys.ver=O58AWE03"
+-> echo "ro.build.display.factoryid=Plat:LATAM_5058A_L030_S17_180124Outer:5058A_LATAM_V2.2_180124End"
++> echo "ro.build.display.id=5058A_LATAM_V2.3_180126"
++> echo "ro.build.version.custintid=5058A_LATAM_V2.3_180126"
++> echo "ro.build.version.incremental=LATAM_5058A_L030_S18_180126"
++> echo "ro.tct.sys.ver=O58AWE04"
++> echo "ro.build.display.factoryid=Plat:LATAM_5058A_L030_S18_180126Outer:5058A_LATAM_V2.3_180126End"
+ > 
+ > echo "ro.product.manufacturer= TCT"
+ > #echo "ro.build.fingerprint=$BUILD_FINGERPRINT"
+-> echo "ro.build.fingerprint=TCL/5058A/A3A_PLUS:7.1.1/N6F26Q/5058A_LATAM_V2.2_180124:user/release-keys"
++> echo "ro.build.fingerprint=TCL/5058A/A3A_PLUS:7.1.1/N6F26Q/5058A_LATAM_V2.3_180126:user/release-keys"
+ 
+ vendor/branch/5058A_Entel_Chile/packages/apps/Email/AndroidManifest.xml:
+ >             android:theme="@android:style/Theme.NoDisplay"
+@@ -43,6 +46,8 @@
+ vendor/branch/5058A_Entel_Chile/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java:
+ >             newSignature = getResources().getString(R.string.preferences_signature_content_reference);
+ 
++vendor/branch/5058A_Entel_Chile/packages/apps/Settings/src/com/android/settings/ApnSettings.java:
++
+ vendor/branch/5058A_Entel_Chile/vendor/customer/custom.mk:
+ >                     Diagnostics \
+ >                     facebookStub \
+@@ -56,9 +61,19 @@
+ >     <string name="def_browser_bookmark1_name">"Alcatel Portal"</string>
+ >     <string name="def_browser_bookmark1_url">"http://3g.my-alcatel.com"</string>
+ 
++vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/ELabelOverlay/res/values/isdm_ElabelRes_defaults.xml:
++>     <string name="def_jrdelabel_ift">"IFT:TBD"</string>
++>     <string name="def_jrdelabel_ifetel">"México"</string>
++>     <string name="def_jrdelabel_sarfcc_headvalue">"0.41"</string>
++>     <string name="def_jrdelabel_sarfcc_bodyvalue">"0.90"</string>
++>     <string name="def_jrdelabel_sarfcc_distancevalue">"10"</string>
++>     <string name="feature_jrdelabel_celogo_index">"2"</string>
++>     <string name="def_jrdelabel_manufacturer_address">"5/F, Building 22E, 22 Science Park East Avenue, Hong Kong Science Park, Shatin, NT, Hong Kong"</string>
++
+ vendor/branch/5058A_Entel_Chile/frameworks/base/packages/SettingsProvider/res/values/defaults.xml:
+ 
+ vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/locale_config.xml:
++> 		<item>es-MX</item> <!-- Spanish (Mexico) -->
+ >         <item>es-US</item> <!-- Spanish (United States) -->
+ >         <item>fr-FR</item> <!-- French (France) -->
+ >         <item>es</item> <!-- Spanish (Spain) -->
+@@ -69,5 +84,6 @@
+ >     <string name="default_browser" translatable="false"></string>
+ >     <string translatable="false" name="config_ntpServer">asia.pool.ntp.org</string>
+ >     <bool name="config_cellBroadcastAppLinks">true</bool>
++>     <bool name="config_cameraDoubleTapPowerGestureEnabled">false</bool>
+ > 	<bool name="def_cb_channel_50_behaviour_brazil">true</bool>
+ 
+Index: vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/ELabelOverlay/res/values/isdm_ElabelRes_defaults.xml
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/ELabelOverlay/res/values/isdm_ElabelRes_defaults.xml	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/ELabelOverlay/res/values/isdm_ElabelRes_defaults.xml	(revision 7292)
+@@ -25,4 +25,9 @@
+ <resources>
+     <string name="def_jrdelabel_manufacturer_name">"TCL Communication Ltd."</string>
+     <string name="def_jrdelabel_bluetooth_qdid_lable">"Bluetooth QD ID D038401"</string>
++    <string name="def_jrdelabel_sarfcc_headvalue">"0.41"</string>
++    <string name="def_jrdelabel_sarfcc_bodyvalue">"0.90"</string>
++    <string name="def_jrdelabel_sarfcc_distancevalue">"10"</string>
++    <string name="feature_jrdelabel_celogo_index">"2"</string>
++    <string name="def_jrdelabel_manufacturer_address">"5/F, Building 22E, 22 Science Park East Avenue, Hong Kong Science Park, Shatin, NT, Hong Kong"</string>
+ </resources>
+Index: vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java	(revision 7292)
+@@ -367,31 +367,39 @@
+ 
+     @Override
+     public int getSmsEncodingType(int encodingType, Context context) {
+-    	int type = SmsMessage.ENCODING_UNKNOWN;
+-    	SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+-    	String encodingTypeStr = null;
+-    	encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
+-    	if ("Unicode".equals(encodingTypeStr)) {
+-            type = SmsMessage.ENCODING_16BIT;
+-    	} else if ("GSM alphabet".equals(encodingTypeStr)) {
+-            type = SmsMessage.ENCODING_7BIT;
+-    	}
+-    	return type;
+-        //return encodingType;
++		boolean bFrSmsEncoding = context.getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++		if(bFrSmsEncoding){
++			int type = SmsMessage.ENCODING_UNKNOWN;
++			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++			String encodingTypeStr = null;
++			encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++			if ("Unicode".equals(encodingTypeStr)) {
++				type = SmsMessage.ENCODING_16BIT;
++			} else if ("GSM alphabet".equals(encodingTypeStr)) {
++				type = SmsMessage.ENCODING_7BIT;
++			}
++			return type;
++		}else{
++			return encodingType;
++		}
+     }
+     
+     public static int getSmsEncodingTypes(int encodingType, Context context) {
+-    	int type = SmsMessage.ENCODING_UNKNOWN;
+-    	SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+-    	String encodingTypeStr = null;
+-    	encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
+-    	if ("Unicode".equals(encodingTypeStr)) {
+-            type = SmsMessage.ENCODING_16BIT;
+-    	} else if ("GSM alphabet".equals(encodingTypeStr)) {
+-            type = SmsMessage.ENCODING_7BIT;
+-    	}
+-    	return type;
+-        //return encodingType;
++		boolean bFrSmsEncoding = context.getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++		if(bFrSmsEncoding){
++			int type = SmsMessage.ENCODING_UNKNOWN;
++			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++			String encodingTypeStr = null;
++			encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++			if ("Unicode".equals(encodingTypeStr)) {
++				type = SmsMessage.ENCODING_16BIT;
++			} else if ("GSM alphabet".equals(encodingTypeStr)) {
++				type = SmsMessage.ENCODING_7BIT;
++			}
++			return type;
++		}else{
++			return encodingType;
++		}
+     }
+ 
+     @Override
+Index: vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java	(revision 7292)
+@@ -268,8 +268,13 @@
+                     = (PreferenceCategory) findPreference("pref_key_sms_settings");
+             mSmsInputMode = (ListPreference) findPreference(SMS_INPUT_MODE);
+             if (mSmsInputMode != null) {
+-                //smsCategory.removePreference(mSmsInputMode);
+-                mSmsInputMode.setOnPreferenceChangeListener(this);
++				boolean bFrSmsEncoding = getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++				if(bFrSmsEncoding){
++					mSmsInputMode.setOnPreferenceChangeListener(this);
++				}else{
++					smsCategory.removePreference(mSmsInputMode);
++				}
++                
+             }
+         }
+     }
+@@ -564,7 +569,10 @@
+         MmsConfig.setInitQuickText(true);
+ 
+         mOpSmsPreferenceActivityExt.restoreDefaultPreferences(this, editor);
+-        editor.putString(SMS_INPUT_MODE, "Automatic"); // Add this
++		boolean bFrSmsEncoding = getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++		if(bFrSmsEncoding){
++			editor.putString(SMS_INPUT_MODE, "Automatic"); // Add this
++		}
+         editor.apply();
+         setPreferenceScreen(null);
+         setMessagePreferences();
+Index: vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7292)
+@@ -224,7 +224,7 @@
+ MTK_BT_SUPPORT = yes
+ MTK_BT_WIFI_COEX_RADIO_MODIFY = no
+ MTK_BUFFER_COMPRESSION_SUPPORT = no
+-MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P47
++MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P48
+ MTK_BWC_SUPPORT = yes
+ MTK_C2K_LTE_MODE = 0
+ MTK_CACHE_MERGE_SUPPORT = no
+@@ -677,7 +677,7 @@
+ MTK_WAPI_SUPPORT = yes
+ MTK_WAPPUSH_SUPPORT = yes
+ MTK_WB_SPEECH_SUPPORT = yes
+-MTK_WEEK_NO = W18.02
++MTK_WEEK_NO = W18.04
+ MTK_WFC_SUPPORT = no
+ MTK_WFD_HDCP_RX_SVP_SUPPORT = no
+ MTK_WFD_HDCP_TX_SUPPORT = no
+Index: vendor/branch/5058A_Entel_Chile/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 7292)
+@@ -1256,6 +1256,7 @@
+                 }
+ 
+                 mEfMWIS = data;
++
+                 break;
+ 
+             case EVENT_GET_VOICE_MAIL_INDICATOR_CPHS_DONE:
+@@ -1544,7 +1545,7 @@
+ 
+                 fetchMbiRecords();
+                 fetchMwisRecords();
+-                fetchPnnAndOpl();
++                fetchPnn();
+                 fetchSpn();
+                 fetchSmsp();
+                 fetchGbaRecords();
+@@ -1787,7 +1788,7 @@
+ 
+             // MTK-START
+             case EVENT_GET_ALL_OPL_DONE:
+-                isRecordLoadResponse = true;
++                isRecordLoadResponse = false;
+ 
+                 ar = (AsyncResult) msg.obj;
+                 if (ar.exception != null) {
+@@ -1794,6 +1795,8 @@
+                     break;
+                 }
+                 parseEFopl((ArrayList) ar.result);
++
++                mRecordsEventsRegistrants.notifyResult(EVENT_OPL);
+                 break;
+ 
+             case EVENT_GET_CPHSONS_DONE:
+@@ -2532,6 +2535,8 @@
+             new AsyncResult(null, null, null));
+ 
+         // MTK-START
++        fetchOpl();
++
+         log("imsi = " + mImsi + " operator = " + operator);
+ 
+         if (operator != null) {
+@@ -3396,8 +3401,8 @@
+     }
+ 
+     // ALPS00267605 : PNN/OPL revision
+-    private void fetchPnnAndOpl() {
+-        if (DBG) log("fetchPnnAndOpl()");
++    private void fetchPnn() {
++        if (DBG) log("fetchPnn()");
+         //boolean bPnnOplActive = false;
+         boolean bPnnActive = false;
+         boolean bOplActive = false;
+@@ -3422,9 +3427,35 @@
+         if (bPnnActive) {
+             mFh.loadEFLinearFixedAll(EF_PNN, obtainMessage(EVENT_GET_PNN_DONE));
+             mRecordsToLoad++;
++        }
++    }
++
++    private void fetchOpl() {
++        if (DBG) log("fetchOpl()");
++        //boolean bPnnOplActive = false;
++        boolean bPnnActive = false;
++        boolean bOplActive = false;
++
++        if (mEfSST != null) {
++            if (mParentApp.getType() == AppType.APPTYPE_USIM) {
++                if (mEfSST.length >= 6) {
++                    bPnnActive = ((mEfSST[5] & 0x10) == 0x10);
++                    if (bPnnActive) {
++                        bOplActive = ((mEfSST[5] & 0x20) == 0x20);
++                    }
++                }
++            } else if (mEfSST.length >= 13) {
++                bPnnActive = ((mEfSST[12] & 0x30) == 0x30);
++                if (bPnnActive) {
++                    bOplActive = ((mEfSST[12] & 0xC0) == 0xC0);
++                }
++            }
++        }
++        if (DBG) log("bPnnActive = " + bPnnActive + ", bOplActive = " + bOplActive);
++
++        if (bPnnActive) {
+             if (bOplActive) {
+                 mFh.loadEFLinearFixedAll(EF_OPL, obtainMessage(EVENT_GET_ALL_OPL_DONE));
+-                mRecordsToLoad++;
+             }
+         }
+     }
+Index: vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/locale_config.xml
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/locale_config.xml	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/locale_config.xml	(revision 7292)
+@@ -18,10 +18,10 @@
+ 
+     <string-array translatable="false" name="supported_locales">
+     	<item>en-US</item> <!-- English (United States) -->
+-    	<item>es-US</item> <!-- Spanish (Spain) -->
++    	<item>es-MX</item> <!-- Spanish (Latin) -->
+     	<item>pt-BR</item> <!-- Portuguese (Brazil) -->
+     	<item>pt-PT</item> <!-- Portuguese (Portugal) -->  
+-        <item>fr-FR</item>
++        <item>fr-FR</item> <!-- French (France) -->
+     </string-array>
+ 
+ </resources>
+Index: vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/config.xml	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/config.xml	(revision 7292)
+@@ -1583,7 +1583,7 @@
+     <string name="config_mms_user_agent" translatable="false">5058A-MMS/2.0</string>
+ 
+     <!-- MMS user agent prolfile url -->
+-    <string name="config_mms_user_agent_profile_url" translatable="false">http://www-ccpp.tcl-ta.com/files/5058a.xml</string>
++    <string name="config_mms_user_agent_profile_url" translatable="false">http://www.google.com/oha/rdf/ua-profile-kila.xml</string>
+ 
+     <!-- National Language Identifier codes for the following two config items.
+          (from 3GPP TS 23.038 V9.1.1 Table 6.2.1.2.4.1):
+@@ -1699,9 +1699,9 @@
+     <!-- If supported, are dreams enabled? (by default) -->
+     <bool name="config_dreamsEnabledByDefault">true</bool>
+     <!-- If supported and enabled, are dreams activated when docked? (by default) -->
+-    <bool name="config_dreamsActivatedOnDockByDefault">true</bool>
++    <bool name="config_dreamsActivatedOnDockByDefault">false</bool>
+     <!-- If supported and enabled, are dreams activated when asleep and charging? (by default) -->
+-    <bool name="config_dreamsActivatedOnSleepByDefault">false</bool>
++    <bool name="config_dreamsActivatedOnSleepByDefault">true</bool>
+     <!-- ComponentName of the default dream (Settings.Secure.DEFAULT_SCREENSAVER_COMPONENT) -->
+ 
+     <string name="config_dreamsDefaultComponent" translatable="false">com.android.deskclock/com.android.deskclock.Screensaver</string>
+@@ -1950,7 +1950,7 @@
+     <bool name="config_wifiDisplaySupportsProtectedBuffers">false</bool>
+ 
+     <!-- Whether camera shutter sound is forced or not  (country specific). -->
+-    <bool name="config_camera_sound_forced">false</bool>
++    <bool name="config_camera_sound_forced">true</bool>
+ 
+     <!-- Set to true if we need to not prefer an APN.
+          This is being added to enable a simple scenario of pre-paid
+@@ -2494,7 +2494,7 @@
+ 
+     <!-- Allow the gesture to double tap the power button twice to start the camera while the device
+          is non-interactive. -->
+-    <bool name="config_cameraDoubleTapPowerGestureEnabled">true</bool>
++    <bool name="config_cameraDoubleTapPowerGestureEnabled">false</bool>
+ 
+     <!-- Name of the component to handle network policy notifications. If present,
+          disables NetworkPolicyManagerService's presentation of data-usage notifications. -->
+Index: vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/features.xml	(revision 0)
++++ vendor/branch/5058A_Entel_Chile/frameworks/base/core/res/res/values/features.xml	(revision 7292)
+@@ -0,0 +1,19 @@
++<?xml version="1.0" encoding="utf-8"?>
++
++<!-- config all code feature -->
++
++<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <!-- feature for 24 hours or 12 hours one day -->
++	<bool name="FR_TIMEFORMAT">true</bool>
++	<string name="STR_TIMEFORMAT_24">24</string>
++	
++	<!-- feature for date format one day -->
++	<bool name="FR_DATEFORMAT">true</bool>
++	<string name="STR_DATEFORMAT">DD/MM/YYYY</string>
++	
++	<!-- feature for sms encoding -->
++	<bool name="FR_SMS_ENCODING">true</bool> 
++	
++	<!-- feature for other -->
++    
++</resources>
+Index: vendor/branch/5058A_Entel_Chile/frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 7291)
++++ vendor/branch/5058A_Entel_Chile/frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 7292)
+@@ -2433,7 +2433,14 @@
+ 			loadIntegerSetting(stmt, Settings.System.BATTERY_POWER_PERCENNTAGE_ENABLED,
+                     R.integer.battery_power_percentage_enable);
+ 			//add by wqq for battery percentage }
+-			loadStringSetting(stmt, Settings.System.TIME_12_24, R.string.time_12_24);//add for 24 hours
++			
++			//add by javen for 24 hours or 12 hours format{
++			boolean bFrTimeFmt = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_TIMEFORMAT);
++			if(bFrTimeFmt){
++				loadStringSetting(stmt, Settings.System.TIME_12_24, com.android.internal.R.string.STR_TIMEFORMAT_24);//add for 24 hours
++			}
++			//end by javen 2018.01.26 }
++			
+             /// M: Load MTK added System providers before Android M.
+             mUtils.loadCustomSystemSettings(stmt);
+ 
+@@ -2498,7 +2505,7 @@
+             //loadSetting(stmt, Settings.Secure.ADB_ENABLED, 0);
+ 			// Allow def input method
+ 			loadStringSetting(stmt, Settings.Secure.ENABLED_INPUT_METHODS,
+-                    R.string.def_input_method);
++                    R.string.enabled_input_methods);
+ 			loadStringSetting(stmt,Settings.Secure.DEFAULT_INPUT_METHOD,
+ 					R.string.def_input_method);	
+             // Allow mock locations default, based on build

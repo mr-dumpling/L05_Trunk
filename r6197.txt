@@ -1,0 +1,233 @@
+Index: vendor/branch/5058I/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058I/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058I/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -53,4 +53,6 @@
+ 	<bool name="config_remove_wifi_calling">true</bool>
+ 	<bool name="guest_cannot_open_hotspot">true</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool> 
++
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>
+Index: vendor/branch/5058J/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058J/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058J/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -52,4 +52,5 @@
+ 	<bool name="config_remove_wifi_calling">true</bool>
+ 	<bool name="guest_cannot_open_hotspot">true</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool>
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>
+Index: vendor/branch/980CN1/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/980CN1/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/980CN1/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -54,4 +54,6 @@
+ 	
+ 	<bool name="guest_cannot_open_hotspot">true</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool>
++
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>
+Index: vendor/branch/5058A_Claro/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058A_Claro/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058A_Claro/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -53,4 +53,6 @@
+ 	<bool name="config_remove_wifi_calling">true</bool>
+ 	<bool name="guest_cannot_open_hotspot">false</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool>
++
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>
+Index: vendor/branch/5058T/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058T/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058T/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -53,4 +53,5 @@
+ 	<bool name="config_remove_wifi_calling">true</bool>
+ 	<bool name="guest_cannot_open_hotspot">true</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool>
++    <bool name="def_settings_informed_consent_show">true</bool>    
+ </resources>
+Index: vendor/branch/5058A_Telcel/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058A_Telcel/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -53,4 +53,6 @@
+ 	<bool name="config_remove_wifi_calling">true</bool>
+ 	<bool name="guest_cannot_open_hotspot">false</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool>
++
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>
+Index: vendor/branch/5058A_Telcel/packages/apps/Settings/src/com/android/settings/DeviceInfoSettings.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Settings/src/com/android/settings/DeviceInfoSettings.java	(revision 6196)
++++ vendor/branch/5058A_Telcel/packages/apps/Settings/src/com/android/settings/DeviceInfoSettings.java	(revision 6197)
+@@ -53,6 +53,11 @@
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+ 
++//lance add for Diagnostic @{
++import android.content.ActivityNotFoundException;
++import android.content.pm.PackageManager.NameNotFoundException;
++// @}
++
+ public class DeviceInfoSettings extends SettingsPreferenceFragment implements Indexable {
+ 
+     private static final String LOG_TAG = "DeviceInfoSettings";
+@@ -74,6 +79,7 @@
+     private static final String PROPERTY_EQUIPMENT_ID = "ro.ril.fccid";
+     private static final String KEY_DEVICE_FEEDBACK = "device_feedback";
+     private static final String KEY_SAFETY_LEGAL = "safetylegal";
++	private static final String KEY_INFORMED_CONSENT = "informed_consent";//lance add for Diagnostic
+ 
+     static final int TAPS_TO_BE_A_DEVELOPER = 7;
+ 
+@@ -188,11 +194,45 @@
+         removePreferenceIfActivityMissing(
+                 "safety_info", "android.settings.SHOW_SAFETY_AND_REGULATORY_INFO");
+ 
++        //lance add for diagnostic @{
++        if(!shouldShowInformedConsent()) {
++            getPreferenceScreen().removePreference(findPreference(KEY_INFORMED_CONSENT));
++        } else {
++            findPreference(KEY_INFORMED_CONSENT).setEnabled(true);
++        }
++        //@}
++
+         ///M:
+         mExts = new DeviceInfoSettingsExts(getActivity(), this);
+         mExts.initMTKCustomization(getPreferenceScreen());
+     }
++	
++    //lance add for diagnostic @{
++    public boolean shouldShowInformedConsent() {
++        return hasDiagnosticApp() && (getResources().getBoolean(R.bool.def_settings_informed_consent_show));   
++    }
+ 
++    public boolean hasDiagnosticApp() {
++        try {
++            getPackageManager().getApplicationIcon("com.tct.diagnostics");
++            return true;
++        } catch (NameNotFoundException e) {
++            // TODO Auto-generated catch block
++            Log.w(LOG_TAG, "get com.tct.diagnostics failed!");
++            return false;
++        }
++    }
++	
++    private void updateInformedSummary(){
++        Preference pre = findPreference(KEY_INFORMED_CONSENT);
++        if(null != pre){
++            int isOn = Settings.Global.getInt(getContentResolver(), "def.diagnostic.on", 0);
++            pre.setSummary(isOn == 1 ? R.string.informed_consent_on
++                    : R.string.informed_consent_off);
++        }
++    }
++	//@}
++
+     @Override
+     public void onResume() {
+         super.onResume();
+@@ -208,6 +248,7 @@
+                 getActivity(), UserManager.DISALLOW_DEBUGGING_FEATURES, UserHandle.myUserId());
+         mDebuggingFeaturesDisallowedBySystem = RestrictedLockUtils.hasBaseUserRestriction(
+                 getActivity(), UserManager.DISALLOW_DEBUGGING_FEATURES, UserHandle.myUserId());
++		updateInformedSummary();//lance add for Diagnostic
+     }
+ 
+     @Override
+@@ -311,7 +352,16 @@
+             startActivity(intent);
+             return true;
+             //[BUGFIX]-Mod-END by TCTNB.yubin.ying
++            //lance add for Diagnostic @{
++        }	else if (preference.getKey().equals(KEY_INFORMED_CONSENT)){
++            Intent intent = new Intent("com.tct.diagnostic.INFORMEDCONSENT");
++            try{
++                startActivity(intent);
++            }catch(ActivityNotFoundException e){
++                Log.d(LOG_TAG, "lancelot happened error:this activity can not be found");
++            }
+         }
++		// @}
+         /// M:
+         mExts.onCustomizedPreferenceTreeClick(preference);
+         return super.onPreferenceTreeClick(preference);
+Index: vendor/branch/5058Y/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058Y/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -54,4 +54,6 @@
+ 	
+ 	<bool name="guest_cannot_open_hotspot">true</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool> 
++
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>
+Index: vendor/branch/5058Y/packages/apps/Settings/res/xml/device_info_settings.xml
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/res/xml/device_info_settings.xml	(revision 6196)
++++ vendor/branch/5058Y/packages/apps/Settings/res/xml/device_info_settings.xml	(revision 6197)
+@@ -45,6 +45,13 @@
+ 	     android:summary="@string/software_updates_more_summary" >
+ 	</PreferenceScreen>
+ 
++        <!-- lance add for Diagnostic -->
++        <Preference android:key="informed_consent"
++                android:enabled="false"
++                android:shouldDisableView="false"
++                android:title="@string/informed_consent"
++                android:summary="@string/informed_consent_off"/>
++
+         <!-- Device status - launches activity -->
+         <PreferenceScreen android:key="status_info"
+                 android:title="@string/device_status"
+Index: vendor/branch/5058A_Telefonica/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058A_Telefonica/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058A_Telefonica/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -54,4 +54,6 @@
+ 	
+ 	<bool name="guest_cannot_open_hotspot">false</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool>
++
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>
+Index: vendor/branch/5058A_BRIGHTSTAR/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058A_BRIGHTSTAR/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058A_BRIGHTSTAR/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -53,4 +53,6 @@
+ 	<bool name="config_remove_wifi_calling">true</bool>
+ 	<bool name="guest_cannot_open_hotspot">false</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool>
++
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>
+Index: vendor/branch/5058A/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058A/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058A/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -54,4 +54,6 @@
+ 	
+ 	<bool name="guest_cannot_open_hotspot">false</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool>
++
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>
+Index: vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/res/values/bools.xml	(revision 6196)
++++ vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/res/values/bools.xml	(revision 6197)
+@@ -53,5 +53,6 @@
+ 	<bool name="config_remove_wifi_calling">true</bool>
+ 	<bool name="guest_cannot_open_hotspot">false</bool>
+ 	<bool name="config_remove_snooze_enabled">false</bool>
+-	<bool name="config_remove_snooze_enabled">false</bool>
++
++    <bool name="def_settings_informed_consent_show">true</bool>
+ </resources>

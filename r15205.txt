@@ -1,0 +1,68 @@
+Index: vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 15204)
++++ vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 15205)
+@@ -54,6 +54,7 @@
+ import android.content.IntentFilter;
+ import android.content.DialogInterface.OnKeyListener;
+ import android.content.pm.PackageManager.NameNotFoundException;
++import android.provider.Settings.System;
+ import android.database.ContentObserver;
+ import android.net.Uri;
+ import android.os.AsyncResult;
+@@ -219,6 +220,7 @@
+         } else {
+             // Reset the toggle
+             mButtonDataRoam.setChecked(false);
++			Settings.System.putInt(this.getContentResolver(),"def_roam_state_with_expection_apn",1);
+         }
+     }
+ 
+@@ -341,6 +343,7 @@
+             if (TelephonyUtils.isHotSwapHanppened(
+                     mActiveSubInfos, PhoneUtils.getActiveSubInfoList())) {
+                 log("onSubscriptionsChanged:hot swap hanppened");
++				Settings.System.putInt(MobileNetworkSettings.this.getContentResolver(),"def_roam_state_with_expection_apn",0);
+                 dissmissDialog(mButtonPreferredNetworkMode);
+                 dissmissDialog(mButtonEnabledNetworks);
+                 finish();
+@@ -648,6 +651,16 @@
+         // Set UI state in onResume because a user could go home, launch some
+         // app to change this setting's backend, and re-launch this settings app
+         // and the UI state would be inconsistent with actual state
++		String mNumeric = mTelephonyManager.getSimOperator();
++		log("mNumeric="+mNumeric+" def_roam_state:"+Settings.System.getInt(this.getContentResolver(),"def_roam_state_with_expection_apn",0));		
++		if (Settings.System.getInt(this.getContentResolver(),"def_roam_state_with_expection_apn",0) == 0) {
++			mPhone.setDataRoamingEnabled(false);
++			log("===setDataRoamingEnabled(false)===");
++			if (!TextUtils.isEmpty(mNumeric) && ("27202".equals(mNumeric) || "27205".equals(mNumeric))) {			
++				mPhone.setDataRoamingEnabled(true);
++				log("===mPhone.getDataRoamingEnabled()==="+mPhone.getDataRoamingEnabled());
++			}			
++		}
+         mButtonDataRoam.setChecked(mPhone.getDataRoamingEnabled());
+ 
+         if (getPreferenceScreen().findPreference(BUTTON_PREFERED_NETWORK_MODE) != null
+@@ -1234,6 +1247,7 @@
+             if (DBG) {
+                 log("onPreferenceTreeClick: preference == mButtonDataRoam.");
+             }
++			Settings.System.putInt(this.getContentResolver(),"def_roam_state_with_expection_apn",1);
+             //normally called on the toggle click
+             if (!mButtonDataRoam.isChecked()) {
+                 // First confirm with a warning dialog about charges
+Index: vendor/branch/5058Y_ALIE/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 15204)
++++ vendor/branch/5058Y_ALIE/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 15205)
+@@ -620,8 +620,9 @@
+                                        //ALPS02446235]
+                                        {"20402", "20404","20405", "20407", "20408", "20409", "204043", "20412", "20415", "20416", "20418", "20420", "20424", "20465"},
+                                        /** ALPS02501839 treat 20815 as 20801's EPLMN @{ */
+-                                       {"20815", "20801"}
++                                       {"20815", "20801"},
+                                        /** @} */
++                                       {"27202", "27205"}
+                                        };
+ 
+     /** M:[ALPS02503235] add operator considered roaming configures @{ */

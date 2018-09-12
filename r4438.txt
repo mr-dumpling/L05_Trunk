@@ -1,0 +1,2899 @@
+Index: device/mediatek/common/sepolicy/bsp/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/bsp/system_app.te	(revision 4437)
++++ device/mediatek/common/sepolicy/bsp/system_app.te	(revision 4438)
+@@ -102,10 +102,10 @@
+ 
+ # Date : 2016/07/29
+ # Purpose : Gain permission to system apps read sdcard file for auto sanity case.
+-userdebug_or_eng(`
++#userdebug_or_eng(`
+ allow system_app media_rw_data_file:dir { read open };
+ allow system_app media_rw_data_file:file { read open };
+-')
++#')
+ 
+ # Date : 2015/06/12
+ # Operation: TEEI integration
+Index: device/mediatek/common/sepolicy/basic/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/basic/system_app.te	(revision 4437)
++++ device/mediatek/common/sepolicy/basic/system_app.te	(revision 4438)
+@@ -16,9 +16,9 @@
+ 
+ # Date : 2016/07/07
+ # Purpose : Gain permission to system apps to append file for tool testing
+-userdebug_or_eng(`
++#userdebug_or_eng(`
+ allow system_app media_rw_data_file:file append;
+-')
++#')
+ 
+ # Date : 2016/07/12
+ # Purpose : Issue submitter need creat folder on SD card
+Index: device/mediatek/common/sepolicy/full/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/full/system_app.te	(revision 4437)
++++ device/mediatek/common/sepolicy/full/system_app.te	(revision 4438)
+@@ -165,4 +165,5 @@
+ allow system_app media_rw_data_file:dir { read open getattr };
+ allow system_app cache_recovery_file:file { read open setattr };
+ allow system_app shell_data_file:dir { read open getattr };
++
+ allow system_app media_rw_data_file:file append;
+\ No newline at end of file
+Index: packages/apps/Settings/src/com/android/settings/Utils.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/Utils.java	(revision 4437)
++++ packages/apps/Settings/src/com/android/settings/Utils.java	(revision 4438)
+@@ -1222,4 +1222,16 @@
+         }
+         return 0l;
+    }
++   
++   // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++   public static boolean isCarrierDemoUser(Context context) {
++       final String carrierDemoModeSetting =
++               context.getString(com.android.internal.R.string.config_carrierDemoModeSetting);
++       return UserManager.isDeviceInDemoMode(context)
++               && getUserManager(context).isDemoUser()
++               && !TextUtils.isEmpty(carrierDemoModeSetting)
++               && (Settings.Secure.getInt(context.getContentResolver(),
++                       carrierDemoModeSetting, 0) == 1);
++   }
++   // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+ }
+Index: packages/apps/Settings/src/com/android/settings/MasterClear.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 4437)
++++ packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 4438)
+@@ -131,7 +131,7 @@
+            if (!runKeyguardConfirmation(KEYGUARD_REQUEST)) {
+                 //showFinalConfirmation();
+                }
+-               Resources res = getActivity().getResources();
++                Resources res = getActivity().getResources();
+                 AlertDialog ad=new AlertDialog.Builder(getActivity()).create(); //getActivity().getResources().getString(R.string.reset_attention);      
+                 ad.setMessage(res.getString(R.string.reset_attention));  
+                 ad.setButton(res.getString(R.string.reset_confirm), new DialogInterface.OnClickListener() {
+@@ -152,7 +152,7 @@
+                           
+                     }  
+                 });  
+-                ad.show();   
++                ad.show();        
+         }
+     };
+ 	private  void resetHandleCallTimes() {
+@@ -360,11 +360,20 @@
+     @Override
+     public View onCreateView(LayoutInflater inflater, ViewGroup container,
+             Bundle savedInstanceState) {
+-        final EnforcedAdmin admin = RestrictedLockUtils.checkIfRestrictionEnforced(
+-                getActivity(), UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId());
+-        final UserManager um = UserManager.get(getActivity());
+-        if (!um.isAdminUser() || RestrictedLockUtils.hasBaseUserRestriction(getActivity(),
+-                UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId())) {
++        // Begin modified by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++        //final EnforcedAdmin admin = RestrictedLockUtils.checkIfRestrictionEnforced(
++                //getActivity(), UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId());
++        //final UserManager um = UserManager.get(getActivity());
++        //if (!um.isAdminUser() || RestrictedLockUtils.hasBaseUserRestriction(getActivity(),
++                //UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId())) {
++        final Context context = getContext();
++        final EnforcedAdmin admin = RestrictedLockUtils.checkIfRestrictionEnforced(context,
++                UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId());
++        final UserManager um = UserManager.get(context);
++        final boolean disallow = !um.isAdminUser() || RestrictedLockUtils.hasBaseUserRestriction(
++                context, UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId());
++        if (disallow && !Utils.isCarrierDemoUser(context)) {
++        // End modified by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+             return inflater.inflate(R.layout.master_clear_disallowed_screen, null);
+         } else if (admin != null) {
+             View view = inflater.inflate(R.layout.admin_support_details_empty_view, null);
+Index: vendor/branch/5058A/device/mediatek/common/security/aus6739_66_n1/odm.platform.x509.pem
+===================================================================
+--- vendor/branch/5058A/device/mediatek/common/security/aus6739_66_n1/odm.platform.x509.pem	(revision 0)
++++ vendor/branch/5058A/device/mediatek/common/security/aus6739_66_n1/odm.platform.x509.pem	(revision 4438)
+@@ -0,0 +1,28 @@
++-----BEGIN CERTIFICATE-----
++MIIExTCCA62gAwIBAgIJAMmGa58HoxkAMA0GCSqGSIb3DQEBBQUAMIGdMQswCQYD
++VQQGEwJDTjERMA8GA1UECBMIU2hhbmdoYWkxIDAeBgNVBAcTF1poYW5namlhbmct
++SGktVGVjaC1QYXJrMQwwCgYDVQQKEwNUQ1QxFDASBgNVBAsTC3d3dy50Y2wuY29t
++MRUwEwYDVQQDEwxUQ0wtcGxhdGZvcm0xHjAcBgkqhkiG9w0BCQEWD2FuZHJvaWRA
++dGNsLmNvbTAeFw0xNDA1MTgyMjIxMjRaFw00MTEwMDMyMjIxMjRaMIGdMQswCQYD
++VQQGEwJDTjERMA8GA1UECBMIU2hhbmdoYWkxIDAeBgNVBAcTF1poYW5namlhbmct
++SGktVGVjaC1QYXJrMQwwCgYDVQQKEwNUQ1QxFDASBgNVBAsTC3d3dy50Y2wuY29t
++MRUwEwYDVQQDEwxUQ0wtcGxhdGZvcm0xHjAcBgkqhkiG9w0BCQEWD2FuZHJvaWRA
++dGNsLmNvbTCCASAwDQYJKoZIhvcNAQEBBQADggENADCCAQgCggEBAOUmwnuRcBMh
++gR4gGeA8OZuscuA/ra/WPwl4MWdiPsypvqgRJqqCHu5qRpe3dHn6ZLXI22zDvFVv
++UB0NC5nn2I2hVOgh0VhCSEMgtTMd0NlIHXeFn6uoAiJoQGm3eQMIUGR69QEO9Lod
++jGweKAkefWSGrMgsksEWc67bE7ehiI1udUVVOUqKhxkDEAzUwE7qMyurvBlT47GP
++1G1bbNFZs1dHBxXX3IjFyfbH0lMB2r0blsY/GINHs6JZ77QLGcuQ6bURe13Gob4r
++mjcoJWeKYMryyq2acbUEK8oIXivndN6BhVoiu84Z9RW46KoiYzF+xW0bFzBmstzF
++V4azO5YTh40CAQOjggEGMIIBAjAdBgNVHQ4EFgQUxSQH3u/nSIhUsU/FT5wk/lBH
++ovswgdIGA1UdIwSByjCBx4AUxSQH3u/nSIhUsU/FT5wk/lBHovuhgaOkgaAwgZ0x
++CzAJBgNVBAYTAkNOMREwDwYDVQQIEwhTaGFuZ2hhaTEgMB4GA1UEBxMXWmhhbmdq
++aWFuZy1IaS1UZWNoLVBhcmsxDDAKBgNVBAoTA1RDVDEUMBIGA1UECxMLd3d3LnRj
++bC5jb20xFTATBgNVBAMTDFRDTC1wbGF0Zm9ybTEeMBwGCSqGSIb3DQEJARYPYW5k
++cm9pZEB0Y2wuY29tggkAyYZrnwejGQAwDAYDVR0TBAUwAwEB/zANBgkqhkiG9w0B
++AQUFAAOCAQEAXKDc/L8ahx0IAC9HHK3RG1qPcbPJh6UxSczhsCqjBvbLI4VjAIPg
++7REwZxLqCo0Gq9ycom0sjgVEbnci8IQjN4wXT42/Ck7z/niN9PWvz3PxmnhAa1aU
++vTwBllIv+uSmNeHlnHcKM3qisaeGcTAh9yK5XJfTeOizESCC85GXSf3S1y7xT7b8
++DWicgs5gSpwb2wWJrjIUwnhZSbyGSrqY/xRnTL58uPgXQ6vs2tEUgS5ZQL1LmbJs
++PRrNVL/aS/VlM/eN+T1oMoVv5S5khhsnjIw0Bzo/y4GCAfIsotncn0hMuXQ3va8l
++jh1Y3o5/d7SlpuWzZ7zQYhFsm+aZOSktBg==
++-----END CERTIFICATE-----
+
+Property changes on: vendor/branch/5058A/device/mediatek/common/security/aus6739_66_n1/odm.platform.x509.pem
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058A/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A/frameworks/base/core/res/res/values/config.xml	(revision 4437)
++++ vendor/branch/5058A/frameworks/base/core/res/res/values/config.xml	(revision 4438)
+@@ -2604,7 +2604,22 @@
+ 
+     <!-- Component that is the default launcher when demo mode is enabled. -->
+     <string name="config_demoModeLauncherComponent">com.android.retaildemo/.DemoPlayer</string>
++    
++    <!-- Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
++    <!-- Hashed password (SHA-256) used to restrict carrier demo mode operation. -->
++    <string name="config_carrierDemoModePassword" translatable="false"></string>
+ 
++    <!-- Secure setting used to activate carrier demo mode. -->
++    <string name="config_carrierDemoModeSetting" translatable="false"></string>
++
++    <!-- List of packages to enable in carrier demo mode (comma separated). -->
++    <string name="config_carrierDemoModePackages" translatable="false"></string>
++
++    <!-- Number of days preloaded file cache should be preserved on a device before it can be
++         deleted -->
++    <integer name="config_keepPreloadsMinDays">7</integer>
++    <!-- End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
++
+     <!-- Flag indicating whether round icons should be parsed from the application manifest. -->
+     <bool name="config_useRoundIcon">false</bool>
+ 
+Index: vendor/branch/5058A/packages/apps/Settings/src/com/android/settings/MasterClear.java
+===================================================================
+--- vendor/branch/5058A/packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 4437)
++++ vendor/branch/5058A/packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 4438)
+@@ -360,11 +360,20 @@
+     @Override
+     public View onCreateView(LayoutInflater inflater, ViewGroup container,
+             Bundle savedInstanceState) {
+-        final EnforcedAdmin admin = RestrictedLockUtils.checkIfRestrictionEnforced(
+-                getActivity(), UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId());
+-        final UserManager um = UserManager.get(getActivity());
+-        if (!um.isAdminUser() || RestrictedLockUtils.hasBaseUserRestriction(getActivity(),
+-                UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId())) {
++        // Begin modified by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++        //final EnforcedAdmin admin = RestrictedLockUtils.checkIfRestrictionEnforced(
++                //getActivity(), UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId());
++        //final UserManager um = UserManager.get(getActivity());
++        //if (!um.isAdminUser() || RestrictedLockUtils.hasBaseUserRestriction(getActivity(),
++                //UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId())) {
++        final Context context = getContext();
++        final EnforcedAdmin admin = RestrictedLockUtils.checkIfRestrictionEnforced(context,
++                UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId());
++        final UserManager um = UserManager.get(context);
++        final boolean disallow = !um.isAdminUser() || RestrictedLockUtils.hasBaseUserRestriction(
++                context, UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId());
++        if (disallow && !Utils.isCarrierDemoUser(context)) {
++        // End modified by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+             return inflater.inflate(R.layout.master_clear_disallowed_screen, null);
+         } else if (admin != null) {
+             View view = inflater.inflate(R.layout.admin_support_details_empty_view, null);
+Index: frameworks/base/proto/src/system_messages.proto
+===================================================================
+--- frameworks/base/proto/src/system_messages.proto	(revision 0)
++++ frameworks/base/proto/src/system_messages.proto	(revision 4438)
+@@ -0,0 +1,239 @@
++// Copyright (C) 2017 The Android Open Source Project
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//      http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++syntax = "proto2";
++
++option java_package = "com.android.internal.messages";
++option java_outer_classname = "SystemMessageProto";
++
++package com_android_notifications;
++
++// Descriptors for system messages: notifications, dialogs, toasts, etc.
++message SystemMessage {
++
++  // System message IDs
++  // These are non-consecutive in order to preserve some existing, ad hoc IDs.
++  // It is OK to use skipped IDs.
++  // Prefer to add new IDs consecutively from zero, search for ADD_NEW_IDS_ABOVE_THIS_LINE.
++  // Most of these IDs only became meaningful with the O release.
++  enum ID {
++    // Unknown
++    NOTE_UNKNOWN = 0;
++
++    // Notify the user that a screenshot was captured.
++    // Package: com.android.systemui
++    NOTE_GLOBAL_SCREENSHOT = 1;
++
++    // Warn the user about an invalid charger.
++    // Package: com.android.systemui
++    NOTE_BAD_CHARGER = 2;
++
++    // Warn the user about low battery.
++    // Package: com.android.systemui
++    NOTE_POWER_LOW = 3;
++
++    // Warn the user that the device has gotten warm.
++    // Package: com.android.systemui
++    NOTE_HIGH_TEMP = 4;
++
++    // Warn the user that some notifications are hidden.
++    // Package: com.android.systemui
++    NOTE_HIDDEN_NOTIFICATIONS = 5;
++
++    // Notify the user of a problem with a plugin (dev devices only).
++    // Package: com.android.systemui
++    NOTE_PLUGIN = 6;
++
++    // Notify the user that instant app is running.
++    // Package: com.android.systemui
++    NOTE_INSTANT_APPS = 7;
++
++    // Notify the user that they should select an input method
++    // Package: android
++    NOTE_SELECT_INPUT_METHOD = 8;
++
++    // Notify the user about limited functionality before decryption
++    // Package: android
++    NOTE_FBE_ENCRYPTED_NOTIFICATION = 9;
++
++    // Give the user a way out of car mode
++    // Package: android
++    NOTE_CAR_MODE_DISABLE = 10;
++
++    // Notification to tell the user that a heavy-weight application is running.
++    // Package: android
++    NOTE_HEAVY_WEIGHT_NOTIFICATION = 11;
++
++    // Notification to tell the user that a process has exceeded its memory limit.
++    // Package: android
++    NOTE_DUMP_HEAP_NOTIFICATION = 12;
++
++    // Notification that is shown when finishing a system upgrade
++    // Package: android
++    NOTE_SYSTEM_UPGRADING = 13;
++
++    // Notify the user that tethering is active.
++    // Package: android
++    NOTE_TETHER_GENERAL = 14;
++    NOTE_TETHER_USB = 15;
++    NOTE_TETHER_BLUETOOTH = 16;
++
++    // Notify the user that always-on VPN has disconnected.
++    // Package: android
++    NOTE_VPN_DISCONNECTED = 17;
++
++    // Notify the user about a sync error.
++    // Package: android
++    NOTE_SYNC_ERROR = 18;
++
++    // Ask the user to select a keyboard language and layout
++    // Package: android
++    NOTE_SELECT_KEYBOARD_LAYOUT = 19;
++
++    // Update the user about the status of the VPN
++    // Package: android
++    NOTE_VPN_STATUS = 20;
++
++    // Package manager either installed or deleted a package
++    // Package: android
++    NOTE_PACKAGE_STATE = 21;
++
++    // Tell the user that storage space is low
++    // Package: android
++    NOTE_LOW_STORAGE = 23;
++
++    // Confirm that the user wants to reset out of retail demo mode
++    // Package: android
++    NOTE_RETAIL_RESET = 24;
++
++    // Entice the use to tap to share files
++    // Package: android
++    NOTE_USB_MTP_TAP = 25;
++
++    // Display the Android Debug Protocol status
++    // Package: android
++    NOTE_ADB_ACTIVE = 26;
++
++    // Inform that USB is configured for Media Transfer Protocol
++    // Package: android
++    NOTE_USB_MTP = 27;
++
++    // Inform that USB is configured for Picture Transfer Protocol
++    // Package: android
++    NOTE_USB_PTP = 28;
++
++    // Inform that USB is configured as a Musical Instrument Digital Interface
++    // Package: android
++    NOTE_USB_MIDI = 29;
++
++    // Inform that USB is configured in host mode
++    // Package: android
++    NOTE_USB_ACCESSORY = 30;
++
++    // Inform the user that the device is supplying power to another device.
++    // Package: android
++    NOTE_USB_SUPPLYING = 31;
++
++    // Inform the user that the device is consuming power from another device.
++    // Package: android
++    NOTE_USB_CHARGING = 32;
++
++    // Inform the user that a certificate authority is managing SSL
++    // Package: android
++    NOTE_SSL_CERT_INFO = 33;
++
++    // Warn the user they are approaching their data limit.
++    // Package: android
++    NOTE_NET_WARNING = 34;
++
++    // Warn the user they have reached their data limit.
++    // Package: android
++    NOTE_NET_LIMIT = 35;
++
++    // Warn the user they have exceeded their data limit.
++    // Package: android
++    NOTE_NET_LIMIT_SNOOZED = 36;
++
++    // Inform the user they need to sign in to an account
++    // Package: android, and others
++    NOTE_ACCOUNT_REQUIRE_SIGNIN = 37;
++
++    // Inform the user that there has been a permission request for an account
++    // Package: android
++    NOTE_ACCOUNT_CREDENTIAL_PERMISSION = 38;
++
++    // Inform the user their phone recently shut down due to high temperature
++    NOTE_THERMAL_SHUTDOWN = 39;
++
++    // Tell the user about currently running foreground services
++    // Package: android
++    NOTE_FOREGROUND_SERVICES = 40;
++
++    // ADD_NEW_IDS_ABOVE_THIS_LINE
++    // Legacy IDs with arbitrary values appear below
++    // Legacy IDs existed as stable non-conflicting constants prior to the O release
++
++    // Network status notes, previously decleared in metrics_constants with these values
++    // Package: android
++    //
++    // A captive portal was detected during network validation
++    NOTE_NETWORK_SIGN_IN = 740;
++    // An unvalidated network without Internet was selected by the user
++    NOTE_NETWORK_NO_INTERNET = 741;
++    // A validated network failed revalidation and lost Internet access
++    NOTE_NETWORK_LOST_INTERNET = 742;
++    // The system default network switched to a different network
++    NOTE_NETWORK_SWITCH = 743;
++
++    // Notify the user that their work profile has been deleted
++    // Package: android
++    NOTE_PROFILE_WIPED = 1001;
++
++    // Warn the user that their org can monitor the network
++    // Package: android
++    NOTE_NETWORK_LOGGING = 1002;
++
++    // Confirm that the user wants to remove the guest account.
++    // Package: com.android.systemui
++    NOTE_REMOVE_GUEST = 1010;
++
++    // Confirm that the user wants to log out of the device.
++    // Package: com.android.systemui
++    NOTE_LOGOUT_USER = 1011;
++
++    // Notify the user that a TV PIP is running.
++    // Package: com.android.systemui
++    NOTE_TV_PIP = 1100;
++
++    // Communicate to the user about remote bugreports.
++    // Package: android
++    NOTE_REMOTE_BUGREPORT = 678432343;
++
++    // Notify the user about public volume state changes..
++    // Package: com.android.systemui
++    NOTE_STORAGE_PUBLIC = 0x53505542;  // 1397773634
++
++    // Notify the user about private volume state changes.
++    // Package: com.android.systemui
++    NOTE_STORAGE_PRIVATE = 0x53505256;
++
++    // Notify the user about an unsupported storage device..
++    // Package: com.android.systemui
++    NOTE_STORAGE_DISK = 0x5344534b;
++
++    // Notify the user that data or apps are being moved to external storage.
++    // Package: com.android.systemui
++    NOTE_STORAGE_MOVE = 0x534d4f56;
++  }
++}
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 4437)
++++ frameworks/base/api/test-current.txt	(revision 4438)
+@@ -32798,6 +32798,9 @@
+     field public static final deprecated java.lang.String SHOW_WEB_SUGGESTIONS = "show_web_suggestions";
+     field public static final java.lang.String SOUND_EFFECTS_ENABLED = "sound_effects_enabled";
+     field public static final deprecated java.lang.String STAY_ON_WHILE_PLUGGED_IN = "stay_on_while_plugged_in";
++    field public static final java.lang.String TCT_FINGERPRINT_FUNC_NUM = "fingerprint_func_num";
++    field public static final java.lang.String TCT_FP_QUICK_LAUNCH_FUNC = "tct_fp_quick_launch_func";
++    field public static final java.lang.String TCT_UNLOCK_SCREEN = "tct_unlock_screen";
+     field public static final java.lang.String TEXT_AUTO_CAPS = "auto_caps";
+     field public static final java.lang.String TEXT_AUTO_PUNCTUATE = "auto_punctuate";
+     field public static final java.lang.String TEXT_AUTO_REPLACE = "auto_replace";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 4437)
++++ frameworks/base/api/current.txt	(revision 4438)
+@@ -32718,6 +32718,9 @@
+     field public static final deprecated java.lang.String SHOW_WEB_SUGGESTIONS = "show_web_suggestions";
+     field public static final java.lang.String SOUND_EFFECTS_ENABLED = "sound_effects_enabled";
+     field public static final deprecated java.lang.String STAY_ON_WHILE_PLUGGED_IN = "stay_on_while_plugged_in";
++    field public static final java.lang.String TCT_FINGERPRINT_FUNC_NUM = "fingerprint_func_num";
++    field public static final java.lang.String TCT_FP_QUICK_LAUNCH_FUNC = "tct_fp_quick_launch_func";
++    field public static final java.lang.String TCT_UNLOCK_SCREEN = "tct_unlock_screen";
+     field public static final java.lang.String TEXT_AUTO_CAPS = "auto_caps";
+     field public static final java.lang.String TEXT_AUTO_PUNCTUATE = "auto_punctuate";
+     field public static final java.lang.String TEXT_AUTO_REPLACE = "auto_replace";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 4437)
++++ frameworks/base/api/system-current.txt	(revision 4438)
+@@ -35477,6 +35477,9 @@
+     field public static final deprecated java.lang.String SHOW_WEB_SUGGESTIONS = "show_web_suggestions";
+     field public static final java.lang.String SOUND_EFFECTS_ENABLED = "sound_effects_enabled";
+     field public static final deprecated java.lang.String STAY_ON_WHILE_PLUGGED_IN = "stay_on_while_plugged_in";
++    field public static final java.lang.String TCT_FINGERPRINT_FUNC_NUM = "fingerprint_func_num";
++    field public static final java.lang.String TCT_FP_QUICK_LAUNCH_FUNC = "tct_fp_quick_launch_func";
++    field public static final java.lang.String TCT_UNLOCK_SCREEN = "tct_unlock_screen";
+     field public static final java.lang.String TEXT_AUTO_CAPS = "auto_caps";
+     field public static final java.lang.String TEXT_AUTO_PUNCTUATE = "auto_punctuate";
+     field public static final java.lang.String TEXT_AUTO_REPLACE = "auto_replace";
+Index: frameworks/base/services/java/com/android/server/SystemServer.java
+===================================================================
+--- frameworks/base/services/java/com/android/server/SystemServer.java	(revision 4437)
++++ frameworks/base/services/java/com/android/server/SystemServer.java	(revision 4438)
+@@ -1481,7 +1481,9 @@
+ 
+         if (Settings.Global.getInt(mContentResolver, Settings.Global.DEVICE_PROVISIONED, 0) == 0 ||
+                 UserManager.isDeviceInDemoMode(mSystemContext)) {
++            Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "StartRetailDemoModeService");
+             mSystemServiceManager.startService(RetailDemoModeService.class);
++            Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+         }
+ 
+         // It is now time to start up the app processes...
+Index: frameworks/base/services/retaildemo/java/com/android/server/retaildemo/PreloadAppsInstaller.java
+===================================================================
+--- frameworks/base/services/retaildemo/java/com/android/server/retaildemo/PreloadAppsInstaller.java	(revision 4437)
++++ frameworks/base/services/retaildemo/java/com/android/server/retaildemo/PreloadAppsInstaller.java	(revision 4438)
+@@ -103,6 +103,8 @@
+             Log.d(TAG, "installExistingPackage " + packageName + " u" + userId);
+         }
+         try {
++            //mPackageManager.installExistingPackageAsUser(packageName, userId,
++            //        0 /*installFlags*/, PackageManager.INSTALL_REASON_UNKNOWN);
+             mPackageManager.installExistingPackageAsUser(packageName, userId);
+         } catch (RemoteException e) {
+             throw e.rethrowFromSystemServer();
+@@ -174,4 +176,4 @@
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+Index: frameworks/base/services/retaildemo/java/com/android/server/retaildemo/RetailDemoModeService.java
+===================================================================
+--- frameworks/base/services/retaildemo/java/com/android/server/retaildemo/RetailDemoModeService.java	(revision 4437)
++++ frameworks/base/services/retaildemo/java/com/android/server/retaildemo/RetailDemoModeService.java	(revision 4438)
+@@ -17,8 +17,8 @@
+ package com.android.server.retaildemo;
+ 
+ import android.Manifest;
++import android.app.ActivityManager;
+ import android.app.ActivityManagerInternal;
+-import android.app.ActivityManagerNative;
+ import android.app.AppGlobals;
+ import android.app.Notification;
+ import android.app.NotificationManager;
+@@ -26,7 +26,6 @@
+ import android.app.RetailDemoModeServiceInternal;
+ import android.content.BroadcastReceiver;
+ import android.content.ComponentName;
+-import android.content.ContentProvider;
+ import android.content.ContentResolver;
+ import android.content.Context;
+ import android.content.DialogInterface;
+@@ -59,14 +58,20 @@
+ import android.provider.CallLog;
+ import android.provider.MediaStore;
+ import android.provider.Settings;
++import android.text.TextUtils;
+ import android.util.KeyValueListParser;
+ import android.util.Slog;
++
++import com.android.internal.messages.SystemMessageProto.SystemMessage;
++//import com.android.internal.notification.SystemNotificationChannels;
+ import com.android.internal.os.BackgroundThread;
+ import com.android.internal.R;
+ import com.android.internal.annotations.GuardedBy;
++import com.android.internal.annotations.VisibleForTesting;
+ import com.android.internal.logging.MetricsLogger;
+ import com.android.internal.widget.LockPatternUtils;
+ import com.android.server.LocalServices;
++import com.android.server.PreloadsFileCacheExpirationJobService;
+ import com.android.server.ServiceThread;
+ import com.android.server.SystemService;
+ import com.android.server.am.ActivityManagerService;
+@@ -75,6 +80,24 @@
+ import java.io.File;
+ import java.util.ArrayList;
+ 
++// Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++import java.util.List;
++import java.util.Locale;
++import com.android.internal.widget.LockPatternUtils;
++import com.android.server.LocalServices;
++import com.android.internal.app.LocalePicker;
++import android.os.LocaleList;
++import android.app.admin.DevicePolicyManager;
++import android.app.AppGlobals;
++import android.content.pm.PackageInfo;
++import android.content.pm.PackageManagerInternal;
++import android.content.pm.PackageManager.NameNotFoundException;
++import android.location.LocationManager;
++import android.hardware.fingerprint.Fingerprint;
++import android.hardware.fingerprint.FingerprintManager;
++import android.hardware.fingerprint.FingerprintManager.RemovalCallback;
++// End added by Xutao.Wu for TASK5709544 on 2017/11/28
++
+ public class RetailDemoModeService extends SystemService {
+     private static final boolean DEBUG = false;
+ 
+@@ -82,19 +105,60 @@
+     private static final String DEMO_USER_NAME = "Demo";
+     private static final String ACTION_RESET_DEMO =
+             "com.android.server.retaildemo.ACTION_RESET_DEMO";
+-    private static final String SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED = "sys.retaildemo.enabled";
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private static final String ACTION_STOP_AUTO_BACK_TO_DEMO =
++            "com.tct.retaildemo.ACTION_STOP_AUTO_BACK_TO_DEMO";
+ 
++    private static final String ACTION_CANCEL_STOP_AUTO_BACK_TO_DEMO =
++            "com.tct.retaildemo.ACTION_CANCEL_STOP_AUTO_BACK_TO_DEMO";
++    private static final String TCT_DEMO_MODE_LAUNCHER_COMPONENT = "com.tct.retaildemo/.DemoPlayer";
++
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++    @VisibleForTesting
++    static final String SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED = "sys.retaildemo.enabled";
++
+     private static final int MSG_TURN_SCREEN_ON = 0;
+     private static final int MSG_INACTIVITY_TIME_OUT = 1;
+     private static final int MSG_START_NEW_SESSION = 2;
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private static final int MSG_AUTO_BACK_TO_DEMO_MODE = 3;
++    private static final int MSG_FORCE_BACK_TO_DEMO_MODE = 4;
++    private static final int MSG_START_DEMO_MODE = 5;
+ 
++    /*****-------------------- below items used for tcl old workflow, means @DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT is false --------**/
++    private static final int MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO = 6; //15s no action;  only used for tcl old ergo solution @ DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT
++
++    private static final boolean DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT = false;  //TCL new ergo will follow the google workflow now.
++    //Google default solution   15s noAction --> Auto Reset --> play video --> 15s noAction -->Auto Reset  --> play video
++    //TCL ergo solution         15s noAction --> play video ---> useraction --> Launcher --> 15s noAction --> play video
++    //TCL ergo solution         30min noAction(30min can set by tct demo apk) --> Auto Reset -->  Launcher --> 15s noAction --> play video
++
++    private static final int USER_ACTION_COUNT_IN_DEMO_WILL_DO_AUTO_RESET = 5; // 4  times actions; 
++
++    boolean mIsPlayingDemoVideo = false;
++    boolean mIsSwitchingUser = true;
++
++    private int mUserActionCountInDemo =0;
++
++    private static final String ACTION_STOP_TCT_DEMO_PLAYER = "com.tct.retaildemo.ACTION_STOP_TCT_DEMO_PLAYER";
++    /*****------------------------------------------ above items used for tcl old workflow ------------------------------------------**/
++
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+     private static final long SCREEN_WAKEUP_DELAY = 2500;
+     private static final long USER_INACTIVITY_TIMEOUT_MIN = 10000;
+     private static final long USER_INACTIVITY_TIMEOUT_DEFAULT = 90000;
+     private static final long WARNING_DIALOG_TIMEOUT_DEFAULT = 0;
+     private static final long MILLIS_PER_SECOND = 1000;
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private static final long USER_INACTIVITY_TCT_TIMEOUT_DEFAULT = 3600000; //reset every hour for default
++    private static final long USER_INACTIVITY_TCT_TIMEOUT_MIN = 60000; //reset every minute for min
++    private static final long THE_WORST_AUTO_BACK_TO_DEMO_MODE_TIMEOUT = 300000;//5min
++    private static final long USER_INACTIVITY_NORMAL_TO_DEMO_TIMEOUT_DEFAULT = 15000; //15s
++    private static final long USER_INACTIVITY_FOR_DEMO_VIDEO_TIMEOUT_DEFAULT = 15000;  //15s timeout
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+ 
+-    private static final int[] VOLUME_STREAMS_TO_MUTE = {
++    @VisibleForTesting
++    static final int[] VOLUME_STREAMS_TO_MUTE = {
+             AudioSystem.STREAM_RING,
+             AudioSystem.STREAM_MUSIC
+     };
+@@ -102,25 +166,28 @@
+     // Tron Vars
+     private static final String DEMO_SESSION_COUNT = "retail_demo_session_count";
+     private static final String DEMO_SESSION_DURATION = "retail_demo_session_duration";
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private static final String RETURN_TO_DEMO_DURATION = "return_to_demo_duration";
+ 
+-    boolean mDeviceInDemoMode = false;
++    boolean mIsDemoModeHasBeenRunOnThisDevice = false; // When enter into normal mode from demo, and without action more than 2 minutes, it will auto go back to demo mode.
++    boolean mIsTctDemoAPKInstalled = false;
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++    boolean mDeviceInDemoMode;
++    boolean mIsCarrierDemoMode;
+     int mCurrentUserId = UserHandle.USER_SYSTEM;
+     long mUserInactivityTimeout;
+     long mWarningDialogTimeout;
+-    private ActivityManagerService mAms;
+-    private ActivityManagerInternal mAmi;
+-    private AudioManager mAudioManager;
+-    private NotificationManager mNm;
+-    private UserManager mUm;
+-    private PowerManager mPm;
+-    private PowerManager.WakeLock mWakeLock;
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    long mUserInactivityNormalToDemoTimeout = USER_INACTIVITY_NORMAL_TO_DEMO_TIMEOUT_DEFAULT;
++    long mUserInactivityForDemoVideoTimeout = USER_INACTIVITY_FOR_DEMO_VIDEO_TIMEOUT_DEFAULT; //only used for TCL old workflow @DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT
++    long mWarningDialogNormalToDemoTimeout = WARNING_DIALOG_TIMEOUT_DEFAULT;
++
++    private FingerprintManager mFingerprintManager;
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private Injector mInjector;
+     Handler mHandler;
+     private ServiceThread mHandlerThread;
+-    private PendingIntent mResetDemoPendingIntent;
+-    private CameraManager mCameraManager;
+-    private WifiManager mWifiManager;
+     private String[] mCameraIdsWithFlash;
+-    private Configuration mSystemUserConfiguration;
+     private PreloadAppsInstaller mPreloadAppsInstaller;
+ 
+     final Object mActivityLock = new Object();
+@@ -131,14 +198,80 @@
+     long mFirstUserActivityTime;
+     @GuardedBy("mActivityLock")
+     long mLastUserActivityTime;
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    @GuardedBy("mActivityLock")
++    boolean mUser2NormalModeUntouched; //it need about 2s to switching the user
++    @GuardedBy("mActivityLock")
++    long mLastUserActivityTimeForBackToDemoMode;
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+ 
+-    private BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
++    private boolean mSafeBootRestrictionInitialState;
++    private int mPackageVerifierEnableInitialState;
++
++    private IntentReceiver mBroadcastReceiver = null;
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private IntentReceiver mBroadcastReceiverAutoBackDemo = null;
++
++    private boolean mNeedStopAutoBackDemo = false;
++    private boolean mIsInShuttingDownStatus = false;
++    private long mWaitForCancelStopAutoBackDemoTime = 0;  //It should be the video's length when Retail Demo preview the video.
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private final class IntentReceiver extends BroadcastReceiver {
+         @Override
+         public void onReceive(Context context, Intent intent) {
++            // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++            final String action = intent.getAction();
++            switch (action) {
++                case ACTION_STOP_AUTO_BACK_TO_DEMO:
++                    if (mIsDemoModeHasBeenRunOnThisDevice && !mDeviceInDemoMode) {
++                        mWaitForCancelStopAutoBackDemoTime = intent.getLongExtra(RETURN_TO_DEMO_DURATION, 0);
++                        String sender = intent.getStringExtra("sender_name");
++
++                        if (sender != null && sender.equals(PackageManager.TCT_RETAILDEMO_PACKAGE_NAME)) {
++                            if (DEBUG) Slog.d(TAG, "on Receive --- back to demo event  mWaitTime:"+mWaitForCancelStopAutoBackDemoTime );
++                            mNeedStopAutoBackDemo = true;
++
++                            if (mWaitForCancelStopAutoBackDemoTime == 0) {
++                                mWaitForCancelStopAutoBackDemoTime = THE_WORST_AUTO_BACK_TO_DEMO_MODE_TIMEOUT;
++                            } else {
++                                mWaitForCancelStopAutoBackDemoTime += mUserInactivityNormalToDemoTimeout;
++                            }
++                            mHandler.removeMessages(MSG_AUTO_BACK_TO_DEMO_MODE);
++                            mHandler.removeMessages(MSG_FORCE_BACK_TO_DEMO_MODE);
++                            mHandler.sendEmptyMessageDelayed(MSG_FORCE_BACK_TO_DEMO_MODE, mWaitForCancelStopAutoBackDemoTime);
++                        }
++                    }
++                    break;
++                case ACTION_CANCEL_STOP_AUTO_BACK_TO_DEMO:
++                    if(mIsDemoModeHasBeenRunOnThisDevice && !mDeviceInDemoMode){
++                        mNeedStopAutoBackDemo = false;
++                        mHandler.removeMessages(MSG_AUTO_BACK_TO_DEMO_MODE);
++                        mHandler.removeMessages(MSG_FORCE_BACK_TO_DEMO_MODE);
++                        mHandler.sendEmptyMessageDelayed(MSG_AUTO_BACK_TO_DEMO_MODE, mUserInactivityNormalToDemoTimeout);
++                    }else{
++                        Slog.e(TAG, "on Receive --- cancel stop auto back but not enter demo before. this should not happen");
++                    }
++                    break;
++
++                case Intent.ACTION_SHUTDOWN:
++                    if(mIsDemoModeHasBeenRunOnThisDevice && !mDeviceInDemoMode){
++                        //Slog.d(TAG, "on Receive --- shutdown in normal mode, stop autoback to demo countdown");
++                        mIsInShuttingDownStatus = true;
++                        mHandler.removeMessages(MSG_AUTO_BACK_TO_DEMO_MODE);
++                        mHandler.removeMessages(MSG_FORCE_BACK_TO_DEMO_MODE);
++                    }else{
++                        if (DEBUG) Slog.d(TAG, "on Receive --- shutdown but in demo mode, do nothing");
++                    }
++                    break;
++            }
++            // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+             if (!mDeviceInDemoMode) {
+                 return;
+             }
+-            switch (intent.getAction()) {
++            // Begin deleted by Xutao.Wu for TASK5709544 on 2017/11/28	move to above
++            //final String action = intent.getAction();
++            // End deleted by Xutao.Wu for TASK5709544 on 2017/11/28
++            switch (action) {
+                 case Intent.ACTION_SCREEN_OFF:
+                     mHandler.removeMessages(MSG_TURN_SCREEN_ON);
+                     mHandler.sendEmptyMessageDelayed(MSG_TURN_SCREEN_ON, SCREEN_WAKEUP_DELAY);
+@@ -158,19 +291,71 @@
+ 
+         @Override
+         public void handleMessage(Message msg) {
++            if (!mDeviceInDemoMode) {
++                // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++                if (mIsTctDemoAPKInstalled && !mIsInShuttingDownStatus){
++                    if (msg.what == MSG_AUTO_BACK_TO_DEMO_MODE || msg.what == MSG_FORCE_BACK_TO_DEMO_MODE) {
++                        if (DEBUG)Slog.d(TAG, "handleMessage --- not in demo mod  MSG_AUTO_BACK_TO_DEMO_MODE  will countdown to start DEMO  mode");
++                        showInactivityStartDemoDialog();
++                    } else if (msg.what == MSG_START_DEMO_MODE){
++                        if (DEBUG) Slog.d(TAG, "handleMessage --- not in demo mod	MSG_START_DEMO_MODE	will set to DEMO  mode");
++                        Settings.Global.putInt(mInjector.getContentResolver(),	Settings.Global.DEVICE_DEMO_MODE, 1);
++                    }
++                }
++                // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++                return;
++            }
+             switch (msg.what) {
+                 case MSG_TURN_SCREEN_ON:
+-                    if (mWakeLock.isHeld()) {
+-                        mWakeLock.release();
++                    if (mInjector.isWakeLockHeld()) {
++                        mInjector.releaseWakeLock();
+                     }
+-                    mWakeLock.acquire();
++                    mInjector.acquireWakeLock();
+                     break;
+                 case MSG_INACTIVITY_TIME_OUT:
+-                    if (isDemoLauncherDisabled()) {
++                    if (!mIsCarrierDemoMode && isDemoLauncherDisabled()) {
+                         Slog.i(TAG, "User inactivity timeout reached");
++                        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++                          if (!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT) {
++                            mIsSwitchingUser = true;
++                            mHandler.removeMessages(MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO);
++                        }
++                        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+                         showInactivityCountdownDialog();
++                    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++                    } else {
++                        if (DEBUG) Slog.i(TAG, "User inactivity timeout reached but not in carrier demomode or demolauncher is disabled");
++                    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+                     }
+                     break;
++                // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++                case MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO:
++                    if (DEBUG) Slog.d(TAG, "handleMessage --- MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO will play demo video");
++
++                    if (!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT && !mIsCarrierDemoMode) {
++                        if (DEBUG) Slog.i(TAG, "User inactivity playvideo timeout reached enter");
++
++                        if (mIsPlayingDemoVideo || mIsSwitchingUser){
++                            if (DEBUG) Slog.i(TAG, "User inactivity playvideo timeout reached, in video or switching user, do nothing");
++                        } else {
++                            if (DEBUG) Slog.i(TAG, "User inactivity playvideo timeout reached mCurrentUserId:"+mCurrentUserId);
++
++                            if(mCurrentUserId != UserHandle.USER_SYSTEM){
++                                if(canPlayDemoVideo()){
++                                    if (DEBUG) Slog.i(TAG, "will start player demo video");
++                                    Intent intent = new Intent("com.tct.retaildemo.action.DEMOVIDEO");
++                                    mInjector.getContext().startActivityAsUser(intent, UserHandle.CURRENT);
++                                    mIsPlayingDemoVideo = true;
++                                 }else {
++                                    if (DEBUG) Slog.i(TAG, "restart player recountdown");
++                                    mHandler.removeMessages(MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO);
++                                    mHandler.sendEmptyMessageDelayed(MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO, 15000);
++                                }
++                            }
++                        }
++                    }
++                    break;
++                // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+                 case MSG_START_NEW_SESSION:
+                     if (DEBUG) {
+                         Slog.d(TAG, "Switching to a new demo user");
+@@ -177,14 +362,32 @@
+                     }
+                     removeMessages(MSG_START_NEW_SESSION);
+                     removeMessages(MSG_INACTIVITY_TIME_OUT);
+-                    if (mCurrentUserId != UserHandle.USER_SYSTEM) {
++                    if (!mIsCarrierDemoMode && mCurrentUserId != UserHandle.USER_SYSTEM) {
+                         logSessionDuration();
+                     }
+-                    final UserInfo demoUser = getUserManager().createUser(DEMO_USER_NAME,
+-                            UserInfo.FLAG_DEMO | UserInfo.FLAG_EPHEMERAL);
+-                    if (demoUser != null) {
++
++                    final UserManager um = mInjector.getUserManager();
++                    UserInfo demoUser = null;
++                    if (mIsCarrierDemoMode) {
++                        // Re-use the existing demo user in carrier demo mode.
++                        for (UserInfo user : um.getUsers()) {
++                            if (user.isDemo()) {
++                                demoUser = user;
++                                break;
++                            }
++                        }
++                    }
++
++                    if (demoUser == null) {
++                        // User in carrier demo mode should survive reboots.
++                        final int flags = UserInfo.FLAG_DEMO
++                                | (mIsCarrierDemoMode ? 0 : UserInfo.FLAG_EPHEMERAL);
++                        demoUser = um.createUser(DEMO_USER_NAME, flags);
++                    }
++
++                    if (demoUser != null && mCurrentUserId != demoUser.id) {
+                         setupDemoUser(demoUser);
+-                        getActivityManager().switchUser(demoUser.id);
++                        mInjector.switchUser(demoUser.id);
+                     }
+                     break;
+             }
+@@ -191,10 +394,16 @@
+         }
+     }
+ 
+-    private class SettingsObserver extends ContentObserver {
++    @VisibleForTesting
++    class SettingsObserver extends ContentObserver {
+ 
+         private final static String KEY_USER_INACTIVITY_TIMEOUT = "user_inactivity_timeout_ms";
+         private final static String KEY_WARNING_DIALOG_TIMEOUT = "warning_dialog_timeout_ms";
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        private final static String KEY_USER_INACTIVITY_FOR_DEMO_VIDEO_TIMEOUT = "user_inactivity_for_demo_video_timeout_ms";
++        private final static String KEY_USER_INACTIVITY_NORMAL_TO_DEMO_TIMEOUT = "user_inactivity_normal_to_demo_timeout_ms";
++        private final static String KEY_WARNING_DIALOG_NORMAL_TO_DEMO_TIMEOUT = "warning_dialog_normal_to_demo_timeout_ms";
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+ 
+         private final Uri mDeviceDemoModeUri = Settings.Global
+                 .getUriFor(Settings.Global.DEVICE_DEMO_MODE);
+@@ -210,7 +419,7 @@
+         }
+ 
+         public void register() {
+-            ContentResolver cr = getContext().getContentResolver();
++            final ContentResolver cr = mInjector.getContentResolver();
+             cr.registerContentObserver(mDeviceDemoModeUri, false, this, UserHandle.USER_SYSTEM);
+             cr.registerContentObserver(mDeviceProvisionedUri, false, this, UserHandle.USER_SYSTEM);
+             cr.registerContentObserver(mRetailDemoConstantsUri, false, this,
+@@ -223,35 +432,35 @@
+                 refreshTimeoutConstants();
+                 return;
+             }
+-            if (mDeviceDemoModeUri.equals(uri)) {
+-                mDeviceInDemoMode = UserManager.isDeviceInDemoMode(getContext());
+-                if (mDeviceInDemoMode) {
+-                    putDeviceInDemoMode();
++
++            // If device is provisioned and left demo mode - run the cleanup in demo folder
++            if (isDeviceProvisioned()) {
++                if (UserManager.isDeviceInDemoMode(getContext())) {
++                    startDemoMode();
+                 } else {
+-                    SystemProperties.set(SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED, "0");
+-                    if (mWakeLock.isHeld()) {
+-                        mWakeLock.release();
+-                    }
+-                }
+-            }
+-            // If device is provisioned and left demo mode - run the cleanup in demo folder
+-            if (!mDeviceInDemoMode && isDeviceProvisioned()) {
+-                // Run on the bg thread to not block the fg thread
+-                BackgroundThread.getHandler().post(new Runnable() {
+-                    @Override
+-                    public void run() {
++                    mInjector.systemPropertiesSet(SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED, "0");
++
++                    // Run on the bg thread to not block the fg thread
++                    BackgroundThread.getHandler().post(() -> {
+                         if (!deletePreloadsFolderContents()) {
+                             Slog.w(TAG, "Failed to delete preloads folder contents");
+                         }
++                        PreloadsFileCacheExpirationJobService.schedule(mInjector.getContext());
++                    });
++
++                    stopDemoMode();
++
++                    if (mInjector.isWakeLockHeld()) {
++                        mInjector.releaseWakeLock();
+                     }
+-                });
++                }
+             }
+         }
+ 
+         private void refreshTimeoutConstants() {
+             try {
+-                mParser.setString(Settings.Global.getString(getContext().getContentResolver(),
+-                    Settings.Global.RETAIL_DEMO_MODE_CONSTANTS));
++                mParser.setString(Settings.Global.getString(mInjector.getContentResolver(),
++                        Settings.Global.RETAIL_DEMO_MODE_CONSTANTS));
+             } catch (IllegalArgumentException exc) {
+                 Slog.e(TAG, "Invalid string passed to KeyValueListParser");
+                 // Consuming the exception to fall back to default values.
+@@ -258,16 +467,59 @@
+             }
+             mWarningDialogTimeout = mParser.getLong(KEY_WARNING_DIALOG_TIMEOUT,
+                     WARNING_DIALOG_TIMEOUT_DEFAULT);
+-            mUserInactivityTimeout = mParser.getLong(KEY_USER_INACTIVITY_TIMEOUT,
+-                    USER_INACTIVITY_TIMEOUT_DEFAULT);
+-            mUserInactivityTimeout = Math.max(mUserInactivityTimeout, USER_INACTIVITY_TIMEOUT_MIN);
++            // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++            if (!isAppInstalled(PackageManager.TCT_RETAILDEMO_PACKAGE_NAME) || DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT){
++            // End added by Xutao.Wu for TASK5709544 on 2017/09/22
++                mUserInactivityTimeout = mParser.getLong(KEY_USER_INACTIVITY_TIMEOUT,
++                        USER_INACTIVITY_TIMEOUT_DEFAULT);
++                mUserInactivityTimeout = Math.max(mUserInactivityTimeout, USER_INACTIVITY_TIMEOUT_MIN);
++            // Begin added by Xutao.Wu for TASK5709544 on 2017/09/22
++            } else {
++                mUserInactivityTimeout = mParser.getLong(KEY_USER_INACTIVITY_TIMEOUT,
++                        USER_INACTIVITY_TCT_TIMEOUT_DEFAULT);
++                mUserInactivityTimeout = Math.max(mUserInactivityTimeout, USER_INACTIVITY_TCT_TIMEOUT_MIN);
++            }
++
++            mUserInactivityForDemoVideoTimeout = mParser.getLong(KEY_USER_INACTIVITY_FOR_DEMO_VIDEO_TIMEOUT,
++                    USER_INACTIVITY_FOR_DEMO_VIDEO_TIMEOUT_DEFAULT);
++            mWarningDialogNormalToDemoTimeout = mParser.getLong(KEY_WARNING_DIALOG_NORMAL_TO_DEMO_TIMEOUT,
++                    WARNING_DIALOG_TIMEOUT_DEFAULT);
++            mUserInactivityNormalToDemoTimeout = mParser.getLong(KEY_USER_INACTIVITY_NORMAL_TO_DEMO_TIMEOUT,
++                    USER_INACTIVITY_NORMAL_TO_DEMO_TIMEOUT_DEFAULT);
++
++            if (DEBUG) Slog.d(TAG, "refresh TimeoutConstants  WarningDialogTimeout:"+mWarningDialogTimeout + " mUserInactivityTimeout:"+mUserInactivityTimeout +" mUserInactivityForDemoVideoTimeout:"+ mUserInactivityForDemoVideoTimeout);
++            if (DEBUG) Slog.d(TAG, "refresh TimeoutConstants  WarningDialogNormalToDemoTimeout:"+mWarningDialogNormalToDemoTimeout + " mUserInactivityNormalToDemoTimeout:"+mUserInactivityNormalToDemoTimeout);
++
++            mUserInactivityNormalToDemoTimeout = Math.max(mUserInactivityNormalToDemoTimeout, USER_INACTIVITY_TIMEOUT_MIN);
++            mUserInactivityForDemoVideoTimeout = Math.max(mUserInactivityForDemoVideoTimeout, USER_INACTIVITY_FOR_DEMO_VIDEO_TIMEOUT_DEFAULT);
++            // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+         }
+     }
+ 
+     private void showInactivityCountdownDialog() {
++        // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++        //UserInactivityCountdownDialog dialog = new UserInactivityCountdownDialog(getContext(),
++               // mWarningDialogTimeout, MILLIS_PER_SECOND);
++        //dialog.setNegativeButtonClickListener(null);
+         UserInactivityCountdownDialog dialog = new UserInactivityCountdownDialog(getContext(),
+-                mWarningDialogTimeout, MILLIS_PER_SECOND);
+-        dialog.setNegativeButtonClickListener(null);
++                       mWarningDialogTimeout,
++                       MILLIS_PER_SECOND,
++                       R.string.demo_user_inactivity_timeout_title,
++                       R.string.demo_user_inactivity_timeout_countdown,
++                       R.string.demo_user_inactivity_timeout_left_button,
++                       R.string.demo_user_inactivity_timeout_right_button);
++        // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
++        // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++        //dialog.setNegativeButtonClickListener(null);
++        dialog.setNegativeButtonClickListener(new DialogInterface.OnClickListener() {
++            @Override
++            public void onClick(DialogInterface dialog, int which) {
++                if (!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT) {
++                    mIsSwitchingUser = false;
++                }
++            }
++        });
++        // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
+         dialog.setPositiveButtonClickListener(new DialogInterface.OnClickListener() {
+             @Override
+             public void onClick(DialogInterface dialog, int which) {
+@@ -283,52 +535,87 @@
+         dialog.show();
+     }
+ 
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private void showInactivityStartDemoDialog() {
++        PowerManager pm = (PowerManager)getContext().getSystemService(Context.POWER_SERVICE);
++        if (!pm.isInteractive()){
++            PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP
++                                    | PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "retail_demoservice");
++            wl.acquire();
++            wl.release();
++        }
++
++        UserInactivityCountdownDialog dialog = new UserInactivityCountdownDialog(getContext(),
++                       mWarningDialogNormalToDemoTimeout,
++                       MILLIS_PER_SECOND,
++                       R.string.start_demo_mode_inactivity_timeout_title,
++                       R.string.start_demo_mode_inactivity_timeout_countdown,
++                       R.string.demo_user_inactivity_timeout_left_button,
++                       R.string.start_demo_mode_inactivity_timeout_right_button);
++        dialog.setNegativeButtonClickListener(null);
++        dialog.setPositiveButtonClickListener(new DialogInterface.OnClickListener() {
++            @Override
++            public void onClick(DialogInterface dialog, int which) {
++                mHandler.sendEmptyMessage(MSG_START_DEMO_MODE);
++            }
++        });
++        dialog.setOnCountDownExpiredListener(new OnCountDownExpiredListener() {
++            @Override
++            public void onCountDownExpired() {
++                mHandler.sendEmptyMessage(MSG_START_DEMO_MODE);
++            }
++        });
++        dialog.show();
++    }
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+     public RetailDemoModeService(Context context) {
+-        super(context);
++        this(new Injector(context));
++    }
++
++    @VisibleForTesting
++    RetailDemoModeService(Injector injector) {
++        super(injector.getContext());
++
++        mInjector = injector;
+         synchronized (mActivityLock) {
+             mFirstUserActivityTime = mLastUserActivityTime = SystemClock.uptimeMillis();
+         }
+     }
+ 
+-    private Notification createResetNotification() {
+-        return new Notification.Builder(getContext())
+-                .setContentTitle(getContext().getString(R.string.reset_retail_demo_mode_title))
+-                .setContentText(getContext().getString(R.string.reset_retail_demo_mode_text))
+-                .setOngoing(true)
+-                .setSmallIcon(R.drawable.platlogo)
+-                .setShowWhen(false)
+-                .setVisibility(Notification.VISIBILITY_PUBLIC)
+-                .setContentIntent(getResetDemoPendingIntent())
+-                .setColor(getContext().getColor(R.color.system_notification_accent_color))
+-                .build();
+-    }
+-
+-    private PendingIntent getResetDemoPendingIntent() {
+-        if (mResetDemoPendingIntent == null) {
+-            Intent intent = new Intent(ACTION_RESET_DEMO);
+-            mResetDemoPendingIntent = PendingIntent.getBroadcast(getContext(), 0, intent, 0);
++    boolean isDemoLauncherDisabled() {
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        if(!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT && mIsTctDemoAPKInstalled)
++        {
++            return true;  //directly return true for it's not launcher  when use tct auto reset workflow
+         }
+-        return mResetDemoPendingIntent;
+-    }
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+ 
+-    boolean isDemoLauncherDisabled() {
+-        IPackageManager pm = AppGlobals.getPackageManager();
+         int enabledState = PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
+-        String demoLauncherComponent = getContext().getResources()
+-                .getString(R.string.config_demoModeLauncherComponent);
+         try {
+-            enabledState = pm.getComponentEnabledSetting(
+-                    ComponentName.unflattenFromString(demoLauncherComponent),
+-                    mCurrentUserId);
+-        } catch (RemoteException exc) {
+-            Slog.e(TAG, "Unable to talk to Package Manager", exc);
++            final IPackageManager iPm = mInjector.getIPackageManager();
++            // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++            //final String demoLauncherComponent =
++                    //getContext().getString(R.string.config_demoModeLauncherComponent);
++
++            String demoLauncherComponent;
++            if (mIsTctDemoAPKInstalled){
++                demoLauncherComponent = TCT_DEMO_MODE_LAUNCHER_COMPONENT;
++            } else {
++                demoLauncherComponent =
++                        getContext().getString(R.string.config_demoModeLauncherComponent);
++            }
++            // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
++            enabledState = iPm.getComponentEnabledSetting(
++                    ComponentName.unflattenFromString(demoLauncherComponent), mCurrentUserId);
++        } catch (RemoteException re) {
++            Slog.e(TAG, "Error retrieving demo launcher enabled setting", re);
+         }
+         return enabledState == PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+     }
+ 
+     private void setupDemoUser(UserInfo userInfo) {
+-        UserManager um = getUserManager();
+-        UserHandle user = UserHandle.of(userInfo.id);
++        final UserManager um = mInjector.getUserManager();
++        final UserHandle user = UserHandle.of(userInfo.id);
+         um.setUserRestriction(UserManager.DISALLOW_CONFIG_WIFI, true, user);
+         um.setUserRestriction(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES, true, user);
+         um.setUserRestriction(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS, true, user);
+@@ -338,19 +625,90 @@
+         // Set this to false because the default is true on user creation
+         um.setUserRestriction(UserManager.DISALLOW_OUTGOING_CALLS, false, user);
+         // Disallow rebooting in safe mode - controlled by user 0
+-        getUserManager().setUserRestriction(UserManager.DISALLOW_SAFE_BOOT, true,
+-                UserHandle.SYSTEM);
+-        Settings.Secure.putIntForUser(getContext().getContentResolver(),
++        um.setUserRestriction(UserManager.DISALLOW_SAFE_BOOT, true, UserHandle.SYSTEM);
++        if (mIsCarrierDemoMode) {
++            // Enable SMS in carrier demo mode.
++            um.setUserRestriction(UserManager.DISALLOW_SMS, false, user);
++        }
++
++        Settings.Secure.putIntForUser(mInjector.getContentResolver(),
+                 Settings.Secure.SKIP_FIRST_USE_HINTS, 1, userInfo.id);
+-        Settings.Global.putInt(getContext().getContentResolver(),
++        Settings.Global.putInt(mInjector.getContentResolver(),
+                 Settings.Global.PACKAGE_VERIFIER_ENABLE, 0);
++
+         grantRuntimePermissionToCamera(user);
+         clearPrimaryCallLog();
++
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        if (isAppInstalled(PackageManager.TCT_RETAILDEMO_PACKAGE_NAME)){
++            //Slog.w(TAG, "setupDemoUser   tct retail demo  exist");
++            mIsTctDemoAPKInstalled = true;
++
++            if (!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT){
++                grantRuntimePermissionToTctLauncher(userInfo);
++            }
++        } else {
++            mIsTctDemoAPKInstalled = false;
++            Slog.w(TAG, "setupDemoUser   tct retail demo is not exist");
++        }
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++
++        if (!mIsCarrierDemoMode) {
++            // Enable demo launcher.
++            // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++            //final String demoLauncher = getContext().getString(
++                    //R.string.config_demoModeLauncherComponent);
++
++            String demoLauncher;
++            if (mIsTctDemoAPKInstalled){
++                demoLauncher = TCT_DEMO_MODE_LAUNCHER_COMPONENT;
++            } else {
++                demoLauncher = getContext().getString(
++                        R.string.config_demoModeLauncherComponent);
++            }
++            // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
++
++            if (!TextUtils.isEmpty(demoLauncher)) {
++                final ComponentName componentToEnable =
++                        ComponentName.unflattenFromString(demoLauncher);
++                final String packageName = componentToEnable.getPackageName();
++                try {
++                    final IPackageManager iPm = AppGlobals.getPackageManager();
++                    iPm.setComponentEnabledSetting(componentToEnable,
++                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0, userInfo.id);
++                    iPm.setApplicationEnabledSetting(packageName,
++                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0, userInfo.id, null);
++                } catch (RemoteException re) {
++                    // Internal, shouldn't happen
++                }
++            }
++        } else {
++            // Set the carrier demo mode setting for the demo user.
++            final String carrierDemoModeSetting = getContext().getString(
++                    R.string.config_carrierDemoModeSetting);
++            Settings.Secure.putIntForUser(getContext().getContentResolver(),
++                    carrierDemoModeSetting, 1, userInfo.id);
++
++            // Enable packages for carrier demo mode.
++            final String packageList = getContext().getString(
++                    R.string.config_carrierDemoModePackages);
++            final String[] packageNames = packageList == null ? new String[0]
++                    : TextUtils.split(packageList, ",");
++            final IPackageManager iPm = AppGlobals.getPackageManager();
++            for (String packageName : packageNames) {
++                try {
++                    iPm.setApplicationEnabledSetting(packageName,
++                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0, userInfo.id, null);
++                } catch (RemoteException re) {
++                    Slog.e(TAG, "Error enabling application: " + packageName, re);
++                }
++            }
++        }
+     }
+ 
+     private void grantRuntimePermissionToCamera(UserHandle user) {
+         final Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+-        final PackageManager pm = getContext().getPackageManager();
++        final PackageManager pm = mInjector.getPackageManager();
+         final ResolveInfo handler = pm.resolveActivityAsUser(cameraIntent,
+                 PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
+                 user.getIdentifier());
+@@ -365,8 +723,138 @@
+         }
+     }
+ 
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private boolean canPlayDemoVideo(){
++        boolean canPlayVideo = true;
++        if (mInjector.getLockPatternUtils().isLockScreenDisabled(mCurrentUserId)){
++            //if (DEBUG) Slog.i(TAG, " lock pattern is None");
++        } else {
++            UserInfo userInfo = mInjector.getUserManager().getUserInfo(mCurrentUserId);
++            if(userInfo == null) {
++                if (DEBUG) Slog.w(TAG, " userinfo is null  mCurrentUserId:"+mCurrentUserId);
++                canPlayVideo = false;
++            }else {
++                final int curUser = mInjector.getUserManager().getCredentialOwnerProfile(mCurrentUserId);
++                if (DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED == mInjector.getLockPatternUtils().getKeyguardStoredPasswordQuality(curUser)){
++                    //if (DEBUG) Slog.i(TAG, "lock pattern is swipe");
++                }else {
++                    //if (DEBUG) Slog.i(TAG, "loked status");
++                    canPlayVideo = false;
++                    clearFingerPrintForDemo();
++                }
++	            mInjector.getLockPatternUtils().clearLock(mCurrentUserId);
++                mInjector.getLockPatternUtils().setLockScreenDisabled(true, mCurrentUserId);
++            }
++        }
++        return canPlayVideo;
++    }
++
++	private void clearFingerPrintForDemo(){
++        if (mInjector.getPackageManager().hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
++            //Slog.d(TAG, " has fingerprints feature");
++            mFingerprintManager = getContext().getSystemService(FingerprintManager.class);
++
++            if (mFingerprintManager != null /*&& mFingerprintManager.isHardwareDetected()*/) {
++                if (mFingerprintManager != null /*mFingerprintManager.hasEnrolledFingerprints(mCurrentUserId)*/){
++                    mFingerprintManager.setActiveUser(mCurrentUserId);
++                    // For the purposes of M and N, groupId is the same as userId.
++                    Fingerprint finger = new Fingerprint(null, mCurrentUserId, 0, 0);
++                    //Slog.v(TAG, "Fingerprint start remove: " + finger.getFingerId());
++                    mFingerprintManager.remove(finger, mCurrentUserId,
++                            new RemovalCallback() {
++                                @Override
++                                public void onRemovalError(Fingerprint fp, int errMsgId, CharSequence errString) {
++                                    Slog.e(TAG, "Fingerprint removed: " + fp.getFingerId());
++                                    //Modified by jinlong.lu for Task 3104022 on 16-10-19 begin
++                                    // old if (fp.getFingerId() == 0) {
++                                    Slog.e(TAG, "Fingerprint removed: " + fp.getFingerId());
++                                    if (fp.getFingerId() == 0 && errMsgId != FingerprintManager.FINGERPRINT_ERROR_CANCELED) {
++                                    //Modified by jinlong.lu for Task 3104022 on 16-10-19 end
++                                        //removeManagedProfileFingerprintsAndFinishIfNecessary(mCurrentUserId);
++                                    }
++
++                                }
++
++                                @Override
++                                public void onRemovalSucceeded(Fingerprint fingerprint) {
++                                    if (fingerprint.getFingerId() == 0) {
++                                        Slog.d(TAG, " Fingerprint remove successed");
++                                    }
++                                }
++                            });
++
++                    if (DEBUG) Slog.d(TAG, "will set unlock fp parameter ");
++                    Settings.System.putIntForUser(getContext().getContentResolver(), Settings.System.TCT_UNLOCK_SCREEN, 0 , mCurrentUserId);
++                    Settings.System.putIntForUser(getContext().getContentResolver(), Settings.System.TCT_FP_QUICK_LAUNCH_FUNC, 0 , mCurrentUserId);
++                    for (int i = 0; i < getContext().getResources().getInteger(com.android.internal.R.integer.config_fingerprintMaxTemplatesPerUser); i++) {
++					    if (DEBUG)Slog.d(TAG, "will put remove fingerprint:"+ i);
++                        Settings.System.putStringForUser(getContext().getContentResolver(),
++                                Settings.System.TCT_FINGERPRINT_FUNC_NUM + i, null, mCurrentUserId);
++                    }
++                }else{
++                    if (DEBUG) Slog.d(TAG, " fingerprints hasEnrolledFingerprints No");
++                }
++            }else {
++                if (DEBUG) Slog.d(TAG, " fingerprints mFingerprintManager is null or no hardware");
++            }
++        }else {
++            if (DEBUG) Slog.d(TAG, " has not fingerprints feature");
++        }
++    }
++
++    private void setDemoSystemLanguage(int userId) {
++        final String localeValue = Settings.System.getStringForUser(mInjector.getContentResolver(), Settings.System.SYSTEM_LOCALES, UserHandle.USER_SYSTEM);
++        if (localeValue != null) {
++            LocaleList mlocales = LocaleList.forLanguageTags(localeValue);
++            Settings.System.putStringForUser(mInjector.getContentResolver(), Settings.System.SYSTEM_LOCALES, mlocales.toLanguageTags(),  userId);
++            LocalePicker.updateLocales(mlocales);
++        }
++    }
++
++    private void grantRuntimePermissionToTctLauncher(UserInfo userInfo) {
++        UserHandle user = UserHandle.of(userInfo.id);
++        PackageManager pm = mInjector.getPackageManager();
++        String TCT_LAUNCHER_PKG_NAME = "com.tct.launcher";
++        // <pkg name="com.tct.launcher">
++        //   <item name="android.permission.READ_SMS" granted="false" flags="1" />
++        //   <item name="android.permission.READ_CALL_LOG" granted="false" flags="1" />
++        //   <item name="android.permission.READ_CONTACTS" granted="false" flags="1" />
++        // </pkg>
++
++        if(isAppInstalled(TCT_LAUNCHER_PKG_NAME)){
++            try {
++                pm.grantRuntimePermission(TCT_LAUNCHER_PKG_NAME, Manifest.permission.READ_SMS, user);
++                pm.grantRuntimePermission(TCT_LAUNCHER_PKG_NAME, Manifest.permission.READ_CALL_LOG, user);
++                pm.grantRuntimePermission(TCT_LAUNCHER_PKG_NAME, Manifest.permission.READ_CONTACTS, user);
++            } catch (Exception e) {
++                Slog.w(TAG, "grant default launcher runtime permission error:"+e);
++            }
++        }
++    }
++
++    private boolean isAppInstalled(String packagename)
++    {
++        PackageInfo packageInfo;
++
++        try {
++            packageInfo = mInjector.getPackageManager().getPackageInfo(packagename, 0);
++        }catch (NameNotFoundException e) {
++            packageInfo = null;
++            e.printStackTrace();
++        }
++
++        if(packageInfo ==null){
++            if (DEBUG) Slog.w(TAG, "isAppInstalled pkg:"+packagename+"  return false");
++            return false;
++        }else{
++            if (DEBUG) Slog.w(TAG, "isAppInstalled pkg:"+packagename+"  return true");
++            return true;
++        }
++    }
++
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+     private void clearPrimaryCallLog() {
+-        final ContentResolver resolver = getContext().getContentResolver();
++        final ContentResolver resolver = mInjector.getContentResolver();
+ 
+         // Deleting primary user call log so that it doesn't get copied to the new demo user
+         final Uri uri = CallLog.Calls.CONTENT_URI;
+@@ -382,93 +870,201 @@
+         synchronized (mActivityLock) {
+             sessionDuration = (int) ((mLastUserActivityTime - mFirstUserActivityTime) / 1000);
+         }
+-        MetricsLogger.histogram(getContext(), DEMO_SESSION_DURATION, sessionDuration);
++        mInjector.logSessionDuration(sessionDuration);
+     }
+ 
+-    private ActivityManagerService getActivityManager() {
+-        if (mAms == null) {
+-            mAms = (ActivityManagerService) ActivityManagerNative.getDefault();
+-        }
+-        return mAms;
+-    }
+-
+-    private UserManager getUserManager() {
+-        if (mUm == null) {
+-            mUm = getContext().getSystemService(UserManager.class);
+-        }
+-        return mUm;
+-    }
+-
+-    private AudioManager getAudioManager() {
+-        if (mAudioManager == null) {
+-            mAudioManager = getContext().getSystemService(AudioManager.class);
+-        }
+-        return mAudioManager;
+-    }
+-
+     private boolean isDeviceProvisioned() {
+         return Settings.Global.getInt(
+-                getContext().getContentResolver(), Settings.Global.DEVICE_PROVISIONED, 0) != 0;
++                mInjector.getContentResolver(), Settings.Global.DEVICE_PROVISIONED, 0) != 0;
+     }
+ 
++    /**
++     * Deletes contents of {@link Environment#getDataPreloadsDirectory()},
++     * but leave {@link Environment#getDataPreloadsFileCacheDirectory()}
++     * @return true if contents was sucessfully deleted
++     */
+     private boolean deletePreloadsFolderContents() {
+-        final File dir = Environment.getDataPreloadsDirectory();
++        final File dir = mInjector.getDataPreloadsDirectory();
++        final File[] files = FileUtils.listFilesOrEmpty(dir);
++        final File fileCacheDirectory = mInjector.getDataPreloadsFileCacheDirectory();
+         Slog.i(TAG, "Deleting contents of " + dir);
+-        return FileUtils.deleteContents(dir);
++        boolean success = true;
++        for (File file : files) {
++            if (file.isFile()) {
++                if (!file.delete()) {
++                    success = false;
++                    Slog.w(TAG, "Cannot delete file " + file);
++                }
++            } else {
++                // Do not remove file_cache dir
++                if (!file.equals(fileCacheDirectory)) {
++                    if (!FileUtils.deleteContentsAndDir(file)) {
++                        success = false;
++                        Slog.w(TAG, "Cannot delete dir and its content " + file);
++                    }
++                } else {
++                    Slog.i(TAG, "Skipping directory with file cache " + file);
++                }
++            }
++        }
++        return success;
+     }
+ 
+     private void registerBroadcastReceiver() {
++        if (mBroadcastReceiver != null) {
++            return;
++        }
++
+         final IntentFilter filter = new IntentFilter();
+-        filter.addAction(Intent.ACTION_SCREEN_OFF);
++        if (!mIsCarrierDemoMode) {
++            filter.addAction(Intent.ACTION_SCREEN_OFF);
++        }
+         filter.addAction(ACTION_RESET_DEMO);
++        mBroadcastReceiver = new IntentReceiver();
+         getContext().registerReceiver(mBroadcastReceiver, filter);
+     }
+ 
+-    private String[] getCameraIdsWithFlash() {
+-        ArrayList<String> cameraIdsList = new ArrayList<String>();
+-        try {
+-            for (String cameraId : mCameraManager.getCameraIdList()) {
+-                CameraCharacteristics c = mCameraManager.getCameraCharacteristics(cameraId);
+-                if (Boolean.TRUE.equals(c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE))) {
+-                    cameraIdsList.add(cameraId);
++    private void unregisterBroadcastReceiver() {
++        if (mBroadcastReceiver != null) {
++            getContext().unregisterReceiver(mBroadcastReceiver);
++            mBroadcastReceiver = null;
++        }
++    }
++
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private void registerBroadcastReceiverForAutoBackDemo() {
++        if (mBroadcastReceiverAutoBackDemo == null) {
++            final IntentFilter filter = new IntentFilter();
++            filter.addAction(ACTION_STOP_AUTO_BACK_TO_DEMO);
++            filter.addAction(ACTION_CANCEL_STOP_AUTO_BACK_TO_DEMO);
++            filter.addAction(Intent.ACTION_SHUTDOWN);
++            filter.setPriority(1000);
++            mBroadcastReceiverAutoBackDemo = new IntentReceiver();
++            getContext().registerReceiver(mBroadcastReceiverAutoBackDemo, filter);
++        }
++    }
++
++    private void unregisterBroadcastReceiverForAutoBackDemo() {
++        if (mBroadcastReceiverAutoBackDemo != null) {
++            getContext().unregisterReceiver(mBroadcastReceiverAutoBackDemo);
++            mBroadcastReceiverAutoBackDemo = null;
++        }
++    }
++
++    private void disableSetupWizardInDemo(int userId) {
++        PackageManagerInternal packageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
++        if (packageManagerInternal != null){
++            String setupwizard = packageManagerInternal.getSetupWizardPackageName();
++            if (setupwizard != null){
++                try {
++                    AppGlobals.getPackageManager().setApplicationEnabledSetting(setupwizard, PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
++                            0, userId, mInjector.getContext().getOpPackageName());
++                } catch (RemoteException e) {
++                    Slog.e(TAG,"disable setupwizard fail! e:"+e);
+                 }
++            }else {
++                Slog.d(TAG,"setupwizard is null");
+             }
+-        } catch (CameraAccessException e) {
+-            Slog.e(TAG, "Unable to access camera while getting camera id list", e);
+         }
+-        return cameraIdsList.toArray(new String[cameraIdsList.size()]);
+     }
+ 
+-    private void turnOffAllFlashLights() {
+-        for (String cameraId : mCameraIdsWithFlash) {
++    /* Some system service especially GMS services may acquire some rights and prompt some dialog, try to disable them */
++    private void disablePromptUpDialogFromSystemServicesInDemo(int userId) {
++        Settings.Secure.putStringForUser(mInjector.getContentResolver(), Settings.Secure.LOCATION_PROVIDERS_ALLOWED, "-gps", userId);
++        Settings.Secure.putStringForUser(mInjector.getContentResolver(), Settings.Secure.LOCATION_PROVIDERS_ALLOWED, "-network", userId);
++    }
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++
++    private String[] getCameraIdsWithFlash() {
++        ArrayList<String> cameraIdsList = new ArrayList<String>();
++        final CameraManager cm = mInjector.getCameraManager();
++        if (cm != null) {
+             try {
+-                mCameraManager.setTorchMode(cameraId, false);
++                for (String cameraId : cm.getCameraIdList()) {
++                    CameraCharacteristics c = cm.getCameraCharacteristics(cameraId);
++                    if (Boolean.TRUE.equals(c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE))) {
++                        cameraIdsList.add(cameraId);
++                    }
++                }
+             } catch (CameraAccessException e) {
+-                Slog.e(TAG, "Unable to access camera " + cameraId + " while turning off flash", e);
++                Slog.e(TAG, "Unable to access camera while getting camera id list", e);
+             }
+         }
++        return cameraIdsList.toArray(new String[cameraIdsList.size()]);
+     }
+ 
+     private void muteVolumeStreams() {
+         for (int stream : VOLUME_STREAMS_TO_MUTE) {
+-            getAudioManager().setStreamVolume(stream, getAudioManager().getStreamMinVolume(stream),
+-                    0);
++            mInjector.getAudioManager().setStreamVolume(stream,
++                    mInjector.getAudioManager().getStreamMinVolume(stream), 0);
+         }
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        if (!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT && mIsTctDemoAPKInstalled){
++            //set max media volume
++            mInjector.getAudioManager().setStreamVolume(AudioManager.STREAM_MUSIC, 
++                        mInjector.getAudioManager().getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0);
++        }
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++
+     }
+ 
+-    private Configuration getSystemUsersConfiguration() {
+-        if (mSystemUserConfiguration == null) {
+-            Settings.System.getConfiguration(getContext().getContentResolver(),
+-                    mSystemUserConfiguration = new Configuration());
++    private void startDemoMode() {
++        mDeviceInDemoMode = true;
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        if( isAppInstalled(PackageManager.TCT_RETAILDEMO_PACKAGE_NAME)){
++            if (DEBUG) Slog.d(TAG, "startDemoMode	 tct retaildemo exist");
++            mIsDemoModeHasBeenRunOnThisDevice = true;
+         }
+-        return mSystemUserConfiguration;
+-    }
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+ 
+-    private void putDeviceInDemoMode() {
+-        SystemProperties.set(SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED, "1");
++        mPreloadAppsInstaller = mInjector.getPreloadAppsInstaller();
++        mInjector.initializeWakeLock();
++        if (mCameraIdsWithFlash == null) {
++            mCameraIdsWithFlash = getCameraIdsWithFlash();
++        }
++        registerBroadcastReceiver();
++
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        unregisterBroadcastReceiverForAutoBackDemo();
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++        final String carrierDemoModeSetting =
++                getContext().getString(R.string.config_carrierDemoModeSetting);
++        mIsCarrierDemoMode = !TextUtils.isEmpty(carrierDemoModeSetting)
++                && (Settings.Secure.getInt(getContext().getContentResolver(),
++                        carrierDemoModeSetting, 0) == 1);
++
++        mInjector.systemPropertiesSet(SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED, "1");
+         mHandler.sendEmptyMessage(MSG_START_NEW_SESSION);
++
++        mSafeBootRestrictionInitialState = mInjector.getUserManager().hasUserRestriction(
++                UserManager.DISALLOW_SAFE_BOOT, UserHandle.SYSTEM);
++        mPackageVerifierEnableInitialState = Settings.Global.getInt(mInjector.getContentResolver(),
++                Settings.Global.PACKAGE_VERIFIER_ENABLE, 1);
+     }
+ 
++    private void stopDemoMode() {
++        mPreloadAppsInstaller = null;
++        mCameraIdsWithFlash = null;
++        mInjector.destroyWakeLock();
++        unregisterBroadcastReceiver();
++
++        if (mDeviceInDemoMode) {
++            mInjector.getUserManager().setUserRestriction(UserManager.DISALLOW_SAFE_BOOT,
++                    mSafeBootRestrictionInitialState, UserHandle.SYSTEM);
++            Settings.Global.putInt(mInjector.getContentResolver(),
++                        Settings.Global.PACKAGE_VERIFIER_ENABLE,
++                        mPackageVerifierEnableInitialState);
++        }
++
++        mDeviceInDemoMode = false;
++        mIsCarrierDemoMode = false;
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        synchronized (mActivityLock) {
++            mLastUserActivityTimeForBackToDemoMode = SystemClock.uptimeMillis();
++        }
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++    }
++
+     @Override
+     public void onStart() {
+         if (DEBUG) {
+@@ -478,7 +1074,7 @@
+                 false);
+         mHandlerThread.start();
+         mHandler = new MainHandler(mHandlerThread.getLooper());
+-        publishLocalService(RetailDemoModeServiceInternal.class, mLocalService);
++        mInjector.publishLocalService(this, mLocalService);
+     }
+ 
+     @Override
+@@ -485,27 +1081,13 @@
+     public void onBootPhase(int bootPhase) {
+         switch (bootPhase) {
+             case PHASE_THIRD_PARTY_APPS_CAN_START:
+-                mPreloadAppsInstaller = new PreloadAppsInstaller(getContext());
+-                mPm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+-                mAmi = LocalServices.getService(ActivityManagerInternal.class);
+-                mWakeLock = mPm
+-                        .newWakeLock(
+-                                PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+-                                TAG);
+-                mNm = NotificationManager.from(getContext());
+-                mWifiManager = (WifiManager) getContext().getSystemService(Context.WIFI_SERVICE);
+-                mCameraManager = (CameraManager) getContext()
+-                        .getSystemService(Context.CAMERA_SERVICE);
+-                mCameraIdsWithFlash = getCameraIdsWithFlash();
+-                SettingsObserver settingsObserver = new SettingsObserver(mHandler);
++                final SettingsObserver settingsObserver = new SettingsObserver(mHandler);
+                 settingsObserver.register();
+                 settingsObserver.refreshTimeoutConstants();
+-                registerBroadcastReceiver();
+                 break;
+             case PHASE_BOOT_COMPLETED:
+                 if (UserManager.isDeviceInDemoMode(getContext())) {
+-                    mDeviceInDemoMode = true;
+-                    putDeviceInDemoMode();
++                    startDemoMode();
+                 }
+                 break;
+         }
+@@ -514,42 +1096,76 @@
+     @Override
+     public void onSwitchUser(int userId) {
+         if (!mDeviceInDemoMode) {
++            // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++            if (mIsTctDemoAPKInstalled && mIsDemoModeHasBeenRunOnThisDevice && userId == 0) {
++                registerBroadcastReceiverForAutoBackDemo();
++                synchronized (mActivityLock) {
++                    mUser2NormalModeUntouched = true;
++                    mLastUserActivityTimeForBackToDemoMode = SystemClock.uptimeMillis();
++                    mHandler.removeMessages(MSG_AUTO_BACK_TO_DEMO_MODE);
++                    mHandler.sendEmptyMessageDelayed(MSG_AUTO_BACK_TO_DEMO_MODE, mUserInactivityNormalToDemoTimeout);
++                }
++            }
++            // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+             return;
+         }
+         if (DEBUG) {
+             Slog.d(TAG, "onSwitchUser: " + userId);
+         }
+-        final UserInfo ui = getUserManager().getUserInfo(userId);
++        final UserInfo ui = mInjector.getUserManager().getUserInfo(userId);
+         if (!ui.isDemo()) {
+             Slog.wtf(TAG, "Should not allow switch to non-demo user in demo mode");
+             return;
+         }
+-        if (!mWakeLock.isHeld()) {
+-            mWakeLock.acquire();
++        if (!mIsCarrierDemoMode && !mInjector.isWakeLockHeld()) {
++            mInjector.acquireWakeLock();
+         }
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        if (!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT){
++            mUserActionCountInDemo = 0;
++        }
++
++        if(mIsTctDemoAPKInstalled){
++			disableSetupWizardInDemo(userId);
++            if(!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT){
++                disablePromptUpDialogFromSystemServicesInDemo(userId);
++            }
++        }
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+         mCurrentUserId = userId;
+-        mAmi.updatePersistentConfigurationForUser(getSystemUsersConfiguration(), userId);
+-        turnOffAllFlashLights();
++        mInjector.getActivityManagerInternal().updatePersistentConfigurationForUser(
++                mInjector.getSystemUsersConfiguration(), userId);
++
++        mInjector.turnOffAllFlashLights(mCameraIdsWithFlash);
+         muteVolumeStreams();
+-        if (!mWifiManager.isWifiEnabled()) {
+-            mWifiManager.setWifiEnabled(true);
++        if (!mInjector.getWifiManager().isWifiEnabled()) {
++            mInjector.getWifiManager().setWifiEnabled(true);
+         }
++
+         // Disable lock screen for demo users.
+-        LockPatternUtils lockPatternUtils = new LockPatternUtils(getContext());
+-        lockPatternUtils.setLockScreenDisabled(true, userId);
+-        mNm.notifyAsUser(TAG, 1, createResetNotification(), UserHandle.of(userId));
++        mInjector.getLockPatternUtils().setLockScreenDisabled(true, userId);
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/09/22
++		setDemoSystemLanguage(userId);
++		mIsSwitchingUser = false;
++        // End added by Xutao.Wu for TASK5709544 on 2017/09/22
+ 
+-        synchronized (mActivityLock) {
+-            mUserUntouched = true;
++        if (!mIsCarrierDemoMode) {
++            // Show reset notification (except in carrier demo mode).
++            mInjector.getNotificationManager().notifyAsUser(TAG, SystemMessage.NOTE_RETAIL_RESET,
++                    mInjector.createResetNotification(), UserHandle.of(userId));
++
++            synchronized (mActivityLock) {
++                mUserUntouched = true;
++            }
++            mInjector.logSessionCount(1);
++            mHandler.removeMessages(MSG_INACTIVITY_TIME_OUT);
++            mHandler.post(new Runnable() {
++                @Override
++                public void run() {
++                    mPreloadAppsInstaller.installApps(userId);
++                }
++            });
+         }
+-        MetricsLogger.count(getContext(), DEMO_SESSION_COUNT, 1);
+-        mHandler.removeMessages(MSG_INACTIVITY_TIME_OUT);
+-        mHandler.post(new Runnable() {
+-            @Override
+-            public void run() {
+-                mPreloadAppsInstaller.installApps(userId);
+-            }
+-        });
+     }
+ 
+     private RetailDemoModeServiceInternal mLocalService = new RetailDemoModeServiceInternal() {
+@@ -557,23 +1173,305 @@
+ 
+         @Override
+         public void onUserActivity() {
+-            if (!mDeviceInDemoMode) {
++            // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++            if (DEBUG) Slog.d(TAG, "onUserActivity ---00 enter");
++
++            if (mIsDemoModeHasBeenRunOnThisDevice && !mDeviceInDemoMode) {
++                if (DEBUG) Slog.d(TAG, "onUserActivity in normal---01");
++
++                long timeOfActivity = SystemClock.uptimeMillis();
++                synchronized (mActivityLock) {
++                    if (timeOfActivity < mLastUserActivityTimeForBackToDemoMode + USER_ACTIVITY_DEBOUNCE_TIME) {
++                        if (DEBUG) Slog.d(TAG, "onUserActivity in normal---02  still in 2s user switching");
++                    }
++                    else if ( mUser2NormalModeUntouched) {
++                        if (DEBUG) Slog.d(TAG, "onUserActivity in normal---03  mUserUntouched is true");
++                        mLastUserActivityTimeForBackToDemoMode = timeOfActivity;
++                        mUser2NormalModeUntouched = false;
++                    }
++                }
++                mHandler.removeMessages(MSG_AUTO_BACK_TO_DEMO_MODE);
++                if (!mNeedStopAutoBackDemo) {
++                    if (DEBUG) Slog.d(TAG, "onUserActivity in normal---04 continue auto timeout back demo");
++                    mHandler.sendEmptyMessageDelayed(MSG_AUTO_BACK_TO_DEMO_MODE, mUserInactivityNormalToDemoTimeout);
++                }
++            }
++            // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++            if (!mDeviceInDemoMode || mIsCarrierDemoMode) {
++                if (DEBUG) Slog.d(TAG, "onUserActivity ---in normal 05 return");
+                 return;
+             }
+             long timeOfActivity = SystemClock.uptimeMillis();
++            // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++            if (!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT && mIsTctDemoAPKInstalled){
++                if(mIsSwitchingUser){
++                    mUserActionCountInDemo = 0;
++                } else {
++                    if (mUserActionCountInDemo >= USER_ACTION_COUNT_IN_DEMO_WILL_DO_AUTO_RESET) {
++                        mUserActionCountInDemo = USER_ACTION_COUNT_IN_DEMO_WILL_DO_AUTO_RESET;
++                    }
++                    else {
++                        mUserActionCountInDemo++;
++                    }
++                }
++                if (DEBUG) Slog.d(TAG, "onUserActivity ---in demo 06 mUserActionCountInDemo:"+mUserActionCountInDemo + " mIsSwitchingUser:" +mIsSwitchingUser);
++            }
++            // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+             synchronized (mActivityLock) {
+                 if (timeOfActivity < mLastUserActivityTime + USER_ACTIVITY_DEBOUNCE_TIME) {
++                    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++                    if (DEBUG) Slog.d(TAG, "onUserActivity ---in demo 07 in debounce time");
++
++                    if (!DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT && mIsTctDemoAPKInstalled){
++                        mHandler.removeMessages(MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO);
++                        mHandler.sendEmptyMessageDelayed(MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO, mUserInactivityForDemoVideoTimeout);
++                    }
++                    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+                     return;
+                 }
+                 mLastUserActivityTime = timeOfActivity;
+                 if (mUserUntouched && isDemoLauncherDisabled()) {
+-                    Slog.d(TAG, "retail_demo first touch");
++                    Slog.d(TAG, "onUserActivity ---in demo 08 retail_demo first touch");
+                     mUserUntouched = false;
+                     mFirstUserActivityTime = timeOfActivity;
+                 }
+             }
+-            mHandler.removeMessages(MSG_INACTIVITY_TIME_OUT);
+-            mHandler.sendEmptyMessageDelayed(MSG_INACTIVITY_TIME_OUT, mUserInactivityTimeout);
++            // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++            if (DEMO_AUTO_RESET_WORKFLOW_FOLLOW_GOOGLE_DEFAULT){
++                if (DEBUG) Slog.d(TAG, "onUserActivity ---in demo 09  start reset countdown");
++            // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++                mHandler.removeMessages(MSG_INACTIVITY_TIME_OUT);
++                mHandler.sendEmptyMessageDelayed(MSG_INACTIVITY_TIME_OUT, mUserInactivityTimeout);
++            // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++             } else if (mIsTctDemoAPKInstalled){
++                long inactivityTimeout = mUserInactivityForDemoVideoTimeout;
++                if (mIsPlayingDemoVideo){
++                    if (DEBUG) Slog.d(TAG, "onUserActivity ---in demo 10 in playing video then stop it.");
++
++                    Intent intent = new Intent(ACTION_STOP_TCT_DEMO_PLAYER);
++                    mInjector.getContext().sendBroadcastAsUser(intent, UserHandle.ALL);
++                    mIsPlayingDemoVideo = false;
++                }
++
++                if (mIsSwitchingUser){
++                    if (DEBUG) Slog.d(TAG, "onUserActivity ---in demo 11 in switching user ");
++                    inactivityTimeout = mUserInactivityForDemoVideoTimeout + USER_ACTIVITY_DEBOUNCE_TIME;
++                } else {
++                    if (DEBUG) Slog.d(TAG, "onUserActivity ---in demo 12 start countdown for playing demo video ");
++                }
++
++                mHandler.removeMessages(MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO);
++                mHandler.sendEmptyMessageDelayed(MSG_INACTIVITY_TIME_OUT_TO_PLAY_DEMO_VIDEO, inactivityTimeout);
++
++                if(mUserActionCountInDemo >= USER_ACTION_COUNT_IN_DEMO_WILL_DO_AUTO_RESET){
++                    if (DEBUG) Slog.d(TAG, "onUserActivity ---in demo 13 start count down for reset");
++                    mHandler.removeMessages(MSG_INACTIVITY_TIME_OUT);
++                    mHandler.sendEmptyMessageDelayed(MSG_INACTIVITY_TIME_OUT, mUserInactivityTimeout);
++                }
++             }
++             // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+         }
+     };
++
++    static class Injector {
++        private Context mContext;
++        private UserManager mUm;
++        private PackageManager mPm;
++        private NotificationManager mNm;
++        private ActivityManagerService mAms;
++        private ActivityManagerInternal mAmi;
++        private AudioManager mAudioManager;
++        private PowerManager mPowerManager;
++        private CameraManager mCameraManager;
++        private PowerManager.WakeLock mWakeLock;
++        private WifiManager mWifiManager;
++        private Configuration mSystemUserConfiguration;
++        private PendingIntent mResetDemoPendingIntent;
++        private PreloadAppsInstaller mPreloadAppsInstaller;
++
++        Injector(Context context) {
++            mContext = context;
++        }
++
++        Context getContext() {
++            return mContext;
++        }
++
++        WifiManager getWifiManager() {
++            if (mWifiManager == null) {
++                mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
++            }
++            return mWifiManager;
++        }
++
++        UserManager getUserManager() {
++            if (mUm == null) {
++                mUm = getContext().getSystemService(UserManager.class);
++            }
++            return mUm;
++        }
++
++        void switchUser(int userId) {
++            if (mAms == null) {
++                mAms = (ActivityManagerService) ActivityManager.getService();
++            }
++            mAms.switchUser(userId);
++        }
++
++        AudioManager getAudioManager() {
++            if (mAudioManager == null) {
++                mAudioManager = getContext().getSystemService(AudioManager.class);
++            }
++            return mAudioManager;
++        }
++
++        private PowerManager getPowerManager() {
++            if (mPowerManager == null) {
++                mPowerManager = (PowerManager) getContext().getSystemService(
++                        Context.POWER_SERVICE);
++            }
++            return mPowerManager;
++        }
++
++        NotificationManager getNotificationManager() {
++            if (mNm == null) {
++                mNm = NotificationManager.from(getContext());
++            }
++            return mNm;
++        }
++
++        ActivityManagerInternal getActivityManagerInternal() {
++            if (mAmi == null) {
++                mAmi = LocalServices.getService(ActivityManagerInternal.class);
++            }
++            return mAmi;
++        }
++
++        CameraManager getCameraManager() {
++            if (mCameraManager == null) {
++                mCameraManager = (CameraManager) getContext().getSystemService(
++                        Context.CAMERA_SERVICE);
++            }
++            return mCameraManager;
++        }
++
++        PackageManager getPackageManager() {
++            if (mPm == null) {
++                mPm = getContext().getPackageManager();
++            }
++            return mPm;
++        }
++
++        IPackageManager getIPackageManager() {
++            return AppGlobals.getPackageManager();
++        }
++
++        ContentResolver getContentResolver() {
++            return getContext().getContentResolver();
++        }
++
++        PreloadAppsInstaller getPreloadAppsInstaller() {
++            if (mPreloadAppsInstaller == null) {
++                mPreloadAppsInstaller = new PreloadAppsInstaller(getContext());
++            }
++            return mPreloadAppsInstaller;
++        }
++
++        void systemPropertiesSet(String key, String value) {
++            SystemProperties.set(key, value);
++        }
++
++        void turnOffAllFlashLights(String[] cameraIdsWithFlash) {
++            for (String cameraId : cameraIdsWithFlash) {
++                try {
++                    getCameraManager().setTorchMode(cameraId, false);
++                } catch (CameraAccessException e) {
++                    Slog.e(TAG, "Unable to access camera " + cameraId
++                            + " while turning off flash", e);
++                // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++                } catch (Exception e) {
++                    Slog.e(TAG,"setTorchMode exception:"+e);
++                // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++                }
++            }
++        }
++
++        void initializeWakeLock() {
++            if (mWakeLock == null) {
++                mWakeLock = getPowerManager().newWakeLock(
++                        PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
++            }
++        }
++
++        void destroyWakeLock() {
++            mWakeLock = null;
++        }
++
++        boolean isWakeLockHeld() {
++            return mWakeLock != null && mWakeLock.isHeld();
++        }
++
++        void acquireWakeLock() {
++            mWakeLock.acquire();
++        }
++
++        void releaseWakeLock() {
++            mWakeLock.release();
++        }
++
++        void logSessionDuration(int duration) {
++            MetricsLogger.histogram(getContext(), DEMO_SESSION_DURATION, duration);
++        }
++
++        void logSessionCount(int count) {
++            MetricsLogger.count(getContext(), DEMO_SESSION_COUNT, count);
++        }
++
++        Configuration getSystemUsersConfiguration() {
++            if (mSystemUserConfiguration == null) {
++                Settings.System.getConfiguration(getContentResolver(),
++                        mSystemUserConfiguration = new Configuration());
++            }
++            return mSystemUserConfiguration;
++        }
++
++        LockPatternUtils getLockPatternUtils() {
++            return new LockPatternUtils(getContext());
++        }
++
++        Notification createResetNotification() {
++            //return new Notification.Builder(getContext(), SystemNotificationChannels.RETAIL_MODE)
++              return new Notification.Builder(getContext())
++                    .setContentTitle(getContext().getString(R.string.reset_retail_demo_mode_title))
++                    .setContentText(getContext().getString(R.string.reset_retail_demo_mode_text))
++                    .setOngoing(true)
++                    .setSmallIcon(R.drawable.platlogo)
++                    .setShowWhen(false)
++                    .setVisibility(Notification.VISIBILITY_PUBLIC)
++                    .setContentIntent(getResetDemoPendingIntent())
++                    .setColor(getContext().getColor(R.color.system_notification_accent_color))
++                    .build();
++        }
++
++        private PendingIntent getResetDemoPendingIntent() {
++            if (mResetDemoPendingIntent == null) {
++                Intent intent = new Intent(ACTION_RESET_DEMO);
++                mResetDemoPendingIntent = PendingIntent.getBroadcast(getContext(), 0, intent, 0);
++            }
++            return mResetDemoPendingIntent;
++        }
++
++        File getDataPreloadsDirectory() {
++            return Environment.getDataPreloadsDirectory();
++        }
++
++        File getDataPreloadsFileCacheDirectory() {
++            return Environment.getDataPreloadsFileCacheDirectory();
++        }
++
++        void publishLocalService(RetailDemoModeService service,
++                RetailDemoModeServiceInternal localService) {
++            service.publishLocalService(RetailDemoModeServiceInternal.class, localService);
++        }
++    }
+ }
+Index: frameworks/base/services/retaildemo/java/com/android/server/retaildemo/UserInactivityCountdownDialog.java
+===================================================================
+--- frameworks/base/services/retaildemo/java/com/android/server/retaildemo/UserInactivityCountdownDialog.java	(revision 4437)
++++ frameworks/base/services/retaildemo/java/com/android/server/retaildemo/UserInactivityCountdownDialog.java	(revision 4438)
+@@ -32,19 +32,39 @@
+     private long mCountDownDuration;
+     private long mRefreshInterval;
+ 
+-    UserInactivityCountdownDialog(Context context, long duration, long refreshInterval) {
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    private int mDialogTitleStringId;
++    private int mDialogMessageStringId;
++    private int mDialogLeftBtnStringId;
++    private int mDialogRightBtnStringId;
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++
++    // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++    //UserInactivityCountdownDialog(Context context, long duration, long refreshInterval) {
++    UserInactivityCountdownDialog(Context context, long duration, long refreshInterval, int titleId, int messageId, int leftBtnTextId, int rightBtnTextId) {
++    // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
+         super(context);
+         mCountDownDuration = duration;
+         mRefreshInterval = refreshInterval;
+ 
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        mDialogTitleStringId = titleId;
++        mDialogMessageStringId = messageId;
++        mDialogLeftBtnStringId = leftBtnTextId;
++        mDialogRightBtnStringId = rightBtnTextId;
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+         getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ERROR);
+         WindowManager.LayoutParams attrs = getWindow().getAttributes();
+         attrs.privateFlags = WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+         getWindow().setAttributes(attrs);
+ 
+-        setTitle(R.string.demo_user_inactivity_timeout_title);
+-        setMessage(getContext().getString(R.string.demo_user_inactivity_timeout_countdown,
+-                duration));
++        // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++        //setTitle(R.string.demo_user_inactivity_timeout_title);
++        //setMessage(getContext().getString(R.string.demo_user_inactivity_timeout_countdown,
++        //        duration));
++        setTitle(mDialogTitleStringId);
++        setMessage(getContext().getString(mDialogMessageStringId, duration / 1000));
++        // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
+     }
+ 
+     public void setOnCountDownExpiredListener(
+@@ -54,13 +74,19 @@
+ 
+     public void setPositiveButtonClickListener(OnClickListener onClickListener) {
+         setButton(Dialog.BUTTON_POSITIVE,
+-                getContext().getString(R.string.demo_user_inactivity_timeout_right_button),
++                // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++                //getContext().getString(R.string.demo_user_inactivity_timeout_right_button),
++                getContext().getString(mDialogRightBtnStringId),
++                // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
+                 onClickListener);
+     }
+ 
+     public void setNegativeButtonClickListener(OnClickListener onClickListener) {
+         setButton(Dialog.BUTTON_NEGATIVE,
+-                getContext().getString(R.string.demo_user_inactivity_timeout_left_button),
++                // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++                //getContext().getString(R.string.demo_user_inactivity_timeout_left_button),
++                getContext().getString(mDialogLeftBtnStringId),
++                // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
+                 onClickListener);
+     }
+ 
+@@ -67,7 +93,7 @@
+     @Override
+     public void show() {
+         super.show();
+-        final TextView messageView = (TextView) findViewById(R.id.message);
++        final TextView messageView = (TextView)findViewById(R.id.message);
+         messageView.post(new Runnable() {
+             @Override
+             public void run() {
+@@ -76,7 +102,10 @@
+                     @Override
+                     public void onTick(long millisUntilFinished) {
+                         String msg = getContext().getString(
+-                                R.string.demo_user_inactivity_timeout_countdown,
++                                // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++                                //R.string.demo_user_inactivity_timeout_countdown,
++                                mDialogMessageStringId,
++                                // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
+                                 millisUntilFinished / 1000);
+                         messageView.setText(msg);
+                     }
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 4437)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 4438)
+@@ -183,6 +183,11 @@
+ import java.util.Date;
+ //add by dongdongli for 111401 20171122 end
+ 
++// Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++import android.os.UserManager;
++import android.content.pm.PackageInfo;
++// End added by Xutao.Wu for TASK5709544 on 2017/11/28
++
+ /**
+  * WindowManagerPolicy implementation for the Android phone UI.  This
+  * introduces a new method suffix, Lp, for an internal lock of the
+@@ -1461,6 +1466,27 @@
+     }
+ 
+     void showGlobalActionsInternal() {
++    	// Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        if (UserManager.isDeviceInDemoMode(mContext)) {
++            // will check tct retail demo apk installed or not
++            PackageInfo packageInfo;
++
++            try {
++                packageInfo = mContext.getPackageManager().getPackageInfo(PackageManager.TCT_RETAILDEMO_PACKAGE_NAME, 0);
++            }catch (PackageManager.NameNotFoundException e) {
++                packageInfo = null;
++                e.printStackTrace();
++            }
++
++            if(packageInfo ==null){
++                //Log.w(TAG, "tct retail demo apk is not exist ");
++            }else{
++                Intent intent = new Intent("com.tct.retaildemo.action.LONG_PRESSING_POWER_KEY");
++                mContext.startActivityAsUser(intent, UserHandle.CURRENT);
++                return;
++            }
++        }
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+         sendCloseSystemWindows(SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS);
+         if (mGlobalActions == null) {
+             mGlobalActions = new GlobalActions(mContext, mWindowManagerFuncs);
+Index: frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java	(revision 4437)
++++ frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java	(revision 4438)
+@@ -778,6 +778,9 @@
+     final ResolveInfo mResolveInfo = new ResolveInfo();
+     ComponentName mResolveComponentName;
+     PackageParser.Package mPlatformPackage;
++    // Begin added by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28
++    PackageParser.Package mOemPackage;
++    // End added by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28
+     ComponentName mCustomResolverComponentName;
+ 
+     boolean mResolverReplaced = false;
+@@ -2678,6 +2681,10 @@
+                                 + " no longer exists; it's data will be wiped";
+                         // Actual deletion of code and data will be handled by later
+                         // reconciliation step
++                    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++                    } else if (deletedAppName!=null && PackageManager.TCT_RETAILDEMO_PACKAGE_NAME.equals(deletedAppName)){
++                        msg = "Updated system app ignore retail mode privileges ";
++                    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+                     } else {
+                         msg = "Updated system app + " + deletedAppName
+                                 + " no longer present; removing system privileges for "
+@@ -7347,6 +7354,16 @@
+                 updatedPkg.pkgPrivateFlags |= ApplicationInfo.PRIVATE_FLAG_PRIVILEGED;
+             } else {
+                 updatedPkg.pkgPrivateFlags &= ~ApplicationInfo.PRIVATE_FLAG_PRIVILEGED;
++                // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++                if(scanFile != null){
++                    String absolutePath = scanFile.getAbsolutePath();
++
++                    if (absolutePath!=null && absolutePath.contains(PackageManager.TCT_RETAILDEMO_PACKAGE_NAME)){
++                        if (DEBUG_INSTALL) Slog.d(TAG, "scan file is retail:"+ scanFile + " add private flag ");
++                        updatedPkg.pkgPrivateFlags |= ApplicationInfo.PRIVATE_FLAG_PRIVILEGED;
++                    }
++                }
++                // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+             }
+ 
+             if (ps != null && !ps.codePath.equals(scanFile)) {
+@@ -7610,6 +7627,12 @@
+                 match = compareSignaturesRecover(pkgSetting.sharedUser.signatures, pkg)
+                         == PackageManager.SIGNATURE_MATCH;
+             }
++            // Begin added by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28
++            if (!match && mOemPackage != null
++                    && pkg.packageName != null && PackageManager.TCT_RETAILDEMO_PACKAGE_NAME.equals(pkg.packageName)){
++                match = (compareSignatures(mOemPackage.mSignatures, pkg.mSignatures) == PackageManager.SIGNATURE_MATCH);
++            }
++            // End added by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28
+             if (!match) {
+                 throw new PackageManagerException(INSTALL_FAILED_SHARED_USER_INCOMPATIBLE,
+                         "Package " + pkg.packageName
+@@ -8459,6 +8482,11 @@
+     private PackageParser.Package scanPackageDirtyLI(PackageParser.Package pkg,
+             final int policyFlags, final int scanFlags, long currentTime, UserHandle user)
+             throws PackageManagerException {
++        // Begin added by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28
++		if (pkg.packageName.equals("com.jrd.supersignature.platform")) {
++		    mOemPackage = pkg;
++		}
++		// End added by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28
+         final File scanFile = new File(pkg.codePath);
+         if (pkg.applicationInfo.getCodePath() == null ||
+                 pkg.applicationInfo.getResourcePath() == null) {
+@@ -8505,6 +8533,14 @@
+             pkg.applicationInfo.flagsEx |= ApplicationInfo.FLAG_EX_OPERATOR;
+         }
+         /** @} */
++        
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        if (PackageManager.TCT_RETAILDEMO_PACKAGE_NAME.equals(pkg.packageName)){
++            //if (DEBUG_INSTALL) Slog.w(TAG,"scanPackageDirtyLI, set retaildemo as SYSTEM PRIVILEGED");
++            pkg.applicationInfo.privateFlags |= ApplicationInfo.PRIVATE_FLAG_PRIVILEGED;
++            pkg.applicationInfo.flags |= ApplicationInfo.FLAG_SYSTEM;
++        }
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+ 
+         if ((policyFlags & PackageParser.PARSE_ENFORCE_CODE) != 0) {
+             enforceCodePolicy(pkg);
+@@ -10801,6 +10837,12 @@
+                         == PackageManager.SIGNATURE_MATCH)
+                 || (compareSignatures(mPlatformPackage.mSignatures, pkg.mSignatures)
+                         == PackageManager.SIGNATURE_MATCH);
++        // Begin added by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28
++        if (allowed == false && mOemPackage != null
++                && pkg.packageName != null && PackageManager.TCT_RETAILDEMO_PACKAGE_NAME.equals(pkg.packageName)){
++            allowed = (compareSignatures(mOemPackage.mSignatures, pkg.mSignatures) == PackageManager.SIGNATURE_MATCH);
++        }
++        // End added by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28
+         if (!allowed && (bp.protectionLevel
+                 & PermissionInfo.PROTECTION_FLAG_PRIVILEGED) != 0) {
+             if (isSystemApp(pkg)) {
+@@ -22010,6 +22052,13 @@
+                 return mSettings.wasPackageEverLaunchedLPr(packageName, userId);
+             }
+         }
++        
++        // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++        @Override
++        public String getSetupWizardPackageName() {
++            return mSetupWizardPackage;
++        }
++        // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+ 
+         /// M: CTA requirement - Enhanced exception dialog by runtime permission @{
+         @Override
+Index: frameworks/base/services/core/java/com/android/server/pm/DefaultPermissionGrantPolicy.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/pm/DefaultPermissionGrantPolicy.java	(revision 4437)
++++ frameworks/base/services/core/java/com/android/server/pm/DefaultPermissionGrantPolicy.java	(revision 4438)
+@@ -896,7 +896,10 @@
+         // permissions if the version on the system image does not declare them.
+         if (!isDefaultPhoneOrSms && pkg.isUpdatedSystemApp()) {
+             PackageSetting sysPs = mService.mSettings.getDisabledSystemPkgLPr(pkg.packageName);
+-            if (sysPs != null) {
++            // Begin modified by Xutao.Wu for TASK5709544 on 2017/11/28
++            //if (sysPs != null) {
++            if (sysPs != null && sysPs.pkg != null) {
++            // End modified by Xutao.Wu for TASK5709544 on 2017/11/28
+                 if (sysPs.pkg.requestedPermissions.isEmpty()) {
+                     return;
+                 }
+Index: frameworks/base/services/core/java/com/android/server/PreloadsFileCacheExpirationJobService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/PreloadsFileCacheExpirationJobService.java	(revision 0)
++++ frameworks/base/services/core/java/com/android/server/PreloadsFileCacheExpirationJobService.java	(revision 4438)
+@@ -0,0 +1,85 @@
++/*
++ * Copyright (C) 2017 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License
++ */
++
++package com.android.server;
++
++import android.app.job.JobInfo;
++import android.app.job.JobParameters;
++import android.app.job.JobScheduler;
++import android.app.job.JobService;
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.res.Resources;
++import android.os.Environment;
++import android.os.SystemProperties;
++import android.util.Slog;
++import android.util.TimeUtils;
++
++import com.android.internal.R;
++
++import java.util.concurrent.TimeUnit;
++
++/**
++ * {@link JobService} that marks
++ * {@link Environment#getDataPreloadsFileCacheDirectory() preloaded file cache} as expired after a
++ * pre-configured timeout.
++ */
++public class PreloadsFileCacheExpirationJobService extends JobService {
++    private static final boolean DEBUG = false; // Do not submit with true
++    private static final String TAG = "PreloadsFileCacheExpirationJobService";
++
++    // TODO move all JOB_IDs into a single class to avoid collisions
++    private static final int JOB_ID = 100500;
++
++    private static final String PERSIST_SYS_PRELOADS_FILE_CACHE_EXPIRED
++            = "persist.sys.file_cache_expired";
++
++    public static void schedule(Context context) {
++        int keepPreloadsMinDays = Resources.getSystem().getInteger(
++                R.integer.config_keepPreloadsMinDays); // Default is 1 week
++        long keepPreloadsMinTimeoutMs = DEBUG ? TimeUnit.MINUTES.toMillis(2)
++                : TimeUnit.DAYS.toMillis(keepPreloadsMinDays);
++        long keepPreloadsMaxTimeoutMs = DEBUG ? TimeUnit.MINUTES.toMillis(3)
++                : TimeUnit.DAYS.toMillis(keepPreloadsMinDays + 1);
++
++        if (DEBUG) {
++            StringBuilder sb = new StringBuilder("Scheduling expiration job to run in ");
++            TimeUtils.formatDuration(keepPreloadsMinTimeoutMs, sb);
++            Slog.i(TAG, sb.toString());
++        }
++        JobInfo expirationJob = new JobInfo.Builder(JOB_ID,
++                new ComponentName(context, PreloadsFileCacheExpirationJobService.class))
++                .setPersisted(true)
++                .setMinimumLatency(keepPreloadsMinTimeoutMs)
++                .setOverrideDeadline(keepPreloadsMaxTimeoutMs)
++                .build();
++
++        JobScheduler jobScheduler = context.getSystemService(JobScheduler.class);
++        jobScheduler.schedule(expirationJob);
++    }
++
++    @Override
++    public boolean onStartJob(JobParameters params) {
++        SystemProperties.set(PERSIST_SYS_PRELOADS_FILE_CACHE_EXPIRED, "1");
++        Slog.i(TAG, "Set " + PERSIST_SYS_PRELOADS_FILE_CACHE_EXPIRED + "=1");
++        return false;
++    }
++
++    @Override
++    public boolean onStopJob(JobParameters params) {
++        return false;
++    }
++}
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 4437)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 4438)
+@@ -23006,6 +23006,15 @@
+     public UserInfo getCurrentUser() {
+         return mUserController.getCurrentUser();
+     }
++    
++    // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++    String getStartedUserState(int userId) {
++        synchronized (this) {
++            final UserState userState = mUserController.getStartedUserStateLocked(userId);
++            return UserState.stateToString(userState.state);
++        }
++    }
++    // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+ 
+     @Override
+     public boolean isUserRunning(int userId, int flags) {
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerShellCommand.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerShellCommand.java	(revision 4437)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerShellCommand.java	(revision 4438)
+@@ -56,6 +56,10 @@
+                     return runKillAll(pw);
+                 case "write":
+                     return runWrite(pw);
++                // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++                case "get-started-user-state":
++                    return runGetStartedUserState(pw);
++                // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+                 case "track-associations":
+                     return runTrackAssociations(pw);
+                 case "untrack-associations":
+@@ -126,6 +130,20 @@
+         pw.println("All tasks persisted.");
+         return 0;
+     }
++    
++    // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++    int runGetStartedUserState(PrintWriter pw) throws RemoteException {
++        mInternal.enforceCallingPermission(android.Manifest.permission.DUMP,
++                "runGetStartedUserState()");
++        final int userId = Integer.parseInt(getNextArgRequired());
++        try {
++            pw.println(mInternal.getStartedUserState(userId));
++        } catch (NullPointerException e) {
++            pw.println("User is not started: " + userId);
++        }
++        return 0;
++    }
++    // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+ 
+     int runTrackAssociations(PrintWriter pw) {
+         mInternal.enforceCallingPermission(android.Manifest.permission.SET_ACTIVITY_WATCHER,
+@@ -231,6 +249,10 @@
+             pw.println("    Kill all processes that are safe to kill (cached, etc).");
+             pw.println("  write");
+             pw.println("    Write all pending state to storage.");
++            // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++            pw.println("  get-started-user-state <USER_ID>");
++            pw.println("      Gets the current state of the given started user.");
++            // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+             pw.println("  track-associations");
+             pw.println("    Enable association tracking.");
+             pw.println("  untrack-associations");
+Index: frameworks/base/services/core/java/com/android/server/am/UserState.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/UserState.java	(revision 4437)
++++ frameworks/base/services/core/java/com/android/server/am/UserState.java	(revision 4438)
+@@ -87,7 +87,7 @@
+         state = newState;
+     }
+ 
+-    private static String stateToString(int state) {
++    public static String stateToString(int state) {
+         switch (state) {
+             case STATE_BOOTING: return "BOOTING";
+             case STATE_RUNNING_LOCKED: return "RUNNING_LOCKED";
+Index: frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
+===================================================================
+--- frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java	(revision 4437)
++++ frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java	(revision 4438)
+@@ -2883,9 +2883,30 @@
+             }
+             mHistoryLastWritten.setTo(mHistoryLastLastWritten);
+         }
++        
++        // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++        boolean recordResetDueToOverflow = false;
++        // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++        final int dataSize = mHistoryBuffer.dataSize();
++        // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++        if (dataSize >= MAX_MAX_HISTORY_BUFFER*3) {
++            // Clients can't deal with history buffers this large. This only
++            // really happens when the device is on charger and interacted with
++            // for long periods of time, like in retail mode. Since the device is
++            // most likely charged, when unplugged, stats would have reset anyways.
++            // Reset the stats and mark that we overflowed.
++            // b/32540341
++            resetAllStatsLocked();
+ 
+-        final int dataSize = mHistoryBuffer.dataSize();
+-        if (dataSize >= MAX_HISTORY_BUFFER) {
++            // Mark that we want to set *OVERFLOW* event and the RESET:START
++            // events.
++            recordResetDueToOverflow = true;
++
++        } else if (dataSize >= MAX_HISTORY_BUFFER) {
++        // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++        // Begin deleted by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++        //if (dataSize >= MAX_HISTORY_BUFFER) {
++        // End deleted by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+             if (!mHistoryOverflow) {
+                 mHistoryOverflow = true;
+                 addHistoryBufferLocked(elapsedRealtimeMs, uptimeMs, HistoryItem.CMD_UPDATE, cur);
+@@ -2931,9 +2952,17 @@
+             return;
+         }
+ 
+-        if (dataSize == 0) {
++        // Begin modified by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++        //if (dataSize == 0) {
++        if (dataSize == 0 || recordResetDueToOverflow) {
++        // End modified by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+             // The history is currently empty; we need it to start with a time stamp.
+             cur.currentTime = System.currentTimeMillis();
++            // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++            if (recordResetDueToOverflow) {
++                addHistoryBufferLocked(elapsedRealtimeMs, uptimeMs, HistoryItem.CMD_OVERFLOW, cur);
++            }
++            // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+             addHistoryBufferLocked(elapsedRealtimeMs, uptimeMs, HistoryItem.CMD_RESET, cur);
+         }
+         addHistoryBufferLocked(elapsedRealtimeMs, uptimeMs, HistoryItem.CMD_UPDATE, cur);
+Index: frameworks/base/core/java/android/app/ActivityManager.java
+===================================================================
+--- frameworks/base/core/java/android/app/ActivityManager.java	(revision 4437)
++++ frameworks/base/core/java/android/app/ActivityManager.java	(revision 4438)
+@@ -3520,6 +3520,16 @@
+         dumpService(pw, fd, BatteryStats.SERVICE_NAME, new String[] { packageName });
+         pw.flush();
+     }
++    
++    // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++    /**
++     * @hide
++     */
++    public static IActivityManager getService() {
++        //return IActivityManagerSingleton.get();
++        return ActivityManagerNative.getDefault();
++    }
++    // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+ 
+     private static void dumpService(PrintWriter pw, FileDescriptor fd, String name, String[] args) {
+         pw.print("DUMP OF SERVICE "); pw.print(name); pw.println(":");
+Index: frameworks/base/core/java/android/os/Environment.java
+===================================================================
+--- frameworks/base/core/java/android/os/Environment.java	(revision 4437)
++++ frameworks/base/core/java/android/os/Environment.java	(revision 4438)
+@@ -396,8 +396,28 @@
+     public static File getDataPreloadsMediaDirectory() {
+         return new File(getDataPreloadsDirectory(), "media");
+     }
++    
++    // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++    /**
++     * Returns location of preloaded cache directory for package name
++     * @see #getDataPreloadsDirectory()
++     * {@hide}
++     */
++    public static File getDataPreloadsFileCacheDirectory(String packageName) {
++        return new File(getDataPreloadsFileCacheDirectory(), packageName);
++    }
+ 
+     /**
++     * Returns location of preloaded cache directory.
++     * @see #getDataPreloadsDirectory()
++     * {@hide}
++     */
++    public static File getDataPreloadsFileCacheDirectory() {
++        return new File(getDataPreloadsDirectory(), "file_cache");
++    }
++    // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++
++    /**
+      * Return the primary shared/external storage directory. This directory may
+      * not currently be accessible if it has been mounted by the user on their
+      * computer, has been removed from the device, or some other problem has
+Index: frameworks/base/core/java/android/os/UserManager.java
+===================================================================
+--- frameworks/base/core/java/android/os/UserManager.java	(revision 4437)
++++ frameworks/base/core/java/android/os/UserManager.java	(revision 4438)
+@@ -884,6 +884,18 @@
+         UserInfo user = getUserInfo(UserHandle.myUserId());
+         return user != null && user.isGuest();
+     }
++    
++    // Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
++    /**
++     * Checks if a user is a guest user.
++     * @return whether user is a guest user.
++     * @hide
++     */
++    public boolean isGuestUser(int id) {
++        UserInfo user = getUserInfo(id);
++        return user != null && user.isGuest();
++    }
++    // End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28
+ 
+     /**
+      * Checks if the calling app is running in a demo user. When running in a demo user,
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 4437)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 4438)
+@@ -2838,6 +2838,11 @@
+         private static final Validator MUTE_STREAMS_AFFECTED_VALIDATOR =
+                 sNonNegativeIntegerValidator;
+ 
++        public static final String TCT_UNLOCK_SCREEN = "tct_unlock_screen";
++
++        public static final String TCT_FP_QUICK_LAUNCH_FUNC = "tct_fp_quick_launch_func";
++
++        public static final String TCT_FINGERPRINT_FUNC_NUM = "fingerprint_func_num";
+         /**
+          * Whether vibrate is on for different events. This is used internally,
+          * changing this value will not change the vibrate. See AudioManager.
+Index: frameworks/base/core/java/android/content/pm/PackageManagerInternal.java
+===================================================================
+--- frameworks/base/core/java/android/content/pm/PackageManagerInternal.java	(revision 4437)
++++ frameworks/base/core/java/android/content/pm/PackageManagerInternal.java	(revision 4438)
+@@ -175,7 +175,15 @@
+     public abstract boolean wasPackageEverLaunched(String packageName, int userId);
+ 
+     /// M: CTA requirement - Enhanced exception dialog by runtime permission @{
++    
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
+     /**
++     * @return The SetupWizard package name.
++     */
++    public abstract String getSetupWizardPackageName();
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
++
++    /**
+      * Init MtkPermErrorDialog if app is crashed by runtime security exception.
+      *
+      * @param data required information for initializing MtkPermErrorDialog
+Index: frameworks/base/core/java/android/content/pm/PackageManager.java
+===================================================================
+--- frameworks/base/core/java/android/content/pm/PackageManager.java	(revision 4437)
++++ frameworks/base/core/java/android/content/pm/PackageManager.java	(revision 4438)
+@@ -219,6 +219,11 @@
+     })
+     @Retention(RetentionPolicy.SOURCE)
+     public @interface InstrumentationInfoFlags {}
++    
++    // Begin added by Xutao.Wu for TASK5709544 on 2017/11/28
++    /** @hide */
++    public static final String TCT_RETAILDEMO_PACKAGE_NAME = "com.tct.retaildemo";
++    // End added by Xutao.Wu for TASK5709544 on 2017/11/28
+ 
+     /**
+      * {@link PackageInfo} flag: return information about
+Index: frameworks/base/core/res/AndroidManifest.xml
+===================================================================
+--- frameworks/base/core/res/AndroidManifest.xml	(revision 4437)
++++ frameworks/base/core/res/AndroidManifest.xml	(revision 4438)
+@@ -3436,6 +3436,11 @@
+             android:permission="android.permission.BIND_JOB_SERVICE">
+         </service>
+ 
++        <!-- Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
++        <service android:name="com.android.server.PreloadsFileCacheExpirationJobService"
++                 android:permission="android.permission.BIND_JOB_SERVICE" >
++        </service>
++        <!-- End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
+     </application>
+ 
+ </manifest>
+Index: frameworks/base/core/res/res/values/strings.xml
+===================================================================
+--- frameworks/base/core/res/res/values/strings.xml	(revision 4437)
++++ frameworks/base/core/res/res/values/strings.xml	(revision 4438)
+@@ -4535,4 +4535,13 @@
+   <string name="fingerprint_acquired_duplicate_area">Duplicate area.Please try again.</string>
+ 	
+   <string name="shutdown_poweroff">POWER OFF</string>
++  
++  <!--Begin added by Xutao.Wu for TASK5709544 on 2017/11/28-->
++  <!-- Title of the dialog shown when user inactivity times to start retail demo mode [CHAR LIMIT=40] -->
++  <string name="start_demo_mode_inactivity_timeout_title">Enter into demo mode</string>
++  <!-- Warning message shown when user inactivity times out to start retail demo mode [CHAR LIMIT=none] -->
++  <string name="start_demo_mode_inactivity_timeout_countdown">The demo mode will activate in <xliff:g id="timeout" example="9">%1$s</xliff:g> seconds\u2026</string>
++  <!-- Text of button to allow user to abort countdown and immediately start retail demo mode [CHAR LIMIT=40] -->
++  <string name="start_demo_mode_inactivity_timeout_right_button">ENTER</string>
++  <!--End added by Xutao.Wu for TASK5709544 on 2017/11/28-->
+ </resources>
+Index: frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- frameworks/base/core/res/res/values/config.xml	(revision 4437)
++++ frameworks/base/core/res/res/values/config.xml	(revision 4438)
+@@ -1580,10 +1580,10 @@
+     <bool name="config_mms_content_disposition_support">true</bool>
+ 
+     <!-- MMS user agent string -->
+-    <string name="config_mms_user_agent" translatable="false">Android-Mms/0.1</string>
++    <string name="config_mms_user_agent" translatable="false">5058A-MMS/2.0</string>
+ 
+     <!-- MMS user agent prolfile url -->
+-    <string name="config_mms_user_agent_profile_url" translatable="false">http://www.google.com/oha/rdf/ua-profile-kila.xml</string>
++    <string name="config_mms_user_agent_profile_url" translatable="false">http://www-ccpp.tcl-ta.com/files/5058a.xml</string>
+ 
+     <!-- National Language Identifier codes for the following two config items.
+          (from 3GPP TS 23.038 V9.1.1 Table 6.2.1.2.4.1):
+@@ -1847,7 +1847,7 @@
+     </integer-array>
+ 
+     <!-- Set to true to add links to Cell Broadcast app from Settings and MMS app. -->
+-    <bool name="config_cellBroadcastAppLinks">false</bool>
++    <bool name="config_cellBroadcastAppLinks">true</bool>
+ 
+     <!-- The default value if the SyncStorageEngine should sync automatically or not -->
+     <bool name="config_syncstorageengine_masterSyncAutomatically">true</bool>
+@@ -2177,7 +2177,7 @@
+         <item>power</item>
+         <item>bugreport</item>
+         <item>users</item>
+-        <item>airplane</item>
++		<item>airplane</item>
+     </string-array>
+ 
+     <!-- Number of milliseconds to hold a wake lock to ensure that drawing is fully
+@@ -2604,7 +2604,22 @@
+ 
+     <!-- Component that is the default launcher when demo mode is enabled. -->
+     <string name="config_demoModeLauncherComponent">com.android.retaildemo/.DemoPlayer</string>
++    
++    <!-- Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
++    <!-- Hashed password (SHA-256) used to restrict carrier demo mode operation. -->
++    <string name="config_carrierDemoModePassword" translatable="false"></string>
+ 
++    <!-- Secure setting used to activate carrier demo mode. -->
++    <string name="config_carrierDemoModeSetting" translatable="false"></string>
++
++    <!-- List of packages to enable in carrier demo mode (comma separated). -->
++    <string name="config_carrierDemoModePackages" translatable="false"></string>
++
++    <!-- Number of days preloaded file cache should be preserved on a device before it can be
++         deleted -->
++    <integer name="config_keepPreloadsMinDays">7</integer>
++    <!-- End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
++
+     <!-- Flag indicating whether round icons should be parsed from the application manifest. -->
+     <bool name="config_useRoundIcon">false</bool>
+ 
+@@ -2656,5 +2671,5 @@
+     <!-- An array of packages for which notifications cannot be blocked. -->
+     <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
+ 	
+-	<bool name="def_cb_channel_50_behaviour_brazil">false</bool>
++	<bool name="def_cb_channel_50_behaviour_brazil">true</bool>
+ </resources>
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 4437)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 4438)
+@@ -405,6 +405,9 @@
+   <java-symbol type="integer" name="config_valid_wappush_index" />
+   <java-symbol type="integer" name="config_overrideHasPermanentMenuKey" />
+   <java-symbol type="integer" name="config_mdc_initial_max_retry" />
++  <!-- Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
++  <java-symbol type="integer" name="config_keepPreloadsMinDays" />
++  <!-- End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
+   <java-symbol type="bool" name="config_hasPermanentDpad" />
+ 
+   <java-symbol type="color" name="tab_indicator_text_v4" />
+@@ -1109,9 +1112,16 @@
+   <java-symbol type="string" name="lockscreen_transport_pause_description" />
+   <java-symbol type="string" name="config_ethernet_tcp_buffers" />
+   <java-symbol type="string" name="config_wifi_tcp_buffers" />
++  <!-- Begin added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
+   <java-symbol type="string" name="config_demoModeLauncherComponent" />
++  <java-symbol type="string" name="config_carrierDemoModePassword" />
++  <java-symbol type="string" name="config_carrierDemoModeSetting" />
++  <java-symbol type="string" name="config_carrierDemoModePackages" />
+   <java-symbol type="string" name="demo_starting_message" />
+   <java-symbol type="string" name="demo_restarting_message" />
++  <!-- End added by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
++  <java-symbol type="string" name="demo_starting_message" />
++  <java-symbol type="string" name="demo_restarting_message" />
+   <java-symbol type="string" name="conference_call" />
+ 
+ 
+@@ -2749,5 +2759,11 @@
+   <!-- added by lei.shi for task927658 at 2015.11.24 end --> 
+ 
+   <java-symbol type="string" name="shutdown_poweroff" />
++  
++  <!--Begin added by Xutao.Wu for TASK5709544 on 2017/11/28-->
++  <java-symbol type="string" name="start_demo_mode_inactivity_timeout_title" />
++  <java-symbol type="string" name="start_demo_mode_inactivity_timeout_countdown" />
++  <java-symbol type="string" name="start_demo_mode_inactivity_timeout_right_button" />
++  <!--End added by Xutao.Wu for TASK5709544 on 2017/11/28-->
+ 
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 4437)
++++ frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 4438)
+@@ -1161,7 +1161,10 @@
+     <string name="overview">Overview</string>
+ 
+     <!-- Name of demo mode (mode with preset icons for screenshots) -->
+-    <string name="demo_mode">Demo mode</string>
++    <!--string name="demo_mode">Demo mode</string-->
++    <!-- Name of System UI demo mode (mode with preset icons for screenshots) -->
++    <string name="demo_mode">System UI demo mode</string>
++    <!-- End modified by Xutao.Wu according to Google AndroidO retaildemo for TASK5709544 on 2017/11/28 -->
+ 
+     <!-- Enable demo mode -->
+     <string name="enable_demo_mode">Enable demo mode</string>
+Index: system/sepolicy/keys.conf
+===================================================================
+--- system/sepolicy/keys.conf	(revision 4437)
++++ system/sepolicy/keys.conf	(revision 4438)
+@@ -23,3 +23,6 @@
+ USER      : $DEFAULT_SYSTEM_DEV_CERTIFICATE/testkey.x509.pem
+ USERDEBUG : $DEFAULT_SYSTEM_DEV_CERTIFICATE/testkey.x509.pem
+ 
++# added odm.platform.x509.pem by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28
++[@OEMKEY]
++ALL : $DEFAULT_SYSTEM_DEV_CERTIFICATE/odm.platform.x509.pem
+\ No newline at end of file
+Index: system/sepolicy/mac_permissions.xml
+===================================================================
+--- system/sepolicy/mac_permissions.xml	(revision 4437)
++++ system/sepolicy/mac_permissions.xml	(revision 4438)
+@@ -50,5 +50,9 @@
+     <signer signature="@PLATFORM" >
+       <seinfo value="platform" />
+     </signer>
+-
++    
++    <!-- added OEMKEY by Xutao.Wu for TASK5709544 for 2 platfrom key on 2017/11/28 -->
++    <signer signature="@OEMKEY" >
++      <seinfo value="platform" />
++    </signer>
+ </policy>

@@ -1,0 +1,69 @@
+Index: vendor/branch/5058A/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java
+===================================================================
+--- vendor/branch/5058A/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 6503)
++++ vendor/branch/5058A/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 6504)
+@@ -3201,6 +3201,18 @@
+                                 String strOperatorShort = null;
+                                 SpnOverride spnOverride = SpnOverride.getInstance();
+ 
++								if(opNames[2].equals("74810")){
++                                    TelephonyManager tm =
++                                            (TelephonyManager) mPhone.getContext().getSystemService(Context.TELEPHONY_SERVICE);
++									if(TelephonyManager.getNetWorkClass(tm.getNetworkType()) == TelephonyManager.NETWORK_CLASS_4_G ){
++										strOperatorLong = "Claro LTE";
++										strOperatorShort = "Claro LTE";
++									}else if((TelephonyManager.getNetWorkClass(tm.getNetworkType()) == NETWORK_CLASS_2_G)||
++                                       (TelephonyManager.getNetWorkClass(tm.getNetworkType()) == NETWORK_CLASS_3_G)){
++										strOperatorLong = "Claro UY";
++										strOperatorShort = "Claro UY";
++									}
++								}else{		
+                                 strOperatorLong = mCi.lookupOperatorNameFromNetwork(
+                                         SubscriptionManager.getSubIdUsingPhoneId(
+                                                 mPhone.getPhoneId()), opNames[2], true);
+@@ -3243,6 +3255,7 @@
+                                 }
+                                 log("EVENT_POLL_STATE_OPERATOR_CDMA: "
+                                         + strOperatorLong + ", " + strOperatorShort);
++							}
+                                 mNewSS.setOperatorName(strOperatorLong, strOperatorShort,
+                                         opNames[2]);
+                                 /// @}
+@@ -3563,10 +3576,12 @@
+         String plmn = null;
+         String realPlmn = null;
+         String mSimOperatorNumeric = (simRecords != null) ? simRecords.getOperatorNumeric() : "";
+-
++        loge("strNumPlmn = " + strNumPlmn + " mSimOperatorNumeric = " + mSimOperatorNumeric);
+         try {
++			if(!("29505".equals(strNumPlmn) || "23212".equals(strNumPlmn))){
+             sEons = (simRecords != null) ? simRecords.getEonsIfExist(mSS.getOperatorNumeric(),
+                     ((GsmCellLocation)mCellLoc).getLac(), true) : null;
++			}
+         } catch (RuntimeException ex) {
+             loge("Exception while getEonsIfExist. " + ex);
+         }
+@@ -3573,10 +3588,23 @@
+ 
+         if (sEons != null) {
+             plmn = sEons;
++            loge("plmn update to seons:"+sEons);
+         }
+         else if (strNumPlmn != null && strNumPlmn.equals(mSimOperatorNumeric)) {
+             log("Home PLMN, get CPHS ons");
+             plmn = (simRecords != null) ? simRecords.getSIMCPHSOns() : "";
++            loge("plmn update to cphs" +plmn );
++				if(strNumPlmn.equals("74810")){
++                    TelephonyManager tm =
++                            (TelephonyManager) mPhone.getContext().getSystemService(Context.TELEPHONY_SERVICE);
++					if((TelephonyManager.getNetWorkClass(tm.getNetworkType()) == NETWORK_CLASS_2_G)||
++                                       (TelephonyManager.getNetWorkClass(tm.getNetworkType()) == NETWORK_CLASS_3_G)){
++									plmn = "Claro UY";
++									}
++					else if(TelephonyManager.getNetWorkClass(tm.getNetworkType()) == NETWORK_CLASS_4_G){
++										plmn = "Claro LTE";
++									}
++								}
+         }
+ 
+         if (TextUtils.isEmpty(plmn)) {

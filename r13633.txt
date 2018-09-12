@@ -1,0 +1,48 @@
+Index: vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/NetworkSetting.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 13632)
++++ vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 13633)
+@@ -672,6 +672,7 @@
+                 // just use the operator name instead of the mildly
+                 // confusing mcc/mnc.
+                 /// M: add forbidden at the end of operator name
++				HashMap<String,Preference> tempMap = new HashMap<String,Preference>();;
+                 int forbiddenCount = 0;
+                 for (OperatorInfo ni : result) {
+                     String forbidden = "";
+@@ -679,15 +680,22 @@
+                         forbidden = " (" + getResources().getString(
+                                 R.string.network_forbidden) + ")";
+                         forbiddenCount++;
++						continue;
+                     }
+                     Preference carrier = new Preference(this, null);
+-                    carrier.setTitle(getNetworkTitle(ni) + forbidden);
+-                    carrier.setPersistent(false);
+-                    mNetworkList.addPreference(carrier);
++					String operatorName = getNetworkTitle(ni).replaceAll("2G|3G|4G","");
++                    carrier.setTitle(operatorName/*  + forbidden */);
++                    carrier.setPersistent(false);					
++					tempMap.put(ni.getOperatorNumeric(),carrier);					
+                     mNetworkMap.put(carrier, ni);
+-
++					Log.d("NetWorkSetting.TAG",ni.toString());
+                     if (DBG) log("  " + ni);
+                 }
++				if (tempMap !=null) {
++					for (String operatorNumberic:tempMap.keySet()) {
++						mNetworkList.addPreference(tempMap.get(operatorNumberic));
++					}
++				}			                    
+                 if (mIsForeground && forbiddenCount == result.size()) {
+                     if (DBG) {
+                         log("show DIALOG_ALL_FORBIDDEN forbiddenCount:" + forbiddenCount);
+@@ -716,7 +724,7 @@
+             return ni.getOperatorAlphaShort();
+         } else {
+             BidiFormatter bidiFormatter = BidiFormatter.getInstance();
+-            return bidiFormatter.unicodeWrap(ni.getOperatorNumeric(), TextDirectionHeuristics.LTR);
++			return bidiFormatter.unicodeWrap(ni.getOperatorNumeric(), TextDirectionHeuristics.LTR);
+         }
+     }
+ 

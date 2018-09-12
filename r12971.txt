@@ -1,0 +1,284 @@
+Index: vendor/branch/5058A_Etecsa_Cuba/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058A_Etecsa_Cuba/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 12970)
++++ vendor/branch/5058A_Etecsa_Cuba/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 12971)
+@@ -47,6 +47,11 @@
+ import android.app.ActionBar;
+ import android.app.AlertDialog;
+ import android.app.Dialog;
++import android.app.Notification;
++import android.app.PendingIntent;
++import android.graphics.BitmapFactory;
++import android.app.NotificationManager;
++import android.support.v4.app.NotificationCompat;
+ import android.content.BroadcastReceiver;
+ import android.content.Context;
+ import android.content.DialogInterface;
+@@ -145,6 +150,8 @@
+     private static final String iface = "rmnet0"; //TODO: this will go away
+     private List<SubscriptionInfo> mActiveSubInfos;
+ 
++	private boolean OnInit = true;
++	
+     private UserManager mUm;
+     private Phone mPhone;
+     private MyHandler mHandler;
+@@ -559,9 +566,6 @@
+         getContentResolver().registerContentObserver(
+                 Settings.Global.getUriFor(Settings.Global.ENHANCED_4G_MODE_ENABLED),
+                 true, mContentObserver);
+-        getContentResolver().registerContentObserver(
+-                Settings.Global.getUriFor(Settings.Global.ENHANCED_4G_MODE_ENABLED_SIM2),
+-                true, mContentObserver);
+         if (DBG) log("onCreate:-");
+     }
+ 
+@@ -686,7 +690,7 @@
+             prefSet.addPreference(mButtonDataRoam);
+             prefSet.addPreference(mButtonPreferredNetworkMode);
+             prefSet.addPreference(mButtonEnabledNetworks);
+-            // prefSet.addPreference(mButton4glte);
++            prefSet.addPreference(mButton4glte);
+         }
+ 
+         int settingsNetworkMode = android.provider.Settings.Global.getInt(
+@@ -850,8 +854,8 @@
+                     mButtonEnabledNetworks.setEntryValues(
+                             R.array.enabled_networks_cdma_values);
+                 } else {
+-                    int select = (mShow4GForLTE == true) ? R.array.enabled_networks_4g_choices
+-                            : R.array.enabled_networks_choices;
++                    int select = (mShow4GForLTE == true) ? R.array.enabled_networks_choices_Bse
++                            : R.array.enabled_networks_choices_Bse;
+                     mButtonEnabledNetworks.setEntries(select);
+                     mExt.changeEntries(mButtonEnabledNetworks);
+                     /// Add for C2K @{
+@@ -863,7 +867,7 @@
+                                 R.array.enabled_networks_values_c2k);
+                     } else {
+                         mButtonEnabledNetworks.setEntryValues(
+-                                R.array.enabled_networks_values);
++                                R.array.enabled_networks_values_Bse);
+                     }
+                     /// @}
+                 }
+@@ -1445,13 +1449,12 @@
+                     controlGsmOptions(true);
+                     break;
+                 }
+-            case Phone.NT_MODE_LTE_ONLY:
+             case Phone.NT_MODE_LTE_WCDMA:
+                 if (!mIsGlobalCdma) {
+                     mButtonEnabledNetworks.setValue(
+                             Integer.toString(Phone.NT_MODE_LTE_GSM_WCDMA));
+                     mButtonEnabledNetworks.setSummary((mShow4GForLTE == true)
+-                            ? R.string.network_4G : R.string.network_lte);
++                            ? R.string.network_4G_bse : R.string.network_4G_bse);
+                 } else {
+                     mButtonEnabledNetworks.setValue(
+                             Integer.toString(Phone.NT_MODE_LTE_CDMA_EVDO_GSM_WCDMA));
+@@ -1563,10 +1566,22 @@
+                         mButtonEnabledNetworks.setSummary(R.string.network_global);
+                     } else {
+                         mButtonEnabledNetworks.setSummary((mShow4GForLTE == true)
+-                                ? R.string.network_4G : R.string.network_lte);
++                                ? R.string.network_4G_bse : R.string.network_4G_bse);
+                     }
+                 }
+                 break;
++				case Phone.NT_MODE_LTE_ONLY:
++					if (!mIsGlobalCdma) {
++						//showAttentionDialog();
++						mButtonEnabledNetworks.setValue(
++                            Integer.toString(Phone.NT_MODE_LTE_ONLY));
++						mButtonEnabledNetworks.setSummary(R.string.network_lte_only_bse);
++					} else {
++						mButtonEnabledNetworks.setValue(
++                            Integer.toString(Phone.NT_MODE_LTE_CDMA_EVDO_GSM_WCDMA));
++						mButtonEnabledNetworks.setSummary(R.string.network_global);
++					}
++				break;
+             default:
+                 String errMsg = "Invalid Network Mode (" + NetworkMode + "). Ignore.";
+                 loge(errMsg);
+@@ -1915,11 +1930,11 @@
+                     + settingsNetworkMode + "; currRat = " + currRat);
+             }
+             if ((currRat & RadioAccessFamily.RAF_LTE) == RadioAccessFamily.RAF_LTE) {
+-                int select = mShow4GForLTE ? R.array.enabled_networks_4g_choices
+-                        : R.array.enabled_networks_choices;
++                int select = mShow4GForLTE ? R.array.enabled_networks_choices_Bse
++                        : R.array.enabled_networks_choices_Bse;
+                 mButtonEnabledNetworks.setEntries(select);
+                 mButtonEnabledNetworks.setEntryValues(isC2kLteSupport() ?
+-                        R.array.enabled_networks_values_c2k : R.array.enabled_networks_values);
++                        R.array.enabled_networks_values_c2k : R.array.enabled_networks_values_Bse);
+                 if (DBG) {
+                     log("updateNetworkModeForLwDsds mShow4GForLTE = " + mShow4GForLTE);
+                 }
+@@ -2115,7 +2130,6 @@
+             }
+             preferenceScreen.removePreference(mButton4glte);
+         }
+-        volteEnabled = false;
+         if (volteEnabled && !mExt.isCtPlugin()) {
+             int order = mButtonEnabledNetworks.getOrder() + 1;
+             mEnhancedButton4glte = new Enhanced4GLteSwitchPreference(this, mPhone.getSubId());
+@@ -2125,7 +2139,7 @@
+             // show "VOLTE" for CT SIM
+             if (TelephonyUtilsEx.isCtVolteEnabled()
+                     && TelephonyUtilsEx.isCtSim(mPhone.getSubId())) {
+-                mEnhancedButton4glte.setTitle(R.string.hd_voice_switch_title);
++                mEnhancedButton4glte.setTitle(R.string.wfc_volte_switch_title);
+             } else {
+                 PersistableBundle carrierConfig =
+                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+@@ -2174,14 +2188,13 @@
+                 }
+             }
+             if (findPreference(BUTTON_4G_LTE_KEY) != null) {
++                if (DBG) {
++                    log("[updateEnhanced4GLteSwitchPreference] SubId = " + mPhone.getSubId());
++                }
+                 mEnhancedButton4glte.setSubId(mPhone.getSubId());
+                 boolean enh4glteMode = ImsManager.isEnhanced4gLteModeSettingEnabledByUser(this,
+                         mPhone.getPhoneId())
+                         && ImsManager.isNonTtyOrTtyOnVolteEnabled(this, mPhone.getPhoneId());
+-                if (DBG) {
+-                    log("[updateEnhanced4GLteSwitchPreference] SubId = " + mPhone.getSubId()
+-                        + ", enh4glteMode=" + enh4glteMode);
+-                }
+                 mEnhancedButton4glte.setChecked(enh4glteMode);
+                 /// M: update enabled state
+                 updateEnhanced4glteEnableState();
+@@ -2230,28 +2243,21 @@
+      * @return
+      */
+     private boolean onPreferenceChangeMTK(Preference preference, Object objValue) {
+-        String volteTitle = getResources().getString(R.string.hd_voice_switch_title);
+-        String lteTitle = getResources().getString(R.string.enhanced_4g_lte_mode_title);
+-        log("[onPreferenceChangeMTK] Preference = " + preference.getTitle());
+-
+-        if ((mEnhancedButton4glte == preference) || preference.getTitle().equals(volteTitle)
+-                || preference.getTitle().equals(lteTitle)) {
+-            Enhanced4GLteSwitchPreference ltePref = (Enhanced4GLteSwitchPreference) preference;
++        log("[onPreferenceChangeMTK] preference = " + preference.getTitle());
++        if (mEnhancedButton4glte == preference) {
+             if (DBG) {
+-                log("[onPreferenceChangeMTK] IsChecked = " + ltePref.isChecked());
++                log("[onPreferenceChangeMTK] IsChecked = " + mEnhancedButton4glte.isChecked());
+             }
+-
++            Enhanced4GLteSwitchPreference ltePref = (Enhanced4GLteSwitchPreference) preference;
+             /// M: [CT VOLTE] @{
+             if (TelephonyUtilsEx.isCtVolteEnabled() && TelephonyUtilsEx.isCtSim(mPhone.getSubId())
+-                    && !ltePref.isChecked()) {
++                    && !mEnhancedButton4glte.isChecked()) {
+                 int type = TelephonyManager.getDefault().getNetworkType(mPhone.getSubId());
+                 if (DBG) {
+                     log("network type = " + type);
+                 }
+                 if (TelephonyManager.NETWORK_TYPE_LTE != type
+-                        && !TelephonyUtilsEx.isRoaming(mPhone)
+-                        && (TelephonyUtilsEx.getMainPhoneId() == mPhone.getPhoneId()
+-                        || TelephonyUtilsEx.isBothslotCt4gSim(mSubscriptionManager))) {
++                        && !TelephonyUtilsEx.isRoaming(mPhone)) {
+                     showVolteUnavailableDialog();
+                     return false;
+                 }
+@@ -2282,19 +2288,20 @@
+                             log("dialog cancel mEnhanced4GLteSwitchPreference.setchecked  = "
+                                 + !mEnhancedButton4glte.isChecked());
+                         }
+-                        mEnhancedButton4glte.setChecked(false);
++                        mEnhancedButton4glte.setChecked(!mEnhancedButton4glte.isChecked());
+ 
+                     }
+                 }).setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+             @Override
+             public void onClick(DialogInterface dialog, int which) {
+-                mEnhancedButton4glte.setChecked(true);
++                mEnhancedButton4glte.setChecked(mEnhancedButton4glte.isChecked());
+                 if (DBG) {
+                     log("dialog ok" + " ims set " + mEnhancedButton4glte.isChecked() + " mSlotId = "
+                         + SubscriptionManager.getPhoneId(mPhone.getSubId()));
+                 }
+                 ImsManager.setEnhanced4gLteModeSetting(MobileNetworkSettings.this,
+-                        mEnhancedButton4glte.isChecked(), mPhone.getPhoneId());
++                        mEnhancedButton4glte.isChecked(),
++                        SubscriptionManager.getPhoneId(mPhone.getSubId()));
+             }
+         }).create();
+         dialog.setCanceledOnTouchOutside(false);
+@@ -2408,7 +2415,7 @@
+                 log("--- go to c2k 5M ---");
+             }
+             if (!TelephonyUtilsEx.isCDMAPhone(mPhone)) {
+-                mButtonEnabledNetworks.setEntries(R.array.enabled_networks_4g_choices);
++                mButtonEnabledNetworks.setEntries(R.array.enabled_networks_choices_Bse);
+                 mButtonEnabledNetworks.setEntryValues(R.array.enabled_networks_values_c2k);
+             }
+         }
+@@ -2449,8 +2456,8 @@
+             updateEnhanced4GLteSwitchPreference();
+         }
+     };
+-
+-    private boolean isSecondVolteEnabled() {
++	
++	    private boolean isSecondVolteEnabled() {
+         if (!TelephonyUtilsEx.isBothslotCtSim(mSubscriptionManager)) {
+             return true;
+         }
+@@ -2460,4 +2467,51 @@
+             return false;
+         }
+     }
++	
++	private void showAttentionDialog(){
++        AlertDialog.Builder normalDialog = new AlertDialog.Builder(this);
++        normalDialog.setIcon(R.drawable.icon_dialog_attention);
++        normalDialog.setTitle(getString(R.string.attention_dialog_title));
++        normalDialog.setMessage(getString(R.string.attention_dialog_text));
++        normalDialog.setPositiveButton(R.string.attention_dialog_ok, 
++            new DialogInterface.OnClickListener() {
++            @Override
++            public void onClick(DialogInterface dialog, int which) {
++               dialog.dismiss();
++			   sendNotification();
++            }
++        });
++        normalDialog.setNegativeButton(R.string.attention_dialog_cancel, 
++            new DialogInterface.OnClickListener() {
++            @Override
++            public void onClick(DialogInterface dialog, int which) {
++				dialog.dismiss();
++            }
++        });
++        Dialog d =  normalDialog.create();
++		if(!OnInit){
++			d.show();
++		}else{
++			OnInit = false;
++		}
++    }
++	
++	public static final int DEFAULT_NOTIFICATION_ID = 1;
++    private NotificationManager mNotificationManager;
++	
++	private void sendNotification() {
++		Intent mainIntent = new Intent(this, MobileNetworkSettings.class);
++		PendingIntent mainPendingIntent = PendingIntent.getActivity(this, 0, mainIntent, PendingIntent.FLAG_UPDATE_CURRENT);
++		mNotificationManager = (NotificationManager) this.getSystemService(Context.NOTIFICATION_SERVICE);
++		NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
++			builder.setSmallIcon(R.mipmap.icon_dialog_attention);
++			builder.setContentTitle(getString(R.string.attention_Notification_panel_title));
++		NotificationCompat.BigTextStyle textStyle =  new NotificationCompat.BigTextStyle(builder);  
++            textStyle.bigText(getString(R.string.attention_Notification_panel_text)); 
++			builder.setContentIntent(mainPendingIntent);
++			//builder.setLargeIcon(BitmapFactory.decodeResource(getResources(),R.drawable.icon_dialog_attention));
++		Notification notification = builder.build();
++			notification.flags |= Notification.FLAG_NO_CLEAR;
++        mNotificationManager.notify(DEFAULT_NOTIFICATION_ID, notification);
++	}
+ }

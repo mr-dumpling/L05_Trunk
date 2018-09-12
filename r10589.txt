@@ -1,0 +1,60 @@
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java	(revision 10588)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java	(revision 10589)
+@@ -184,11 +184,7 @@
+         if (!mDiscoverableTimeoutSwitchPreference.isChecked()) {
+             mLocalAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE);
+         }
+-        if(savedInstanceState != null){
+-            mDiscoverableTimeoutSwitchPreference.setChecked(savedInstanceState.getBoolean("state"));
+-            a = savedInstanceState.getInt("number");
+-            handler.postDelayed(runnable,1000);
+-        }
++        
+         final SettingsActivity activity = (SettingsActivity) getActivity();
+         mSwitchBar = activity.getSwitchBar();
+ 
+@@ -195,16 +191,9 @@
+         mBluetoothEnabler = new BluetoothEnabler(activity, mSwitchBar);
+         mBluetoothEnabler.setupSwitchBar();
+     }
++   
+ 
+     @Override
+-    public void onSaveInstanceState(Bundle outState) {
+-        outState.putInt("number",a);
+-        outState.putBoolean("state",mDiscoverableTimeoutSwitchPreference.isChecked());
+-
+-        super.onSaveInstanceState(outState);
+-    }
+-
+-    @Override
+     public void onDestroyView() {
+         super.onDestroyView();
+ 
+@@ -469,10 +458,12 @@
+ 
+                 // mLocalAdapter.setScanMode is internally synchronized so it is okay for multiple
+                 // threads to execute.
+-                if (mInitiateDiscoverable) {
++                if (mInitiateDiscoverable && mDiscoverableTimeoutSwitchPreference.isChecked()) {
+                     // Make the device visible to other devices.
+                     mLocalAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+                     mInitiateDiscoverable = false;
++                }else {
++                    mLocalAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE);
+                 }
+                 if (fromDrawer) {
+                     Message message = Message.obtain();
+@@ -567,8 +558,9 @@
+         super.onBluetoothStateChanged(bluetoothState);
+         // If BT is turned off/on staying in the same BT Settings screen
+         // discoverability to be set again
+-        if ((BluetoothAdapter.STATE_ON == bluetoothState) && (mDiscoverableTimeoutSwitchPreference.isChecked()))
++        if ((BluetoothAdapter.STATE_ON == bluetoothState) && (mDiscoverableTimeoutSwitchPreference.isChecked())) {
+             mInitiateDiscoverable = true;
++        }
+         updateContent(bluetoothState);
+     }
+ 

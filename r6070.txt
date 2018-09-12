@@ -1,0 +1,57 @@
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/tracability/Tracability.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/tracability/Tracability.java	(revision 6069)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/tracability/Tracability.java	(revision 6070)
+@@ -25,6 +25,10 @@
+ import com.android.mmi.R;
+ import android.os.IBinder;
+ import android.os.ServiceManager;
++import java.io.FileReader;
++import java.io.BufferedReader;
++import java.io.IOException;
++import java.io.FileNotFoundException;
+ import android.util.Log;
+ 
+ public class Tracability extends Activity implements OnClickListener {
+@@ -47,6 +51,7 @@
+ 	String ft = "\nFT:";
+ 	String date_code = "\nDate Code:";
+ 	String phase = "\nPhase:";
++	String TP_Firmware_version = "\nTP Firmware version:";
+ 	int count = 0;
+ 	static byte[] product_info = null;
+ 	IBinder binder;
+@@ -154,6 +159,7 @@
+ 				+ buffString(PTH, PTH_LENGTH, STRING) + pt + product_info[PT1]
+ 				+ product_info[PT2] + bw + buffString(BW, BW_LENGTH, HEX) + mmi
+ 				+ buffString(MMI, MMI_LENGTH, HEX) + ft + product_info[FT1]
++				+ TP_Firmware_version +gettpFwVersion()
+ 						/*+ product_info[FT2]+ date_code
+ 				+ buffString(DATECODE, DATECODE_LENGTH, STRING) + phase
+ 				+ buffString(PHASE, PHASE_LENGTH, STRING)*/);
+@@ -273,4 +279,25 @@
+ 		}
+ 		return super.onKeyUp(keyCode, event);
+ 	}
++	public String gettpFwVersion(){
++		String tpFwVersion = "unknow";
++		try {			
++			BufferedReader reader = new BufferedReader(new FileReader("/proc/tp_ver"), 256);
++			if (reader != null) {
++				try {
++					int version = reader.read();
++					tpFwVersion = "0x" + Integer.toHexString(version);
++					Log.v("TAG", "tpFwVersion = " + tpFwVersion);
++					} catch (IOException e) {
++					// TODO Auto-generated catch block
++					Log.e("TAG", "tpFwVersion readLine failed!");
++					}
++					}
++			} catch (FileNotFoundException e) {
++			// TODO Auto-generated catch block
++			Log.e("TAG", "tpFwVersion new BufferedReader failed!");
++			}
++
++			return tpFwVersion;
++	}
+ }

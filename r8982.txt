@@ -1,0 +1,86 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java	(revision 8981)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java	(revision 8982)
+@@ -127,17 +127,17 @@
+     static final int QS_DATA_3G = R.drawable.ic_qs_signal_3g;
+ 
+     static final int[][] DATA_E = {
+-            { R.drawable.stat_sys_data_fully_connected_e,
+-              R.drawable.stat_sys_data_fully_connected_e,
+-              R.drawable.stat_sys_data_fully_connected_e,
+-              R.drawable.stat_sys_data_fully_connected_e },
+-            { R.drawable.stat_sys_data_fully_connected_e,
+-              R.drawable.stat_sys_data_fully_connected_e,
+-              R.drawable.stat_sys_data_fully_connected_e,
+-              R.drawable.stat_sys_data_fully_connected_e }
++            { R.drawable.ic_2g,
++              R.drawable.ic_2g,
++              R.drawable.ic_2g,
++              R.drawable.ic_2g },
++            { R.drawable.ic_2g,
++              R.drawable.ic_2g,
++              R.drawable.ic_2g,
++              R.drawable.ic_2g }
+         };
+ 
+-    static final int QS_DATA_E = R.drawable.ic_qs_signal_e;
++    static final int QS_DATA_E = R.drawable.ic_2g;
+ 
+     //3.5G
+     static final int[][] DATA_H = {
+@@ -217,7 +217,7 @@
+     static final int ICON_LTE_PLUS = R.drawable.stat_sys_data_fully_connected_lte_plus;
+ 
+     static final int ICON_G = R.drawable.stat_sys_data_fully_connected_g;
+-    static final int ICON_E = R.drawable.stat_sys_data_fully_connected_e;
++    static final int ICON_E = R.drawable.ic_2g;
+     static final int ICON_H = R.drawable.stat_sys_data_fully_connected_h;
+     static final int ICON_3G = R.drawable.stat_sys_data_fully_connected_3g;
+     static final int ICON_4G = R.drawable.stat_sys_data_fully_connected_4g;
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java	(revision 8981)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java	(revision 8982)
+@@ -258,11 +258,22 @@
+         int volumeIconId = 0;
+         String volumeDescription = null;
+ 
++        ActivityManager activityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
++        boolean isDial = false;
++        if (activityManager.getRunningTasks(1) != null && activityManager.getRunningTasks(1).get(0) != null){
++            String topPackageName = activityManager.getRunningTasks(1).get(0).topActivity.getPackageName();
++            if (topPackageName.equals("com.android.dialer") || topPackageName.equals("com.android.contacts")){
++                isDial = true;
++            }
++        }
++
+         if (DndTile.isVisible(mContext) || DndTile.isCombinedIcon(mContext)) {
+-            zenVisible = mZen != Global.ZEN_MODE_OFF;
+-            zenIconId = mZen == Global.ZEN_MODE_NO_INTERRUPTIONS
+-                    ? R.drawable.stat_sys_dnd_total_silence : R.drawable.stat_sys_dnd;
+-            zenDescription = mContext.getString(R.string.quick_settings_dnd_label);
++            if (!isDial) {
++                zenVisible = mZen != Global.ZEN_MODE_OFF;
++                zenIconId = mZen == Global.ZEN_MODE_NO_INTERRUPTIONS
++                        ? R.drawable.stat_sys_dnd_total_silence : R.drawable.stat_sys_dnd;
++                zenDescription = mContext.getString(R.string.quick_settings_dnd_label);
++            }
+         } else if (mZen == Global.ZEN_MODE_NO_INTERRUPTIONS) {
+             zenVisible = true;
+             zenIconId = R.drawable.stat_sys_zen_none;
+@@ -276,9 +287,11 @@
+         if (DndTile.isVisible(mContext)
+ //                && !DndTile.isCombinedIcon(mContext)
+                 && audioManager.getRingerModeInternal() == AudioManager.RINGER_MODE_SILENT) {
+-            volumeVisible = true;
+-            volumeIconId = R.drawable.stat_sys_ringer_silent;
+-            volumeDescription = mContext.getString(R.string.accessibility_ringer_silent);
++            if (!isDial) {
++                volumeVisible = true;
++                volumeIconId = R.drawable.stat_sys_ringer_silent;
++                volumeDescription = mContext.getString(R.string.accessibility_ringer_silent);
++            }
+         } else if (mZen != Global.ZEN_MODE_NO_INTERRUPTIONS && mZen != Global.ZEN_MODE_ALARMS &&
+                 audioManager.getRingerModeInternal() == AudioManager.RINGER_MODE_VIBRATE) {
+             volumeVisible = true;

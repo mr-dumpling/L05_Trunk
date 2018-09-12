@@ -1,0 +1,2925 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallDateUtils.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallDateUtils.java	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallDateUtils.java	(revision 5422)
+@@ -0,0 +1,56 @@
++package com.android.incallui;
++
++import android.content.Context;
++import android.content.res.Resources;
++
++import com.android.dialer.R;
++
++/**
++ * Methods to parse time and date information in the InCallUi
++ */
++public class InCallDateUtils {
++
++    /**
++     * Return given duration in a human-friendly format. For example, "4 minutes 3 seconds" or
++     * "3 hours 1 second". Returns the hours, minutes and seconds in that order if they exist.
++     */
++    public static String formatDuration(Context context, long millis) {
++        int hours = 0;
++        int minutes = 0;
++        int seconds = 0;
++        int elapsedSeconds = (int) (millis / 1000);
++        if (elapsedSeconds >= 3600) {
++            hours = elapsedSeconds / 3600;
++            elapsedSeconds -= hours * 3600;
++        }
++        if (elapsedSeconds >= 60) {
++            minutes = elapsedSeconds / 60;
++            elapsedSeconds -= minutes * 60;
++        }
++        seconds = elapsedSeconds;
++
++        final Resources res = context.getResources();
++        StringBuilder duration = new StringBuilder();
++        try {
++            if (hours > 0) {
++                duration.append(res.getQuantityString(R.plurals.duration_seconds_alru, hours, hours));
++            }
++            if (minutes > 0) {
++                if (hours > 0) {
++                    duration.append(' ');
++                }
++                duration.append(res.getQuantityString(R.plurals.duration_minutes_alru, minutes, minutes));
++            }
++            if (seconds > 0) {
++                if (hours > 0 || minutes > 0) {
++                    duration.append(' ');
++                }
++                duration.append(res.getQuantityString(R.plurals.duration_seconds_alru, seconds, seconds));
++            }
++        } catch (Resources.NotFoundException e) {
++            // Ignore; plurals throws an exception for an untranslated quantity for a given locale.
++            return null;
++        }
++        return duration.toString();
++    }
++}
+Index: vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java	(revision 5422)
+@@ -0,0 +1,2087 @@
++/*
++* Copyright (C) 2014 MediaTek Inc.
++* Modification based on code covered by the mentioned copyright
++* and/or permission notice(s).
++*/
++/*
++ * Copyright (C) 2013 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License
++ */
++
++package com.android.incallui;
++
++import android.animation.Animator;
++import android.animation.AnimatorListenerAdapter;
++import android.animation.AnimatorSet;
++import android.animation.ObjectAnimator;
++import android.content.Context;
++import android.graphics.Bitmap;
++import android.graphics.Canvas;
++import android.graphics.drawable.AnimationDrawable;
++import android.graphics.drawable.BitmapDrawable;
++import android.graphics.drawable.Drawable;
++import android.graphics.drawable.GradientDrawable;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Message;
++import android.os.Looper;
++import android.os.Trace;
++import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
++import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
++import android.telecom.DisconnectCause;
++import android.telecom.VideoProfile;
++import android.telephony.PhoneNumberUtils;
++import android.text.TextUtils;
++import android.text.format.DateUtils;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.View.OnLayoutChangeListener;
++import android.view.ViewGroup;
++import android.view.ViewPropertyAnimator;
++import android.view.ViewTreeObserver;
++import android.view.ViewTreeObserver.OnGlobalLayoutListener;
++import android.view.accessibility.AccessibilityEvent;
++import android.view.accessibility.AccessibilityManager;
++import android.view.animation.Animation;
++import android.view.animation.AnimationUtils;
++import android.widget.ImageButton;
++import android.widget.ImageView;
++import android.widget.LinearLayout;
++import android.widget.ListAdapter;
++import android.widget.ListView;
++import android.widget.TextView;
++import android.widget.Toast;
++
++import com.android.contacts.common.compat.PhoneNumberUtilsCompat;
++import com.android.contacts.common.util.MaterialColorMapUtils.MaterialPalette;
++import com.android.contacts.common.widget.FloatingActionButtonController;
++import com.android.dialer.R;
++import com.android.phone.common.animation.AnimUtils;
++import com.mediatek.incallui.InCallTrace;
++import com.mediatek.incallui.InCallUtils;
++/// M: add for plugin. @{
++import com.mediatek.incallui.ext.ExtensionManager;
++/// @}
++/// M: add for volte. @{
++import com.mediatek.incallui.volte.InCallUIVolteUtils;
++import com.mediatek.incallui.wrapper.FeatureOptionWrapper;
++/// @}
++
++import java.util.List;
++import java.util.Locale;
++import java.util.Timer;
++import java.util.TimerTask;
++/**
++ * Fragment for call card.
++ */
++public class CallCardFragment extends BaseFragment<CallCardPresenter, CallCardPresenter.CallCardUi>
++        implements CallCardPresenter.CallCardUi {
++    private static final String TAG = "CallCardFragment";
++    private static final String IMS_MERGED_SUCCESSFULLY = "IMS_MERGED_SUCCESSFULLY";
++    /**
++     * Internal class which represents the call state label which is to be applied.
++     */
++    private class CallStateLabel {
++        private CharSequence mCallStateLabel;
++        private boolean mIsAutoDismissing;
++
++        public CallStateLabel(CharSequence callStateLabel, boolean isAutoDismissing) {
++            mCallStateLabel = callStateLabel;
++            mIsAutoDismissing = isAutoDismissing;
++        }
++
++        public CharSequence getCallStateLabel() {
++            return mCallStateLabel;
++        }
++
++        /**
++         * Determines if the call state label should auto-dismiss.
++         *
++         * @return {@code true} if the call state label should auto-dismiss.
++         */
++        public boolean isAutoDismissing() {
++            return mIsAutoDismissing;
++        }
++    };
++
++    private static final String IS_DIALPAD_SHOWING_KEY = "is_dialpad_showing";
++
++    /**
++     * The duration of time (in milliseconds) a call state label should remain visible before
++     * resetting to its previous value.
++     */
++    private static final long CALL_STATE_LABEL_RESET_DELAY_MS = 3000;
++    /**
++     * Amount of time to wait before sending an announcement via the accessibility manager.
++     * When the call state changes to an outgoing or incoming state for the first time, the
++     * UI can often be changing due to call updates or contact lookup. This allows the UI
++     * to settle to a stable state to ensure that the correct information is announced.
++     */
++    private static final long ACCESSIBILITY_ANNOUNCEMENT_DELAY_MS = 500;
++
++    private AnimatorSet mAnimatorSet;
++    private int mShrinkAnimationDuration;
++    private int mFabNormalDiameter;
++    private int mFabSmallDiameter;
++    private boolean mIsLandscape;
++    private boolean mHasLargePhoto;
++    private boolean mIsDialpadShowing;
++
++    // Primary caller info
++    private TextView mPhoneNumber;
++    private TextView mNumberLabel;
++    private TextView mPrimaryName;
++    private View mCallStateButton;
++    private ImageView mCallStateIcon;
++    private ImageView mCallStateVideoCallIcon;
++    private TextView mCallStateLabel;
++    private TextView mCallTypeLabel;
++    private ImageView mHdAudioIcon;
++    private ImageView mForwardIcon;
++    private View mCallNumberAndLabel;
++    private TextView mElapsedTime;
++    private Drawable mPrimaryPhotoDrawable;
++    private TextView mCallSubject;
++    private ImageView mWorkProfileIcon;
++
++    // Container view that houses the entire primary call card, including the call buttons
++    private View mPrimaryCallCardContainer;
++    // Container view that houses the primary call information
++    private ViewGroup mPrimaryCallInfo;
++    private View mCallButtonsContainer;
++    private ImageView mPhotoSmall;
++
++    // Secondary caller info
++    private View mSecondaryCallInfo;
++    private TextView mSecondaryCallName;
++    private View mSecondaryCallProviderInfo;
++    private TextView mSecondaryCallProviderLabel;
++    private View mSecondaryCallConferenceCallIcon;
++    private View mSecondaryCallVideoCallIcon;
++    private View mProgressSpinner;
++
++    // Call card content
++    private View mCallCardContent;
++    private ImageView mPhotoLarge;
++    private View mContactContext;
++    private TextView mContactContextTitle;
++    private ListView mContactContextListView;
++    private LinearLayout mContactContextListHeaders;
++
++    private View mManageConferenceCallButton;
++
++    // Dark number info bar
++    private TextView mInCallMessageLabel;
++
++    private FloatingActionButtonController mFloatingActionButtonController;
++    private View mFloatingActionButtonContainer;
++    private ImageButton mFloatingActionButton;
++    private int mFloatingActionButtonVerticalOffset;
++
++    private float mTranslationOffset;
++    private Animation mPulseAnimation;
++	private String mPhoneNumberDigits;
++	private boolean isNeedMiniECC;
++    private int mVideoAnimationDuration;
++    // Whether or not the call card is currently in the process of an animation
++    private boolean mIsAnimating;
++
++    private MaterialPalette mCurrentThemeColors;
++
++    /**
++     * Call state label to set when an auto-dismissing call state label is dismissed.
++     */
++    private CharSequence mPostResetCallStateLabel;
++    private boolean mCallStateLabelResetPending = false;
++    private Handler mHandler;
++
++    /**
++     * Determines if secondary call info is populated in the secondary call info UI.
++     */
++    private boolean mHasSecondaryCallInfo = false;
++
++
++    /**
++     * M: A tag for the secondcallinfo previous visibility, to identify if the view need reset
++     * state or not.
++     */
++    private boolean mSecondCallInforLatestVisibility = false;
++
++    @Override
++    public CallCardPresenter.CallCardUi getUi() {
++        return this;
++    }
++
++    @Override
++    public CallCardPresenter createPresenter() {
++        return new CallCardPresenter();
++    }
++
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++
++        /// M: log enhancement
++        Log.d(this, "onCreate...");
++		isNeedMiniECC = getResources().getBoolean(R.bool.is_need_mini_ecc);
++        mHandler = new Handler(Looper.getMainLooper());
++        mShrinkAnimationDuration = getResources().getInteger(R.integer.shrink_animation_duration);
++        mVideoAnimationDuration = getResources().getInteger(R.integer.video_animation_duration);
++        mFloatingActionButtonVerticalOffset = getResources().getDimensionPixelOffset(
++                R.dimen.floating_action_button_vertical_offset);
++        mFabNormalDiameter = getResources().getDimensionPixelOffset(
++                R.dimen.end_call_floating_action_button_diameter);
++        mFabSmallDiameter = getResources().getDimensionPixelOffset(
++                R.dimen.end_call_floating_action_button_small_diameter);
++
++        if (savedInstanceState != null) {
++            mIsDialpadShowing = savedInstanceState.getBoolean(IS_DIALPAD_SHOWING_KEY, false);
++        }
++    }
++
++    @Override
++    public void onActivityCreated(Bundle savedInstanceState) {
++        super.onActivityCreated(savedInstanceState);
++
++        final CallList calls = CallList.getInstance();
++        final Call call = calls.getFirstCall();
++        getPresenter().init(getActivity(), call);
++    }
++
++    @Override
++    public void onSaveInstanceState(Bundle outState) {
++        outState.putBoolean(IS_DIALPAD_SHOWING_KEY, mIsDialpadShowing);
++        super.onSaveInstanceState(outState);
++    }
++
++    @Override
++    public View onCreateView(LayoutInflater inflater, ViewGroup container,
++            Bundle savedInstanceState) {
++        Trace.beginSection(TAG + " onCreate");
++        mTranslationOffset =
++                getResources().getDimensionPixelSize(R.dimen.call_card_anim_translate_y_offset);
++        final View view = inflater.inflate(R.layout.call_card_fragment, container, false);
++        Trace.endSection();
++        return view;
++    }
++
++    @Override
++    public void onViewCreated(View view, Bundle savedInstanceState) {
++        super.onViewCreated(view, savedInstanceState);
++
++        mPulseAnimation =
++                AnimationUtils.loadAnimation(view.getContext(), R.anim.call_status_pulse);
++
++        mPhoneNumber = (TextView) view.findViewById(R.id.phoneNumber);
++        mPrimaryName = (TextView) view.findViewById(R.id.name);
++        mNumberLabel = (TextView) view.findViewById(R.id.label);
++        mSecondaryCallInfo = view.findViewById(R.id.secondary_call_info);
++        mSecondaryCallProviderInfo = view.findViewById(R.id.secondary_call_provider_info);
++        mCallCardContent = view.findViewById(R.id.call_card_content);
++        mPhotoLarge = (ImageView) view.findViewById(R.id.photoLarge);
++        //M:[VideoCall] in MTK solution, when click photo, do nothing
++        /*mPhotoLarge.setOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                getPresenter().onContactPhotoClick();
++            }
++        });*/
++        ///@}
++        mContactContext = view.findViewById(R.id.contact_context);
++        mContactContextTitle = (TextView) view.findViewById(R.id.contactContextTitle);
++        mContactContextListView = (ListView) view.findViewById(R.id.contactContextInfo);
++        // This layout stores all the list header layouts so they can be easily removed.
++        mContactContextListHeaders = new LinearLayout(getView().getContext());
++        mContactContextListView.addHeaderView(mContactContextListHeaders);
++
++        mCallStateIcon = (ImageView) view.findViewById(R.id.callStateIcon);
++        mCallStateVideoCallIcon = (ImageView) view.findViewById(R.id.videoCallIcon);
++        mWorkProfileIcon = (ImageView) view.findViewById(R.id.workProfileIcon);
++        mCallStateLabel = (TextView) view.findViewById(R.id.callStateLabel);
++        mHdAudioIcon = (ImageView) view.findViewById(R.id.hdAudioIcon);
++        mForwardIcon = (ImageView) view.findViewById(R.id.forwardIcon);
++        mCallNumberAndLabel = view.findViewById(R.id.labelAndNumber);
++        mCallTypeLabel = (TextView) view.findViewById(R.id.callTypeLabel);
++        mElapsedTime = (TextView) view.findViewById(R.id.elapsedTime);
++        mPrimaryCallCardContainer = view.findViewById(R.id.primary_call_info_container);
++        mPrimaryCallInfo = (ViewGroup) view.findViewById(R.id.primary_call_banner);
++        mCallButtonsContainer = view.findViewById(R.id.callButtonFragment);
++        mPhotoSmall = (ImageView) view.findViewById(R.id.photoSmall);
++        mPhotoSmall.setVisibility(View.GONE);
++        mInCallMessageLabel = (TextView) view.findViewById(R.id.connectionServiceMessage);
++        mProgressSpinner = view.findViewById(R.id.progressSpinner);
++
++        mFloatingActionButtonContainer = view.findViewById(
++                R.id.floating_end_call_action_button_container);
++        mFloatingActionButton = (ImageButton) view.findViewById(
++                R.id.floating_end_call_action_button);
++        mFloatingActionButton.setOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                getPresenter().endCallClicked();
++            }
++        });
++        mFloatingActionButtonController = new FloatingActionButtonController(getActivity(),
++                mFloatingActionButtonContainer, mFloatingActionButton);
++
++        mSecondaryCallInfo.setOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                getPresenter().secondaryInfoClicked();
++                updateFabPositionForSecondaryCallInfo();
++            }
++        });
++
++        mCallStateButton = view.findViewById(R.id.callStateButton);
++        mCallStateButton.setOnLongClickListener(new View.OnLongClickListener() {
++            @Override
++            public boolean onLongClick(View v) {
++                getPresenter().onCallStateButtonTouched();
++                return false;
++            }
++        });
++
++        mManageConferenceCallButton = view.findViewById(R.id.manage_conference_call_button);
++        mManageConferenceCallButton.setOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                InCallActivity activity = (InCallActivity) getActivity();
++                /// M: Activity maybe not resumed in Multi-Window case. @{
++                if (activity.isResumed()) {
++                    activity.showConferenceFragment(true);
++                }
++                /// @}
++            }
++        });
++
++        mPrimaryName.setElegantTextHeight(false);
++        mCallStateLabel.setElegantTextHeight(false);
++
++        /// M: Add for recording. @{
++        initVoiceRecorderIcon(view);
++        /// @}
++
++        //add for plug in. @{
++        ExtensionManager.getCallCardExt()
++                .onViewCreated(InCallPresenter.getInstance().getContext(), view);
++        ExtensionManager.getRCSeCallCardExt()
++                .onViewCreated(InCallPresenter.getInstance().getContext(), view);
++        //add for plug in. @}
++        mCallSubject = (TextView) view.findViewById(R.id.callSubject);
++    }
++
++  public void onDestroyView() {
++        Log.d(this, "onDestroyView");
++        /// M: add for OP09 plugin.@{
++        ExtensionManager.getCallCardExt().onDestroyView();
++        /// @}
++        super.onDestroyView();
++    }
++
++    @Override
++    public void setVisible(boolean on) {
++        if (on) {
++            getView().setVisibility(View.VISIBLE);
++        } else {
++            getView().setVisibility(View.INVISIBLE);
++        }
++    }
++
++    /**
++     * Hides or shows the progress spinner.
++     *
++     * @param visible {@code True} if the progress spinner should be visible.
++     */
++    @Override
++    public void setProgressSpinnerVisible(boolean visible) {
++        mProgressSpinner.setVisibility(visible ? View.VISIBLE : View.GONE);
++    }
++
++    @Override
++    public void setContactContextTitle(View headerView) {
++        mContactContextListHeaders.removeAllViews();
++        mContactContextListHeaders.addView(headerView);
++    }
++
++    @Override
++    public void setContactContextContent(ListAdapter listAdapter) {
++        mContactContextListView.setAdapter(listAdapter);
++    }
++
++    @Override
++    public void showContactContext(boolean show) {
++        showImageView(mPhotoLarge, !show);
++        showImageView(mPhotoSmall, show);
++        mPrimaryCallCardContainer.setElevation(
++                show ? 0 : getResources().getDimension(R.dimen.primary_call_elevation));
++        mContactContext.setVisibility(show ? View.VISIBLE : View.GONE);
++    }
++
++    /**
++     * Sets the visibility of the primary call card.
++     * Ensures that when the primary call card is hidden, the video surface slides over to fill the
++     * entire screen.
++     *
++     * @param visible {@code True} if the primary call card should be visible.
++     */
++    @Override
++    public void setCallCardVisible(final boolean visible) {
++        Log.v(this, "setCallCardVisible : isVisible = " + visible);
++        // When animating the hide/show of the views in a landscape layout, we need to take into
++        // account whether we are in a left-to-right locale or a right-to-left locale and adjust
++        // the animations accordingly.
++        final boolean isLayoutRtl = InCallPresenter.isRtl();
++
++        // Retrieve here since at fragment creation time the incoming video view is not inflated.
++        final View videoView = getView().findViewById(R.id.incomingVideo);
++        if (videoView == null) {
++            return;
++        }
++
++        // Determine how much space there is below or to the side of the call card.
++        final float spaceBesideCallCard = getSpaceBesideCallCard();
++
++        ///M: when (videoView.getHeight() / 2)- (spaceBesideCallCard / 2) < 0 means
++        // peer rotation 90, when local video is vertical we use
++        //mPrimaryCallCardContainer.getHeight() / 2 to translate @{
++        final float realVideoViewTranslation = ((videoView.getHeight() / 2)
++                - (spaceBesideCallCard / 2)) > 0 ?
++                ((videoView.getHeight() / 2) - (spaceBesideCallCard / 2))
++                : mPrimaryCallCardContainer.getHeight() / 2;
++
++        // We need to translate the video surface, but we need to know its position after the layout
++        // has occurred so use a {@code ViewTreeObserver}.
++        final ViewTreeObserver observer = getView().getViewTreeObserver();
++        observer.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
++            @Override
++            public boolean onPreDraw() {
++                // We don't want to continue getting called.
++                getView().getViewTreeObserver().removeOnPreDrawListener(this);
++
++                ///M:[Video call] changed google default , add switch ,
++                // control video display view translation.@{
++                if (FeatureOptionWrapper.isSupportVideoDisplayTrans()) {
++                    float videoViewTranslation = 0f;
++
++                // Translate the call card to its pre-animation state.
++                if (!mIsLandscape) {
++                    mPrimaryCallCardContainer.setTranslationY(visible ?
++                            -mPrimaryCallCardContainer.getHeight() : 0);
++
++                    ViewGroup.LayoutParams p = videoView.getLayoutParams();
++                    videoViewTranslation = p.height / 2 - spaceBesideCallCard / 2;
++                }
++
++                // Perform animation of video view.
++                ViewPropertyAnimator videoViewAnimator = videoView.animate()
++                        .setInterpolator(AnimUtils.EASE_OUT_EASE_IN)
++                        .setDuration(mVideoAnimationDuration);
++              /*M: [Video call]
++              if (mIsLandscape) {
++                    videoViewAnimator
++                            .translationX(visible ? videoViewTranslation : 0);
++                } else {
++                    videoViewAnimator
++                            .translationY(visible ? videoViewTranslation : 0);
++                }*/
++
++               if (!mIsLandscape) {
++                        videoViewAnimator
++                                .translationY(videoViewTranslation)
++                                .start();
++                    }
++                videoViewAnimator.start();
++                ///@}
++            }
++            ///end FeatureOptionWrapper.isSupportVideoDisplayTrans() @}
++
++                // Animate the call card sliding.
++                ViewPropertyAnimator callCardAnimator = mPrimaryCallCardContainer.animate()
++                        .setInterpolator(AnimUtils.EASE_OUT_EASE_IN)
++                        .setDuration(mVideoAnimationDuration)
++                        .setListener(new AnimatorListenerAdapter() {
++                            @Override
++                            public void onAnimationEnd(Animator animation) {
++                                super.onAnimationEnd(animation);
++                                if (!visible) {
++                                    mPrimaryCallCardContainer.setVisibility(View.GONE);
++                                }
++                            }
++
++                            @Override
++                            public void onAnimationStart(Animator animation) {
++                                super.onAnimationStart(animation);
++                                if (visible) {
++                                    mPrimaryCallCardContainer.setVisibility(View.VISIBLE);
++                                }
++                            }
++                        });
++
++                if (mIsLandscape) {
++                    float translationX = mPrimaryCallCardContainer.getWidth();
++                    translationX *= isLayoutRtl ? 1 : -1;
++                    callCardAnimator
++                            .translationX(visible ? 0 : translationX)
++                            .start();
++                } else {
++                    //M:[VIDEOCALL] just for test ,will delete in future
++                    Log.d(this, "translationY in vertical --->" + visible);
++
++                    callCardAnimator
++                            .translationY(visible ? 0 : -mPrimaryCallCardContainer.getHeight())
++                            .start();
++                }
++
++                return true;
++            }
++        });
++        /// M: [ALPS02673351] [Video Call] If in fullscreen mode and the whole view has
++        /// no changes, this onPreDraw() would never be called. Such as held video call. @{
++        Log.v(TAG, "[setCallCardVisible]invalidate to force refresh");
++        getView().invalidate();
++        /// @}
++    }
++
++    /**
++     * Determines the amount of space below the call card for portrait layouts), or beside the
++     * call card for landscape layouts.
++     *
++     * @return The amount of space below or beside the call card.
++     */
++    public float getSpaceBesideCallCard() {
++        if (mIsLandscape) {
++            return getView().getWidth() - mPrimaryCallCardContainer.getWidth();
++        } else {
++            final int callCardHeight;
++            // Retrieve the actual height of the call card, independent of whether or not the
++            // outgoing call animation is in progress. The animation does not run in landscape mode
++            // so this only needs to be done for portrait.
++            if (mPrimaryCallCardContainer.getTag(R.id.view_tag_callcard_actual_height) != null) {
++                callCardHeight = (int) mPrimaryCallCardContainer.getTag(
++                        R.id.view_tag_callcard_actual_height);
++            } else {
++                callCardHeight = mPrimaryCallCardContainer.getHeight();
++            }
++            return getView().getHeight() - callCardHeight;
++        }
++    }
++
++    @Override
++    public void setPrimaryName(String name, boolean nameIsNumber) {
++        if (TextUtils.isEmpty(name)) {
++            mPrimaryName.setText(null);
++        } else {
++			if(nameIsNumber) {
++				mPhoneNumberDigits = name;
++			}
++            mPrimaryName.setText(nameIsNumber
++                    ? PhoneNumberUtilsCompat.createTtsSpannable(name)
++                    : name);
++
++            // Set direction of the name field
++            int nameDirection = View.TEXT_DIRECTION_INHERIT;
++            if (nameIsNumber) {
++                nameDirection = View.TEXT_DIRECTION_LTR;
++            }
++            mPrimaryName.setTextDirection(nameDirection);
++        }
++    }
++
++    /**
++     * Sets the primary image for the contact photo.
++     *
++     * @param image The drawable to set.
++     * @param isVisible Whether the contact photo should be visible after being set.
++     */
++    @Override
++    public void setPrimaryImage(Drawable image, boolean isVisible) {
++        if (image != null) {
++            setDrawableToImageViews(image);
++            showImageView(mPhotoLarge, isVisible);
++        }
++    }
++
++    @Override
++    public void setPrimaryPhoneNumber(String number) {
++        // Set the number
++        if (TextUtils.isEmpty(number)) {
++            mPhoneNumber.setText(null);
++            mPhoneNumber.setVisibility(View.GONE);
++        } else {
++            mPhoneNumber.setText(PhoneNumberUtilsCompat.createTtsSpannable(number));
++            mPhoneNumber.setVisibility(View.VISIBLE);
++            mPhoneNumber.setTextDirection(View.TEXT_DIRECTION_LTR);
++        }
++    }
++
++    @Override
++    public void setPrimaryLabel(String label) {
++        if (!TextUtils.isEmpty(label)) {
++            mNumberLabel.setText(label);
++            mNumberLabel.setVisibility(View.VISIBLE);
++        } else {
++            mNumberLabel.setVisibility(View.GONE);
++        }
++
++    }
++
++    /**
++     * Sets the primary caller information.
++     *
++     * @param number The caller phone number.
++     * @param name The caller name.
++     * @param nameIsNumber {@code true} if the name should be shown in place of the phone number.
++     * @param label The label.
++     * @param photo The contact photo drawable.
++     * @param isSipCall {@code true} if this is a SIP call.
++     * @param isContactPhotoShown {@code true} if the contact photo should be shown (it will be
++     *      updated even if it is not shown).
++     * @param isWorkCall Whether the call is placed through a work phone account or caller is a work
++              contact.
++     */
++    @Override
++    public void setPrimary(String number, String name, boolean nameIsNumber, String label,
++            Drawable photo, boolean isSipCall, boolean isContactPhotoShown, boolean isWorkCall) {
++        Log.d(this, "Setting primary call");
++        // set the name field.
++        setPrimaryName(name, nameIsNumber);
++		if(isNeedMiniECC && !nameIsNumber && "100".equals(mPhoneNumberDigits) ){
++			number = "Police 100";
++		}else if(isNeedMiniECC && !nameIsNumber && "101".equals(mPhoneNumberDigits)){
++			number = "Fire 101";
++		}else if(isNeedMiniECC && !nameIsNumber && "102".equals(mPhoneNumberDigits) ){
++			number = "Ambulance 102";
++		} 
++
++        if (TextUtils.isEmpty(number) && TextUtils.isEmpty(label)) {
++            mCallNumberAndLabel.setVisibility(View.GONE);
++            mElapsedTime.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
++        } else {
++            mCallNumberAndLabel.setVisibility(View.VISIBLE);
++            mElapsedTime.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
++        }
++
++        setPrimaryPhoneNumber(number);
++
++        // Set the label (Mobile, Work, etc)
++        setPrimaryLabel(label);
++
++        showInternetCallLabel(isSipCall);
++
++        setDrawableToImageViews(photo);
++        showImageView(mPhotoLarge, isContactPhotoShown);
++        showImageView(mWorkProfileIcon, isWorkCall);
++    }
++
++    @Override
++    public void setSecondary(boolean show, String name, boolean nameIsNumber, String label,
++            String providerLabel, boolean isConference, boolean isVideoCall, boolean isFullscreen) {
++
++        if (show) {
++            // M: FIXME: this plugin usage is not correct.
++            // M: add for OP09 plug in @{
++            if (ExtensionManager.getCallCardExt().shouldShowCallAccountIcon()) {
++                if (null == providerLabel) {
++                    providerLabel = ExtensionManager.getCallCardExt().getSecondCallProviderLabel();
++                }
++                ImageView icon = (ImageView) getView().findViewById(R.id.callProviderIcon);
++                icon.setVisibility(View.VISIBLE);
++                icon.setImageBitmap(
++                        ExtensionManager.getCallCardExt().getSecondCallPhoneAccountBitmap());
++            }
++            // add for OP09 plug in @}
++            mHasSecondaryCallInfo = true;
++            boolean hasProvider = !TextUtils.isEmpty(providerLabel);
++            initializeSecondaryCallInfo(hasProvider);
++
++            // Do not show the secondary caller info in fullscreen mode, but ensure it is populated
++            // in case fullscreen mode is exited in the future.
++            setSecondaryInfoVisible(!isFullscreen);
++
++            mSecondaryCallConferenceCallIcon.setVisibility(isConference ? View.VISIBLE : View.GONE);
++            mSecondaryCallVideoCallIcon.setVisibility(isVideoCall ? View.VISIBLE : View.GONE);
++
++            mSecondaryCallName.setText(nameIsNumber
++                    ? PhoneNumberUtilsCompat.createTtsSpannable(name)
++                    : name);
++            if (hasProvider) {
++                mSecondaryCallProviderLabel.setText(providerLabel);
++                mCurrentSecondCallColor = getPresenter().getSecondCallColor();
++                mSecondaryCallProviderLabel.setTextColor(mCurrentSecondCallColor);
++            }
++
++            int nameDirection = View.TEXT_DIRECTION_INHERIT;
++            if (nameIsNumber) {
++                nameDirection = View.TEXT_DIRECTION_LTR;
++            }
++            mSecondaryCallName.setTextDirection(nameDirection);
++            /// M: [CTA] CTA need special "on hold" string in Chinese. @{
++            int resId = InCallUtils.isTwoIncomingCalls() ? R.string.notification_incoming_call
++                    : (FeatureOptionWrapper.isCta()
++                            ? getCtaSpecificOnHoldResId() : R.string.onHold);
++            TextView secondaryCallStatus =
++                    (TextView) getView().findViewById(R.id.secondaryCallStatus);
++            secondaryCallStatus.setText(getView().getResources().getString(resId));
++            /// @}
++       } else {
++            mHasSecondaryCallInfo = false;
++            setSecondaryInfoVisible(false);
++        }
++    }
++
++    /**
++     * Sets the visibility of the secondary caller info box.  Note, if the {@code visible} parameter
++     * is passed in {@code true}, and there is no secondary caller info populated (as determined by
++     * {@code mHasSecondaryCallInfo}, the secondary caller info box will not be shown.
++     *
++     * @param visible {@code true} if the secondary caller info should be shown, {@code false}
++     *      otherwise.
++     */
++    @Override
++    public void setSecondaryInfoVisible(final boolean visible) {
++        /**
++         * M: In some case, the View.isShown() wouldn't return value we expected here,
++         * once the fragment was paused or stopped, but the view of fragment hadn't been destroyed.
++         * For example,
++         * 1. Establish 1A1H.
++         * 2. Press home key back to home-screen.
++         * 3. Launch the dialer, input "12", and then dial
++         * 4. Return to in-call screen from notification.
++         * 5. Finally, the secondary info about holding call wouldn't disappear.
++         * @{
++         */
++        boolean wasVisible = mSecondaryCallInfo.getVisibility() == View.VISIBLE;
++        /** @} */
++        final boolean isVisible = visible && mHasSecondaryCallInfo;
++        Log.v(this, "setSecondaryInfoVisible: wasVisible = " + wasVisible + " isVisible = "
++                + isVisible);
++
++        // If visibility didn't change, nothing to do.
++        if (wasVisible == isVisible
++                /**
++                 * M:There is a timing issue under 1A1H2W.
++                 * The view's visibility change processed in the animination for
++                 * the first incomming call while the second visibility change will skiped,
++                 * because before the animination stared the visibility status will be reverse.
++                 *
++                 * Need refresh since not same with the previous visibility too.
++                 * @{
++                 */
++                && mSecondCallInforLatestVisibility == isVisible) {
++            Log.v(this, "skip setSecondaryInfoVisible: LatestVisibility "
++                    + mSecondCallInforLatestVisibility);
++            return;
++        }
++        mSecondCallInforLatestVisibility = isVisible;
++        /** @}*/
++
++        // If we are showing the secondary info, we need to show it before animating so that its
++        // height will be determined on layout.
++        if (isVisible) {
++            mSecondaryCallInfo.setVisibility(View.VISIBLE);
++        } else {
++            mSecondaryCallInfo.setVisibility(View.GONE);
++        }
++
++        updateFabPositionForSecondaryCallInfo();
++        // We need to translate the secondary caller info, but we need to know its position after
++        // the layout has occurred so use a {@code ViewTreeObserver}.
++        final ViewTreeObserver observer = getView().getViewTreeObserver();
++
++        observer.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
++            @Override
++            public boolean onPreDraw() {
++                // We don't want to continue getting called.
++                getView().getViewTreeObserver().removeOnPreDrawListener(this);
++
++                // Get the height of the secondary call info now, and then re-hide the view prior
++                // to doing the actual animation.
++                int secondaryHeight = mSecondaryCallInfo.getHeight();
++                if (isVisible) {
++                    mSecondaryCallInfo.setVisibility(View.GONE);
++                } else {
++                    mSecondaryCallInfo.setVisibility(View.VISIBLE);
++                }
++                Log.v(this, "setSecondaryInfoVisible: secondaryHeight = " + secondaryHeight);
++
++                // Set the position of the secondary call info card to its starting location.
++                mSecondaryCallInfo.setTranslationY(visible ? secondaryHeight : 0);
++
++                // Animate the secondary card info slide up/down as it appears and disappears.
++                ViewPropertyAnimator secondaryInfoAnimator = mSecondaryCallInfo.animate()
++                        .setInterpolator(AnimUtils.EASE_OUT_EASE_IN)
++                        .setDuration(mVideoAnimationDuration)
++                        .translationY(isVisible ? 0 : secondaryHeight)
++                        .setListener(new AnimatorListenerAdapter() {
++                            @Override
++                            public void onAnimationEnd(Animator animation) {
++                                /// M: add for debug FAB.
++                                Log.v(this, "onAnimationEnd isVisible= " + isVisible);
++                                if (!isVisible) {
++                                    mSecondaryCallInfo.setVisibility(View.GONE);
++                                }
++                                /// M: ALPS03384240, change language,
++                                // and separate member from CS conference management,
++                                // FabPosition cannot be shown over secondary info
++                                // by updateFabPosition(),
++                                // due to screen width is zero @{
++                                final ViewGroup parent =
++                                            (ViewGroup) mPrimaryCallCardContainer.getParent();
++                                mFloatingActionButtonController.setScreenWidth(parent.getWidth());
++                                /// @}
++
++                                /**
++                                 * M: Need reset FabPosion since secondary call visibility
++                                 * changed, because FAB position relay on the view's height and
++                                 * aligned incorrectly.
++                                 */
++                                updateFabPosition();
++                                /// M: [1A1H2W] update answer view position to show secondary info
++                                updateAnswerViewPosition();
++                            }
++
++                            @Override
++                            public void onAnimationStart(Animator animation) {
++                                /// M: add for debug FAB.
++                                Log.v(this, "onAnimationStart isVisible= " + isVisible);
++                                if (isVisible) {
++                                    mSecondaryCallInfo.setVisibility(View.VISIBLE);
++                                }
++                            }
++                        });
++                secondaryInfoAnimator.start();
++
++                // Notify listeners of a change in the visibility of the secondary info. This is
++                // important when in a video call so that the video call presenter can shift the
++                // video preview up or down to accommodate the secondary caller info.
++                InCallPresenter.getInstance().notifySecondaryCallerInfoVisibilityChanged(visible,
++                        secondaryHeight);
++
++                return true;
++            }
++        });
++    }
++
++    @Override
++    public void setCallState(
++            int state,
++            int videoState,
++            int sessionModificationState,
++            DisconnectCause disconnectCause,
++            String connectionLabel,
++            Drawable callStateIcon,
++            String gatewayNumber,
++            boolean isWifi,
++            boolean isConference,
++            boolean isWorkCall) {
++        boolean isGatewayCall = !TextUtils.isEmpty(gatewayNumber);
++        CallStateLabel callStateLabel = getCallStateLabelFromState(state, videoState,
++                sessionModificationState, disconnectCause, connectionLabel, isGatewayCall, isWifi,
++                isConference, isWorkCall);
++
++        Log.v(this, "setCallState " + callStateLabel.getCallStateLabel());
++        Log.v(this, "AutoDismiss " + callStateLabel.isAutoDismissing());
++        Log.v(this, "DisconnectCause " + disconnectCause.toString());
++        Log.v(this, "gateway " + connectionLabel + gatewayNumber);
++
++        /// M: fix CR:ALPS02583825,after SRVCC,display VT icon. @{
++        /// M: for support cmcc video ringtone.InCallUI will receive RX video state when play video
++        ///ringtone from network on voice call with dialing state.But this call is still a voice
++        ///call,so the video call icon shouldn't show during play video ringtone. @{
++        if (VideoProfile.isTransmissionEnabled(videoState)
++                ||(VideoProfile.isReceptionEnabled(videoState) && state != Call.State.DIALING)
++        /// @}
++                || (state == Call.State.ACTIVE && sessionModificationState
++                        == Call.SessionModificationState.WAITING_FOR_UPGRADE_RESPONSE)) {
++            mCallStateVideoCallIcon.setVisibility(View.VISIBLE);
++        } else {
++            mCallStateVideoCallIcon.setVisibility(View.GONE);
++        }
++        /// @}
++
++        // Check for video state change and update the visibility of the contact photo.  The contact
++        // photo is hidden when the incoming video surface is shown.
++        // The contact photo visibility can also change in setPrimary().
++        boolean showContactPhoto = !VideoCallPresenter.showIncomingVideo(videoState, state);
++        mPhotoLarge.setVisibility(showContactPhoto ? View.VISIBLE : View.GONE);
++
++        // Check if the call subject is showing -- if it is, we want to bypass showing the call
++        // state.
++        boolean isSubjectShowing = mCallSubject.getVisibility() == View.VISIBLE;
++
++        if (TextUtils.equals(callStateLabel.getCallStateLabel(), mCallStateLabel.getText())
++                /// M: For ALPS02036232, add this filter then can update
++                // callstateIcon if icon changed. @{
++                && !isCallStateIconChanged(callStateIcon)
++                && !isSubjectShowing) {
++                /// @}
++            // Nothing to do if the labels are the same
++            if (state == Call.State.ACTIVE || state == Call.State.CONFERENCED) {
++                mCallStateLabel.clearAnimation();
++                mCallStateIcon.clearAnimation();
++            }
++            return;
++        }
++
++        if (isSubjectShowing) {
++            changeCallStateLabel(null);
++            callStateIcon = null;
++        } else {
++            // Update the call state label and icon.
++            setCallStateLabel(callStateLabel);
++        }
++
++        if (!TextUtils.isEmpty(callStateLabel.getCallStateLabel())) {
++            if (state == Call.State.ACTIVE || state == Call.State.CONFERENCED) {
++                mCallStateLabel.clearAnimation();
++            } else {
++                mCallStateLabel.startAnimation(mPulseAnimation);
++            }
++        } else {
++            mCallStateLabel.clearAnimation();
++        }
++
++        if (callStateIcon != null) {
++            mCallStateIcon.setVisibility(View.VISIBLE);
++            // Invoke setAlpha(float) instead of setAlpha(int) to set the view's alpha. This is
++            // needed because the pulse animation operates on the view alpha.
++            mCallStateIcon.setAlpha(1.0f);
++            mCallStateIcon.setImageDrawable(callStateIcon);
++
++            if (state == Call.State.ACTIVE || state == Call.State.CONFERENCED
++                    || TextUtils.isEmpty(callStateLabel.getCallStateLabel())) {
++                mCallStateIcon.clearAnimation();
++            } else {
++                mCallStateIcon.startAnimation(mPulseAnimation);
++            }
++
++            if (callStateIcon instanceof AnimationDrawable) {
++                ((AnimationDrawable) callStateIcon).start();
++            }
++        } else {
++            mCallStateIcon.clearAnimation();
++
++            // Invoke setAlpha(float) instead of setAlpha(int) to set the view's alpha. This is
++            // needed because the pulse animation operates on the view alpha.
++            mCallStateIcon.setAlpha(0.0f);
++            mCallStateIcon.setVisibility(View.GONE);
++            /**
++             * M: [ALPS01841247]Once the ImageView was shown, it would show again even when
++             * setVisibility(GONE). This is caused by View system, when complex interaction
++             * combined by Visibility/Animation/Alpha. This root cause need further discussion.
++             * As a solution, set the drawable to null can fix this specific problem of
++             * ALPS01841247 directly.
++             */
++            mCallStateIcon.setImageDrawable(null);
++        }
++
++        /// M: fix CR:ALPS02583825,after SRVCC,display VT icon,move logic to front@{
++        /*if (VideoUtils.isVideoCall(videoState)
++                || (state == Call.State.ACTIVE && sessionModificationState
++                        == Call.SessionModificationState.WAITING_FOR_UPGRADE_RESPONSE)) {
++            mCallStateVideoCallIcon.setVisibility(View.VISIBLE);
++        } else {
++            mCallStateVideoCallIcon.setVisibility(View.GONE);
++        }*/
++        ///@}
++    }
++
++    private void setCallStateLabel(CallStateLabel callStateLabel) {
++        Log.v(this, "setCallStateLabel : label = " + callStateLabel.getCallStateLabel());
++
++        if (callStateLabel.isAutoDismissing()) {
++            mCallStateLabelResetPending = true;
++            mHandler.postDelayed(new Runnable() {
++                @Override
++                public void run() {
++                    Log.v(this, "restoringCallStateLabel : label = " +
++                            mPostResetCallStateLabel);
++                    changeCallStateLabel(mPostResetCallStateLabel);
++                    mCallStateLabelResetPending = false;
++                }
++            }, CALL_STATE_LABEL_RESET_DELAY_MS);
++
++            changeCallStateLabel(callStateLabel.getCallStateLabel());
++        } else {
++            // Keep track of the current call state label; used when resetting auto dismissing
++            // call state labels.
++            mPostResetCallStateLabel = callStateLabel.getCallStateLabel();
++
++            if (!mCallStateLabelResetPending) {
++                changeCallStateLabel(callStateLabel.getCallStateLabel());
++            }
++        }
++    }
++
++    private void changeCallStateLabel(CharSequence callStateLabel) {
++        Log.v(this, "changeCallStateLabel : label = " + callStateLabel);
++        if (!TextUtils.isEmpty(callStateLabel)) {
++            mCallStateLabel.setText(callStateLabel);
++            mCallStateLabel.setAlpha(1);
++            mCallStateLabel.setVisibility(View.VISIBLE);
++        } else {
++            Animation callStateLabelAnimation = mCallStateLabel.getAnimation();
++            if (callStateLabelAnimation != null) {
++                callStateLabelAnimation.cancel();
++            }
++            mCallStateLabel.setText(null);
++            mCallStateLabel.setAlpha(0);
++            mCallStateLabel.setVisibility(View.GONE);
++        }
++    }
++
++    @Override
++    public void setCallbackNumber(String callbackNumber, boolean isEmergencyCall) {
++        if (mInCallMessageLabel == null) {
++            return;
++        }
++
++        if (TextUtils.isEmpty(callbackNumber)) {
++            mInCallMessageLabel.setVisibility(View.GONE);
++            return;
++        }
++
++        // TODO: The new Locale-specific methods don't seem to be working. Revisit this.
++        callbackNumber = PhoneNumberUtils.formatNumber(callbackNumber);
++
++        int stringResourceId = isEmergencyCall ? R.string.card_title_callback_number_emergency
++                : R.string.card_title_callback_number;
++
++        String text = getString(stringResourceId, callbackNumber);
++        mInCallMessageLabel.setText(text);
++
++        mInCallMessageLabel.setVisibility(View.VISIBLE);
++    }
++
++    /**
++     * Sets and shows the call subject if it is not empty.  Hides the call subject otherwise.
++     *
++     * @param callSubject The call subject.
++     */
++    @Override
++    public void setCallSubject(String callSubject) {
++        boolean showSubject = !TextUtils.isEmpty(callSubject);
++
++        mCallSubject.setVisibility(showSubject ? View.VISIBLE : View.GONE);
++        if (showSubject) {
++            mCallSubject.setText(callSubject);
++        } else {
++            mCallSubject.setText(null);
++        }
++    }
++
++    public boolean isAnimating() {
++        return mIsAnimating;
++    }
++
++    private void showInternetCallLabel(boolean show) {
++        if (show) {
++            final String label = getView().getContext().getString(
++                    R.string.incall_call_type_label_sip);
++            mCallTypeLabel.setVisibility(View.VISIBLE);
++            mCallTypeLabel.setText(label);
++        } else {
++            mCallTypeLabel.setVisibility(View.GONE);
++        }
++    }
++
++    @Override
++    public void setPrimaryCallElapsedTime(boolean show, long duration) {
++        if (show) {
++            if (mElapsedTime.getVisibility() != View.VISIBLE) {
++                AnimUtils.fadeIn(mElapsedTime, AnimUtils.DEFAULT_DURATION);
++            }
++            String callTimeElapsed = DateUtils.formatElapsedTime(duration / 1000);
++			 String durationDescription =
++                    InCallDateUtils.formatDuration(getView().getContext(), duration);
++            mElapsedTime.setText(durationDescription);
++
++            mElapsedTime.setContentDescription(
++                    !TextUtils.isEmpty(durationDescription) ? durationDescription : null);
++        } else {
++            // hide() animation has no effect if it is already hidden.
++            AnimUtils.fadeOut(mElapsedTime, AnimUtils.DEFAULT_DURATION);
++        }
++    }
++
++    /**
++     * Set all the ImageViews to the same photo. Currently there are 2 photo views: the large one
++     * (which fills about the bottom half of the screen) and the small one, which displays as a
++     * circle next to the primary contact info. This method does not handle whether the ImageView
++     * is shown or not.
++     *
++     * @param photo The photo to set for the image views.
++     */
++    private void setDrawableToImageViews(Drawable photo) {
++        if (photo == null) {
++            photo = ContactInfoCache.getInstance(getView().getContext())
++                            .getDefaultContactPhotoDrawable();
++        }
++
++        if (mPrimaryPhotoDrawable == photo){
++            return;
++        }
++        mPrimaryPhotoDrawable = photo;
++
++        mPhotoLarge.setImageDrawable(photo);
++
++        // Modify the drawable to be round for the smaller ImageView.
++        Bitmap bitmap = drawableToBitmap(photo);
++        if (bitmap != null) {
++            final RoundedBitmapDrawable drawable =
++                    RoundedBitmapDrawableFactory.create(getResources(), bitmap);
++            drawable.setAntiAlias(true);
++            drawable.setCornerRadius(bitmap.getHeight() / 2);
++            photo = drawable;
++        }
++        mPhotoSmall.setImageDrawable(photo);
++    }
++
++    /**
++     * Helper method for image view to handle animations.
++     *
++     * @param view The image view to show or hide.
++     * @param isVisible {@code true} if we want to show the image, {@code false} to hide it.
++     */
++    private void showImageView(ImageView view, boolean isVisible) {
++        if (view.getDrawable() == null) {
++            if (isVisible) {
++                AnimUtils.fadeIn(mElapsedTime, AnimUtils.DEFAULT_DURATION);
++            }
++        } else {
++            // Cross fading is buggy and not noticeable due to the multiple calls to this method
++            // that switch drawables in the middle of the cross-fade animations. Just show the
++            // photo directly instead.
++            view.setVisibility(isVisible ? View.VISIBLE : View.GONE);
++        }
++    }
++
++    /**
++     * Converts a drawable into a bitmap.
++     *
++     * @param drawable the drawable to be converted.
++     */
++    public static Bitmap drawableToBitmap(Drawable drawable) {
++        Bitmap bitmap;
++        if (drawable instanceof BitmapDrawable) {
++            bitmap = ((BitmapDrawable) drawable).getBitmap();
++        } else {
++            if (drawable.getIntrinsicWidth() <= 0 || drawable.getIntrinsicHeight() <= 0) {
++                // Needed for drawables that are just a colour.
++                bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
++            } else {
++                bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(),
++                        drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
++            }
++
++            Log.i(TAG, "Created bitmap with width " + bitmap.getWidth() + ", height "
++                    + bitmap.getHeight());
++
++            Canvas canvas = new Canvas(bitmap);
++            drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
++            drawable.draw(canvas);
++        }
++        return bitmap;
++    }
++
++    /**
++     * Gets the call state label based on the state of the call or cause of disconnect.
++     *
++     * Additional labels are applied as follows:
++     *         1. All outgoing calls with display "Calling via [Provider]".
++     *         2. Ongoing calls will display the name of the provider.
++     *         3. Incoming calls will only display "Incoming via..." for accounts.
++     *         4. Video calls, and session modification states (eg. requesting video).
++     *         5. Incoming and active Wi-Fi calls will show label provided by hint.
++     *
++     * TODO: Move this to the CallCardPresenter.
++     */
++    private CallStateLabel getCallStateLabelFromState(int state, int videoState,
++            int sessionModificationState, DisconnectCause disconnectCause, String label,
++            boolean isGatewayCall, boolean isWifi, boolean isConference, boolean isWorkCall) {
++        final Context context = getView().getContext();
++        CharSequence callStateLabel = null;  // Label to display as part of the call banner
++
++        boolean hasSuggestedLabel = label != null;
++        boolean isAccount = hasSuggestedLabel && !isGatewayCall;
++        boolean isAutoDismissing = false;
++
++        switch  (state) {
++            case Call.State.IDLE:
++                // "Call state" is meaningless in this state.
++                break;
++            case Call.State.ACTIVE:
++                // We normally don't show a "call state label" at all in this state
++                // (but we can use the call state label to display the provider name).
++                /// M:fix ALPS02503808, no need to show connection label if any video request. @{
++                /*
++                Google code:
++                if ((isAccount || isWifi || isConference) && hasSuggestedLabel) {
++                 */
++                if ((isAccount || isWifi || isConference) && hasSuggestedLabel
++                        && sessionModificationState == Call.SessionModificationState.NO_REQUEST) {
++                /// @}
++                    callStateLabel = label;
++                } else if (sessionModificationState
++                        == Call.SessionModificationState.REQUEST_REJECTED) {
++                    callStateLabel = context.getString(R.string.card_title_video_call_rejected);
++                    isAutoDismissing = true;
++                } else if (sessionModificationState
++                        == Call.SessionModificationState.REQUEST_FAILED) {
++                    callStateLabel = context.getString(R.string.card_title_video_call_error);
++                    isAutoDismissing = true;
++                } else if (sessionModificationState
++                        == Call.SessionModificationState.WAITING_FOR_UPGRADE_RESPONSE) {
++                    callStateLabel = context.getString(R.string.card_title_video_call_requesting);
++                  //M: add for cancel request state label. @{
++                } else if (sessionModificationState
++                        == Call.SessionModificationState.WAITING_FOR_CANCEL_UPGRADE_RESPONSE) {
++                    callStateLabel = context.getString(R.string.
++                            card_title_cancel_upgrade_requesting);
++                  ///@}
++                } else if (sessionModificationState
++                        == Call.SessionModificationState.RECEIVED_UPGRADE_TO_VIDEO_REQUEST) {
++                    /// M: fix ALPS02493295, modify incoming video call request state label,
++                    // Google String:card_title_video_call_requesting. @{
++                    callStateLabel = context.getString(R.string
++                            .notification_requesting_video_call);
++                    // @}
++                    callStateLabel = appendCountdown(callStateLabel);
++                } else if (VideoUtils.isVideoCall(videoState)) {
++                    callStateLabel = context.getString(R.string.card_title_video_call);
++                }
++                break;
++            case Call.State.ONHOLD:
++                callStateLabel = context.getString(R.string.card_title_on_hold);
++                break;
++            case Call.State.CONNECTING:
++            case Call.State.DIALING:
++                if (hasSuggestedLabel && !isWifi) {
++                    callStateLabel = context.getString(R.string.calling_via_template, label);
++                } else {
++                    callStateLabel = context.getString(R.string.card_title_dialing);
++                }
++                break;
++            case Call.State.REDIALING:
++                callStateLabel = context.getString(R.string.card_title_redialing);
++                break;
++            case Call.State.INCOMING:
++            case Call.State.CALL_WAITING:
++                /// M: [VoLTE conference]incoming volte conference @{
++                if (isIncomingVolteConferenceCall()) {
++                    callStateLabel = context.getString(R.string.card_title_incoming_conference);
++                    break;
++                }
++               /// @}
++
++                if (isWifi && hasSuggestedLabel) {
++                    callStateLabel = label;
++                } else if (isAccount) {
++                    callStateLabel = context.getString(R.string.incoming_via_template, label);
++                } else if (VideoUtils.isVideoCall(videoState)) {
++                    callStateLabel = context.getString(R.string.notification_incoming_video_call);
++                } else {
++                    callStateLabel =
++                            context.getString(isWorkCall ? R.string.card_title_incoming_work_call
++                                    : R.string.card_title_incoming_call);
++                }
++                break;
++            case Call.State.DISCONNECTING:
++                // While in the DISCONNECTING state we display a "Hanging up"
++                // message in order to make the UI feel more responsive.  (In
++                // GSM it's normal to see a delay of a couple of seconds while
++                // negotiating the disconnect with the network, so the "Hanging
++                // up" state at least lets the user know that we're doing
++                // something.  This state is currently not used with CDMA.)
++                callStateLabel = context.getString(R.string.card_title_hanging_up);
++                break;
++            case Call.State.DISCONNECTED:
++                callStateLabel = disconnectCause.getLabel();
++                // M:fix CR:ALPS02584915,UI show error when merge conference call.
++                if (TextUtils.isEmpty(callStateLabel) && !IMS_MERGED_SUCCESSFULLY.equals
++                        (disconnectCause.getReason())) {
++                    Log.d(this," disconnect reason is not ims merged successfully");
++                    callStateLabel = context.getString(R.string.card_title_call_ended);
++                }
++                break;
++            case Call.State.CONFERENCED:
++                callStateLabel = context.getString(R.string.card_title_conf_call);
++                break;
++            default:
++                Log.wtf(this, "updateCallStateWidgets: unexpected call: " + state);
++        }
++        return new CallStateLabel(callStateLabel, isAutoDismissing);
++    }
++
++    private void initializeSecondaryCallInfo(boolean hasProvider) {
++        // mSecondaryCallName is initialized here (vs. onViewCreated) because it is inaccessible
++        // until mSecondaryCallInfo is inflated in the call above.
++        if (mSecondaryCallName == null) {
++            mSecondaryCallName = (TextView) getView().findViewById(R.id.secondaryCallName);
++            mSecondaryCallConferenceCallIcon =
++                    getView().findViewById(R.id.secondaryCallConferenceCallIcon);
++            mSecondaryCallVideoCallIcon =
++                    getView().findViewById(R.id.secondaryCallVideoCallIcon);
++        }
++
++        if (mSecondaryCallProviderLabel == null && hasProvider) {
++            mSecondaryCallProviderInfo.setVisibility(View.VISIBLE);
++            mSecondaryCallProviderLabel = (TextView) getView()
++                    .findViewById(R.id.secondaryCallProviderLabel);
++        }
++    }
++
++    public void dispatchPopulateAccessibilityEvent(AccessibilityEvent event) {
++        if (event.getEventType() == AccessibilityEvent.TYPE_ANNOUNCEMENT) {
++            // Indicate this call is in active if no label is provided. The label is empty when
++            // the call is in active, not in other status such as onhold or dialing etc.
++            if (!mCallStateLabel.isShown() || TextUtils.isEmpty(mCallStateLabel.getText())) {
++                event.getText().add(
++                        TextUtils.expandTemplate(
++                                getResources().getText(R.string.accessibility_call_is_active),
++                                mPrimaryName.getText()));
++            } else {
++                dispatchPopulateAccessibilityEvent(event, mCallStateLabel);
++                dispatchPopulateAccessibilityEvent(event, mPrimaryName);
++                dispatchPopulateAccessibilityEvent(event, mCallTypeLabel);
++                dispatchPopulateAccessibilityEvent(event, mPhoneNumber);
++            }
++            return;
++        }
++        dispatchPopulateAccessibilityEvent(event, mCallStateLabel);
++        dispatchPopulateAccessibilityEvent(event, mPrimaryName);
++        dispatchPopulateAccessibilityEvent(event, mPhoneNumber);
++        dispatchPopulateAccessibilityEvent(event, mCallTypeLabel);
++        dispatchPopulateAccessibilityEvent(event, mSecondaryCallName);
++        dispatchPopulateAccessibilityEvent(event, mSecondaryCallProviderLabel);
++
++        return;
++    }
++
++    @Override
++    public void sendAccessibilityAnnouncement() {
++        mHandler.postDelayed(new Runnable() {
++            @Override
++            public void run() {
++                if (getView() != null && getView().getParent() != null &&
++                        isAccessibilityEnabled(getContext())) {
++                    AccessibilityEvent event = AccessibilityEvent.obtain(
++                            AccessibilityEvent.TYPE_ANNOUNCEMENT);
++                    dispatchPopulateAccessibilityEvent(event);
++                    getView().getParent().requestSendAccessibilityEvent(getView(), event);
++                }
++            }
++
++            private boolean isAccessibilityEnabled(Context context) {
++                AccessibilityManager accessibilityManager =
++                        (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
++                return accessibilityManager != null && accessibilityManager.isEnabled();
++
++            }
++        }, ACCESSIBILITY_ANNOUNCEMENT_DELAY_MS);
++    }
++
++    @Override
++    public void setEndCallButtonEnabled(boolean enabled, boolean animate) {
++        /// MTK add this log. @{
++        Log.d(this, "setEndCallButtonEnabled enabled = " + enabled
++                + ", animate = " + animate + "; old state = "
++                + mFloatingActionButton.isEnabled() + ", vs =",
++                mFloatingActionButtonContainer.getVisibility());
++        /// @}
++        /// M: not show endcall btn when animation not end for ALPS02159995 @{
++        if(enabled == true && mFloatingActionButton.isEnabled()
++                && mFloatingActionButtonContainer.getVisibility() == View.GONE){
++            mFloatingActionButton.setEnabled(false);
++        }
++        /// @}
++        if (enabled != mFloatingActionButton.isEnabled()) {
++            if (animate) {
++                if (enabled) {
++                    mFloatingActionButtonController.scaleIn(AnimUtils.NO_DELAY);
++                } else {
++                    mFloatingActionButtonController.scaleOut();
++                }
++            } else {
++                if (enabled) {
++                    mFloatingActionButtonContainer.setScaleX(1);
++                    mFloatingActionButtonContainer.setScaleY(1);
++                    mFloatingActionButtonContainer.setVisibility(View.VISIBLE);
++                } else {
++                    mFloatingActionButtonContainer.setVisibility(View.GONE);
++                }
++            }
++            mFloatingActionButton.setEnabled(enabled);
++            updateFabPosition();
++        }
++    }
++
++    /**
++     * Changes the visibility of the HD audio icon.
++     *
++     * @param visible {@code true} if the UI should show the HD audio icon.
++     */
++    @Override
++    public void showHdAudioIndicator(boolean visible) {
++        mHdAudioIcon.setVisibility(visible ? View.VISIBLE : View.GONE);
++    }
++
++    /**
++     * Changes the visibility of the forward icon.
++     *
++     * @param visible {@code true} if the UI should show the forward icon.
++     */
++    @Override
++    public void showForwardIndicator(boolean visible) {
++        mForwardIcon.setVisibility(visible ? View.VISIBLE : View.GONE);
++    }
++
++
++    /**
++     * Changes the visibility of the "manage conference call" button.
++     *
++     * @param visible Whether to set the button to be visible or not.
++     */
++    @Override
++    public void showManageConferenceCallButton(boolean visible) {
++        mManageConferenceCallButton.setVisibility(visible ? View.VISIBLE : View.GONE);
++    }
++
++    /**
++     * Determines the current visibility of the manage conference button.
++     *
++     * @return {@code true} if the button is visible.
++     */
++    @Override
++    public boolean isManageConferenceVisible() {
++        return mManageConferenceCallButton.getVisibility() == View.VISIBLE;
++    }
++
++    /**
++     * Determines the current visibility of the call subject.
++     *
++     * @return {@code true} if the subject is visible.
++     */
++    @Override
++    public boolean isCallSubjectVisible() {
++        return mCallSubject.getVisibility() == View.VISIBLE;
++    }
++
++    /**
++     * Get the overall InCallUI background colors and apply to call card.
++     */
++    @Override
++    public void updateColors() {
++        MaterialPalette themeColors = InCallPresenter.getInstance().getThemeColors();
++
++        if (mCurrentThemeColors != null && mCurrentThemeColors.equals(themeColors)) {
++            return;
++        }
++        if (themeColors == null) {
++            return;
++        }
++        /// M:fix CR:ALPS02321720, JE about ColorDrawable can not be cast
++        /// to GradientDrawable. @{
++        if (getResources().getBoolean(R.bool.is_layout_landscape)
++            && mPrimaryCallCardContainer.getBackground() instanceof GradientDrawable) {
++        /// @}
++            final GradientDrawable drawable =
++                    (GradientDrawable) mPrimaryCallCardContainer.getBackground();
++            drawable.setColor(themeColors.mPrimaryColor);
++        } else {
++			if(!isEmergencyCall()){
++				mPrimaryCallCardContainer.setBackgroundColor(themeColors.mPrimaryColor);
++			} else {
++				mPrimaryCallCardContainer.setBackgroundColor(getResources().getColor(R.color.emergency_call_bg));
++			}
++        }
++		if(!isEmergencyCall()){
++			mCallButtonsContainer.setBackgroundColor(themeColors.mPrimaryColor);
++		} else {
++			mCallButtonsContainer.setBackgroundColor(getResources().getColor(R.color.emergency_call_bg));
++		}
++        mCallSubject.setTextColor(themeColors.mPrimaryColor);
++        mContactContext.setBackgroundColor(themeColors.mPrimaryColor);
++        //TODO: set color of message text in call context "recent messages" to be the theme color.
++
++        mCurrentThemeColors = themeColors;
++    }
++
++    private void dispatchPopulateAccessibilityEvent(AccessibilityEvent event, View view) {
++        if (view == null) return;
++        final List<CharSequence> eventText = event.getText();
++        int size = eventText.size();
++        view.dispatchPopulateAccessibilityEvent(event);
++        // if no text added write null to keep relative position
++        if (size == eventText.size()) {
++            eventText.add(null);
++        }
++    }
++
++    @Override
++    public void animateForNewOutgoingCall() {
++        Log.d(this, "[animateForNewOutgoingCall]");
++        final ViewGroup parent = (ViewGroup) mPrimaryCallCardContainer.getParent();
++
++        final ViewTreeObserver observer = getView().getViewTreeObserver();
++
++        /**
++         * M: [ALPS02494688] Seldom, the onGlobalLayout might not be called. As a result,
++         * the CallCardFragment would stay in animating state forever.
++         * Ref. InCallPresenter.onCallListChange(), it would stop responding to any call
++         * state change if CallCardFragment keep animating. To avoid this seldom issue,
++         * we move this line to where the animation.start() was called.
++         * google default code:
++         * mIsAnimating = true;
++         */
++
++        observer.addOnGlobalLayoutListener(new OnGlobalLayoutListener() {
++            @Override
++            public void onGlobalLayout() {
++                final ViewTreeObserver observer = getView().getViewTreeObserver();
++                if (!observer.isAlive()) {
++                    return;
++                }
++                observer.removeOnGlobalLayoutListener(this);
++
++                final LayoutIgnoringListener listener = new LayoutIgnoringListener();
++                mPrimaryCallCardContainer.addOnLayoutChangeListener(listener);
++
++                // Prepare the state of views before the slide animation
++                final int originalHeight = mPrimaryCallCardContainer.getHeight();
++                mPrimaryCallCardContainer.setTag(R.id.view_tag_callcard_actual_height,
++                        originalHeight);
++                mPrimaryCallCardContainer.setBottom(parent.getHeight());
++
++                // Set up FAB.
++                mFloatingActionButtonContainer.setVisibility(View.GONE);
++                mFloatingActionButtonController.setScreenWidth(parent.getWidth());
++
++                mCallButtonsContainer.setAlpha(0);
++                mCallStateLabel.setAlpha(0);
++                mPrimaryName.setAlpha(0);
++                mCallTypeLabel.setAlpha(0);
++                mCallNumberAndLabel.setAlpha(0);
++
++                assignTranslateAnimation(mCallStateLabel, 1);
++                assignTranslateAnimation(mCallStateIcon, 1);
++                assignTranslateAnimation(mPrimaryName, 2);
++                assignTranslateAnimation(mCallNumberAndLabel, 3);
++                assignTranslateAnimation(mCallTypeLabel, 4);
++                assignTranslateAnimation(mCallButtonsContainer, 5);
++
++                final Animator animator = getShrinkAnimator(parent.getHeight(), originalHeight);
++
++                animator.addListener(new AnimatorListenerAdapter() {
++                    @Override
++                    public void onAnimationEnd(Animator animation) {
++                        /// M: add for MO performance analysis
++                        InCallTrace.begin("ShrinkAnimation end");
++                        /// M: add for monitor call card animation process
++                        Log.i(this, "[onAnimationEnd] end of shrink animation.");
++                        mPrimaryCallCardContainer.setTag(R.id.view_tag_callcard_actual_height,
++                                null);
++                        setViewStatePostAnimation(listener);
++                        mIsAnimating = false;
++                        InCallPresenter.getInstance().onShrinkAnimationComplete();
++
++                        /// M: fix ALPS02302284. update floating end button to animate after
++                        /// the primary call card exit shrink animation from bottom to top. @{
++                        updateFabPosition();
++                        /// @}
++                        /// M: add for MO performance analysis
++                        InCallTrace.end("ShrinkAnimation end");
++                    }
++                });
++                /**
++                 * M: [ALPS02494688] Marking the CallCardFragment in animating state at where
++                 * the animation really happened.
++                 */
++                Log.i(this, "[animateForNewOutgoingCall]start ShrinkAnimation");
++                mIsAnimating = true;
++
++                /// M: add for MO performance analysis @{
++                InCallTrace.begin("ShrinkAnimation start");
++                animator.start();
++                InCallTrace.end("ShrinkAnimation start");
++                /// @}
++            }
++        });
++    }
++
++    @Override
++    public void showNoteSentToast() {
++        Toast.makeText(getContext(), R.string.note_sent, Toast.LENGTH_LONG).show();
++    }
++
++    public void onDialpadVisibilityChange(boolean isShown) {
++        mIsDialpadShowing = isShown;
++        updateFabPosition();
++    }
++
++    private void updateFabPosition() {
++        /**
++         * M: skip update Fab position with animation when FAB is not visible and size is 0X0,
++         * hwui will throw exception when draw view size is 0 and hardware layertype. @{
++         */
++        Log.d(this, "[updateFabPosition] Dialpad:" + mIsDialpadShowing
++                + ",FAB dump: " + mFloatingActionButtonContainer);
++        if (!mFloatingActionButtonController.isVisible()
++                && (mFloatingActionButtonContainer.getWidth() == 0 &&
++                mFloatingActionButtonContainer.getHeight() == 0)) {
++            return;
++        }
++        /** @} */
++
++        int offsetY = 0;
++        if (!mIsDialpadShowing) {
++            offsetY = mFloatingActionButtonVerticalOffset;
++            /// M: Unnecessarily offset in Landscape and change the isShown to
++            // getVisibility check for some case Visibility is change but the
++            // view has not attached to the rootView so will cause the fab
++            // position can not be set correct after it attached.
++            if (mSecondaryCallInfo.getVisibility() == View.VISIBLE
++                    && mHasLargePhoto && !mIsLandscape) {
++                offsetY -= mSecondaryCallInfo.getHeight();
++            }
++            Log.d(this,
++                    "offsetY:"
++                            + offsetY
++                            + ",mSecondaryHeight: "
++                            + mSecondaryCallInfo.getHeight());
++        }
++        mFloatingActionButtonController.align(
++                FloatingActionButtonController.ALIGN_MIDDLE /* align base */,
++                0 /* offsetX */,
++                offsetY,
++                true);
++        mFloatingActionButtonController.resize(
++                mIsDialpadShowing ? mFabSmallDiameter : mFabNormalDiameter, true);
++    }
++
++    @Override
++    public Context getContext() {
++        return getActivity();
++    }
++
++    @Override
++    public void onResume() {
++        super.onResume();
++        /// M: log enhancement
++        Log.d(this, "onResume...");
++        // If the previous launch animation is still running, cancel it so that we don't get
++        // stuck in an intermediate animation state.
++        if (mAnimatorSet != null && mAnimatorSet.isRunning()) {
++            mAnimatorSet.cancel();
++        }
++
++        mIsLandscape = getResources().getBoolean(R.bool.is_layout_landscape);
++        mHasLargePhoto = getResources().getBoolean(R.bool.has_large_photo);
++
++        final ViewGroup parent = ((ViewGroup) mPrimaryCallCardContainer.getParent());
++        final ViewTreeObserver observer = parent.getViewTreeObserver();
++        parent.getViewTreeObserver().addOnGlobalLayoutListener(new OnGlobalLayoutListener() {
++            @Override
++            public void onGlobalLayout() {
++                ViewTreeObserver viewTreeObserver = observer;
++                if (!viewTreeObserver.isAlive()) {
++                    viewTreeObserver = parent.getViewTreeObserver();
++                }
++                viewTreeObserver.removeOnGlobalLayoutListener(this);
++                mFloatingActionButtonController.setScreenWidth(parent.getWidth());
++                updateFabPosition();
++            }
++        });
++
++        updateColors();
++    }
++
++    /**
++     * Adds a global layout listener to update the FAB's positioning on the next layout. This allows
++     * us to position the FAB after the secondary call info's height has been calculated.
++     */
++    private void updateFabPositionForSecondaryCallInfo() {
++        mSecondaryCallInfo.getViewTreeObserver().addOnGlobalLayoutListener(
++                new ViewTreeObserver.OnGlobalLayoutListener() {
++                    @Override
++                    public void onGlobalLayout() {
++                        final ViewTreeObserver observer = mSecondaryCallInfo.getViewTreeObserver();
++                        if (!observer.isAlive()) {
++                            return;
++                        }
++                        observer.removeOnGlobalLayoutListener(this);
++
++                        onDialpadVisibilityChange(mIsDialpadShowing);
++                    }
++                });
++    }
++
++    /**
++     * Animator that performs the upwards shrinking animation of the blue call card scrim.
++     * At the start of the animation, each child view is moved downwards by a pre-specified amount
++     * and then translated upwards together with the scrim.
++     */
++    private Animator getShrinkAnimator(int startHeight, int endHeight) {
++        final ObjectAnimator shrinkAnimator =
++                ObjectAnimator.ofInt(mPrimaryCallCardContainer, "bottom", startHeight, endHeight);
++        shrinkAnimator.setDuration(mShrinkAnimationDuration);
++        shrinkAnimator.addListener(new AnimatorListenerAdapter() {
++            @Override
++            public void onAnimationStart(Animator animation) {
++                mFloatingActionButton.setEnabled(true);
++            }
++        });
++        shrinkAnimator.setInterpolator(AnimUtils.EASE_IN);
++        return shrinkAnimator;
++    }
++
++    private void assignTranslateAnimation(View view, int offset) {
++        view.setLayerType(View.LAYER_TYPE_HARDWARE, null);
++        view.buildLayer();
++        view.setTranslationY(mTranslationOffset * offset);
++        view.animate().translationY(0).alpha(1).withLayer()
++                .setDuration(mShrinkAnimationDuration).setInterpolator(AnimUtils.EASE_IN);
++    }
++
++    private void setViewStatePostAnimation(View view) {
++        view.setTranslationY(0);
++        view.setAlpha(1);
++    }
++
++    private void setViewStatePostAnimation(OnLayoutChangeListener layoutChangeListener) {
++        setViewStatePostAnimation(mCallButtonsContainer);
++        setViewStatePostAnimation(mCallStateLabel);
++        setViewStatePostAnimation(mPrimaryName);
++        setViewStatePostAnimation(mCallTypeLabel);
++        setViewStatePostAnimation(mCallNumberAndLabel);
++        setViewStatePostAnimation(mCallStateIcon);
++
++        mPrimaryCallCardContainer.removeOnLayoutChangeListener(layoutChangeListener);
++
++        /// M: For ALPS01761179 & ALPS01794859, don't show end button if state
++        // is incoming or disconnected. @{
++        final Call call = CallList.getInstance().getFirstCall();
++        if (call != null) {
++            int state = call.getState();
++            if (!Call.State.isIncoming(state) && Call.State.isConnectingOrConnected(state)) {
++                mFloatingActionButtonController.scaleIn(AnimUtils.NO_DELAY);
++                Log.d(this, "setViewStatePostAnimation end.");
++            /// M: For ALPS01828090 disable end call button when end button do not show under
++            // call state is disconnected.
++            // in order to setEndCallButtonEnabled() can get right mFloatingActionButton state
++            // to show end button to other connecting or connected calls @{
++            } else if (mFloatingActionButton.isEnabled()) {
++                Log.i(this, "mFloatingActionButton.setEnabled(false) when end button do not show");
++                mFloatingActionButton.setEnabled(false);
++            }
++            /// @}
++        }
++        /// @}
++    }
++
++    private final class LayoutIgnoringListener implements View.OnLayoutChangeListener {
++        @Override
++        public void onLayoutChange(View v,
++                int left,
++                int top,
++                int right,
++                int bottom,
++                int oldLeft,
++                int oldTop,
++                int oldRight,
++                int oldBottom) {
++            v.setLeft(oldLeft);
++            v.setRight(oldRight);
++            v.setTop(oldTop);
++            v.setBottom(oldBottom);
++        }
++    }
++
++    /// M: For second call color @{
++    private int mCurrentSecondCallColor;
++    /// @}
++
++    // Fix ALPS01759672. @{
++    @Override
++    public void setSecondaryEnabled(boolean enabled) {
++        if (mSecondaryCallInfo != null) {
++            mSecondaryCallInfo.setEnabled(enabled);
++        }
++    }
++
++    // @}
++
++    /// M: For second call color @{
++    /**
++     * Get the second call color and apply to second call provider label.
++     */
++    public void updateSecondCallColor() {
++        int secondCallColor = getPresenter().getSecondCallColor();
++        if (mCurrentSecondCallColor == secondCallColor) {
++            return;
++        }
++        if (mSecondaryCallProviderLabel != null) {
++            mSecondaryCallProviderLabel.setTextColor(secondCallColor);
++        }
++        mCurrentSecondCallColor = secondCallColor;
++    }
++
++    /**
++     * M: check whether the callStateIcon has no change.
++     * @param callStateIcon call state icon
++     * @return true if no change
++     */
++    private boolean isCallStateIconChanged(Drawable callStateIcon) {
++        return (mCallStateIcon.getDrawable() != null && callStateIcon == null)
++                || (mCallStateIcon.getDrawable() == null && callStateIcon != null);
++    }
++    /// @}
++
++    /**
++     * M: check incoming call conference call or not.
++     * @return
++     */
++    private boolean isIncomingVolteConferenceCall() {
++        Call call = CallList.getInstance().getIncomingCall();
++        return InCallUIVolteUtils.isIncomingVolteConferenceCall(call);
++    }
++
++    /// M: [Voice Record]recording indication icon @{
++    private ImageView mVoiceRecorderIcon;
++	private TextView mVoiceRecorderTimer;
++
++    private Timer mTimer = null;
++	public static long mStartTime = 0;
++    Handler mTimerHandler = new Handler() {
++        @Override
++        public void handleMessage(Message msg) {
++            switch (msg.what) {
++            case 1236:
++                synchronized (this) {
++                    updateVoiceRecorderTimer();
++                }
++                break;
++
++            default:
++                break;
++            }
++        }
++    };
++    private TimerTask mRecordeTrask = null;
++    private void initVoiceRecorderIcon(View view) {
++        mVoiceRecorderIcon = (ImageView) view.findViewById(R.id.voiceRecorderIcon);
++        mVoiceRecorderIcon.setImageResource(R.drawable.voice_record);
++        mVoiceRecorderIcon.setVisibility(View.INVISIBLE);
++		mVoiceRecorderTimer = (TextView) view.findViewById(R.id.voiceRecorderTime);
++		mVoiceRecorderTimer.setText("00:00");
++		mVoiceRecorderTimer.setVisibility(View.INVISIBLE);
++    }
++
++    @Override
++    public void updateVoiceRecordIcon(boolean show) {
++        mVoiceRecorderIcon.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
++        AnimationDrawable ad = (AnimationDrawable) mVoiceRecorderIcon.getDrawable();
++        if (ad != null) {
++            if (show && !ad.isRunning()) {
++                ad.start();
++            } else if (!show && ad.isRunning()) {
++                ad.stop();
++            }
++        }
++		
++		mVoiceRecorderTimer.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
++		if (show && isManageConferenceVisible()) {
++            mVoiceRecorderTimer.setTextColor(0xff0000ff);
++        } else {
++            mVoiceRecorderTimer.setTextColor(0xffffffff);
++        }
++		if(show) {
++			if(mStartTime == 0) {
++				mStartTime = System.currentTimeMillis();
++				mVoiceRecorderTimer.setText("00:00");
++			} else {
++				updateVoiceRecorderTimer();
++			}
++			if(mTimer == null) {
++				mTimer = new Timer();
++			}
++			if(mRecordeTrask != null) {
++				mRecordeTrask.cancel();
++			}
++			mRecordeTrask = new TimerTask() {
++				@Override
++				public void run() {
++				    // TODO Auto-generated method stub
++				    Message message = mTimerHandler.obtainMessage(1236);
++				    mTimerHandler.sendMessage(message);
++				}
++			};
++			mTimer.schedule(mRecordeTrask, 500, 1000);
++		}
++		else{
++			mStartTime = 0;
++			if(mTimer != null ) {
++				mTimer.cancel();
++				mTimer = null;
++			}
++			if(mRecordeTrask != null) {
++				mRecordeTrask.cancel();
++				mRecordeTrask = null;
++			}
++		}
++        /// M:[RCS] plugin API @{
++        ExtensionManager.getRCSeCallCardExt().updateVoiceRecordIcon(show);
++        /// @}
++    }
++    /// @}
++	private void updateVoiceRecorderTimer(){
++		long during = (System.currentTimeMillis()- mStartTime) / 1000;
++		long sec = during % 60;
++		long min = during / 60;
++		StringBuffer sb = new StringBuffer();
++		if(min < 10) {
++			sb.append("0");
++		}
++		sb.append(min+":");
++		if(sec < 10) {
++			sb.append("0");
++		}
++		sb.append(sec+"");
++		if(mVoiceRecorderTimer != null) {
++			mVoiceRecorderTimer.setText(sb.toString());
++		}
++    }
++    /**
++     * M: [CTA]CTA required that in Simplified Chinese, the text label of the secondary/tertiary
++     * call should be changed to another string rather than google default.
++     * @return the right resId CTS required.
++     */
++    private int getCtaSpecificOnHoldResId() {
++        Locale currentLocale = getActivity().getResources().getConfiguration().locale;
++        if (Locale.SIMPLIFIED_CHINESE.getCountry().equals(currentLocale.getCountry())
++                && Locale.SIMPLIFIED_CHINESE.getLanguage().equals(currentLocale.getLanguage())) {
++            return R.string.onHold_cta;
++        }
++        return R.string.onHold;
++    }
++
++    private CharSequence appendCountdown(CharSequence originalText) {
++        long countdown = getPresenter().getCountdown();
++        if (countdown < 0) {
++            return originalText;
++        }
++        StringBuilder sb = new StringBuilder();
++        sb.append(originalText).append(" (").append(countdown).append(")");
++        return sb.toString();
++    }
++
++    /**
++     * M: Determines the height of the call card.
++     *
++     * @return The height of the call card.
++     */
++    public float getCallCardViewHeight() {
++        return getView().getHeight();
++    }
++
++    /**
++     * M: Determines the width of the call card.
++     *
++     * @return The width of the call card.
++     */
++    public float getCallCardViewWidth() {
++        return getView().getWidth();
++    }
++
++    /**
++     * M: get whether VideoDisplayView is visible .
++     *
++     * @return false means can't visible.
++     */
++    @Override
++    public boolean isVideoDisplayViewVisible() {
++        if(getView() == null) {
++            return false;
++        }
++        final View videoView = getView().findViewById(R.id.incomingVideo);
++        if(videoView == null) {
++            return false;
++        }
++        return videoView.getVisibility() == View.VISIBLE ;
++    }
++
++    /**
++     * M: set photo visible or not .
++     */
++    @Override
++    public void setPhotoVisible(boolean visible) {
++        if(mPhotoLarge == null) {
++            Log.d(this, "[setPhotoVisible]mPhotoLarge is null return");
++            return ;
++        }
++        mPhotoLarge.setVisibility(visible ? View.VISIBLE : View.GONE);
++    }
++
++    /**
++     * M: [Video call]In landscape mode, the End button should placed to somewhere
++     * no covering CallCard and Preview.
++     * @return the offset from middle.
++     */
++    private int getEndButtonOffsetXFromMiddle() {
++        // For port, the end button would be in the middle of the screen.
++        if (!mIsLandscape) {
++            return 0;
++        }
++        // For land, the end button would be placed a little right to the middle to
++        // avoid covering neither CallCard nor Preview.
++        // We decided to place the left edge of the end button to the middle.
++        // refer to the updateFabPosition() method.
++        int endButtonSize = mIsDialpadShowing ? mFabSmallDiameter : mFabNormalDiameter;
++        return endButtonSize / 2;
++    }
++
++    /**
++     * M: [1A1H2W]when enter or leave 2W, update the mSecondaryCallInfo view position.
++     */
++    private void updateAnswerViewPosition() {
++        int bottomPadding = 0;
++        if (CallList.getInstance().getSecondaryIncomingCall() != null) {
++            bottomPadding = mSecondaryCallInfo.getHeight();
++        }
++
++        View answerView = getView() != null ?
++                getView().findViewById(R.id.answer_and_dialpad_container) : null;
++        if (answerView == null) {
++            return;
++        }
++
++        int oldBottomPadding = answerView.getPaddingBottom();
++        if (bottomPadding != oldBottomPadding) {
++            answerView.setPadding(answerView.getPaddingLeft(), answerView.getPaddingTop(),
++                    answerView.getPaddingRight(), bottomPadding);
++            Log.d(this, "updateSecondaryCallInfoPosition, bottomPadding = " + bottomPadding);
++            answerView.invalidate();
++        }
++    }
++	
++	private boolean isEmergencyCall() {
++		final CallList calls = CallList.getInstance();
++        final Call call = calls.getFirstCall();
++		if (call != null) {
++			return call.isEmergencyCall();
++		} else {
++			return false;
++		}
++	}
++}
+Index: vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/res/values/strings.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/res/values/strings.xml	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/res/values/strings.xml	(revision 5422)
+@@ -0,0 +1,537 @@
++<?xml version="1.0" encoding="utf-8" standalone="no"?>
++<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++
++    <!-- Official label of the phone app, as seen in "Manage Applications"
++         and other settings UIs. -->
++    <string name="phoneAppLabel" product="default">Phone</string>
++
++    <!-- Official label for the in-call UI. DO NOT TRANSLATE. -->
++    <string name="inCallLabel" translate="false">InCallUI</string>
++
++    <!-- Call status -->
++
++    <!-- In-call screen: status label for a call that's on hold -->
++    <string name="onHold">On hold</string>
++
++    <!-- Incoming call screen, name of "unknown" caller -->
++    <string name="unknown">Unknown</string>
++    <!-- Incoming call screen, string when number hidden -->
++    <string name="private_num">Private number</string>
++    <!-- Incoming call screen, string when called from a pay phone -->
++    <string name="payphone">Payphone</string>
++
++    <!-- In-call screen: status label for a conference call -->
++    <string name="confCall">Conference call</string>
++    <!-- In-call screen: call lost dialog text -->
++    <string name="call_lost">Call dropped</string>
++
++    <!-- MMI dialog strings -->
++    <!-- Dialog label when an MMI code starts running -->
++
++    <!-- "Audio mode" popup menu: Item label to select the speakerphone [CHAR LIMIT=25] -->
++    <string name="audio_mode_speaker">Speaker</string>
++    <!-- "Audio mode" popup menu: Item label to select the handset earpiece [CHAR LIMIT=25] -->
++    <string name="audio_mode_earpiece">Handset earpiece</string>
++    <!-- "Audio mode" popup menu: Item label to select the wired headset [CHAR LIMIT=25] -->
++    <string name="audio_mode_wired_headset">Wired headset</string>
++    <!-- "Audio mode" popup menu: Item label to select the bluetooth headset [CHAR LIMIT=25] -->
++    <string name="audio_mode_bluetooth">Bluetooth</string>
++
++    <!-- post dial -->
++    <!-- In-call screen: body text of the dialog that appears when we encounter
++         the "wait" character in a phone number to be dialed; this dialog asks the
++         user if it's OK to send the numbers following the "wait". -->
++    <string name="wait_prompt_str">Send the following tones?\n</string>
++    <!-- In-call screen: body text of the dialog that appears when we encounter
++         the "PAUSE" character in a phone number to be dialed; this dialog gives
++         informative message to the user to show the sending numbers following the "Pause". -->
++    <string name="pause_prompt_str">Sending tones\n</string>
++    <!-- In-call screen: button label on the "wait" prompt dialog -->
++    <string name="send_button">Send</string>
++    <!-- In-call screen: button label on the "wait" prompt dialog in CDMA Mode-->
++    <string name="pause_prompt_yes">Yes</string>
++    <!-- In-call screen: button label on the "wait" prompt dialog in CDMA Mode-->
++    <string name="pause_prompt_no">No</string>
++    <!-- In-call screen: on the "wild" character dialog, this is the label
++         for a text widget that lets the user enter the digits that should
++         replace the "wild" character. -->
++    <string name="wild_prompt_str">Replace wild character with</string>
++
++    <!-- In-call screen: status label for a conference call -->
++    <string name="caller_manage_header">Conference call <xliff:g id="conf_call_time">%s</xliff:g></string>
++
++    <!-- Used in FakePhoneActivity test code.  DO NOT TRANSLATE. -->
++    <string name="fake_phone_activity_phoneNumber_text" translatable="false">(650) 555-1234</string>
++    <!-- Used in FakePhoneActivity test code.  DO NOT TRANSLATE. -->
++    <string name="fake_phone_activity_infoText_text" translatable="false">Incoming phone number</string>
++    <!-- Used in FakePhoneActivity test code.  DO NOT TRANSLATE. -->
++    <string name="fake_phone_activity_placeCall_text" translatable="false">Fake Incoming Call</string>
++
++    <!-- Call settings screen, Set voicemail dialog title -->
++    <string name="voicemail_settings_number_label">Voicemail number</string>
++
++    <!-- Card titles -->
++    <!-- In-call screen: status label for a call in the "dialing" state [CHAR LIMIT=25] -->
++    <string name="card_title_dialing">Dialling</string>
++    <!-- In-call screen: status label for a re-dialing call [CHAR LIMIT=25] -->
++    <string name="card_title_redialing">Redialling</string>
++    <!-- In-call screen: status label for a conference call [CHAR LIMIT=25] -->
++    <string name="card_title_conf_call">Conference call</string>
++    <!-- In-call screen: status label for an incoming call [CHAR LIMIT=25] -->
++    <string name="card_title_incoming_call">Incoming call</string>
++    <!-- In-call screen: status label for an incoming work call [CHAR LIMIT=25] -->
++    <string name="card_title_incoming_work_call">Incoming work call</string>
++    <!-- In-call screen: status label displayed briefly after a call ends [CHAR LIMIT=25] -->
++    <string name="card_title_call_ended">Call ended</string>
++    <!-- In-call screen: status label for call that's on hold [CHAR LIMIT=25] -->
++    <string name="card_title_on_hold">On hold</string>
++    <!-- In-call screen: status label for a call that's in the process of hanging up [CHAR LIMIT=25] -->
++    <string name="card_title_hanging_up">Hanging up</string>
++    <!-- In-call screen: status label for a call that's in CDMA flash mode [CHAR LIMIT=25] -->
++    <string name="card_title_in_call">In call</string>
++    <!-- In-call screen: special status label that shows your own phone
++         number during emergency callback mode (ECM) [CHAR LIMIT=30] -->
++    <string name="card_title_my_phone_number">My number is <xliff:g id="my_phone_number">%s</xliff:g></string>
++    <!-- In-call screen: status label when connecting video. -->
++    <string name="card_title_video_call_connecting">Connecting video</string>
++    <!-- In-call screen: status label when in a video call. -->
++    <string name="card_title_video_call">Video call</string>
++    <!-- In-call screen: status label when requesting video. -->
++    <string name="card_title_video_call_requesting">Requesting video</string>
++    <!-- In-call screen: status label when there is a problem connecting a video call. -->
++    <string name="card_title_video_call_error">Can\'t connect video call</string>
++    <!-- In-call screen: status label when the remote party rejects a video call request. -->
++    <string name="card_title_video_call_rejected">Video request rejected</string>
++
++    <!-- In-call screen: string shown to the user when their outgoing number is different than the
++         number reported by TelephonyManager#getLine1Number() -->
++    <string name="card_title_callback_number">Your callback number\n <xliff:g id="dark_number">%1$s</xliff:g></string>
++
++    <!-- In-call screen: string shown to the user when their outgoing number is different than the
++         number reported by TelephonyManager#getLine1Number() and they're calling emergency
++         services. -->
++    <string name="card_title_callback_number_emergency">Your emergency callback number\n <xliff:g id="dark_number">%1$s</xliff:g></string>
++
++    <!-- Notification strings -->
++    <!-- The "label" of the in-call Notification for a dialing call, used
++         as the format string for a Chronometer widget. [CHAR LIMIT=60] -->
++    <string name="notification_dialing">Dialling</string>
++    <!-- Missed call notification label, used when there's exactly one missed call -->
++    <string name="notification_missedCallTitle">Missed call</string>
++    <!-- Missed call notification label, used when there are two or more missed calls -->
++    <string name="notification_missedCallsTitle">Missed calls</string>
++    <!-- Missed call notification message used when there are multiple missed calls -->
++    <string name="notification_missedCallsMsg"><xliff:g id="num_missed_calls">%s</xliff:g> missed calls</string>
++    <!-- Missed call notification message used for a single missed call, including
++         the caller-id info from the missed call -->
++    <string name="notification_missedCallTicker">Missed call from <xliff:g id="missed_call_from">%s</xliff:g></string>
++    <!-- The "label" of the in-call Notification for an ongoing call. [CHAR LIMIT=60] -->
++    <string name="notification_ongoing_call">Ongoing call</string>
++    <!-- The "label" of the in-call Notification for an ongoing work call. [CHAR LIMIT=60] -->
++    <string name="notification_ongoing_work_call">Ongoing work call</string>
++    <!-- The "label" of the in-call Notification for an ongoing call, which is being made over
++         Wi-Fi. [CHAR LIMIT=60] -->
++    <string name="notification_ongoing_call_wifi">Ongoing Wi\u2011Fi call</string>
++    <!-- The "label" of the in-call Notification for an ongoing work call, which is being made
++         over Wi-Fi. [CHAR LIMIT=60] -->
++    <string name="notification_ongoing_work_call_wifi">Ongoing Wi\u2011Fi work call</string>
++    <!-- The "label" of the in-call Notification for a call that's on hold -->
++    <string name="notification_on_hold">On hold</string>
++    <!-- The "label" of the in-call Notification for an incoming ringing call. [CHAR LIMIT=60] -->
++    <string name="notification_incoming_call">Incoming call</string>
++    <!-- The "label" of the in-call Notification for an incoming ringing call. [CHAR LIMIT=60] -->
++    <string name="notification_incoming_work_call">Incoming work call</string>
++    <!-- The "label" of the in-call Notification for an incoming ringing call,
++         which is being made over Wi-Fi. [CHAR LIMIT=60] -->
++    <string name="notification_incoming_call_wifi">Incoming Wi\u2011Fi call</string>
++    <!-- The "label" of the in-call Notification for an incoming ringing work call,
++         which is being made over Wi-Fi. [CHAR LIMIT=60] -->
++    <string name="notification_incoming_work_call_wifi">Incoming Wi\u2011Fi work call</string>
++    <!-- The "label" of the in-call Notification for an incoming ringing video call. -->
++    <string name="notification_incoming_video_call">Incoming video call</string>
++    <!-- The "label" of the in-call Notification for upgrading an existing call to a video call. -->
++    <string name="notification_requesting_video_call">Incoming video request</string>
++    <!-- Label for the "Voicemail" notification item, when expanded. -->
++    <string name="notification_voicemail_title">New voicemail</string>
++    <!-- Label for the expanded "Voicemail" notification item,
++         including a count of messages. -->
++    <string name="notification_voicemail_title_count">New voicemail (<xliff:g id="count">%d</xliff:g>)</string>
++    <!-- Message displayed in the "Voicemail" notification item, allowing the user
++         to dial the indicated number. -->
++    <string name="notification_voicemail_text_format">Dial <xliff:g id="voicemail_number">%s</xliff:g></string>
++    <!-- Message displayed in the "Voicemail" notification item,
++         indicating that there's no voicemail number available -->
++    <string name="notification_voicemail_no_vm_number">Voicemail number unknown</string>
++    <!-- Label for the "No service" notification item, when expanded. -->
++    <string name="notification_network_selection_title">No service</string>
++    <!-- Label for the expanded "No service" notification item, including the
++         operator name set by user -->
++    <string name="notification_network_selection_text">Selected network (<xliff:g id="operator_name">%s</xliff:g>) unavailable</string>
++    <!-- Label for the "Answer call" action. This is the displayed label for the action that answers
++         an incoming call. [CHAR LIMIT=12] -->
++    <string name="notification_action_answer">Answer</string>
++    <!-- Label for "end call" Action.
++         It is displayed in the "Ongoing call" notification, which is shown
++         when the user is outside the in-call screen while the phone call is still
++         active. [CHAR LIMIT=12] -->
++    <string name="notification_action_end_call">Hang up</string>
++    <!-- Label for "Video Call" notification action. This is a displayed on the notification for an
++         incoming video call, and answers the call as a video call. [CHAR LIMIT=12] -->
++    <string name="notification_action_answer_video">Video</string>
++    <!-- Label for "Voice" notification action. This is a displayed on the notification for an
++         incoming video call, and answers the call as an audio call. [CHAR LIMIT=12] -->
++    <string name="notification_action_answer_voice">Voice</string>
++    <!-- Label for "Accept" notification action. This is somewhat generic, and may refer to
++         scenarios such as accepting an incoming call or accepting a video call request.
++         [CHAR LIMIT=12] -->
++    <string name="notification_action_accept">Accept</string>
++    <!-- Label for "Dismiss" notification action. This is somewhat generic, and may refer to
++         scenarios such as declining an incoming call or declining a video call request.
++         [CHAR LIMIT=12] -->
++    <string name="notification_action_dismiss">Dismiss</string>
++
++    <!-- Message for "call back" Action, which is displayed in the missed call notification.
++         The user will be able to call back to the person or the phone number.
++         [CHAR LIMIT=12] -->
++    <string name="notification_missedCall_call_back">Call back</string>
++    <!-- Message for "reply via sms" action, which is displayed in the missed call notification.
++         The user will be able to send text messages using the phone number.
++         [CHAR LIMIT=12] -->
++    <string name="notification_missedCall_message">Message</string>
++    <!-- The "label" of the in-call Notification for an ongoing external call.
++         External calls are a representation of a call which is in progress on the user's other
++         device (e.g. another phone or a watch).
++         [CHAR LIMIT=60] -->
++    <string name="notification_external_call">Ongoing call on another device</string>
++    <!-- Notification action displayed for external call notifications.  External calls are a
++         representation of a call which is in progress on the user's other device (e.g. another
++         phone or a watch).  The "transfer call" action initiates the process of transferring an
++         external call to the current device.
++         [CHAR LIMIT=30] -->
++    <string name="notification_transfer_call">Transfer call</string>
++
++    <!-- In-call screen: call failure message displayed in an error dialog -->
++    <string name="incall_error_power_off">To place a call, first turn off aeroplane mode.</string>
++    <!-- In-call screen: call failure message displayed in an error dialog.
++         This string is currently unused (see comments in InCallActivity.java.) -->
++    <string name="incall_error_emergency_only">Not registered on network.</string>
++    <!-- In-call screen: call failure message displayed in an error dialog -->
++    <string name="incall_error_out_of_service">Mobile network not available</string>
++    <!-- In-call screen: call failure message displayed in an error dialog -->
++    <string name="incall_error_no_phone_number_supplied">To place a call, enter a valid number.</string>
++    <!-- In-call screen: call failure message displayed in an error dialog -->
++    <string name="incall_error_call_failed">Call failed</string>
++    <!-- In-call screen: status message displayed in a dialog when starting an MMI -->
++    <string name="incall_status_dialed_mmi">Starting MMI sequence\u2026</string>
++    <!-- In-call screen: message displayed in an error dialog -->
++    <string name="incall_error_supp_service_unknown">Service not supported.</string>
++    <!-- In-call screen: message displayed in an error dialog -->
++    <string name="incall_error_supp_service_switch">Can\'t switch calls.</string>
++    <!-- In-call screen: message displayed in an error dialog -->
++    <string name="incall_error_supp_service_separate">Can\'t separate call</string>
++    <!-- In-call screen: message displayed in an error dialog -->
++    <string name="incall_error_supp_service_transfer">Can\'t transfer</string>
++    <!-- In-call screen: message displayed in an error dialog -->
++    <string name="incall_error_supp_service_conference">Can\'t conference</string>
++    <!-- In-call screen: message displayed in an error dialog -->
++    <string name="incall_error_supp_service_reject">Can\'t reject call</string>
++    <!-- In-call screen: message displayed in an error dialog -->
++    <string name="incall_error_supp_service_hangup">Can\'t release call(s)</string>
++
++    <!-- In-call screen: "call type" indication for a SIP call [CHAR LIMIT=30]  -->
++    <string name="incall_call_type_label_sip">SIP call</string>
++
++    <!-- Dialog title for the "radio enable" UI for emergency calls -->
++    <string name="emergency_enable_radio_dialog_title">Emergency call</string>
++    <!-- Status message for the "radio enable" UI for emergency calls -->
++    <string name="emergency_enable_radio_dialog_message">Turning on radio\u2026</string>
++    <!-- Status message for the "radio enable" UI for emergency calls -->
++    <string name="emergency_enable_radio_dialog_retry">No service. Trying again\u2026</string>
++
++    <!-- Dialer text on Emergency Dialer -->
++    <!-- Emergency dialer: message displayed in an error dialog -->
++    <string name="dial_emergency_error">Can\'t call. <xliff:g id="non_emergency_number">%s</xliff:g> is not an emergency number.</string>
++    <!-- Emergency dialer: message displayed in an error dialog -->
++    <string name="dial_emergency_empty_error">Can\'t call. Dial an emergency number.</string>
++
++    <!-- Displayed in the text entry box in the dialer when in landscape mode to guide the user
++         to dial using the physical keyboard -->
++    <string name="dialerKeyboardHintText">Use keyboard to dial</string>
++
++    <!-- Text for the onscreen "Hold" button when it is not selected. Pressing it will put
++         the call on hold. -->
++    <string name="onscreenHoldText_unselected">Hold call</string>
++    <!-- Text for the onscreen "Hold" button when it is selected. Pressing it will resume
++         the call from a previously held state. -->
++    <string name="onscreenHoldText_selected">Resume call</string>
++    <!-- Text for the onscreen "End call" button -->
++    <string name="onscreenEndCallText">End call</string>
++    <!-- Text for the onscreen "Show Dialpad" button when it is not selected. Pressing it will
++         show the dialpad. -->
++    <string name="onscreenShowDialpadText_unselected">Show dialpad</string>
++    <!-- Text for the onscreen "Show Dialpad" button when it is selected. Pressing it will
++         hide the dialpad. -->
++    <string name="onscreenShowDialpadText_selected">Hide dialpad</string>
++    <!-- Text for the onscreen "Mute" button when it is not selected. Pressing it will mute
++         the call. -->
++    <string name="onscreenMuteText_unselected">Mute</string>
++    <!-- Text for the onscreen "Mute" button when it is selected. Pressing it will unmute
++         the call. -->
++    <string name="onscreenMuteText_selected">Unmute</string>
++    <!-- Text for the onscreen "Add call" button -->
++    <string name="onscreenAddCallText">Add call</string>
++    <!-- Text for the onscreen "Merge calls" button -->
++    <string name="onscreenMergeCallsText">Merge calls</string>
++    <!-- Text for the onscreen "Swap calls" button -->
++    <string name="onscreenSwapCallsText">Swap</string>
++    <!-- Text for the onscreen "Manage calls" button -->
++    <string name="onscreenManageCallsText">Manage calls</string>
++    <!-- Text for the onscreen "Manage conference" button [CHAR LIMIT=30] -->
++    <string name="onscreenManageConferenceText">Manage conference call</string>
++    <!-- Text for the first half of the onscreen "Manage conference" button [CHAR LIMIT=30] -->
++    <string name="onscreenConferenceText">Conference call</string>
++    <!-- Text for the second half of the onscreen "Manage conference" button [CHAR LIMIT=30] -->
++    <string name="onscreenManageText">Manage</string>
++    <!-- Text for the onscreen "Audio" button that lets you switch
++         between speaker / bluetooth / earpiece [CHAR LIMIT=10] -->
++    <string name="onscreenAudioText">Audio</string>
++    <!-- Text for the onscreen "Video call" button used to change a voice call
++         to a video call. [CHAR LIMIT=10] -->
++    <string name="onscreenVideoCallText">Video call</string>
++    <!-- Text for the onscreen "Change to voice" button. When clicked, this downgrades a video call
++         to a voice call. -->
++    <string name="onscreenChangeToVoiceText">Change to voice call</string>
++    <!-- Text for the onscreen "Switch camera" button. When clicked, this switches the user's camera
++         for video calling between the front-facing camera and the back-facing camera. -->
++    <string name="onscreenSwitchCameraText">Switch camera</string>
++    <!-- Text for the onscreen "turn on camera" button. -->
++    <string name="onscreenTurnOnCameraText">Turn on camera</string>
++    <!-- Text for the onscreen "turn off camera" button. -->
++    <string name="onscreenTurnOffCameraText">Turn off camera</string>
++    <!-- Text for the onscreen overflow button, to see additional actions which can be done. -->
++    <string name="onscreenOverflowText">More options</string>
++
++    <!-- Message indicating that Video Started flowing for IMS-VT calls -->
++    <string name="player_started">Player started</string>
++    <!-- Message indicating that Video Stopped flowing for IMS-VT calls -->
++    <string name="player_stopped">Player stopped</string>
++    <!-- Message indicating that camera failure has occurred for the selected camera and
++         as result camera is not ready -->
++    <string name="camera_not_ready">Camera not ready</string>
++    <!-- Message indicating that camera is ready/available -->
++    <string name="camera_ready">Camera ready</string>
++    <!-- Message indicating unknown call session event -->
++    <string name="unknown_call_session_event">Unkown call session event</string>
++
++    <!-- For incoming calls, this is a string we can get from a CDMA network instead of
++         the actual phone number, to indicate there's no number present.  DO NOT TRANSLATE. -->
++    <string-array name="absent_num" translatable="false">
++        <item>ABSENT NUMBER</item>
++        <item>ABSENTNUMBER</item>
++    </string-array>
++
++    <!-- Preference for Voicemail service provider under "Voicemail" settings.
++         [CHAR LIMIT=40] -->
++    <string name="voicemail_provider">Service</string>
++
++    <!-- Preference for Voicemail setting of each provider.
++         [CHAR LIMIT=40] -->
++    <string name="voicemail_settings">Setup</string>
++
++    <!-- String to display in voicemail number summary when no voicemail num is set -->
++    <string name="voicemail_number_not_set">&lt;not set&gt;</string>
++
++    <!-- Title displayed above settings coming after voicemail in the call features screen -->
++    <string name="other_settings">Other call settings</string>
++
++    <!-- Title displayed in the overlay for outgoing calls which include the name of the provider.
++         [CHAR LIMIT=40] -->
++    <string name="calling_via_template">Calling via <xliff:g id="provider_name">%s</xliff:g></string>
++    <!-- Title displayed in the overlay for incoming calls which include the name of the provider.
++         [CHAR LIMIT=40] -->
++    <string name="incoming_via_template">Incoming via <xliff:g id="provider_name">%s</xliff:g></string>
++
++    <!-- Use this as a default to describe the contact photo; currently for screen readers through accessibility. -->
++    <string name="contactPhoto">contact photo</string>
++    <!-- Use this to describe the separate conference call button; currently for screen readers through accessibility. -->
++    <string name="goPrivate">go private</string>
++    <!--  Use this to describe the select contact button in EditPhoneNumberPreference; currently for screen readers through accessibility. -->
++    <string name="selectContact">select contact</string>
++
++    <!-- "Respond via SMS" option that lets you compose a custom response. [CHAR LIMIT=30] -->
++    <string name="respond_via_sms_custom_message">Write your own...</string>
++    <!-- "Custom Message" Cancel alert dialog button -->
++    <string name="custom_message_cancel">Cancel</string>
++    <!-- "Custom Message" Send alert dialog button -->
++    <string name="custom_message_send">Send</string>
++
++    <!-- Description of the answer target in the Slide unlock screen of Phone. [CHAR LIMIT=NONE] -->
++    <string name="description_target_answer">Answer</string>
++    <!-- Description of the send_sms target in the Slide unlock screen of Phone. [CHAR LIMIT=NONE] -->
++    <string name="description_target_send_sms">Send SMS</string>
++    <!-- Description of the decline target in the Slide unlock screen. [CHAR LIMIT=NONE] -->
++    <string name="description_target_decline">Decline</string>
++    <!-- Description of the target to answer a call as a video call in the Slide unlock screen.
++         [CHAR LIMIT=NONE] -->
++    <string name="description_target_answer_video_call">Answer as video call</string>
++    <!-- Description of the target to answer a call as an audio call in the Slide unlock screen.
++         [CHAR LIMIT=NONE] -->
++    <string name="description_target_answer_audio_call">Answer as audio call</string>
++    <!-- Description of the target to accept a request to upgrade from an audio call to a video call.
++         [CHAR LIMIT=NONE] -->
++    <string name="description_target_accept_upgrade_to_video_request">Accept video request</string>
++    <!-- Description of the target to decline a request to upgrade from an audio call to a video call.
++         [CHAR LIMIT=NONE] -->
++    <string name="description_target_decline_upgrade_to_video_request">Decline video request</string>
++    <!-- Description of the target to accept a request to upgrade from any call to a video transmit call.
++         [CHAR LIMIT=NONE] -->
++    <string name="description_target_accept_upgrade_to_video_transmit_request">Accept video transmit request</string>
++    <!-- Description of the target to decline a request to upgrade from any call to a video transmit call.
++         [CHAR LIMIT=NONE] -->
++    <string name="description_target_decline_upgrade_to_video_transmit_request">Decline video transmit request</string>
++        <!-- Description of the target to accept a request to upgrade from any call to a video receive call.
++         [CHAR LIMIT=NONE] -->
++    <string name="description_target_accept_upgrade_to_video_receive_request">Accept video receive request</string>
++    <!-- Description of the target to decline a request to upgrade from any call to a video receive call.
++         [CHAR LIMIT=NONE] -->
++    <string name="description_target_decline_upgrade_to_video_receive_request">Decline video receive request</string>
++
++    <!-- Description of the up direction in which one can to slide the handle in the phone answer screen. [CHAR LIMIT=NONE] -->
++    <string name="description_direction_up">Slide up for <xliff:g example="Unlock" id="target_description">%s</xliff:g>.</string>
++    <!-- Description of the left direction in which one can to slide the handle in the phone answer screen. [CHAR LIMIT=NONE] -->
++    <string name="description_direction_left">Slide left for <xliff:g example="Unlock" id="target_description">%s</xliff:g>.</string>
++    <!-- Description of the right direction in which one can to slide the handle in the phone answer screen. [CHAR LIMIT=NONE] -->
++    <string name="description_direction_right">Slide right for <xliff:g example="Unlock" id="target_description">%s</xliff:g>.</string>
++    <!-- Description of the down direction in which one can to slide the handle in the phone answer screen. [CHAR LIMIT=NONE] -->
++    <string name="description_direction_down">Slide down for <xliff:g example="Unlock" id="target_description">%s</xliff:g>.</string>
++
++    <!-- Dialog title for the vibration settings for voicemail notifications [CHAR LIMIT=40] -->
++    <string msgid="8731372580674292759" name="voicemail_notification_vibrate_when_title">Vibrate</string>
++    <!-- Dialog title for the vibration settings for voice mail notifications [CHAR LIMIT=40]-->
++    <string msgid="8995274609647451109" name="voicemail_notification_vibarte_when_dialog_title">Vibrate</string>
++
++    <!-- Voicemail ringtone title. The user clicks on this preference to select
++         which sound to play when a voicemail notification is received.
++         [CHAR LIMIT=30] -->
++    <string name="voicemail_notification_ringtone_title">Sound</string>
++
++    <!--  The string used to describe a notification if it is the default one in the system. For
++          example, if the user selects the default notification, it will appear as something like
++          Default sound(Capella) in the notification summary.
++          [CHAR LIMIT=40] -->
++    <string name="default_notification_description">Default sound (<xliff:g id="default_sound_title">%1$s</xliff:g>)</string>
++
++    <!-- The default value value for voicemail notification. -->
++    <string name="voicemail_notification_vibrate_when_default" translatable="false">never</string>
++
++    <!-- Actual values used in our code for voicemail notifications. DO NOT TRANSLATE -->
++    <string-array name="voicemail_notification_vibrate_when_values" translatable="false">
++        <item>always</item>
++        <item>silent</item>
++        <item>never</item>
++    </string-array>
++
++    <!-- Setting option name to pick ringtone (a list dialog comes up). [CHAR LIMIT=30] -->
++    <string msgid="5379026328015343686" name="ringtone_title">Phone ringtone</string>
++
++    <!-- Setting option name to enable or disable vibration when ringing
++         the phone.
++         [CHAR LIMIT=30] -->
++    <string name="vibrate_on_ring_title">Vibrate when ringing</string>
++
++    <!-- Title for the category "ringtone", which is shown above ringtone and vibration
++         related settings.
++         [CHAR LIMIT=30] -->
++    <string name="preference_category_ringtone">Ringtone \u0026 Vibrate</string>
++
++    <!-- Label for "Manage conference call" panel [CHAR LIMIT=40] -->
++    <string name="manageConferenceLabel">Manage conference call</string>
++
++    <!-- This can be used in any application wanting to disable the text "Emergency number" -->
++    <string name="emergency_call_dialog_number_for_display">Emergency number</string>
++	
++	<string name="emergency_call_dialog_number_for_display_alwe">Emergency call</string>
++
++    <!-- Phrase describing a time duration using seconds [CHAR LIMIT=16] -->
++    <plurals name="duration_seconds">
++        <item quantity="one">1 second</item>
++        <item quantity="other"><xliff:g id="count">%d</xliff:g> seconds</item>
++    </plurals>
++    <!-- Phrase describing a time duration using minutes [CHAR LIMIT=16] -->
++    <plurals name="duration_minutes">
++        <item quantity="one">1 minute</item>
++        <item quantity="other"><xliff:g id="count">%d</xliff:g> minutes</item>
++    </plurals>
++    <!-- Phrase describing a time duration using hours [CHAR LIMIT=16] -->
++    <plurals name="duration_hours">
++        <item quantity="one">1 hour</item>
++        <item quantity="other"><xliff:g id="count">%d</xliff:g> hours</item>
++    </plurals>
++
++	   <!-- Phrase describing a time duration using seconds [CHAR LIMIT=16] -->
++    <plurals name="duration_seconds_alru">
++        <item quantity="one">1 s</item>
++        <item quantity="other"><xliff:g id="count">%d</xliff:g> s</item>
++    </plurals>
++    <!-- Phrase describing a time duration using minutes [CHAR LIMIT=16] -->
++    <plurals name="duration_minutes_alru">
++        <item quantity="one">1 min</item>
++        <item quantity="other"><xliff:g id="count">%d</xliff:g> min</item>
++    </plurals>
++    <!-- Phrase describing a time duration using hours [CHAR LIMIT=16] -->
++    <plurals name="duration_hours_alru">
++        <item quantity="one">1 h</item>
++        <item quantity="other"><xliff:g id="count">%d</xliff:g> h</item>
++    </plurals>
++	
++    <!-- Description of the profile photo shown when the device's camera is disabled udring a video
++        call. [CHAR LIMIT=NONE] -->
++    <string name="profile_photo_description">Profile photo</string>
++
++    <!-- Description of the "camera off" icon displayed when the device's camera is disabled during
++         a video call. [CHAR LIMIT=NONE] -->
++    <string name="camera_off_description">Camera off</string>
++
++    <!-- Used to inform the user that a call was received via a number other than the primary
++        phone number associated with their device. [CHAR LIMIT=16] -->
++    <string name="child_number">via <xliff:g example="650\u2011555\u20111212" id="child_number">%s</xliff:g></string>
++
++    <!-- Used to inform the user that the note associated with an outgoing call has been sent.
++         [CHAR LIMIT=32] -->
++    <string name="note_sent">Note sent</string>
++
++    <!-- Title for the call context with a person-type contact. [CHAR LIMIT=40] -->
++    <string name="person_contact_context_title">Recent messages</string>
++
++    <!-- Title for the call context with a business-type contact. [CHAR LIMIT=40] -->
++    <string name="business_contact_context_title">Business info</string>
++
++    <!-- Distance strings for business caller ID context. -->
++
++    <!-- Used to inform the user how far away a location is in miles. [CHAR LIMIT=NONE] -->
++    <string name="distance_imperial_away"><xliff:g id="distance">%.1f</xliff:g> mi away</string>
++    <!-- Used to inform the user how far away a location is in kilometers. [CHAR LIMIT=NONE] -->
++    <string name="distance_metric_away"><xliff:g id="distance">%.1f</xliff:g> km away</string>
++    <!-- A shortened way to display a business address. Formatted [street address], [city/locality]. -->
++    <string name="display_address"><xliff:g id="street_address">%1$s</xliff:g>, <xliff:g id="locality">%2$s</xliff:g></string>
++    <!-- Used to indicate hours of operation for a location as a time span. e.g. "11 am - 9 pm" [CHAR LIMIT=NONE] -->
++    <string name="open_time_span"><xliff:g id="open_time">%1$s</xliff:g> - <xliff:g id="close_time">%2$s</xliff:g></string>
++    <!-- Used to indicate a series of opening hours for a location.
++         This first argument may be one or more time spans. e.g. "11 am - 9 pm, 9 pm - 11 pm"
++         The second argument is an additional time span. e.g. "11 pm - 1 am"
++         The string is used to build a list of opening hours.
++         [CHAR LIMIT=NONE] -->
++    <string name="opening_hours"><xliff:g id="earlier_times">%1$s</xliff:g>, <xliff:g id="later_time">%2$s</xliff:g></string>
++    <!-- Used to express when a location will open the next day. [CHAR LIMIT=NONE] -->
++    <string name="opens_tomorrow_at">Opens tomorrow at <xliff:g id="open_time">%s</xliff:g></string>
++    <!-- Used to express the next time at which a location will be open today. [CHAR LIMIT=NONE] -->
++    <string name="opens_today_at">Opens today at <xliff:g id="open_time">%s</xliff:g></string>
++    <!-- Used to express the next time at which a location will close today. [CHAR LIMIT=NONE] -->
++    <string name="closes_today_at">Closes at <xliff:g id="close_time">%s</xliff:g></string>
++    <!-- Used to express the next time at which a location closed today if it is already closed. [CHAR LIMIT=NONE] -->
++    <string name="closed_today_at">Closed today at <xliff:g id="close_time">%s</xliff:g></string>
++    <!-- Displayed when a place is open. -->
++    <string name="open_now">Open now</string>
++    <!-- Displayed when a place is closed. -->
++    <string name="closed_now">Closed now</string>
++</resources>
+\ No newline at end of file
+Index: vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/res/values-ru/strings.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/res/values-ru/strings.xml	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Dialer/InCallUI/res/values-ru/strings.xml	(revision 5422)
+@@ -0,0 +1,224 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!-- 
++  ~ Copyright (C) 2013 The Android Open Source Project
++  ~
++  ~ Licensed under the Apache License, Version 2.0 (the "License");
++  ~ you may not use this file except in compliance with the License.
++  ~ You may obtain a copy of the License at
++  ~
++  ~      http://www.apache.org/licenses/LICENSE-2.0
++  ~
++  ~ Unless required by applicable law or agreed to in writing, software
++  ~ distributed under the License is distributed on an "AS IS" BASIS,
++  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  ~ See the License for the specific language governing permissions and
++  ~ limitations under the License
++   -->
++
++<resources xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <string name="phoneAppLabel" product="default" msgid="4753450867264774000">"Телефон"</string>
++    <string name="onHold" msgid="527593602772521700">"На удержании"</string>
++    <string name="unknown" msgid="3646075119047488748">"Неизвестный абонент"</string>
++    <string name="private_num" msgid="6081418498487514686">"Скрытый номер"</string>
++    <string name="payphone" msgid="5743050584468748607">"Телефон-автомат"</string>
++    <string name="confCall" msgid="3181961445236675173">"Конференц-вызов"</string>
++    <string name="call_lost" msgid="8208184291640961172">"Звонок сброшен"</string>
++    <string name="audio_mode_speaker" msgid="6160127758732918123">"Динамик"</string>
++    <string name="audio_mode_earpiece" msgid="3138677187223932893">"Динамик гарнитуры"</string>
++    <string name="audio_mode_wired_headset" msgid="583080366967943196">"Проводная гарнитура"</string>
++    <string name="audio_mode_bluetooth" msgid="3188504589946495676">"Bluetooth"</string>
++    <string name="wait_prompt_str" msgid="3784275777844586675">"Отправить следующие тоны?\n"</string>
++    <string name="pause_prompt_str" msgid="4507496811727697620">"Отправка тональных сигналов\n"</string>
++    <string name="send_button" msgid="4054398309483035794">"Отправить"</string>
++    <string name="pause_prompt_yes" msgid="6738588490007499118">"Да"</string>
++    <string name="pause_prompt_no" msgid="417286529736964178">"Нет"</string>
++    <string name="wild_prompt_str" msgid="8178750766679617355">"Заменить универсальный символ на"</string>
++    <string name="caller_manage_header" msgid="4036790479287738218">"Конференц-вызов: <xliff:g id="CONF_CALL_TIME">%s</xliff:g>"</string>
++    <string name="voicemail_settings_number_label" msgid="2951965862286532957">"Номер голосовой почты"</string>
++    <string name="card_title_dialing" msgid="5046026076417718916">"Набор номера…"</string>
++    <string name="card_title_redialing" msgid="8072468059192027844">"Повторный вызов"</string>
++    <string name="card_title_conf_call" msgid="1747835072739982104">"Конференц-вызов"</string>
++    <string name="card_title_incoming_call" msgid="4138485434087223132">"Входящий вызов"</string>
++    <string name="card_title_incoming_work_call" msgid="7000583925426981712">"Входящий вызов (работа)"</string>
++    <string name="card_title_call_ended" msgid="5249815286629136486">"Вызов завершен"</string>
++    <string name="card_title_on_hold" msgid="5633854828341577689">"На удержании"</string>
++    <string name="card_title_hanging_up" msgid="3402022578391538671">"Завершение разговора"</string>
++    <string name="card_title_in_call" msgid="5029165346952099302">"Вызов"</string>
++    <string name="card_title_my_phone_number" msgid="3749572971322520177">"Мой номер: <xliff:g id="MY_PHONE_NUMBER">%s</xliff:g>"</string>
++    <string name="card_title_video_call_connecting" msgid="9171270899902894036">"Подключение видео"</string>
++    <string name="card_title_video_call" msgid="6519406270853889302">"Видеовызов"</string>
++    <string name="card_title_video_call_requesting" msgid="1611293204379882739">"Запрос видео"</string>
++    <string name="card_title_video_call_error" msgid="8488074823425848193">"Не удалось совершить видеовызов"</string>
++    <string name="card_title_video_call_rejected" msgid="2885215432045215465">"Видеовызов отклонен"</string>
++    <string name="card_title_callback_number" msgid="7646082782307705748">"Номер обратного вызова:\n<xliff:g id="DARK_NUMBER">%1$s</xliff:g>"</string>
++    <string name="card_title_callback_number_emergency" msgid="8916355112472826080">"Номер обратного вызова для экстренных служб:\n<xliff:g id="DARK_NUMBER">%1$s</xliff:g>"</string>
++    <string name="notification_dialing" msgid="8080968169444117163">"Набор номера…"</string>
++    <string name="notification_missedCallTitle" msgid="2774630248151712215">"Пропущенный вызов"</string>
++    <string name="notification_missedCallsTitle" msgid="263275811089605859">"Пропущенные вызовы"</string>
++    <string name="notification_missedCallsMsg" msgid="69408330370667429">"Пропущенных вызовов: <xliff:g id="NUM_MISSED_CALLS">%s</xliff:g>"</string>
++    <string name="notification_missedCallTicker" msgid="1599269453813734699">"Пропущенные вызовы от абонента <xliff:g id="MISSED_CALL_FROM">%s</xliff:g>"</string>
++    <string name="notification_ongoing_call" msgid="8633734299234807397">"Текущий вызов"</string>
++    <string name="notification_ongoing_work_call" msgid="3465083293325006579">"Текущий звонок (работа)"</string>
++    <string name="notification_ongoing_call_wifi" msgid="4140639349603930166">"Текущий Wi-Fi-звонок"</string>
++    <string name="notification_ongoing_work_call_wifi" msgid="8469582753279163976">"Текущий Wi-Fi-звонок (работа)"</string>
++    <string name="notification_on_hold" msgid="3151343576023182586">"На удержании"</string>
++    <string name="notification_incoming_call" msgid="5904745644632328863">"Входящий вызов"</string>
++    <string name="notification_incoming_work_call" msgid="281305845895342925">"Входящий вызов (работа)"</string>
++    <string name="notification_incoming_call_wifi" msgid="8337740714221114955">"Входящий Wi-Fi-звонок"</string>
++    <string name="notification_incoming_work_call_wifi" msgid="3248418394186803763">"Входящий Wi-Fi-звонок (работа)"</string>
++    <string name="notification_incoming_video_call" msgid="7814873581838165772">"Входящий видеовызов"</string>
++    <string name="notification_requesting_video_call" msgid="4844596091477863245">"Входящий видеовызов"</string>
++    <string name="notification_voicemail_title" msgid="7595628197933709144">"Новое сообщение голосовой почты"</string>
++    <string name="notification_voicemail_title_count" msgid="1241573926817248239">"Новое сообщение голосовой почты (<xliff:g id="COUNT">%d</xliff:g>)"</string>
++    <string name="notification_voicemail_text_format" msgid="6496440879085042069">"Набрать номер <xliff:g id="VOICEMAIL_NUMBER">%s</xliff:g>"</string>
++    <string name="notification_voicemail_no_vm_number" msgid="5433652017869242375">"Номер голосовой почты неизвестен"</string>
++    <string name="notification_network_selection_title" msgid="6785177943238085441">"Нет сигнала"</string>
++    <string name="notification_network_selection_text" msgid="9097902390701009591">"Выбранная сеть (<xliff:g id="OPERATOR_NAME">%s</xliff:g>) недоступна."</string>
++    <string name="notification_action_answer" msgid="8418990052527593953">"Ответить"</string>
++    <string name="notification_action_end_call" msgid="2152010639043225860">"Завершить"</string>
++    <string name="notification_action_answer_video" msgid="2400233093494856655">"Видео"</string>
++    <string name="notification_action_answer_voice" msgid="3206168292649273866">"Голос"</string>
++    <string name="notification_action_accept" msgid="8595047032790476122">"Разрешить"</string>
++    <string name="notification_action_dismiss" msgid="1998811618480434300">"Закрыть"</string>
++    <string name="notification_missedCall_call_back" msgid="7855043480614703539">"Перезвонить"</string>
++    <string name="notification_missedCall_message" msgid="2407410183079324393">"Написать SMS"</string>
++    <string name="notification_external_call" msgid="5611236780302924816">"Вы участвуете в разговоре на другом устройстве"</string>
++    <string name="notification_transfer_call" msgid="687009078741947505">"Перевести на это устройство"</string>
++    <string name="incall_error_power_off" msgid="3626117639377110403">"Отключите режим полета."</string>
++    <string name="incall_error_emergency_only" msgid="8704761887752183855">"Нет регистрации в сети."</string>
++    <string name="incall_error_out_of_service" msgid="1830319376612608339">"Мобильная сеть недоступна."</string>
++    <string name="incall_error_no_phone_number_supplied" msgid="3042963797202928322">"Недействительный номер."</string>
++    <string name="incall_error_call_failed" msgid="2213413937257570551">"Не удалось позвонить."</string>
++    <string name="incall_status_dialed_mmi" msgid="8864341962086874751">"Запуск последовательности MMI..."</string>
++    <string name="incall_error_supp_service_unknown" msgid="3390926762577861268">"Сервис не поддерживается."</string>
++    <string name="incall_error_supp_service_switch" msgid="4893764463854753730">"Не удалось переключить вызов."</string>
++    <string name="incall_error_supp_service_separate" msgid="5469628699581380277">"Не удалось разделить вызов."</string>
++    <string name="incall_error_supp_service_transfer" msgid="3220469890457973326">"Не удалось перенести."</string>
++    <string name="incall_error_supp_service_conference" msgid="3100373998543200356">"Не удалось выполнить конференц-вызов."</string>
++    <string name="incall_error_supp_service_reject" msgid="4543915892409365831">"Не удалось отклонить вызов."</string>
++    <string name="incall_error_supp_service_hangup" msgid="101167589969625637">"Не удалось разъединить."</string>
++    <string name="incall_call_type_label_sip" msgid="1327822795765282192">"Вызов SIP"</string>
++    <string name="emergency_enable_radio_dialog_title" msgid="7882321703828314787">"Экстренный вызов"</string>
++    <string name="emergency_enable_radio_dialog_message" msgid="4382752053654184327">"Включение радио…"</string>
++    <string name="emergency_enable_radio_dialog_retry" msgid="1672288458940152814">"Нет сигнала. Повторная попытка…"</string>
++    <string name="dial_emergency_error" msgid="582305854626092376">"Не удалось позвонить. Номер <xliff:g id="NON_EMERGENCY_NUMBER">%s</xliff:g> не принадлежит экстренным службам."</string>
++    <string name="dial_emergency_empty_error" msgid="199888628163390267">"Не удалось позвонить. Наберите номер экстренных служб."</string>
++    <string name="dialerKeyboardHintText" msgid="8533449463925408141">"Используйте клавиатуру для набора номера"</string>
++    <string name="onscreenHoldText_unselected" msgid="4509232821220492533">"Удерживать вызов"</string>
++    <string name="onscreenHoldText_selected" msgid="2988100347384733032">"Возобновить вызов"</string>
++    <string name="onscreenEndCallText" msgid="1416981593311001074">"Завершить вызов"</string>
++    <string name="onscreenShowDialpadText_unselected" msgid="8253784035944284938">"Показать панель набора номера"</string>
++    <string name="onscreenShowDialpadText_selected" msgid="7368390784890311449">"Скрыть панель набора номера"</string>
++    <string name="onscreenMuteText_unselected" msgid="4130269060091842798">"Выключить звук"</string>
++    <string name="onscreenMuteText_selected" msgid="7074763815284369548">"Включить звук"</string>
++    <string name="onscreenAddCallText" msgid="5577548650466595598">"Добавить вызов"</string>
++    <string name="onscreenMergeCallsText" msgid="4946687067221459357">"Объединить вызовы"</string>
++    <string name="onscreenSwapCallsText" msgid="8272036175646846198">"Перевести звонок"</string>
++    <string name="onscreenManageCallsText" msgid="5491297234697209677">"Управление вызовами"</string>
++    <string name="onscreenManageConferenceText" msgid="7043499154946980355">"Настройка конференц-связи"</string>
++    <string name="onscreenConferenceText" msgid="171855677185793827">"Конференц-вызов"</string>
++    <string name="onscreenManageText" msgid="7625850560625708322">"Управление"</string>
++    <string name="onscreenAudioText" msgid="8963459818052898299">"Аудио"</string>
++    <string name="onscreenVideoCallText" msgid="1578940167445068369">"Видеовызов"</string>
++    <string name="onscreenChangeToVoiceText" msgid="6249580619992009182">"Отключить видео"</string>
++    <string name="onscreenSwitchCameraText" msgid="7141261218152736690">"Сменить камеру"</string>
++    <string name="onscreenTurnOnCameraText" msgid="915019986687927588">"Включить камеру"</string>
++    <string name="onscreenTurnOffCameraText" msgid="6225377831394679126">"Выключить камеру"</string>
++    <string name="onscreenOverflowText" msgid="7932741239724473887">"Другие настройки"</string>
++    <string name="player_started" msgid="3478865572468310331">"Видеоплеер включен"</string>
++    <string name="player_stopped" msgid="1278611664986561535">"Видеоплеер отключен"</string>
++    <string name="camera_not_ready" msgid="6614469280264241251">"Камера недоступна"</string>
++    <string name="camera_ready" msgid="2614541247814590887">"Камера доступна"</string>
++    <string name="unknown_call_session_event" msgid="2947023743819984299">"Неизвестное событие сеанса связи"</string>
++    <string name="voicemail_provider" msgid="2878119321474918370">"Служба"</string>
++    <string name="voicemail_settings" msgid="7548868784816068975">"Настройка"</string>
++    <string name="voicemail_number_not_set" msgid="2690477999015436138">"&lt;Не задано&gt;"</string>
++    <string name="other_settings" msgid="6699076019841942826">"Другие настройки вызовов"</string>
++    <string name="calling_via_template" msgid="3539373093109976255">"Звонок через <xliff:g id="PROVIDER_NAME">%s</xliff:g>"</string>
++    <string name="incoming_via_template" msgid="6281138766370092800">"Входящий вызов (оператор: <xliff:g id="PROVIDER_NAME">%s</xliff:g>)"</string>
++    <string name="contactPhoto" msgid="6028825355597675193">"фотография контакта"</string>
++    <string name="goPrivate" msgid="3554069451018659483">"приватная конференция"</string>
++    <string name="selectContact" msgid="92191462970821951">"выбрать контакт"</string>
++    <string name="respond_via_sms_custom_message" msgid="8210393177674619127">"Ваш ответ…"</string>
++    <string name="custom_message_cancel" msgid="5920059627508662163">"Отмена"</string>
++    <string name="custom_message_send" msgid="3798076337006735995">"Отправить"</string>
++    <string name="description_target_answer" msgid="1111945818996518320">"Ответить"</string>
++    <string name="description_target_send_sms" msgid="3652217769615310018">"Отправить SMS"</string>
++    <string name="description_target_decline" msgid="7108154434759234035">"Отклонить"</string>
++    <string name="description_target_answer_video_call" msgid="4655616461181308405">"Ответить с видео"</string>
++    <string name="description_target_answer_audio_call" msgid="3234714934649708854">"Ответить на голосовой вызов"</string>
++    <string name="description_target_accept_upgrade_to_video_request" msgid="384894008955682630">"Ответить на видеовызов"</string>
++    <string name="description_target_decline_upgrade_to_video_request" msgid="7342968876159189300">"Отклонить видеовызов"</string>
++    <string name="description_target_accept_upgrade_to_video_transmit_request" msgid="4586773853073826378">"Разрешить передачу видео"</string>
++    <string name="description_target_decline_upgrade_to_video_transmit_request" msgid="1191166008711514234">"Отклонить передачу видео"</string>
++    <string name="description_target_accept_upgrade_to_video_receive_request" msgid="2224978927364021080">"Принять видео"</string>
++    <string name="description_target_decline_upgrade_to_video_receive_request" msgid="3151115394424918077">"Отклонить видео"</string>
++    <string name="description_direction_up" msgid="1735018141439291766">"Проведите вверх, чтобы <xliff:g id="TARGET_DESCRIPTION">%s</xliff:g>."</string>
++    <string name="description_direction_left" msgid="6811598791620851239">"Проведите влево, чтобы <xliff:g id="TARGET_DESCRIPTION">%s</xliff:g>."</string>
++    <string name="description_direction_right" msgid="5461971399586296023">"Проведите вправо, чтобы <xliff:g id="TARGET_DESCRIPTION">%s</xliff:g>."</string>
++    <string name="description_direction_down" msgid="3331715227997561639">"Проведите вниз, чтобы <xliff:g id="TARGET_DESCRIPTION">%s</xliff:g>."</string>
++    <string name="voicemail_notification_vibrate_when_title" msgid="4595145399183729630">"Вибросигнал"</string>
++    <string name="voicemail_notification_vibarte_when_dialog_title" msgid="2390729279972461242">"Вибросигнал"</string>
++    <string name="voicemail_notification_ringtone_title" msgid="1996920553949534944">"Звук"</string>
++    <string name="default_notification_description" msgid="4950807644546509965">"По умолчанию (<xliff:g id="DEFAULT_SOUND_TITLE">%1$s</xliff:g>)"</string>
++    <string name="ringtone_title" msgid="835582004693335905">"Рингтон"</string>
++    <string name="vibrate_on_ring_title" msgid="5019791043398986665">"Вибросигнал и рингтон"</string>
++    <string name="preference_category_ringtone" msgid="6246687516643676729">"Мелодия звонка и вибросигнал"</string>
++    <string name="manageConferenceLabel" msgid="7237614418556336108">"Настройка конференц-связи"</string>
++    <string name="emergency_call_dialog_number_for_display" msgid="7244995877625769187">"Экстренная служба"</string>
++    <plurals name="duration_seconds" formatted="false" msgid="2544699588744957418">
++      <item quantity="one"><xliff:g id="COUNT">%d</xliff:g> секунда</item>
++      <item quantity="few"><xliff:g id="COUNT">%d</xliff:g> секунды</item>
++      <item quantity="many"><xliff:g id="COUNT">%d</xliff:g> секунд</item>
++      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> секунды</item>
++    </plurals>
++    <plurals name="duration_minutes" formatted="false" msgid="8379077285441507101">
++      <item quantity="one"><xliff:g id="COUNT">%d</xliff:g> минута</item>
++      <item quantity="few"><xliff:g id="COUNT">%d</xliff:g> минуты</item>
++      <item quantity="many"><xliff:g id="COUNT">%d</xliff:g> минут</item>
++      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> минуты</item>
++    </plurals>
++    <plurals name="duration_hours" formatted="false" msgid="7420759096931824344">
++      <item quantity="one"><xliff:g id="COUNT">%d</xliff:g> час</item>
++      <item quantity="few"><xliff:g id="COUNT">%d</xliff:g> часа</item>
++      <item quantity="many"><xliff:g id="COUNT">%d</xliff:g> часов</item>
++      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> часа</item>
++    </plurals>
++	
++	<plurals name="duration_seconds_alru" formatted="false" msgid="2544699588744957418">
++      <item quantity="one"><xliff:g id="COUNT">%d</xliff:g> с</item>
++	  <item quantity="few"><xliff:g id="COUNT">%d</xliff:g> с</item>
++      <item quantity="many"><xliff:g id="COUNT">%d</xliff:g> с</item>
++      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> с</item>
++    </plurals>
++    <plurals name="duration_minutes_alru" formatted="false" msgid="8379077285441507101">
++      <item quantity="one"><xliff:g id="COUNT">%d</xliff:g> мин</item>
++	  <item quantity="few"><xliff:g id="COUNT">%d</xliff:g> мин</item>
++      <item quantity="many"><xliff:g id="COUNT">%d</xliff:g> мин</item>
++      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> мин</item>
++    </plurals>
++    <plurals name="duration_hours_alru" formatted="false" msgid="7420759096931824344">
++      <item quantity="one"><xliff:g id="COUNT">%d</xliff:g> ч</item>
++	  <item quantity="few"><xliff:g id="COUNT">%d</xliff:g> ч</item>
++      <item quantity="many"><xliff:g id="COUNT">%d</xliff:g> ч</item>
++      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> ч</item>
++    </plurals>
++    <string name="profile_photo_description" msgid="7958198110870319358">"Фото профиля"</string>
++    <string name="camera_off_description" msgid="4220023868645225790">"Камера отключена"</string>
++    <string name="child_number" msgid="4469090994612105532">"через <xliff:g id="CHILD_NUMBER">%s</xliff:g>"</string>
++    <string name="note_sent" msgid="7623014827902758398">"Сообщение отправлено"</string>
++    <string name="person_contact_context_title" msgid="8490058088809090979">"Недавние сообщения"</string>
++    <string name="business_contact_context_title" msgid="8448362898576496764">"Информация о компании"</string>
++    <string name="distance_imperial_away" msgid="2083362798225798740">"<xliff:g id="DISTANCE">%.1f</xliff:g> мил."</string>
++    <string name="distance_metric_away" msgid="9021396592464955256">"<xliff:g id="DISTANCE">%.1f</xliff:g> км"</string>
++    <string name="display_address" msgid="444235484565491291">"<xliff:g id="STREET_ADDRESS">%1$s</xliff:g>, <xliff:g id="LOCALITY">%2$s</xliff:g>"</string>
++    <string name="open_time_span" msgid="2762952234657271236">"<xliff:g id="OPEN_TIME">%1$s</xliff:g>–<xliff:g id="CLOSE_TIME">%2$s</xliff:g>"</string>
++    <string name="opening_hours" msgid="7803506319518398380">"<xliff:g id="EARLIER_TIMES">%1$s</xliff:g>, <xliff:g id="LATER_TIME">%2$s</xliff:g>"</string>
++    <string name="opens_tomorrow_at" msgid="3567511490448488788">"Откроется завтра в <xliff:g id="OPEN_TIME">%s</xliff:g>"</string>
++    <string name="opens_today_at" msgid="6281212768937222891">"Откроется сегодня в <xliff:g id="OPEN_TIME">%s</xliff:g>"</string>
++    <string name="closes_today_at" msgid="4822369201263491509">"Работает до <xliff:g id="CLOSE_TIME">%s</xliff:g>"</string>
++    <string name="closed_today_at" msgid="4060072663433467233">"Сегодня не работает с <xliff:g id="CLOSE_TIME">%s</xliff:g>"</string>
++    <string name="open_now" msgid="4615706338669555999">"Сейчас открыто"</string>
++    <string name="closed_now" msgid="2635314668145282080">"Сейчас закрыто"</string>
++</resources>

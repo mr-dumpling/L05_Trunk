@@ -1,0 +1,38 @@
+Index: packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java	(revision 8213)
++++ packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java	(revision 8214)
+@@ -666,6 +666,8 @@
+         }
+ 		
+ 		if(PhoneNumberUtils.isEmergencyNumber(number)){
++			//for feature: FR_EMC_CALL_INFO_IN_INDIA = true
++			setEmcTitle(views, number);
+ 			views.emergencyNumberView.setVisibility(View.VISIBLE);
+ 		}else{
+ 			views.emergencyNumberView.setVisibility(View.GONE);
+@@ -684,6 +686,24 @@
+                         ((CallLogListItemViewHolder) viewHolder).primaryActionView, accountHandle);
+         /// @}
+     }
++	private void setEmcTitle(CallLogListItemViewHolder views, String number){
++		boolean bFrEmcIndia = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_EMC_CALL_INFO_IN_INDIA);
++		if(bFrEmcIndia && (views != null) && (views.emergencyNumberView != null)){
++			String arrEmc[][] = {
++				{"100","Police Emergency"},
++				{"101","Fire Emergency"},
++				{"102","Ambulance Emergency"},
++				//{"112","Emergency Number"},
++			};
++			views.emergencyNumberView.setText(R.string.emergency_number);
++			for(int i = 0; i < arrEmc.length; i++){
++				if(arrEmc[i][0].equals(number)){
++					views.emergencyNumberView.setText(arrEmc[i][1]);
++					break;
++				}
++			}
++		}
++	}
+ 
+     private String getPreferredDisplayName(ContactInfo contactInfo) {
+         if (mContactsPreferences.getDisplayOrder() == ContactsPreferences.DISPLAY_ORDER_PRIMARY ||

@@ -1,0 +1,178 @@
+Index: packages/providers/TelephonyProvider/src/com/android/providers/telephony/TelephonyProvider.java
+===================================================================
+--- packages/providers/TelephonyProvider/src/com/android/providers/telephony/TelephonyProvider.java	(revision 1374)
++++ packages/providers/TelephonyProvider/src/com/android/providers/telephony/TelephonyProvider.java	(revision 1375)
+@@ -532,6 +532,73 @@
+ 
+         }
+ 
++        /**
++         *  This function adds APNs from xml file(s) to db. The db may or may not be empty to begin
++         *  with.
++         */
++        private void initDatabaseForTest(SQLiteDatabase db,String mccmnc) {
++            log("Tony initDatabaseForTest E dbh.initDatabase:+ db=" + db + ",mccmnc =" + mccmnc);
++            // Read internal APNS data
++            Resources r = mContext.getResources();
++            XmlResourceParser parser = r.getXml(com.android.internal.R.xml.apns);
++            int publicversion = -1;
++            try {
++                XmlUtils.beginDocument(parser, "apns");
++                publicversion = Integer.parseInt(parser.getAttributeValue(null, "version"));
++                loadApnsForTest(db, parser,mccmnc);
++            } catch (Exception e) {
++                loge("Got exception while loading APN database." + e);
++            } finally {
++                parser.close();
++            }
++
++            // Read external APNS data (partner-provided)
++            XmlPullParser confparser = null;
++            File confFile = getApnConfFile();
++
++            FileReader confreader = null;
++            if (DBG) log("confFile = " + confFile);
++            try {
++                confreader = new FileReader(confFile);
++                confparser = Xml.newPullParser();
++                confparser.setInput(confreader);
++                XmlUtils.beginDocument(confparser, "apns");
++
++                // Sanity check. Force internal version and confidential versions to agree
++                int confversion = Integer.parseInt(confparser.getAttributeValue(null, "version"));
++                if (publicversion != confversion) {
++                    log("initDatabase: throwing exception due to version mismatch");
++                    throw new IllegalStateException("Internal APNS file version doesn't match "
++                            + confFile.getAbsolutePath());
++                }
++
++                loadApnsForTest(db, confparser,mccmnc);
++            } catch (FileNotFoundException e) {
++                // It's ok if the file isn't found. It means there isn't a confidential file
++                // Log.e(TAG, "File not found: '" + confFile.getAbsolutePath() + "'");
++            } catch (Exception e) {
++                loge("initDatabase: Exception while parsing '" + confFile.getAbsolutePath() + "'" +
++                        e);
++            } finally {
++                // Get rid of user/carrier deleted entries that are not present in apn xml file.
++                // Those entries have edited value USER_DELETED/CARRIER_DELETED.
++                if (VDBG) {
++                    log("initDatabase: deleting USER_DELETED and replacing "
++                            + "DELETED_BUT_PRESENT_IN_XML with DELETED");
++                }
++
++                if (confreader != null) {
++                    try {
++                        confreader.close();
++                    } catch (IOException e) {
++                        // do nothing
++                    }
++                }
++            }
++            log("Tony initDatabaseForTest X dbh.initDatabase:- db=" + db);
++
++        }
++
+         private File getNewerFile(File sysApnFile, File altApnFile) {
+             if (altApnFile.exists()) {
+                 // Alternate file exists. Use the newer one.
+@@ -1406,6 +1473,51 @@
+             }
+         }
+ 
++        /*
++         * Loads apns from xml file into the database
++         *
++         * @param db the sqlite database to write to
++         * @param parser the xml parser
++         *
++         */
++        private void loadApnsForTest(SQLiteDatabase db, XmlPullParser parser,String mccmnc) {
++            log("Tony loadApnsForTest dbh.initDatabase:+ db=" + db + ",mccmnc="+ mccmnc);
++            if (parser != null) {
++                try {
++                    db.beginTransaction();
++                    XmlUtils.nextElement(parser);
++                    while (parser.getEventType() != XmlPullParser.END_DOCUMENT) {
++                        String mcc = parser.getAttributeValue(null, "mcc");
++                        String mnc = parser.getAttributeValue(null, "mnc");
++                        String numeric = mcc + mnc;
++                        String operatorNumeric = mccmnc.trim();
++                        String numbericFromXML = numeric.trim();
++                        loge("Tony loadApnsForTest operatorNumeric =" + operatorNumeric + "? numbericFromXML =" + numbericFromXML);
++                        if(operatorNumeric.equals(numbericFromXML)) {
++                            loge("Tony loadApnsForTest equals");
++                            ContentValues row = getRow(parser);
++                            if (row == null) {
++                                throw new XmlPullParserException("Expected 'apn' tag", parser, null);
++                            }
++
++							int subId = SubscriptionManager.getDefaultSubscriptionId();
++                            insertAddingDefaults(db, row, subId);
++                        }
++                        XmlUtils.nextElement(parser);
++                    }
++                    db.setTransactionSuccessful();
++                } catch (XmlPullParserException e) {
++                    loge("Got XmlPullParserException while loading apns." + e);
++                } catch (IOException e) {
++                    loge("Got IOException while loading apns." + e);
++                } catch (SQLException e) {
++                    loge("Got SQLException while loading apns." + e);
++                } finally {
++                    db.endTransaction();
++                }
++            }
++        }
++
+         static public ContentValues setDefaultValue(ContentValues values) {
+             if (!values.containsKey(SUBSCRIPTION_ID)) {
+                 int subId = SubscriptionManager.getDefaultSubscriptionId();
+@@ -2312,9 +2424,15 @@
+             }
+ 
+             case URL_RESTOREAPN_USING_SUBID: {
++                count = 1;
+                 String subIdString = url.getLastPathSegment();
+                 try {
+                     subId = Integer.parseInt(subIdString);
++                    TelephonyManager telephonyManager =
++                            (TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE);
++                    String mccmnc = telephonyManager.getSimOperator(subId);
++                    loge("Tony URL_RESTOREAPN_USING_SUBID mccmnc = " + mccmnc);
++                    restoreSpecialDefaultAPN(subId,mccmnc);
+                 } catch (NumberFormatException e) {
+                     loge("NumberFormatException" + e);
+                     throw new IllegalArgumentException("Invalid subId " + url);
+@@ -2321,6 +2439,7 @@
+                 }
+                 if (DBG) log("subIdString = " + subIdString + " subId = " + subId);
+                 // FIXME use subId in query
++                break;
+             }
+             case URL_RESTOREAPN: {
+                 count = 1;
+@@ -2586,6 +2705,23 @@
+         mOpenHelper.initDatabase(db);
+     }
+ 
++    private void restoreSpecialDefaultAPN(int subId, String mccmnc) {
++        log("Tony restoreSpecialDefaultAPN subId=" + subId + ", mccmnc="+ mccmnc);
++        SQLiteDatabase db = mOpenHelper.getWritableDatabase();
++
++        try {
++            String where = "numeric="+ mccmnc;
++            loge("Tony where = " + where + ",mccmnc =" + mccmnc + ",subId =" +subId);
++            db.delete(CARRIERS_TABLE, where, null);
++        } catch (SQLException e) {
++            loge("got exception when deleting to restore: " + e);
++        }
++        setPreferredApnId((long) INVALID_APN_ID, subId);
++        if(mccmnc != null) {
++            mOpenHelper.initDatabaseForTest(db,mccmnc);
++        }
++    }
++
+     private synchronized void updateApnDb() {
+         if (!mOpenHelper.apnDbUpdateNeeded()) {
+             log("Skipping apn db update since apn-conf has not changed.");

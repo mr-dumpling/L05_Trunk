@@ -1,0 +1,35 @@
+Index: frameworks/base/services/core/java/com/android/server/LocationManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/LocationManagerService.java	(revision 7545)
++++ frameworks/base/services/core/java/com/android/server/LocationManagerService.java	(revision 7546)
+@@ -275,6 +275,10 @@
+ 
+         if (D) Log.d(TAG, "Constructed");
+ 
++		BroadcastReceiver  mReceiver = new AirplaneModeBroadcastReceiver();
++		IntentFilter intentFilter =
++            new IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED);
++		mContext.registerReceiver(mReceiver, intentFilter);
+         // most startup is deferred until systemRunning()
+     }
+ 
+@@ -3261,4 +3265,19 @@
+         return disabledProvider;
+     }
+     // Mtk added end
++	
++	 private class AirplaneModeBroadcastReceiver extends BroadcastReceiver {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++			 boolean airplaneMode = intent.getBooleanExtra("state", false);
++            if (action.equals(Intent.ACTION_AIRPLANE_MODE_CHANGED)) {
++				if(airplaneMode) {
++					Settings.Secure.putInt(context.getContentResolver(),
++						Settings.Secure.LOCATION_MODE,
++						android.provider.Settings.Secure.LOCATION_MODE_OFF);
++				}
++            }
++        }
++    }
+ }

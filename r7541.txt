@@ -1,0 +1,52 @@
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 7540)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 7541)
+@@ -7519,6 +7519,21 @@
+     public final void activityPaused(IBinder token) {
+         final long origId = Binder.clearCallingIdentity();
+         synchronized(this) {
++			//add by mzj for tclcamera
++			/*
++			String name = getPackageForToken(token);
++			Log.d("mzj","activityPaused packagename "+ name);
++			
++			if("com.mediatek.hz.camera".equals(name)){
++				if("2".equals(SystemProperties.get("debug.camera.open"))){
++					Log.d("mzj", "ActivityManagerService activityPaused debug.camera.open = " + SystemProperties.get("debug.camera.open"));
++					SystemProperties.set("debug.camera.open", "-1");
++				}
++				forceStopPackageLocked(name, -1, false, false, true, true,
++                            false, UserHandle.USER_ALL, "set debug app");
++				Log.d("mzj","activityPaused close background camera "+ "close background camera ok");	
++			}*/
++			
+             ActivityStack stack = ActivityRecord.getStackLocked(token);
+             if (stack != null) {
+                 stack.activityPausedLocked(token, false);
+@@ -7531,7 +7546,6 @@
+     public final void activityStopped(IBinder token, Bundle icicle,
+             PersistableBundle persistentState, CharSequence description) {
+         if (DEBUG_ALL) Slog.v(TAG, "Activity stopped: token=" + token);
+-
+         // Refuse possible leaked file descriptors
+         if (icicle != null && icicle.hasFileDescriptors()) {
+             throw new IllegalArgumentException("File descriptors passed in Bundle");
+@@ -22054,7 +22068,17 @@
+                     Log.d(TAG, "resumedAppLocked: mLastStatus = " + mLastStatus);
+                 }
+             }
++			
++			//add by mzj for Tclcamera to fix isue start
++			Log.d("mzj", "ActivityManagerService resumedAppLocked package :" + pkg);
++			if("2".equals(SystemProperties.get("debug.camera.open")) && (!("com.mediatek.hz.camera".equals(pkg)))){
++				Log.d("mzj","ActivityManagerService resumedAppLocked set debug.camera.open := "+ "-1");
++				SystemProperties.set("debug.camera.open", "-1");
++			}
++			//add by mzj for Tclcamera to fix isue end
++			
+         }
++		Log.d("mzj", "ActivityManagerService get debug.camera.open = " + SystemProperties.get("debug.camera.open"));
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+         
+         //ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9

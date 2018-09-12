@@ -1,0 +1,85 @@
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 7466)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 7467)
+@@ -3,6 +3,7 @@
+ import java.util.ArrayList;
+ import android.annotation.TargetApi;
+ import android.content.Intent;
++import android.content.SharedPreferences;
+ import android.graphics.Color;
+ import android.os.Build.VERSION;
+ import android.os.Build.VERSION_CODES;
+@@ -106,6 +107,8 @@
+     private boolean scannerStart = false;
+ 	private ArrayList<Fragment> fragmentlists = new ArrayList<Fragment>();
+ 	private boolean faceIsDelSuccess = false;
++	private SharedPreferences mSharedPreference;
++	private SharedPreferences.Editor mEditor;
+ 	private Handler mhandler = new Handler() {
+ 
+ 		@Override
+@@ -175,7 +178,8 @@
+ 	protected void onCreate(Bundle savedInstanceState) {
+ 		super.onCreate(savedInstanceState);
+ 		mcontext = FaceUnlockMainActivity.this;
+-
++		mSharedPreference = getSharedPreferences("SettingsPrefer", Activity.MODE_PRIVATE);
++		mEditor = mSharedPreference.edit();
+ 		if (!isExistFaceData()) {
+ 			setBackgroundTheme();
+ 		}
+@@ -345,6 +349,32 @@
+ 		}
+ 	}
+ 
++	private boolean checkFirstSetFaceKey() {
++		boolean checkValue = mSharedPreference.getBoolean("is_first_set_face_key", true);
++		return checkValue;
++	}
++
++	private void createDisclaimerDialog(int mRequest) {
++		final int requestValue = mRequest;
++		AlertDialog mDisclaimerDialog = new AlertDialog.Builder(mcontext)
++				.setTitle(R.string.face_key_disclaimer_tittle)
++				.setMessage(R.string.face_key_disclaimer_content)
++				.setPositiveButton(R.string.face_key_set_agree, new DialogInterface.OnClickListener() {
++					@Override
++					public void onClick(DialogInterface dialog, int which) {
++						mEditor.putBoolean("is_first_set_face_key", false);
++						mEditor.commit();
++						Intent intent = new Intent();
++						intent.setClassName("com.android.systemui", "com.face.scanner.FaceActivity");//
++						intent.putExtra("requestType",requestValue);
++						intent.putExtra("source",FROM_SETTING);
++						startActivityForResult(intent,requestValue);
++						dialog.dismiss();
++					}
++				}).create();
++		mDisclaimerDialog.show();
++	}
++
+ 	View inflate;
+     public void hintDialogShow(int index) {
+ 
+@@ -389,11 +419,15 @@
+     }
+ 
+ 	void startFaceScanner(int request){
+-        Intent intent = new Intent();
+-        intent.setClassName("com.android.systemui", "com.face.scanner.FaceActivity");//
+-		intent.putExtra("requestType",request);
+-		intent.putExtra("source",FROM_SETTING);
+-        startActivityForResult(intent,request);
++		if (checkFirstSetFaceKey()){
++			createDisclaimerDialog(request);
++		} else {
++			Intent intent = new Intent();
++			intent.setClassName("com.android.systemui", "com.face.scanner.FaceActivity");//
++			intent.putExtra("requestType",request);
++			intent.putExtra("source",FROM_SETTING);
++			startActivityForResult(intent,request);
++		}
+     }
+ 
+ 	@Override

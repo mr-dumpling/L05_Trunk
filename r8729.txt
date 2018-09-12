@@ -1,0 +1,133 @@
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountServerSettingsActivity.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountServerSettingsActivity.java	(revision 8728)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountServerSettingsActivity.java	(revision 8729)
+@@ -193,6 +193,10 @@
+     }
+ 
+     @Override
++    public void onCheckSettingsPermissionDenied() {
++    }
++
++    @Override
+     public void onCheckSettingsProgressDialogCancel() {
+         dismissCheckSettingsFragment();
+     }
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountSetupFinal.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountSetupFinal.java	(revision 8728)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountSetupFinal.java	(revision 8729)
+@@ -650,7 +650,6 @@
+         /** @} */
+ 
+         getFragmentManager().executePendingTransactions();
+-
+         switch (mState) {
+             case STATE_BASICS:
+                 final boolean advance = onBasicsComplete();
+@@ -1215,6 +1214,14 @@
+     }
+ 
+     @Override
++    public void onCheckSettingsPermissionDenied() {
++        if (mState == STATE_CHECKING_INCOMING) {
++            mState = STATE_MANUAL_INCOMING;
++            updateContentFragment(false);
++        }
++    }
++
++    @Override
+     public void onCheckSettingsAutoDiscoverComplete(int result) {
+         dismissCheckSettingsFragment();
+         proceed();
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountCheckSettingsFragment.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountCheckSettingsFragment.java	(revision 8728)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountCheckSettingsFragment.java	(revision 8729)
+@@ -70,7 +70,9 @@
+     private final static int STATE_CHECK_ERROR = 6;                 // terminal
+     private final static int STATE_AUTODISCOVER_AUTH_DIALOG = 7;    // terminal
+     private final static int STATE_AUTODISCOVER_RESULT = 8;         // terminal
++    private final static int STATE_PERMISSION_DENIED = 9;         // terminal
+     private int mState = STATE_START;
++    private int previousState;
+ 
+     // Args
+     private final static String ARGS_MODE = "mode";
+@@ -122,6 +124,7 @@
+          * @param result autodiscovery result code - success is AUTODISCOVER_OK
+          */
+         void onCheckSettingsAutoDiscoverComplete(int result);
++        void onCheckSettingsPermissionDenied();
+     }
+ 
+     // Public no-args constructor needed for fragment re-instantiation
+@@ -223,9 +226,9 @@
+      * @param newState The new progress state being reported
+      */
+     private void reportProgress(int newState, MessagingException ex) {
++        previousState = mState;
+         mState = newState;
+         mProgressException = ex;
+-
+         // If we are attached, create, recover, and/or update the dialog
+         if (mAttached && !mPaused) {
+             final FragmentManager fm = getFragmentManager();
+@@ -252,6 +255,18 @@
+                             CheckSettingsErrorDialogFragment.getErrorString(getActivity(), ex);
+                     getCallbackTarget().onCheckSettingsError(reason, errorMessage);
+                     break;
++                case STATE_PERMISSION_DENIED:
++                    if (previousState != STATE_CHECK_SHOW_SECURITY) {
++                        CheckSettingsProgressDialogFragment tempCheckingDialog =
++                                (CheckSettingsProgressDialogFragment)
++                                        fm.findFragmentByTag(CheckSettingsProgressDialogFragment.TAG);
++
++                        if (tempCheckingDialog != null) {
++                            tempCheckingDialog.dismiss();
++                        }
++                        getCallbackTarget().onCheckSettingsPermissionDenied();
++                    }
++                    break;
+                 case STATE_AUTODISCOVER_RESULT:
+                     final HostAuth autoDiscoverResult = ((AutoDiscoverResults) ex).mHostAuth;
+                     // report autodiscover results back to target fragment or activity
+@@ -446,6 +461,8 @@
+                         final String[] data =
+                                 unsupported.split("" + Policy.POLICY_STRING_DELIMITER);
+                         return new MessagingException(resultCode, mStoreHost, data);
++                    } else if (resultCode == MessagingException.PERMISSION_DENIED) {
++                        return new MessagingException(resultCode, "PERMISSION DENIED");
+                     } else if (resultCode != MessagingException.NO_ERROR) {
+                         final String errorMessage;
+                         errorMessage = bundle.getString(
+@@ -534,6 +551,9 @@
+                     case MessagingException.SECURITY_POLICIES_REQUIRED:
+                         progressState = STATE_CHECK_SHOW_SECURITY;
+                         break;
++                    case MessagingException.PERMISSION_DENIED:
++                        progressState = STATE_PERMISSION_DENIED;
++                        break;
+                 }
+                 mCallback.reportProgress(progressState, (MessagingException)result);
+             }
+Index: packages/apps/Email/UnifiedEmail/src/com/android/emailcommon/mail/MessagingException.java
+===================================================================
+--- packages/apps/Email/UnifiedEmail/src/com/android/emailcommon/mail/MessagingException.java	(revision 8728)
++++ packages/apps/Email/UnifiedEmail/src/com/android/emailcommon/mail/MessagingException.java	(revision 8729)
+@@ -70,6 +70,8 @@
+     public static final int OAUTH_NOT_SUPPORTED = 18;
+     /** The server indicates it experienced an internal error */
+     public static final int SERVER_ERROR = 19;
++	/** The permissions for Exchange application are not opened*/
++    public static final int PERMISSION_DENIED = 20;
+ 
+     protected int mExceptionType;
+     // Exception type-specific data
+@@ -137,4 +139,4 @@
+     public Object getExceptionData() {
+         return mExceptionData;
+     }
+-}
+\ No newline at end of file
++}

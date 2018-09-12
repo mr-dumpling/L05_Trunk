@@ -1,0 +1,68 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 14567)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 14568)
+@@ -695,7 +695,7 @@
+                         final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+                         final String mNumeric = mSubscriptionInfo == null ? ""
+                                 : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
+-                        if ("23430".equals(mNumeric) || "23420".equals(mNumeric)
++                        /* if ("23430".equals(mNumeric) || "23420".equals(mNumeric)
+                                 ||"23410".equals(mNumeric) ||"23415".equals(mNumeric)) {
+                             Log.d(TAG, "EVENT_RESTORE_DEFAULTAPN_COMPLETE, simNumeric=" + mNumeric
+                                     + " getActivity()=" + getActivity().toString());
+@@ -707,7 +707,11 @@
+                                 startActivity(simServiceIntent);
+                                 return;
+                             }
+-                        }
++                        } */
++						Intent intent = new Intent();
++						intent.setAction("android.apn.action.APN_SELECTION");
++						Log.d(TAG, "onCreate: intent android.apn.action.APN_SELECTION");
++						startActivity(intent);
+                     break;
+             }
+         }
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 14567)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 14568)
+@@ -92,6 +92,8 @@
+     public static final String APN_ID = "apn_id";
+     public static final String SUB_ID = "sub_id";
+     private static final String TAG = "ApnSelectionActivity";
++	//sort by id not name!
++	public static final String DEFAULT_SORT_ORDER = "_id ASC";
+     /// M: add for SVLTE project to update preferred APN @{
+     private static final String CT_NUMERIC_CDMA = "46003";
+     private static final String CT_NUMERIC_LTE = "46011";
+@@ -206,8 +208,8 @@
+         apnBtn.setOnClickListener(new OnClickListener() {
+             @Override
+             public void onClick(View v) {
+-                Toast.makeText(ApnSelectionActivity.this, R.string.dashboard_title,
+-                        Toast.LENGTH_SHORT).show();
++                /* Toast.makeText(ApnSelectionActivity.this, R.string.dashboard_title,
++                        Toast.LENGTH_SHORT).show(); */
+                 if (apnBtn.getText().equals(getResources().getString(R.string.next_label))) {
+                     fillList(1);
+                     ArrayAdapter sAdapter = (ArrayAdapter) menuListView.getAdapter();
+@@ -452,7 +454,7 @@
+         Cursor cursor = getContentResolver().query(
+                 Telephony.Carriers.CONTENT_URI,
+                 new String[] { "_id", "name", "apn", "type", "mvno_type", "mvno_match_data",
+-                        "sourcetype" }, where, null, order);
++                        "sourcetype" }, where, null, DEFAULT_SORT_ORDER);
+         /// @}
+         if(id==1){
+             list.clear();
+@@ -577,7 +579,7 @@
+                 */
+         int subId = mSubscriptionInfo.getSubscriptionId();
+         Cursor cursor = getContentResolver().query(getPreferApnUri(subId), new String[] { "_id" },
+-                null, null, Telephony.Carriers.DEFAULT_SORT_ORDER);
++                null, null, DEFAULT_SORT_ORDER/* Telephony.Carriers.DEFAULT_SORT_ORDER */);
+         /// @}
+         if (cursor.getCount() > 0) {
+             cursor.moveToFirst();

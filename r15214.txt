@@ -1,0 +1,88 @@
+Index: vendor/branch/5058Y_ALIE/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java	(revision 15213)
++++ vendor/branch/5058Y_ALIE/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java	(revision 15214)
+@@ -442,7 +442,7 @@
+             R.string.accessibility_data_connection_4g,
+             TelephonyIcons.ROAMING_4G_ICON,
+             true,
+-            TelephonyIcons.QS_DATA_4G
++            TelephonyIcons.ROAMING_4G_ICON
+             );
+     static final MobileIconGroup THREE_G_R = new MobileIconGroup(
+             "3G_R",
+@@ -456,7 +456,7 @@
+             R.string.accessibility_data_connection_3g,
+             TelephonyIcons.ROAMING_3G_ICON,
+             true,
+-            TelephonyIcons.QS_DATA_3G
++            TelephonyIcons.ROAMING_3G_ICON
+             );
+     static final MobileIconGroup H_PLUS_R = new MobileIconGroup(
+             "H+_R",
+@@ -470,7 +470,7 @@
+             R.string.accessibility_data_connection_3_5g,
+             TelephonyIcons.ROAMING_H_ICON,
+             true,
+-            TelephonyIcons.QS_DATA_H
++            TelephonyIcons.ROAMING_H_ICON
+             );
+     static final MobileIconGroup E_R = new MobileIconGroup(
+             "E_R",
+@@ -484,7 +484,7 @@
+             R.string.accessibility_data_connection_edge,
+             TelephonyIcons.ROAMING_E_ICON,
+             true,
+-            TelephonyIcons.QS_DATA_E
++            TelephonyIcons.ROAMING_E_ICON
+             );
+     static final MobileIconGroup LTE_R = new MobileIconGroup(
+             "LTE_R",
+@@ -498,7 +498,7 @@
+             R.string.accessibility_data_connection_lte,
+             TelephonyIcons.ROAMING_LTE_ICON,
+             true,
+-            TelephonyIcons.QS_DATA_LTE
++            TelephonyIcons.ROAMING_LTE_ICON
+             );
+     static final MobileIconGroup DATA_DISABLED = new MobileIconGroup(
+             "DataDisabled",
+Index: vendor/branch/5058Y_ALIE/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java	(revision 15213)
++++ vendor/branch/5058Y_ALIE/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java	(revision 15214)
+@@ -606,7 +606,8 @@
+         if (isCarrierNetworkChangeActive()) {
+             mCurrentState.iconGroup = TelephonyIcons.CARRIER_NETWORK_CHANGE;
+         } else if (isRoaming()) {
+-        	if (mCurrentState.iconGroup == TelephonyIcons.LTE ) {
++            /*
++            if (mCurrentState.iconGroup == TelephonyIcons.LTE ) {
+                 mCurrentState.iconGroup = TelephonyIcons.LTE_R;
+             } else if (mCurrentState.iconGroup == TelephonyIcons.FOUR_G) {
+                 mCurrentState.iconGroup = TelephonyIcons.FOUR_G_R;
+@@ -619,6 +620,24 @@
+             } else {
+                 mCurrentState.iconGroup = TelephonyIcons.ROAMING;
+             }
++            */
++            if (mCurrentState.dataConnected) {
++                if (mCurrentState.dataNetType == TelephonyManager.NETWORK_TYPE_GPRS ||
++                    mCurrentState.dataNetType == TelephonyManager.NETWORK_TYPE_EDGE) {
++                    mCurrentState.iconGroup = TelephonyIcons.E_R;
++                } else if (mCurrentState.dataNetType == TelephonyManager.NETWORK_TYPE_UMTS ||
++                        mCurrentState.dataNetType == TelephonyManager.NETWORK_TYPE_HSPA ||
++                        mCurrentState.dataNetType == TelephonyManager.NETWORK_TYPE_HSPAP) {
++                    mCurrentState.iconGroup = TelephonyIcons.THREE_G_R;
++                } else if (mCurrentState.dataNetType == TelephonyManager.NETWORK_TYPE_HSDPA ||
++                        mCurrentState.dataNetType == TelephonyManager.NETWORK_TYPE_HSUPA) {
++                    mCurrentState.iconGroup = TelephonyIcons.H_PLUS_R;
++                } else if (mCurrentState.dataNetType == TelephonyManager.NETWORK_TYPE_LTE) {
++                    mCurrentState.iconGroup = TelephonyIcons.FOUR_G_R;
++                }
++            } else {
++                mCurrentState.iconGroup = TelephonyIcons.ROAMING;
++            }
+         } else if (isDataDisabled()) {
+             //mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
+         }

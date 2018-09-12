@@ -1,0 +1,1498 @@
+Index: vendor/branch/5058Y/frameworks/base/packages/SystemUI/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058Y/frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 0)
++++ vendor/branch/5058Y/frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 9458)
+@@ -0,0 +1,814 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++/*
++ * Copyright (c) 2014 Google Inc.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++-->
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++        xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
++        package="com.android.systemui"
++        android:sharedUserId="android.uid.systemui"
++        coreApp="true">
++
++	<!-- added by zengjie for joy lockscreen feature task 5429900 20171101 begin-->
++	<uses-sdk android:minSdkVersion="15" android:targetSdkVersion="25"/>
++	<uses-feature android:name="android.software.live_wallpaper" />
++    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
++	<uses-permission android:name="android.permission.INTERNET" />
++	<uses-permission android:name="android.permission.RECORD_AUDIO" />
++	<uses-permission android:name="android.permission.FLASHLIGHT" />
++	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
++	<uses-permission android:name="android.permission.READ_LOGS" />
++	<uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
++	<uses-permission android:name="com.android.launcher.permission.UNINSTALL_SHORTCUT" />
++	<uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
++	<!-- added by zengjie for joy lockscreen feature task 5429900 20171101 end -->
++    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
++    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
++    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
++    <!-- Used to read storage for all users -->
++    <uses-permission android:name="android.permission.WRITE_MEDIA_STORAGE" />
++    <uses-permission android:name="android.permission.WAKE_LOCK" />
++
++    <uses-permission android:name="android.permission.INJECT_EVENTS" />
++    <uses-permission android:name="android.permission.DUMP" />
++    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
++
++    <uses-permission android:name="android.permission.STATUS_BAR_SERVICE" />
++    <uses-permission android:name="android.permission.STATUS_BAR" />
++    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
++    <uses-permission android:name="android.permission.REMOTE_AUDIO_PLAYBACK" />
++
++    <uses-permission android:name="android.permission.MANAGE_USERS" />
++    <uses-permission android:name="android.permission.READ_PROFILE" />
++    <uses-permission android:name="android.permission.READ_CONTACTS" />
++    <uses-permission android:name="android.permission.CONFIGURE_WIFI_DISPLAY" />
++    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
++    <uses-permission android:name="android.permission.GET_APP_OPS_STATS" />
++
++    <!-- Networking and telephony -->
++    <uses-permission android:name="android.permission.BLUETOOTH" />
++    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
++    <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
++    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
++    <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
++    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
++    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
++    <uses-permission android:name="android.permission.OVERRIDE_WIFI_CONFIG" />
++    <uses-permission android:name="android.permission.MANAGE_NETWORK_POLICY" />
++    <uses-permission android:name="android.permission.CONNECTIVITY_INTERNAL" />
++    <uses-permission android:name="android.permission.TETHER_PRIVILEGED" />
++    <uses-permission android:name="android.permission.READ_NETWORK_USAGE_HISTORY" />
++    <uses-permission android:name="android.permission.CONTROL_VPN" />
++    <uses-permission android:name="android.permission.PEERS_MAC_ADDRESS"/>
++    <!-- Physical hardware -->
++    <uses-permission android:name="android.permission.MANAGE_USB" />
++    <uses-permission android:name="android.permission.DEVICE_POWER" />
++    <uses-permission android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS" />
++    <uses-permission android:name="android.permission.MASTER_CLEAR" />
++    <uses-permission android:name="android.permission.VIBRATE" />
++
++    <!-- ActivityManager -->
++    <uses-permission android:name="android.permission.REAL_GET_TASKS" />
++    <uses-permission android:name="android.permission.GET_DETAILED_TASKS" />
++    <uses-permission android:name="android.permission.REORDER_TASKS" />
++    <uses-permission android:name="android.permission.REMOVE_TASKS" />
++    <uses-permission android:name="android.permission.STOP_APP_SWITCHES" />
++    <uses-permission android:name="android.permission.SET_SCREEN_COMPATIBILITY" />
++    <uses-permission android:name="android.permission.START_ANY_ACTIVITY" />
++    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
++    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
++    <uses-permission android:name="android.permission.GET_TOP_ACTIVITY_INFO" />
++    <uses-permission android:name="android.permission.MANAGE_ACTIVITY_STACKS" />
++    <uses-permission android:name="android.permission.START_TASKS_FROM_RECENTS" />
++    <uses-permission android:name="android.permission.GET_INTENT_SENDER_INTENT" />
++
++    <!-- WindowManager -->
++    <uses-permission android:name="android.permission.INTERNAL_SYSTEM_WINDOW" />
++    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
++    <uses-permission android:name="android.permission.READ_FRAME_BUFFER" />
++    <uses-permission android:name="android.permission.MANAGE_APP_TOKENS" />
++    <uses-permission android:name="android.permission.REGISTER_WINDOW_MANAGER_LISTENERS" />
++    <uses-permission android:name="android.permission.SET_ORIENTATION" />
++    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
++
++    <!-- DreamManager -->
++    <uses-permission android:name="android.permission.READ_DREAM_STATE" />
++    <uses-permission android:name="android.permission.WRITE_DREAM_STATE" />
++
++    <!-- Alarm clocks -->
++    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
++
++    <!-- Keyguard -->
++    <uses-permission android:name="android.permission.CONTROL_KEYGUARD" />
++    <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
++    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
++    <uses-permission android:name="android.permission.MANAGE_ACCOUNTS" />
++    <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
++    <uses-permission android:name="android.permission.CHANGE_COMPONENT_ENABLED_STATE" />
++    <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" />
++    <uses-permission android:name="android.permission.ACCESS_KEYGUARD_SECURE_STORAGE" />
++    <uses-permission android:name="android.permission.TRUST_LISTENER" />
++    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
++    <!-- Keyguard add for Anti-theft-->
++    <uses-permission android:name="com.mediatek.ppl.permission.ACCESS_PPL_MANAGER" />
++    <uses-permission android:name="android.permission.RESET_FINGERPRINT_LOCKOUT" />
++
++    <!-- Needed for WallpaperManager.clear in ImageWallpaper.updateWallpaperLocked -->
++    <uses-permission android:name="android.permission.SET_WALLPAPER"/>
++
++    <!-- Recents -->
++    <uses-permission android:name="android.permission.BIND_APPWIDGET" />
++
++    <!-- Wifi Display -->
++    <uses-permission android:name="android.permission.CONFIGURE_WIFI_DISPLAY" />
++
++    <uses-permission android:name="android.permission.CAMERA" />
++
++    <!-- Screen Capturing -->
++    <uses-permission android:name="android.permission.MANAGE_MEDIA_PROJECTION" />
++
++    <!-- Assist -->
++    <uses-permission android:name="android.permission.ACCESS_VOICE_INTERACTION_SERVICE" />
++
++    <!-- Listen for keyboard attachment / detachment -->
++    <uses-permission android:name="android.permission.TABLET_MODE" />
++
++    <!-- Self permission for internal broadcasts. -->
++    <permission android:name="com.android.systemui.permission.SELF"
++            android:protectionLevel="signature" />
++    <uses-permission android:name="com.android.systemui.permission.SELF" />
++
++    <!-- Adding Quick Settings tiles -->
++    <uses-permission android:name="android.permission.BIND_QUICK_SETTINGS_TILE" />
++
++    <!-- Block notifications inline notifications -->
++    <uses-permission android:name="android.permission.UPDATE_APP_OPS_STATS" />
++
++    <!-- Access battery information -->
++    <uses-permission android:name="android.permission.BATTERY_STATS" />
++
++    <!-- DevicePolicyManager get user restrictions -->
++    <uses-permission android:name="android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS" />
++
++    <!-- TV picture-in-picture -->
++    <uses-permission android:name="android.permission.RECEIVE_MEDIA_RESOURCE_USAGE" />
++
++    <!-- DND access -->
++    <uses-permission android:name="android.permission.MANAGE_NOTIFICATIONS" />
++    <!--TODO:: Check these permission whether still need on N -->
++    <!-- M: Add for data sim switch op feature -->
++    <uses-permission android:name="android.permission.WRITE_APN_SETTINGS"/>
++
++    <!-- M: Add for VoiceCommand -->
++    <uses-permission android:name="android.permission.MANAGE_VOICE_KEYPHRASES" />
++
++    <!-- M: Add for op feature -->
++    <uses-permission android:name="android.permission.READ_PRECISE_PHONE_STATE" />
++
++    <!-- It's like, reality, but, you know, virtual -->
++    <uses-permission android:name="android.permission.ACCESS_VR_MANAGER" />
++
++    <!-- the ability to rename notifications posted by other apps -->
++    <uses-permission android:name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
++
++    <!-- shortcut manager -->
++    <uses-permission android:name="android.permission.RESET_SHORTCUT_MANAGER_THROTTLING" />
++    
++    <!-- ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++    <uses-permission android:name="android.permission.FORCE_STOP_PACKAGES"/>
++    <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++	<!--add for nfc start-->
++	<uses-permission android:name="android.permission.NFC" />
++	<!--add for nfc end-->
++    <application
++        android:name=".SystemUIApplication"
++        android:persistent="true"
++        android:allowClearUserData="false"
++        android:allowBackup="false"
++        android:hardwareAccelerated="true"
++        android:label="@string/app_label"
++        android:icon="@drawable/icon"
++        android:process="com.android.systemui"
++        android:supportsRtl="true"
++        android:theme="@style/systemui_theme"
++        android:defaultToDeviceProtectedStorage="true"
++        android:directBootAware="true">
++        <!-- Keep theme in sync with SystemUIApplication.onCreate().
++             Setting the theme on the application does not affect views inflated by services.
++             The application theme is set again from onCreate to take effect for those views. -->
++
++        <!-- Broadcast receiver that gets the broadcast at boot time and starts
++             up everything else.
++             TODO: Should have an android:permission attribute
++             -->
++        <service android:name="SystemUIService"
++            android:exported="true"
++            />
++
++        <!-- Recents depends on every user having their own SystemUI process, so on user switch,
++             ensure that the process is created by starting this service.
++             -->
++        <service android:name="SystemUISecondaryUserService"
++            android:exported="true"
++            android:permission="com.android.systemui.permission.SELF" />
++
++
++        <!-- started from PhoneWindowManager
++             TODO: Should have an android:permission attribute -->
++        <service android:name=".screenshot.TakeScreenshotService"
++            android:process=":screenshot"
++            android:exported="false" />
++
++        <!-- Called from PhoneWindowManager -->
++        <receiver android:name=".screenshot.ScreenshotServiceErrorReceiver"
++            android:process=":screenshot"
++            android:exported="false">
++            <intent-filter>
++                <action android:name="com.android.systemui.screenshot.SHOW_ERROR" />
++            </intent-filter>
++        </receiver>
++
++        <service android:name=".ImageWallpaper"
++                android:permission="android.permission.BIND_WALLPAPER"
++                android:exported="true" />
++
++        <activity android:name=".tuner.TunerActivity"
++                  android:enabled="false"
++                  android:icon="@drawable/tuner"
++                  android:theme="@style/TunerSettings"
++                  android:label="@string/system_ui_tuner"
++                  android:process=":tuner"
++                  android:exported="true">
++            <intent-filter>
++                <action android:name="com.android.settings.action.EXTRA_SETTINGS" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <meta-data android:name="com.android.settings.category"
++                    android:value="com.android.settings.category.system" />
++        </activity>
++		<activity
++			android:name=".power.BatteryWarning"
++			android:theme="@android:style/Theme.Dialog"
++			>
++		</activity>
++        <activity-alias android:name=".DemoMode"
++                  android:targetActivity=".tuner.TunerActivity"
++                  android:icon="@drawable/tuner"
++                  android:theme="@style/TunerSettings"
++                  android:label="@string/demo_mode"
++                  android:process=":tuner"
++                  android:exported="true">
++            <intent-filter>
++                <action android:name="com.android.settings.action.DEMO_MODE" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity-alias>
++
++        <!-- Service used by secondary users to register themselves with the system user. -->
++        <service android:name=".recents.RecentsSystemUserService"
++            android:exported="false"
++            android:permission="com.android.systemui.permission.SELF" />
++
++        <!-- Alternate Recents -->
++        <activity android:name=".recents.RecentsActivity"
++                  android:label="@string/accessibility_desc_recent_apps"
++                  android:exported="false"
++                  android:launchMode="singleInstance"
++                  android:excludeFromRecents="true"
++                  android:stateNotNeeded="true"
++                  android:resumeWhilePausing="true"
++                  android:screenOrientation="behind"
++                  android:resizeableActivity="true"
++                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
++                  android:theme="@style/RecentsTheme.Wallpaper">
++            <intent-filter>
++                <action android:name="com.android.systemui.recents.TOGGLE_RECENTS" />
++            </intent-filter>
++        </activity>
++
++        <activity android:name=".recents.tv.RecentsTvActivity"
++                  android:label="@string/accessibility_desc_recent_apps"
++                  android:exported="false"
++                  android:launchMode="singleInstance"
++                  android:excludeFromRecents="true"
++                  android:stateNotNeeded="true"
++                  android:resumeWhilePausing="true"
++                  android:screenOrientation="behind"
++                  android:theme="@style/RecentsTvTheme.Wallpaper">
++            <intent-filter>
++                <action android:name="com.android.systemui.recents.TOGGLE_RECENTS" />
++            </intent-filter>
++        </activity>
++
++        <activity
++            android:name=".stackdivider.ForcedResizableInfoActivity"
++            android:theme="@style/ForcedResizableTheme"
++            android:excludeFromRecents="true"
++            android:stateNotNeeded="true"
++            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
++            android:exported="false">
++        </activity>
++
++        <!-- Callback for dismissing screenshot notification after a share target is picked -->
++        <receiver android:name=".screenshot.GlobalScreenshot$TargetChosenReceiver"
++                  android:process=":screenshot"
++                  android:exported="false" />
++
++        <!-- Callback for deleting screenshot notification -->
++        <receiver android:name=".screenshot.GlobalScreenshot$DeleteScreenshotReceiver"
++                  android:process=":screenshot"
++                  android:exported="false" />
++
++        <!-- started from UsbDeviceSettingsManager -->
++        <activity android:name=".usb.UsbConfirmActivity"
++            android:exported="true"
++            android:permission="android.permission.MANAGE_USB"
++            android:theme="@style/Theme.SystemUI.Dialog.Alert"
++            android:finishOnCloseSystemDialogs="true"
++            android:excludeFromRecents="true">
++        </activity>
++
++        <!-- started from UsbDeviceSettingsManager -->
++        <activity android:name=".usb.UsbPermissionActivity"
++            android:exported="true"
++            android:permission="android.permission.MANAGE_USB"
++            android:theme="@style/Theme.SystemUI.Dialog.Alert"
++            android:finishOnCloseSystemDialogs="true"
++            android:excludeFromRecents="true">
++        </activity>
++
++        <!-- started from UsbDeviceSettingsManager -->
++        <activity android:name=".usb.UsbResolverActivity"
++            android:exported="true"
++            android:permission="android.permission.MANAGE_USB"
++            android:theme="@style/Theme.SystemUI.Dialog.Alert"
++            android:finishOnCloseSystemDialogs="true"
++            android:excludeFromRecents="true">
++        </activity>
++
++        <!-- started from UsbDeviceSettingsManager -->
++        <activity android:name=".usb.UsbAccessoryUriActivity"
++            android:exported="true"
++            android:permission="android.permission.MANAGE_USB"
++            android:theme="@style/Theme.SystemUI.Dialog.Alert"
++            android:finishOnCloseSystemDialogs="true"
++            android:excludeFromRecents="true">
++        </activity>
++
++        <!-- started from UsbDebuggingManager -->
++        <activity android:name=".usb.UsbDebuggingActivity"
++            android:permission="android.permission.MANAGE_USB"
++            android:theme="@style/Theme.SystemUI.Dialog.Alert"
++            android:finishOnCloseSystemDialogs="true"
++            android:excludeFromRecents="true">
++        </activity>
++        <activity android:name=".usb.UsbDebuggingSecondaryUserActivity"
++            android:theme="@style/Theme.SystemUI.Dialog.Alert"
++            android:finishOnCloseSystemDialogs="true"
++            android:excludeFromRecents="true">
++        </activity>
++
++        <!-- started from NetworkPolicyManagerService -->
++        <activity
++            android:name=".net.NetworkOverLimitActivity"
++            android:exported="true"
++            android:permission="android.permission.MANAGE_NETWORK_POLICY"
++            android:theme="@android:style/Theme.DeviceDefault.Light.Panel"
++            android:finishOnCloseSystemDialogs="true"
++            android:launchMode="singleTop"
++            android:taskAffinity="com.android.systemui.net"
++            android:excludeFromRecents="true" />
++
++        <!-- started from MediaProjectionManager -->
++        <activity
++            android:name=".media.MediaProjectionPermissionActivity"
++            android:exported="true"
++            android:theme="@style/Theme.AlertDialogHost"
++            android:finishOnCloseSystemDialogs="true"
++            android:launchMode="singleTop"
++            android:excludeFromRecents="true" />
++
++        <!-- started from PipUI -->
++        <activity
++            android:name="com.android.systemui.tv.pip.PipMenuActivity"
++            android:exported="true"
++            android:theme="@style/PipTheme"
++            android:launchMode="singleTop"
++            android:taskAffinity=""
++            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|locale|layoutDirection"
++            android:resizeableActivity="true"
++            android:supportsPictureInPicture="true"
++            androidprv:alwaysFocusable="true"
++            android:excludeFromRecents="true" />
++        <activity
++            android:name="com.android.systemui.tv.pip.PipOverlayActivity"
++            android:exported="true"
++            android:theme="@style/PipTheme"
++            android:taskAffinity=""
++            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|locale|layoutDirection"
++            android:resizeableActivity="true"
++            android:supportsPictureInPicture="true"
++            android:excludeFromRecents="true" />
++        <activity
++            android:name="com.android.systemui.tv.pip.PipOnboardingActivity"
++            android:exported="true"
++            android:theme="@style/PipTheme"
++            android:launchMode="singleTop"
++            android:excludeFromRecents="true" />
++
++        <!-- platform logo easter egg activity -->
++        <activity
++            android:name=".DessertCase"
++            android:exported="true"
++            android:label="@string/dessert_case"
++            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
++            android:hardwareAccelerated="true"
++            android:launchMode="singleInstance"
++            android:screenOrientation="locked"
++            android:process=":sweetsweetdesserts"
++            android:excludeFromRecents="true">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++
++        <activity android:name=".egg.MLandActivity"
++                  android:theme="@android:style/Theme.Material.NoActionBar"
++                  android:exported="true"
++                  android:icon="@drawable/icon"
++                  android:label="@string/mland"
++                  android:hardwareAccelerated="true"
++                  android:launchMode="singleInstance"
++                  android:screenOrientation="locked"
++                  android:process=":sweetsweetdesserts"
++                  android:excludeFromRecents="true">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN"/>
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++        
++        <!-- ADD-S By Justin.Shen for Hide/Show navigation-bar -->
++        <activity android:name=".NavigationBarTipsActivity"
++                  android:exported="false"
++                  android:excludeFromRecents="true" 
++                  android:launchMode="singleInstance"
++                  android:screenOrientation="portrait"
++                  android:theme="@android:style/Theme.Translucent.NoTitleBar"
++                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|locale|layoutDirection">
++        </activity>
++        <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
++
++        <!-- a gallery of delicious treats -->
++        <service
++            android:name=".DessertCaseDream"
++            android:exported="true"
++            android:label="@string/dessert_case"
++            android:permission="android.permission.BIND_DREAM_SERVICE"
++            android:enabled="false"
++            android:process=":sweetsweetdesserts"
++            >
++            <intent-filter>
++                <action android:name="android.service.dreams.DreamService" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </service>
++
++        <service
++            android:name=".keyguard.KeyguardService"
++            android:exported="true"
++            android:enabled="@bool/config_enableKeyguardService" />
++
++        <activity android:name=".Somnambulator"
++            android:label="@string/start_dreams"
++            android:icon="@mipmap/ic_launcher_dreams"
++            android:theme="@android:style/Theme.Wallpaper.NoTitleBar"
++            android:exported="true"
++            android:excludeFromRecents="true"
++            >
++            <!--
++            <intent-filter>
++                <action android:name="android.intent.action.CREATE_SHORTCUT" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            -->
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.DESK_DOCK" />
++            </intent-filter>
++        </activity>
++
++        <activity
++            android:name=".settings.BrightnessDialog"
++            android:label="@string/quick_settings_brightness_dialog_title"
++            android:theme="@android:style/Theme.DeviceDefault.Dialog"
++            android:finishOnCloseSystemDialogs="true"
++            android:launchMode="singleInstance"
++            android:excludeFromRecents="true"
++            android:exported="true">
++            <intent-filter>
++                <action android:name="android.intent.action.SHOW_BRIGHTNESS_DIALOG" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++
++        <!-- Doze with notifications, run in main sysui process for every user  -->
++        <service
++            android:name=".doze.DozeService"
++            android:exported="true"
++            android:singleUser="true"
++            android:permission="android.permission.BIND_DREAM_SERVICE" />
++
++        <receiver
++            android:name=".tuner.TunerService$ClearReceiver"
++            android:exported="false">
++            <intent-filter>
++                <action android:name="com.android.systemui.action.CLEAR_TUNER" />
++            </intent-filter>
++        </receiver>
++
++        <receiver
++            android:name=".statusbar.KeyboardShortcutsReceiver">
++            <intent-filter>
++                <action android:name="android.intent.action.DISMISS_KEYBOARD_SHORTCUTS" />
++                <action android:name="android.intent.action.SHOW_KEYBOARD_SHORTCUTS" />
++            </intent-filter>
++        </receiver>
++		    <!-- Add func settings -->
++		<activity android:name=".funcsetting.FuncSettings"
++			android:theme="@style/FuncTheme">
++			<intent-filter >
++			    <action android:name="android.intent.action.MAIN" />
++				<action  android:name="com.android.systemui.SYSTEMUI_FUNC_SETTING" />
++			    <category android:name="android.intent.category.DEFAULT" />
++			</intent-filter>
++		</activity>
++		<activity android:name=".funcsetting.AppListActivity" 
++			android:theme="@style/FuncTheme"
++		    android:excludeFromRecents="true" >
++             <intent-filter>
++                  <action android:name="android.intent.action.MAIN" />
++              </intent-filter>
++         </activity>
++	<activity android:name=".funcsetting.AddAppShortcutActivity" 
++			android:theme="@style/FuncTheme"/>		
++
++		<receiver android:name=".funcsetting.ContactsReceiver">
++			<intent-filter >
++				<action android:name="com.android.systemui.funcsettings.contact_uri"/>
++				<action android:name="com.android.music.playlist_id"/>
++			</intent-filter>
++       </receiver>
++	<receiver android:name=".funcsetting.AddAppPackageReceiver">
++			<intent-filter >
++				<action android:name="add.app.package"/>
++				<action android:name="clear.app.package"/>
++			</intent-filter>
++       </receiver>
++	
++		<!-- added by zengjie for joy lockscreen feature task 5429900 20170927 begin-->
++         <activity android:name="com.tcl.mie.launcher.lscreen.stub.activity.ActivityProxy"
++             android:launchMode="standard"
++             android:screenOrientation="portrait"
++             android:theme="@android:style/Theme.NoTitleBar">
++         </activity>
++         <service
++             android:name="com.tcl.mie.launcher.lscreen.stub.service.ServiceProxy">
++         </service>
++ 
++         <meta-data android:name="product_file_version" android:value="1874"/>
++ 
++         <meta-data android:name="product_name" android:value="android-tcl-magazine-sdk" />
++ 
++         <meta-data android:name="product_path"  android:value="vlife_magazine"/>
++ 
++         <meta-data android:name="package_resource_type" android:value="" />
++ 
++         <meta-data android:name="wallpaper_resource_id" android:value="465"/>
++ 
++         <meta-data android:name="channel_id" android:value="2067"/>
++ 
++         <meta-data android:name="wallpaper_mypaper_ids" android:value="" />
++ 
++         <meta-data android:name="independent_version"  android:value="3"/>
++ 
++         <meta-data android:name="release_type"  android:value="release"/>
++ 
++         <meta-data android:name="version_name"  android:value="6.132.5"/>
++         <meta-data android:name="version_code"  android:value= "6144"/>  
++         
++         <meta-data
++             android:name="com.google.android.gms.version"
++             android:value="@integer/google_play_services_version" />
++ 
++
++        <activity
++            android:name="com.face.scanner.FaceActivity"
++            android:screenOrientation="portrait"
++            android:excludeFromRecents="true" >
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++            </intent-filter>
++        </activity>
++       <activity
++            android:name=".face.FaceCheckActivity"
++            android:theme="@style/android:Theme.Translucent.NoTitleBar"
++            android:screenOrientation="portrait"
++            android:excludeFromRecents="true" >
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++            </intent-filter>
++        </activity>
++        <service
++            android:name="com.face.scanner.FaceService"
++            android:exported="true"
++            >
++            <intent-filter>
++                <action android:name="com.face.scanner.FaceService" />
++            </intent-filter>
++        </service>    
++
++         <service
++             android:name="com.vlife.MCService"
++             android:exported="true"
++             android:process=":main">
++             <intent-filter>
++                 <action android:name="com.vlife.magazine.content"/>
++                 <category android:name="android.intent.category.DEFAULT" />
++             </intent-filter>
++         </service>
++         <service
++             android:name="com.vlife.AService"
++             android:process=":main">
++             <intent-filter>
++                 <action android:name="com.vlife.init.action"/>
++                 <category android:name="android.intent.category.DEFAULT"/>
++             </intent-filter>
++         </service>
++ 
++         <service
++             android:name="com.vlife.TService"
++             android:exported="true"
++             android:process=":main">
++             <intent-filter>
++                 <action android:name="com.vlife.intent.action.DS" />
++                 <category android:name="android.intent.category.DEFAULT" />
++             </intent-filter>
++             <intent-filter>
++                 <action android:name="com.vlife.intent.action.DB" />
++                 <category android:name="android.intent.category.DEFAULT" />
++             </intent-filter>
++         </service>
++         <receiver
++             android:name="com.vlife.SReceiver"
++             android:process=":main">
++             <intent-filter>
++                 <action android:name="android.intent.action.MEDIA_MOUNTED" />
++                 <action android:name="android.intent.action.MEDIA_REMOVED" />
++                 <action android:name="android.intent.action.MEDIA_SHARED" />
++ 
++                 <data android:scheme="file" />
++             </intent-filter>
++         </receiver>
++         <receiver
++             android:name="com.vlife.NReceiver"
++             android:process=":main">
++             <intent-filter>
++                 <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
++             </intent-filter>
++         </receiver>
++         <receiver
++             android:name="com.vlife.BReceiver"
++             android:process=":main">
++             <intent-filter>
++                 <action android:name="android.intent.action.BOOT_COMPLETED" />
++                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
++                 <action android:name="android.intent.action.MEDIA_MOUNTED" />
++                 <action android:name="android.intent.action.MEDIA_SCANNER_FINISHED" />
++                 <category android:name="android.intent.category.LAUNCHER" />
++             </intent-filter>
++         </receiver>
++         <receiver
++             android:name="com.handpet.livewallpaper.receiver.PetMainReceiver"
++             android:process=":main">
++             <intent-filter android:priority="99">
++                 <action android:name="android.intent.action.PACKAGE_ADDED" />
++                 <action android:name="android.intent.action.PACKAGE_REMOVED" />
++                 <data android:scheme="package" />
++             </intent-filter>
++             <intent-filter>
++                 <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
++             </intent-filter>
++         </receiver>
++         <receiver
++             android:name="com.vlife.IReceiver"
++             android:process=":main">
++             <intent-filter android:priority="99">
++                 <action android:name="android.intent.action.PACKAGE_ADDED" />
++                 <action android:name="android.intent.action.PACKAGE_REMOVED" />
++                 <action android:name="android.intent.action.PACKAGE_INSTALL" />
++                 <action android:name="android.intent.action.PACKAGE_REPLACED" />
++                 <data android:scheme="package" />
++             </intent-filter>
++         </receiver>
++         <!--add for joy lockscreen with baidu begin-->
++         <activity
++             android:name="com.google.android.gms.ads.AdActivity"
++             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"
++             android:theme="@android:style/Theme.Translucent" />
++         <activity
++             android:name="com.duapps.ad.InterstitialAdActivity"
++             android:configChanges="orientation|keyboardHidden|screenSize"
++             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
++ 
++         <meta-data
++             android:name="app_license"
++             android:value="2c9c05a2bb3e4885c0e75e4a9f637a97"/>
++ 
++         <provider
++             android:name="com.duapps.ad.stats.DuAdCacheProvider"
++             android:authorities="com.android.systemui.DuAdCacheProvider"
++             android:exported="false">
++         </provider>
++ 
++         <receiver android:name="com.duapps.ad.base.PackageAddReceiver">
++             <intent-filter>
++                 <action android:name="android.intent.action.PACKAGE_ADDED"/>
++ 
++                 <data android:scheme="package"/>
++             </intent-filter>
++         </receiver>
++         <!--add for joy lockscreen with baidu end-->
++ 
++         <meta-data
++             android:name="UMENG_APPKEY"
++             android:value="59e84f9c07fe65670c0000cb"/>
++         <meta-data
++             android:name="UMENG_CHANNEL"
++             android:value="tcl_preload"/>
++ 
++         <!-- HK ad start -->
++         <activity
++             android:name="com.facebook.ads.InterstitialAdActivity"
++             android:configChanges="keyboardHidden|orientation|screenSize" />
++         <activity
++             android:name="com.mopub.mobileads.MoPubActivity"
++             android:configChanges="keyboardHidden|orientation|screenSize" />
++         <activity
++             android:name="com.mopub.mobileads.MraidActivity"
++             android:configChanges="keyboardHidden|orientation|screenSize" />
++         <activity
++             android:name="com.mopub.common.MoPubBrowser"
++             android:configChanges="keyboardHidden|orientation|screenSize" />
++         <activity
++             android:name="com.mopub.mobileads.MraidVideoPlayerActivity"
++             android:configChanges="keyboardHidden|orientation|screenSize" />
++         <activity
++             android:name="com.flurry.android.FlurryFullscreenTakeoverActivity"
++             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize" />
++         <!-- HK ad end -->
++		 
++		<provider
++            android:name="android.support.v4.content.FileProvider"
++            android:authorities="com.bizhiquan.lockscreen.tcl.provider"
++            android:exported="false"
++            android:grantUriPermissions="true">
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/file_paths" />
++		</provider>
++        <!-- added by zengjie for joy lockscreen feature task 5429900 20170927 end-->
++	    <!--add for incoming calls turn to mute -->
++	    <service android:name="com.android.systemui.statusbar.phone.SensorFunctionServiceIncall"
++            android:exported="false"/>
++
++    </application>
++
++    <!-- Add keyguard usage protected broadcast -->
++    <protected-broadcast android:name="android.intent.action.normal.boot" />
++    <protected-broadcast android:name="android.intent.action.normal.boot.done" />
++    <protected-broadcast android:name="android.intent.action.normal.shutdown" />
++    <protected-broadcast android:name="android.intent.action.LAUNCH_POWEROFF_ALARM" />
++    <protected-broadcast android:name="alarm.boot.remove.ipowin" />
++    <protected-broadcast android:name="com.android.deskclock.SNOOZE_ALARM" />
++    <protected-broadcast android:name="com.android.deskclock.DISMISS_ALARM" />
++    <protected-broadcast android:name="com.android.deskclock.POWER_ON_ALARM" />
++
++</manifest>
+Index: vendor/branch/5058Y/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java
+===================================================================
+--- vendor/branch/5058Y/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java	(revision 0)
++++ vendor/branch/5058Y/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java	(revision 9458)
+@@ -0,0 +1,674 @@
++/*
++ * Copyright (C) 2008 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.systemui.statusbar.phone;
++
++import android.app.ActivityManager;
++import android.app.ActivityManagerNative;
++import android.app.AlarmManager;
++import android.app.AlarmManager.AlarmClockInfo;
++import android.app.SynchronousUserSwitchObserver;
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.content.pm.UserInfo;
++import android.hardware.display.WifiDisplayStatus;
++import android.media.AudioManager;
++import android.net.wifi.p2p.WifiP2pDevice;
++import android.os.Handler;
++import android.os.RemoteException;
++import android.os.UserHandle;
++import android.os.UserManager;
++import android.provider.Settings.Global;
++import android.telecom.TelecomManager;
++import android.util.Log;
++
++import com.android.internal.annotations.VisibleForTesting;
++import com.android.internal.telephony.IccCardConstants;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.systemui.R;
++import com.android.systemui.qs.tiles.DndTile;
++import com.android.systemui.qs.tiles.RotationLockTile;
++import com.android.systemui.statusbar.policy.BluetoothController;
++import com.android.systemui.statusbar.policy.BluetoothController.Callback;
++import com.android.systemui.statusbar.policy.CastController;
++import com.android.systemui.statusbar.policy.CastController.CastDevice;
++import com.android.systemui.statusbar.policy.DataSaverController;
++import com.android.systemui.statusbar.policy.HotspotController;
++import com.android.systemui.statusbar.policy.RotationLockController;
++import com.android.systemui.statusbar.policy.UserInfoController;
++import android.nfc.NfcManager;
++import android.nfc.NfcAdapter;
++
++/**
++ * This class contains all of the policy about which icons are installed in the status
++ * bar at boot time.  It goes through the normal API for icons, even though it probably
++ * strictly doesn't need to.
++ */
++public class PhoneStatusBarPolicy implements Callback, RotationLockController.RotationLockControllerCallback, DataSaverController.Listener {
++    private static final String TAG = "PhoneStatusBarPolicy";
++    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
++
++    private final String mSlotCast;
++    private final String mSlotHotspot;
++    private final String mSlotBluetooth;
++    private final String mSlotTty;
++    private final String mSlotZen;
++    private final String mSlotVolume;
++    private final String mSlotAlarmClock;
++    private final String mSlotManagedProfile;
++    private final String mSlotRotate;
++    private final String mSlotHeadset;
++    private final String mSlotDataSaver;
++    private final Context mContext;
++    private final Handler mHandler = new Handler();
++    private final CastController mCast;
++    private final HotspotController mHotspot;
++    private final AlarmManager mAlarmManager;
++    private final UserInfoController mUserInfoController;
++    private final UserManager mUserManager;
++    private final StatusBarIconController mIconController;
++    private final RotationLockController mRotationLockController;
++    private final DataSaverController mDataSaver;
++    private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
++
++    // Assume it's all good unless we hear otherwise.  We don't always seem
++    // to get broadcasts that it *is* there.
++    IccCardConstants.State mSimState = IccCardConstants.State.READY;
++
++    private boolean mZenVisible;
++    private boolean mVolumeVisible;
++    private boolean mCurrentUserSetup;
++
++    private int mZen;
++
++    private boolean mManagedProfileFocused = false;
++    private boolean mManagedProfileIconVisible = false;
++    private boolean mManagedProfileInQuietMode = false;
++
++    private BluetoothController mBluetooth;
++	
++	//add by nfc start
++	private static final String SLOT_NFC = "nfc";
++    private boolean mNfcVisible = false;
++	//add by nfc end
++    @VisibleForTesting
++    public PhoneStatusBarPolicy(Context context, StatusBarIconController iconController,
++            CastController cast, HotspotController hotspot, UserInfoController userInfoController,
++            BluetoothController bluetooth, RotationLockController rotationLockController,
++            DataSaverController dataSaver) {
++        mContext = context;
++        mIconController = iconController;
++        mCast = cast;
++        mHotspot = hotspot;
++        mBluetooth = bluetooth;
++        mBluetooth.addStateChangedCallback(this);
++        mAlarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
++        mUserInfoController = userInfoController;
++        mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
++        mRotationLockController = rotationLockController;
++        mDataSaver = dataSaver;
++
++        mSlotCast = context.getString(com.android.internal.R.string.status_bar_cast);
++        mSlotHotspot = context.getString(com.android.internal.R.string.status_bar_hotspot);
++        mSlotBluetooth = context.getString(com.android.internal.R.string.status_bar_bluetooth);
++        mSlotTty = context.getString(com.android.internal.R.string.status_bar_tty);
++        mSlotZen = context.getString(com.android.internal.R.string.status_bar_zen);
++        mSlotVolume = context.getString(com.android.internal.R.string.status_bar_volume);
++        mSlotAlarmClock = context.getString(com.android.internal.R.string.status_bar_alarm_clock);
++        mSlotManagedProfile = context.getString(
++                com.android.internal.R.string.status_bar_managed_profile);
++        mSlotRotate = context.getString(com.android.internal.R.string.status_bar_rotate);
++        mSlotHeadset = context.getString(com.android.internal.R.string.status_bar_headset);
++        mSlotDataSaver = context.getString(com.android.internal.R.string.status_bar_data_saver);
++
++        mRotationLockController.addRotationLockControllerCallback(this);
++
++        // listen for broadcasts
++        IntentFilter filter = new IntentFilter();
++        /// M: [Multi-User] Will register this action using special receiver.
++        //filter.addAction(AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED);
++        filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
++        filter.addAction(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION);
++        filter.addAction(AudioManager.ACTION_HEADSET_PLUG);
++        filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
++        filter.addAction(TelecomManager.ACTION_CURRENT_TTY_MODE_CHANGED);
++        filter.addAction(Intent.ACTION_MANAGED_PROFILE_AVAILABLE);
++        filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
++        /// M: [Multi-User] Add user switched action for updating possible alarm icon.
++        filter.addAction(Intent.ACTION_USER_SWITCHED);
++        filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
++		//add for nfc
++		filter.addAction(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
++        mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
++        /// M: [Multi-User] Register Alarm intent by user
++        registerAlarmClockChanged(UserHandle.USER_OWNER, false);
++
++        // listen for user / profile change.
++        try {
++            ActivityManagerNative.getDefault().registerUserSwitchObserver(mUserSwitchListener, TAG);
++        } catch (RemoteException e) {
++            // Ignore
++        }
++
++        // TTY status
++        mIconController.setIcon(mSlotTty,  R.drawable.stat_sys_tty_mode, null);
++        mIconController.setIconVisibility(mSlotTty, false);
++
++        // bluetooth status
++        updateBluetooth();
++
++        // Alarm clock
++        mIconController.setIcon(mSlotAlarmClock, R.drawable.stat_sys_alarm, null);
++        mIconController.setIconVisibility(mSlotAlarmClock, false);
++
++        // zen
++        mIconController.setIcon(mSlotZen, R.drawable.stat_sys_zen_important, null);
++        mIconController.setIconVisibility(mSlotZen, false);
++
++        // volume
++        mIconController.setIcon(mSlotVolume, R.drawable.stat_sys_ringer_vibrate, null);
++        mIconController.setIconVisibility(mSlotVolume, false);
++        updateVolumeZen();
++		//add nfc start
++		mIconController.setIcon(SLOT_NFC, R.drawable.ic_qs_nfc_on,null);
++		boolean isnfcOpen = isNfcOpen();
++        String ave = isnfcOpen ? "true":"false";
++        Log.i(TAG,"isNfcOpen?=" + ave);
++        if(isnfcOpen){
++        	mIconController.setIconVisibility(SLOT_NFC, true);
++        }else{
++        	mIconController.setIconVisibility(SLOT_NFC, false);
++        }
++		//add nfc end
++        // cast
++        // M: Remove CastTile when WFD is not support in quicksetting
++        if (mCast != null) {
++            mIconController.setIcon(mSlotCast, R.drawable.stat_sys_cast, null);
++            mIconController.setIconVisibility(mSlotCast, false);
++            mCast.addCallback(mCastCallback);
++        }
++
++        // hotspot
++        mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
++                mContext.getString(R.string.accessibility_status_bar_hotspot));
++        mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
++        mHotspot.addCallback(mHotspotCallback);
++
++        // managed profile
++        mIconController.setIcon(mSlotManagedProfile, R.drawable.stat_sys_managed_profile_status,
++                mContext.getString(R.string.accessibility_managed_profile));
++        mIconController.setIconVisibility(mSlotManagedProfile, mManagedProfileIconVisible);
++
++        // data saver
++        mIconController.setIcon(mSlotDataSaver, R.drawable.stat_sys_data_saver,
++                context.getString(R.string.accessibility_data_saver_on));
++        mIconController.setIconVisibility(mSlotDataSaver, false);
++        mDataSaver.addListener(this);
++    }
++
++    public void setStatusBarKeyguardViewManager(
++            StatusBarKeyguardViewManager statusBarKeyguardViewManager) {
++        mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
++    }
++
++    public void setZenMode(int zen) {
++        mZen = zen;
++        updateVolumeZen();
++    }
++
++    private void updateAlarm() {
++        final AlarmClockInfo alarm = mAlarmManager.getNextAlarmClock(UserHandle.USER_CURRENT);
++        final boolean hasAlarm = alarm != null && alarm.getTriggerTime() > 0;
++        final boolean zenNone = mZen == Global.ZEN_MODE_NO_INTERRUPTIONS;
++        mIconController.setIcon(mSlotAlarmClock, zenNone ? R.drawable.stat_sys_alarm_dim
++                : R.drawable.stat_sys_alarm, null);
++        mIconController.setIconVisibility(mSlotAlarmClock, mCurrentUserSetup && hasAlarm);
++    }
++
++    private final void updateSimState(Intent intent) {
++        String stateExtra = intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE);
++        if (IccCardConstants.INTENT_VALUE_ICC_ABSENT.equals(stateExtra)) {
++            mSimState = IccCardConstants.State.ABSENT;
++        } else if (IccCardConstants.INTENT_VALUE_ICC_CARD_IO_ERROR.equals(stateExtra)) {
++            mSimState = IccCardConstants.State.CARD_IO_ERROR;
++        } else if (IccCardConstants.INTENT_VALUE_ICC_CARD_RESTRICTED.equals(stateExtra)) {
++            mSimState = IccCardConstants.State.CARD_RESTRICTED;
++        } else if (IccCardConstants.INTENT_VALUE_ICC_READY.equals(stateExtra)) {
++            mSimState = IccCardConstants.State.READY;
++        } else if (IccCardConstants.INTENT_VALUE_ICC_LOCKED.equals(stateExtra)) {
++            final String lockedReason =
++                    intent.getStringExtra(IccCardConstants.INTENT_KEY_LOCKED_REASON);
++            if (IccCardConstants.INTENT_VALUE_LOCKED_ON_PIN.equals(lockedReason)) {
++                mSimState = IccCardConstants.State.PIN_REQUIRED;
++            } else if (IccCardConstants.INTENT_VALUE_LOCKED_ON_PUK.equals(lockedReason)) {
++                mSimState = IccCardConstants.State.PUK_REQUIRED;
++            } else {
++                mSimState = IccCardConstants.State.NETWORK_LOCKED;
++            }
++        } else {
++            mSimState = IccCardConstants.State.UNKNOWN;
++        }
++    }
++
++    private final void updateVolumeZen() {
++        AudioManager audioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
++
++        boolean zenVisible = false;
++        int zenIconId = 0;
++        String zenDescription = null;
++
++        boolean volumeVisible = false;
++        int volumeIconId = 0;
++        String volumeDescription = null;
++
++        if (DndTile.isVisible(mContext) || DndTile.isCombinedIcon(mContext)) {
++            zenVisible = mZen != Global.ZEN_MODE_OFF;
++            zenIconId = mZen == Global.ZEN_MODE_NO_INTERRUPTIONS
++                    ? R.drawable.stat_sys_dnd_total_silence : R.drawable.stat_sys_dnd;
++            zenDescription = mContext.getString(R.string.quick_settings_dnd_label);
++        } else if (mZen == Global.ZEN_MODE_NO_INTERRUPTIONS) {
++            zenVisible = true;
++            zenIconId = R.drawable.stat_sys_zen_none;
++            zenDescription = mContext.getString(R.string.interruption_level_none);
++        } else if (mZen == Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS) {
++            zenVisible = true;
++            zenIconId = R.drawable.stat_sys_zen_important;
++            zenDescription = mContext.getString(R.string.interruption_level_priority);
++        }
++
++        if (DndTile.isVisible(mContext)
++//                && !DndTile.isCombinedIcon(mContext)
++                && audioManager.getRingerModeInternal() == AudioManager.RINGER_MODE_SILENT) {
++            volumeVisible = true;
++            volumeIconId = R.drawable.stat_sys_ringer_silent;
++            volumeDescription = mContext.getString(R.string.accessibility_ringer_silent);
++        } else if (mZen != Global.ZEN_MODE_NO_INTERRUPTIONS && mZen != Global.ZEN_MODE_ALARMS &&
++                audioManager.getRingerModeInternal() == AudioManager.RINGER_MODE_VIBRATE) {
++            volumeVisible = true;
++            volumeIconId = R.drawable.stat_sys_ringer_vibrate;
++            volumeDescription = mContext.getString(R.string.accessibility_ringer_vibrate);
++        }
++
++        if (zenVisible) {
++            mIconController.setIcon(mSlotZen, zenIconId, zenDescription);
++        }
++        if (zenVisible != mZenVisible) {
++            mIconController.setIconVisibility(mSlotZen, zenVisible);
++            mZenVisible = zenVisible;
++        }
++
++        if (volumeVisible) {
++            mIconController.setIcon(mSlotVolume, volumeIconId, volumeDescription);
++        }
++        if (volumeVisible != mVolumeVisible) {
++            mIconController.setIconVisibility(mSlotVolume, volumeVisible);
++            mVolumeVisible = volumeVisible;
++        }
++        updateAlarm();
++    }
++
++    @Override
++    public void onBluetoothDevicesChanged() {
++        updateBluetooth();
++    }
++
++    @Override
++    public void onBluetoothStateChange(boolean enabled) {
++        updateBluetooth();
++    }
++
++    private final void updateBluetooth() {
++        int iconId = R.drawable.stat_sys_data_bluetooth;
++        String contentDescription =
++                mContext.getString(R.string.accessibility_quick_settings_bluetooth_on);
++        boolean bluetoothEnabled = false;
++        if (mBluetooth != null) {
++            bluetoothEnabled = mBluetooth.isBluetoothEnabled();
++            if (mBluetooth.isBluetoothConnected()) {
++                iconId = R.drawable.stat_sys_data_bluetooth_connected;
++                contentDescription = mContext.getString(R.string.accessibility_bluetooth_connected);
++            }
++        }
++
++        mIconController.setIcon(mSlotBluetooth, iconId, contentDescription);
++        mIconController.setIconVisibility(mSlotBluetooth, bluetoothEnabled);
++    }
++
++    /*private final */protected void updateTTY(Intent intent) {
++        int currentTtyMode = intent.getIntExtra(TelecomManager.EXTRA_CURRENT_TTY_MODE,
++                TelecomManager.TTY_MODE_OFF);
++        boolean enabled = currentTtyMode != TelecomManager.TTY_MODE_OFF;
++
++        if (DEBUG) Log.v(TAG, "updateTTY: enabled: " + enabled);
++
++        if (enabled) {
++            // TTY is on
++            if (DEBUG) Log.v(TAG, "updateTTY: set TTY on");
++            mIconController.setIcon(mSlotTty, R.drawable.stat_sys_tty_mode,
++                    mContext.getString(R.string.accessibility_tty_enabled));
++            mIconController.setIconVisibility(mSlotTty, true);
++        } else {
++            // TTY is off
++            if (DEBUG) Log.v(TAG, "updateTTY: set TTY off");
++            mIconController.setIconVisibility(mSlotTty, false);
++        }
++    }
++
++    private void updateCast() {
++        boolean isCasting = false;
++        for (CastDevice device : mCast.getCastDevices()) {
++            if (device.state == CastDevice.STATE_CONNECTING
++                    || device.state == CastDevice.STATE_CONNECTED) {
++                isCasting = true;
++                break;
++            }
++        }
++        if (DEBUG) Log.v(TAG, "updateCast: isCasting: " + isCasting);
++        mHandler.removeCallbacks(mRemoveCastIconRunnable);
++        if (isCasting) {
++            mIconController.setIcon(mSlotCast, R.drawable.stat_sys_cast,
++                    mContext.getString(R.string.accessibility_casting));
++            mIconController.setIconVisibility(mSlotCast, true);
++        } else {
++            // don't turn off the screen-record icon for a few seconds, just to make sure the user
++            // has seen it
++            if (DEBUG) Log.v(TAG, "updateCast: hiding icon in 3 sec...");
++            mHandler.postDelayed(mRemoveCastIconRunnable, 3000);
++        }
++    }
++
++    private void updateQuietState() {
++        mManagedProfileInQuietMode = false;
++        int currentUserId = ActivityManager.getCurrentUser();
++        for (UserInfo ui : mUserManager.getEnabledProfiles(currentUserId)) {
++            if (ui.isManagedProfile() && ui.isQuietModeEnabled()) {
++                mManagedProfileInQuietMode = true;
++                return;
++            }
++        }
++    }
++
++    private void profileChanged(int userId) {
++        UserInfo user = null;
++        if (userId == UserHandle.USER_CURRENT) {
++            try {
++                user = ActivityManagerNative.getDefault().getCurrentUser();
++            } catch (RemoteException e) {
++                // Ignore
++            }
++        } else {
++            user = mUserManager.getUserInfo(userId);
++        }
++
++        mManagedProfileFocused = user != null && user.isManagedProfile();
++        if (DEBUG) Log.v(TAG, "profileChanged: mManagedProfileFocused: " + mManagedProfileFocused);
++        // Actually update the icon later when transition starts.
++    }
++
++    private void updateManagedProfile() {
++        if (DEBUG) Log.v(TAG, "updateManagedProfile: mManagedProfileFocused: "
++                + mManagedProfileFocused);
++        final boolean showIcon;
++        if (mManagedProfileFocused && !mStatusBarKeyguardViewManager.isShowing()) {
++            showIcon = true;
++            mIconController.setIcon(mSlotManagedProfile,
++                    R.drawable.stat_sys_managed_profile_status,
++                    mContext.getString(R.string.accessibility_managed_profile));
++        } else if (mManagedProfileInQuietMode) {
++            showIcon = true;
++            mIconController.setIcon(mSlotManagedProfile,
++                    R.drawable.stat_sys_managed_profile_status_off,
++                    mContext.getString(R.string.accessibility_managed_profile));
++        } else {
++            showIcon = false;
++        }
++        if (mManagedProfileIconVisible != showIcon) {
++            mIconController.setIconVisibility(mSlotManagedProfile, showIcon);
++            mManagedProfileIconVisible = showIcon;
++        }
++    }
++
++    private final SynchronousUserSwitchObserver mUserSwitchListener =
++            new SynchronousUserSwitchObserver() {
++                @Override
++                public void onUserSwitching(int newUserId) throws RemoteException {
++                    mHandler.post(new Runnable() {
++                        @Override
++                        public void run() {
++                            mUserInfoController.reloadUserInfo();
++                        }
++                    });
++                }
++
++                @Override
++                public void onUserSwitchComplete(int newUserId) throws RemoteException {
++                    mHandler.post(new Runnable() {
++                        @Override
++                        public void run() {
++                            updateAlarm();
++                            profileChanged(newUserId);
++                            updateQuietState();
++                            updateManagedProfile();
++                        }
++                    });
++                }
++
++                @Override
++                public void onForegroundProfileSwitch(int newProfileId) {
++                    mHandler.post(new Runnable() {
++                        @Override
++                        public void run() {
++                            profileChanged(newProfileId);
++                        }
++                    });
++                }
++            };
++
++    private final HotspotController.Callback mHotspotCallback = new HotspotController.Callback() {
++        @Override
++        public void onHotspotChanged(boolean enabled) {
++            mIconController.setIconVisibility(mSlotHotspot, enabled);
++        }
++    };
++
++    private final CastController.Callback mCastCallback = new CastController.Callback() {
++        @Override
++        public void onCastDevicesChanged() {
++            updateCast();
++        }
++
++        /// M: WFD sink support {@
++        @Override
++        public void onWfdStatusChanged(WifiDisplayStatus status,
++                boolean sinkMode) {
++
++        }
++
++        @Override
++        public void onWifiP2pDeviceChanged(WifiP2pDevice device) {
++
++        }
++        /// @}
++    };
++
++    public void appTransitionStarting(long startTime, long duration) {
++        updateManagedProfile();
++    }
++
++    public void notifyKeyguardShowingChanged() {
++        updateManagedProfile();
++    }
++
++    public void setCurrentUserSetup(boolean userSetup) {
++        if (mCurrentUserSetup == userSetup) return;
++        mCurrentUserSetup = userSetup;
++        updateAlarm();
++        updateQuietState();
++    }
++
++    @Override
++    public void onRotationLockStateChanged(boolean rotationLocked, boolean affordanceVisible) {
++        boolean portrait = RotationLockTile.isCurrentOrientationLockPortrait(
++                mRotationLockController, mContext);
++        if (rotationLocked) {
++            if (portrait) {
++                mIconController.setIcon(mSlotRotate, R.drawable.stat_sys_rotate_portrait,
++                        mContext.getString(R.string.accessibility_rotation_lock_on_portrait));
++            } else {
++                mIconController.setIcon(mSlotRotate, R.drawable.stat_sys_rotate_landscape,
++                        mContext.getString(R.string.accessibility_rotation_lock_on_landscape));
++            }
++            mIconController.setIconVisibility(mSlotRotate, true);
++        } else {
++            mIconController.setIconVisibility(mSlotRotate, false);
++        }
++    }
++
++    private void updateHeadsetPlug(Intent intent) {
++        boolean connected = intent.getIntExtra("state", 0) != 0;
++        boolean hasMic = intent.getIntExtra("microphone", 0) != 0;
++        Log.d(TAG, "updateHeadsetPlug connected:" + connected + ",hasMic:" + hasMic);
++        if (connected) {
++            String contentDescription = mContext.getString(hasMic
++                    ? R.string.accessibility_status_bar_headset
++                    : R.string.accessibility_status_bar_headphones);
++            mIconController.setIcon(mSlotHeadset, hasMic ? R.drawable.headset_sb_icon
++                    : R.drawable.headset_sb_icon, contentDescription);
++            mIconController.setIconVisibility(mSlotHeadset, true);
++        } else {
++            mIconController.setIconVisibility(mSlotHeadset, false);
++        }
++    }
++
++    @Override
++    public void onDataSaverChanged(boolean isDataSaving) {
++        mIconController.setIconVisibility(mSlotDataSaver, isDataSaving);
++    }
++
++    @VisibleForTesting
++    /*private*/ BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++            if (action.equals(AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED)) {
++                updateAlarm();
++            } else if (action.equals(AudioManager.RINGER_MODE_CHANGED_ACTION) ||
++                    action.equals(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION)) {
++                updateVolumeZen();
++            } else if (action.equals(TelephonyIntents.ACTION_SIM_STATE_CHANGED)) {
++                updateSimState(intent);
++            } else if (action.equals(TelecomManager.ACTION_CURRENT_TTY_MODE_CHANGED)) {
++                updateTTY(intent);
++            } else if (action.equals(Intent.ACTION_MANAGED_PROFILE_AVAILABLE) ||
++                    action.equals(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE) ||
++                    action.equals(Intent.ACTION_MANAGED_PROFILE_REMOVED)) {
++                updateQuietState();
++                updateManagedProfile();
++            } else if (action.equals(AudioManager.ACTION_HEADSET_PLUG)) {
++                updateHeadsetPlug(intent);
++            }
++            /// M: [Multi-User] Register Alarm intent by user @{
++            else if (action.equals(Intent.ACTION_USER_SWITCHED)) {
++                updateAlarm();
++                int newUserId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1);
++                registerAlarmClockChanged(newUserId, true);
++            }
++			//add for nfc start
++			else if(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED.equals(action)){
++				updateNfc(intent);
++				
++			}
++			//add for nfc end
++            /// M: @}
++        }
++    };
++
++    private Runnable mRemoveCastIconRunnable = new Runnable() {
++        @Override
++        public void run() {
++            if (DEBUG) Log.v(TAG, "updateCast: hiding icon NOW");
++            mIconController.setIconVisibility(mSlotCast, false);
++        }
++    };
++	//add for nfc start
++	private boolean isNfcOpen(){
++    	NfcManager nfcmanager = (NfcManager) mContext.getSystemService(Context.NFC_SERVICE);
++    	NfcAdapter nfcadapter = (NfcAdapter)nfcmanager.getDefaultAdapter();
++    	if(nfcadapter != null && nfcadapter.isEnabled()){
++			Log.d(TAG, "nfcadapter!=null");
++			return true;
++		}	
++    	return false;
++    }
++	
++	private Runnable mNfcRunnable = new Runnable() {
++        @Override
++        public void run() {
++            Log.d(TAG, "updateNFC");
++            if(mNfcVisible){
++            	mIconController.setIconVisibility(SLOT_NFC, true);
++            }else{
++            	mIconController.setIconVisibility(SLOT_NFC, false);
++            }
++        }
++    };
++	
++	private void updateNfc(Intent intent){
++    	int state = intent.getIntExtra(NfcAdapter.EXTRA_ADAPTER_STATE,NfcAdapter.STATE_OFF);
++    	mHandler.removeCallbacks(mNfcRunnable);
++    	switch(state){
++    	case NfcAdapter.STATE_OFF :
++    	case NfcAdapter.STATE_TURNING_OFF:
++    		mNfcVisible = false;
++            break;
++        case NfcAdapter.STATE_ON:
++        case NfcAdapter.STATE_TURNING_ON:
++        	mNfcVisible = true;
++        	break;
++    	}
++    	mHandler.postDelayed(mNfcRunnable, 1000);
++    }
++	//add for nfc end
++	
++    /// M: [Multi-User] Register Alarm intent by user @{
++    private BroadcastReceiver mAlarmIntentReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++            Log.d(TAG, "onReceive:" + action);
++            if (action.equals(AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED)) {
++                updateAlarm();
++            }
++        }
++    };
++
++    private void registerAlarmClockChanged(int newUserId, boolean userSwitch) {
++        if (userSwitch) {
++            mContext.unregisterReceiver(mAlarmIntentReceiver);
++        }
++        IntentFilter filter = new IntentFilter();
++        filter.addAction(AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED);
++
++        Log.d(TAG, "registerAlarmClockChanged:" + newUserId);
++        UserHandle newUserHandle = new UserHandle(newUserId);
++        mContext.registerReceiverAsUser(mAlarmIntentReceiver, newUserHandle, filter,
++            null /* permission */, mHandler /* scheduler */);
++    }
++    /// M: @}
++
++}

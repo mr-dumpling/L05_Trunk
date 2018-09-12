@@ -1,0 +1,71 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationListItem.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationListItem.java	(revision 1123)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ConversationListItem.java	(revision 1124)
+@@ -36,6 +36,7 @@
+ import android.text.TextUtils;
+ import android.text.style.ForegroundColorSpan;
+ import android.text.style.StyleSpan;
++import android.text.style.TextAppearanceSpan;
+ import android.util.AttributeSet;
+ import android.util.Log;
+ import android.view.View;
+@@ -217,21 +218,22 @@
+                         before, buf.length(), Spannable.SPAN_INCLUSIVE_EXCLUSIVE);
+             }
+         }
+-/** M: Remove Google default code
++/** M: Remove Google default code */
++        //start hongjian bug 111050
+         if (mConversation.hasDraft()) {
+            // buf.append(mContext.getResources().getString(R.string.draft_separator));
+-            int before = buf.length();
++            int before_draft = buf.length();
+             int size;
+             buf.append(",  " + mContext.getResources().getString(R.string.has_draft));
+             size = android.R.style.TextAppearance_Small;
+-            buf.setSpan(new TextAppearanceSpan(mContext, size, color), before + 1,
++            buf.setSpan(new TextAppearanceSpan(mContext, size, color), before_draft + 1,
+                     buf.length(), Spannable.SPAN_INCLUSIVE_EXCLUSIVE);
+             buf.setSpan(new ForegroundColorSpan(
+                     mContext.getResources().getColor(R.drawable.text_color_red)),
+-                    before + 1, buf.length(), Spannable.SPAN_INCLUSIVE_EXCLUSIVE);
++                    before_draft + 1, buf.length(), Spannable.SPAN_INCLUSIVE_EXCLUSIVE);
+         }
++        //end
+ 
+- */
+         // Unread messages are shown in bold
+         if (mConversation.hasUnreadMessages()) {
+             buf.setSpan(STYLE_BOLD, 0, buf.length(),
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/widget/MmsWidgetService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/widget/MmsWidgetService.java	(revision 1123)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/widget/MmsWidgetService.java	(revision 1124)
+@@ -32,6 +32,7 @@
+ import android.text.Spannable;
+ import android.text.SpannableStringBuilder;
+ import android.text.style.ForegroundColorSpan;
++import android.text.style.TextAppearanceSpan;
+ import android.util.Log;
+ import android.view.View;
+ import android.widget.RemoteViews;
+@@ -300,7 +301,8 @@
+                 }
+                 SpannableStringBuilder from = addColor(fromString, color);
+ 
+-                /** M: do not show draft flag
++                /** M: do not show draft flag*/
++                //start hongjian bug 111050
+                 if (conv.hasDraft()) {
+                     from.append(mContext.getResources().getString(R.string.draft_separator));
+                     int before = from.length();
+@@ -312,7 +314,7 @@
+                             mContext.getResources().getColor(R.drawable.text_color_red)),
+                             before, from.length(), Spannable.SPAN_INCLUSIVE_EXCLUSIVE);
+                 }
+-                */
++                //end
+ 
+                 // Unread messages are shown in bold
+                 if (conv.hasUnreadMessages()) {

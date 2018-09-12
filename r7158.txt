@@ -1,0 +1,53 @@
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintEnrollEnrolling.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintEnrollEnrolling.java	(revision 7157)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintEnrollEnrolling.java	(revision 7158)
+@@ -44,6 +44,9 @@
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ import com.android.settings.ChooseLockSettingsHelper;
+ import com.android.settings.R;
++import android.os.PowerManager;
++import android.content.Context;
++import android.util.Log;
+ 
+ /**
+  * Activity which handles the actual enrolling for fingerprint.
+@@ -89,6 +92,8 @@
+     private int mIndicatorBackgroundRestingColor;
+     private int mIndicatorBackgroundActivatedColor;
+     private boolean mRestoring;
++    
++    PowerManager.WakeLock mWakeLock = null;
+ 
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+@@ -141,6 +146,13 @@
+     @Override
+     protected void onStart() {
+         super.onStart();
++        if (mWakeLock == null) {
++            Log.d(TAG_SIDECAR, "Acquiring wakelock.");
++            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
++            mWakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, TAG_SIDECAR);
++            mWakeLock.acquire();
++        }
++        
+         mSidecar = (FingerprintEnrollSidecar) getFragmentManager().findFragmentByTag(TAG_SIDECAR);
+         if (mSidecar == null) {
+             mSidecar = new FingerprintEnrollSidecar();
+@@ -173,6 +185,15 @@
+     @Override
+     protected void onStop() {
+         super.onStop();
++        if (mWakeLock != null) {
++            Log.d(TAG_SIDECAR, "Releasing and destroying wakelock");
++            ///M ALPS01852753 {@
++            if (mWakeLock.isHeld()) {
++                mWakeLock.release();
++            }
++            /// @}
++            mWakeLock = null;
++        }
+         if (mSidecar != null) {
+             mSidecar.setListener(null);
+         }

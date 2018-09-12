@@ -1,0 +1,37 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/wappush/WapPushMessagingNotification.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/wappush/WapPushMessagingNotification.java	(revision 7633)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/wappush/WapPushMessagingNotification.java	(revision 7634)
+@@ -781,7 +781,8 @@
+                 NotificationPreferenceActivity.NOTIFICATION_RINGTONE, null);
+ 
+         /// M: for Plug-in @{
+-        if (OpMessageUtils.getOpMessagePlugin().getOpWappushMessagingNotificationExt() != null) {
++        if ((OpMessageUtils.getOpMessagePlugin().getOpWappushMessagingNotificationExt() != null)
++                && (!sNotificationSet.isEmpty())) { // Add empty check to avoid potential exception
+             ringtoneStr = OpMessageUtils.getOpMessagePlugin()
+                     .getOpWappushMessagingNotificationExt().getWapPushSimRingtone(
+                     context, ringtoneStr, sNotificationSet.first().mThreadId);
+@@ -799,6 +800,22 @@
+                 audioManager.shouldVibrate(AudioManager.VIBRATE_TYPE_NOTIFICATION)) {
+             defaults |= Notification.DEFAULT_VIBRATE;
+         }
++        // Deliver user to Wap push mailbox since message has been auto lanuched
++        Intent intent = new Intent(Intent.ACTION_VIEW);
++        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
++                | Intent.FLAG_ACTIVITY_SINGLE_TOP
++                | Intent.FLAG_ACTIVITY_CLEAR_TOP);
++        intent.setType("vnd.android-dir/wappush");
++        PendingIntent pi = PendingIntent.getActivity(
++                context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
++        builder.setContentIntent(pi);
++        builder.setAutoCancel(true);
++        // No need to show pop-up
++        // builder.setPriority(Notification.PRIORITY_HIGH);
++
++        builder.setSmallIcon(R.drawable.stat_notify_wappush);
++        builder.setContentTitle("Service Load Message");
++        builder.setContentText(url);
+         builder.setTicker(url);
+         builder.setDefaults(defaults);
+         builder.setLights(0xff00ff00, 500, 2000);

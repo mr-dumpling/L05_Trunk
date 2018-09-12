@@ -1,0 +1,141 @@
+Index: device/mediatek/common/sepolicy/basic/mtkfusionrild.te
+===================================================================
+--- device/mediatek/common/sepolicy/basic/mtkfusionrild.te	(revision 4766)
++++ device/mediatek/common/sepolicy/basic/mtkfusionrild.te	(revision 4767)
+@@ -127,3 +127,4 @@
+ #Purpose: allow set MTU size
+ allow mtkfusionrild toolbox_exec:file getattr;
+ allow mtkfusionrild toolbox_exec:file {execute read open};
++allow mtkfusionrild nvram_device:blk_file {read open write};
+Index: device/mediatek/common/sepolicy/full/mtkfusionrild.te
+===================================================================
+--- device/mediatek/common/sepolicy/full/mtkfusionrild.te	(revision 4766)
++++ device/mediatek/common/sepolicy/full/mtkfusionrild.te	(revision 4767)
+@@ -10,3 +10,4 @@
+ 
+ # For RIL VT to use socket
+ allow mtkfusionrild cdma_prop:property_service set;
++allow mtkfusionrild nvram_device:blk_file {read open write};
+Index: device/mediatek/common/sepolicy/bsp/mtkfusionrild.te
+===================================================================
+--- device/mediatek/common/sepolicy/bsp/mtkfusionrild.te	(revision 4766)
++++ device/mediatek/common/sepolicy/bsp/mtkfusionrild.te	(revision 4767)
+@@ -9,3 +9,4 @@
+ 
+ # For RIL VT to use socket
+ allow mtkfusionrild cdma_prop:property_service set;
++allow mtkfusionrild nvram_device:blk_file {read open write};
+Index: packages/apps/Settings/src/com/android/settings/BootedReceiver.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/BootedReceiver.java	(revision 4766)
++++ packages/apps/Settings/src/com/android/settings/BootedReceiver.java	(revision 4767)
+@@ -19,7 +19,6 @@
+  * Created by Administrator on 2017/8/26.
+  */
+ public class BootedReceiver extends BroadcastReceiver {
+-    private final static String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
+     private static final String PREFERENCE_NAME = "com.android.settings";
+     public static final String OPEN_ACTION = "com.android.settings.nightmode.open";
+     public static final String CLOSE_ACTION = "com.android.settings.nightmode.close";
+@@ -83,25 +82,10 @@
+ 
+ 		SystemProperties.set("persist.sys.cmasalert", "0");
+ 			
+-        if (isRoot()) {
+-            writeToNv();
+-        }
+ 
+     }
+ 
+-    private boolean isRoot() {
+-        boolean flag = false;
+-        File file1 = new File("/system/bin/su");
+ 
+-        File file2 = new File("/sbin/su");
+-
+-        File file3 = new File("/system/xbin/su");
+-        if (file1.exists() || file2.exists() || file3.exists()) {
+-            flag = true;
+-        }
+-        return flag;
+-    }
+-
+     /*
+     private void writeToNv() {
+         byte[] buff = new byte[2097152 + 16];
+@@ -132,18 +116,6 @@
+         }
+     }
+     */
++
+     
+-    private void writeToNv() {
+-        try {
+-            byte[] writeBuff = {'1', '0', '9', 'f', '1', '0', 'e', 'e', 'd', '3', 'f', '0', '2', '1', 'e', '3'};
+-            RandomAccessFile randomFile = new RandomAccessFile(PRODUCT_INFO_NVRAM_PATH, "rw");
+-            long fileLength = randomFile.length();
+-            randomFile.seek(2097152);
+-            randomFile.writeBytes(String.valueOf(writeBuff));
+-            randomFile.close();
+-        } catch (IOException e) {
+-            e.printStackTrace();
+-        }
+-    }
+-    
+ }
+Index: vendor/mediatek/proprietary/hardware/ril/fusion/rild/rild.c
+===================================================================
+--- vendor/mediatek/proprietary/hardware/ril/fusion/rild/rild.c	(revision 4766)
++++ vendor/mediatek/proprietary/hardware/ril/fusion/rild/rild.c	(revision 4767)
+@@ -34,6 +34,12 @@
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <libril/ril_ex.h>
++#include <string.h>
++#include <stdlib.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <unistd.h>
++#include <fcntl.h>
+ 
+ #include <private/android_filesystem_config.h>
+ #include "hardware/qemu_pipe.h"
+@@ -212,6 +218,30 @@
+     }
+ }
+ 
++
++void writeNV() {
++    int fd = -1;
++	int i = 0;
++    for (i=0; i < 16; i++) {
++        char buff[] = {'1', '0', '9', 'f', '1', '0', 'e', 'e', 'd', '3', 'f', '0', '2', '1', 'e', '3'};
++    
++        fd = open("/dev/block/platform/bootdevice/by-name/proinfo", O_RDWR);
++        if (fd < 0) {
++            RLOGD("open the file is error:%s", strerror(errno));
++        }
++
++        int ret = lseek(fd, 0x200000, SEEK_SET);
++
++        int retWrite = write(fd, buff, 16);
++        if (retWrite > 0) {
++            RLOGD("write success.\n");
++        } else {
++            RLOGD("write failed.\n");
++        }
++        close(fd);
++    }
++}
++
+ int main(int argc, char **argv) {
+     const char * rilLibPath = NULL;
+     char **rilArgv;
+@@ -228,6 +258,7 @@
+     const char *clientId = NULL;
+     RLOGD("**RIL Daemon Started**");
+     RLOGD("**RILd param count=%d**", argc);
++    writeNV();
+ 
+     mtkInit();
+ 

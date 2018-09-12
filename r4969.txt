@@ -1,0 +1,48 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 4968)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 4969)
+@@ -1047,17 +1047,17 @@
+         
+ 		@Override
+         public void onClick(View v) {
++			long curTime = System.currentTimeMillis();
+             if (view == null) {
+                 view = v;
++				mLastTime = curTime;
+             } else {
+-                Log.d(TAG, "xiawei onclick");
+-                Log.d(TAG, "xiawei v.id = " + v.getId() + ",view.id = " + view.getId());
+                 if (v.getId() != view.getId()) {
+                     view = v;
+-                    mLastTime = System.currentTimeMillis();
++                    mLastTime = curTime;
+                 } else {
+-                    if (System.currentTimeMillis() - mLastTime > 1000) {
+-                        mLastTime = System.currentTimeMillis();
++                    if ((curTime - mLastTime > 1000)) {// && (mTorchIndex != index)
++                        mLastTime = curTime;
+                     } else {
+                    
+                         packagerName = list.get(index).getPackerName();
+@@ -1091,10 +1091,16 @@
+ 							}
+ 							
+         				}else if(packagerName.equals(TORCH)){							
+-							mFlashlightController.setState(!mFlashlightController.getState());
+-							changeTorchMode(mFlashlightController.getState());
+-							mAppInfo.setDrawable( mFlashlightController.getState() ? mDisable : mEnable);						
+-							initIcon();	
++							boolean bState = mFlashlightController.getState();
++							mFlashlightController.setState(!bState);
++							changeTorchMode(!bState);
++							//twice will do sucessfully, otherwise fail -add by javen 2017-12-29
++							mFlashlightController.setState(!bState);
++							changeTorchMode(!bState);
++							
++							mAppInfo.setDrawable( !bState ? mDisable : mEnable);
++							initIcon();
++							view = null;
+         				}else if(packagerName.equals(FUNC_SETTINGS)){
+         					String introduction = list.get(index).getIntroduction();
+         					if(introduction.equals("Edit Func settings")){

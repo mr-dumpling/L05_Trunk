@@ -1,0 +1,25 @@
+Index: packages/apps/Settings/src/com/android/settings/DisplaySettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 5619)
++++ packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 5620)
+@@ -75,6 +75,8 @@
+ import static android.provider.Settings.System.SCREEN_OFF_TIMEOUT;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
++import com.android.settingslib.dream.DreamBackend;
++import com.android.settingslib.dream.DreamBackend.DreamInfo;
+ 
+ public class DisplaySettings extends SettingsPreferenceFragment implements
+         Preference.OnPreferenceChangeListener, Indexable {
+@@ -481,6 +483,11 @@
+ 
+     private void updateScreenSaverSummary() {
+         if (mScreenSaverPreference != null) {
++            if (DreamSettings.getSummaryTextWithDreamName(getActivity()) == null) {
++                DreamBackend backend = new DreamBackend(getActivity());
++                List<DreamBackend.DreamInfo> dreamInfos = backend.getDreamInfos();
++                backend.setActiveDream(dreamInfos.get(0).componentName);
++            }
+             mScreenSaverPreference.setSummary(
+                     DreamSettings.getSummaryTextWithDreamName(getActivity()));
+         }

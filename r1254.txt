@@ -1,0 +1,97 @@
+Index: packages/providers/MediaProvider/src/com/android/providers/media/RingtonePickerActivity.java
+===================================================================
+--- packages/providers/MediaProvider/src/com/android/providers/media/RingtonePickerActivity.java	(revision 1253)
++++ packages/providers/MediaProvider/src/com/android/providers/media/RingtonePickerActivity.java	(revision 1254)
+@@ -51,7 +51,12 @@
+ import com.android.internal.app.AlertController;
+ 
+ import java.util.regex.Pattern;
+-
++//add by wqq start{
++import android.media.AudioManager; 
++import android.content.Context;
++import android.media.AudioManager.OnAudioFocusChangeListener;
++import android.media.AudioSystem;
++//add by wqq end}
+ /**
+  * The {@link RingtonePickerActivity} allows the user to choose one from all of the
+  * available ringtones. The chosen ringtone's URI will be persisted as a string.
+@@ -142,7 +147,10 @@
+      * can be stopped later, after the activity is recreated.
+      */
+     private static Ringtone sPlayingRingtone;
+-
++	//add by wqq start{
++	private AudioManager mAudioManager = null;
++ 	private boolean mGetFocus = false; 
++	//add by wqq end}
+     private DialogInterface.OnClickListener mRingtoneClickListener =
+             new DialogInterface.OnClickListener() {
+ 
+@@ -263,6 +271,8 @@
+             + ", mExistingUri = " + mExistingUri
+             + ", mCursor.getCount() = " + (mCursor == null ? "null" : mCursor.getCount()));
+         setupAlert();
++		//add by wqq
++		mAudioManager=(AudioManager)getSystemService(Context.AUDIO_SERVICE);
+     }
+     @Override
+     public void onSaveInstanceState(Bundle outState) {
+@@ -458,7 +468,20 @@
+                                 .setFlags(mAttributesFlags)
+                                 .build());
+             }
+-            ringtone.play();
++			//add wqq start{
++			int result=mAudioManager.requestAudioFocus(mAudioFocusListener, AudioManager.STREAM_RING, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
++			if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
++				MtkLog.d(TAG, " request audio focus fail");
++				mGetFocus = false;
++			} else {
++				MtkLog.d(TAG, " request audio focus success");
++				mGetFocus = true;
++			}
++ 			if(AudioSystem.isStreamActive(AudioManager.STREAM_RING,0)==false){
++				ringtone.play();
++			}
++            
++			//add by wqq end}
+         }
+     }
+ 
+@@ -506,8 +529,34 @@
+         if (mRingtoneManager != null) {
+             mRingtoneManager.stopPreviousRingtone();
+         }
++		//add by wqq start{
++		if (mGetFocus && (null != mAudioManager) ) {
++ 
++			if (AudioManager.AUDIOFOCUS_REQUEST_GRANTED == mAudioManager
++					.abandonAudioFocus(mAudioFocusListener)) {
++				MtkLog.d(TAG, "<abandonAudioFocus()> abandon audio focus success");
++				mGetFocus = false;
++ 			} else {
++				MtkLog.d(TAG, "<abandonAudioFocus()> abandon audio focus failed");
++				mGetFocus = true;
++			}
++		}
++		//add by wqq end}
+     }
+-
++	//add by wqq start{
++	private OnAudioFocusChangeListener mAudioFocusListener = new OnAudioFocusChangeListener() {
++ 		public void onAudioFocusChange(int focusChange) {
++ 			MtkLog.d(TAG, "onAudioFocusChange:" + focusChange );
++ 			switch (focusChange) {
++ 				case AudioManager.AUDIOFOCUS_LOSS:
++ 				case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
++ 				case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
++ 						stopAnyPlayingRingtone();
++				 	break;
++ 				}
++ 		}
++ 	};
++	//add by wqq end}
+     private int getRingtoneManagerPosition(int listPos) {
+         return listPos - mStaticItemCount;
+     }

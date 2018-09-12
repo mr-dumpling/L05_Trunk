@@ -1,0 +1,910 @@
+Index: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/BootCmpReceiver.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/BootCmpReceiver.java	(revision 0)
++++ vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/BootCmpReceiver.java	(revision 15009)
+@@ -0,0 +1,224 @@
++/* Copyright Statement:
++ *
++ * This software/firmware and related documentation ("MediaTek Software") are
++ * protected under relevant copyright laws. The information contained herein
++ * is confidential and proprietary to MediaTek Inc. and/or its licensors.
++ * Without the prior written permission of MediaTek inc. and/or its licensors,
++ * any reproduction, modification, use or disclosure of MediaTek Software,
++ * and information contained herein, in whole or in part, shall be strictly prohibited.
++ *
++ * MediaTek Inc. (C) 2010. All rights reserved.
++ *
++ * BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
++ * THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
++ * RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
++ * AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
++ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
++ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
++ * NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
++ * SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
++ * SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
++ * THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
++ * THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
++ * CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
++ * SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
++ * STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
++ * CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
++ * AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
++ * OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
++ * MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
++ *
++ * The following software/firmware and/or related documentation ("MediaTek Software")
++ * have been modified by MediaTek Inc. All revisions are subject to any receiver's
++ * applicable license agreements with MediaTek Inc.
++ */
++
++package com.mediatek.simprocessor;
++
++import java.util.HashMap;
++import java.util.List;
++
++import android.content.BroadcastReceiver;
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.Intent;
++import android.content.SharedPreferences;
++import android.content.pm.PackageManager;
++import android.os.UserHandle;
++import android.os.UserManager;
++
++import com.android.internal.telephony.PhoneConstants;
++import com.android.internal.telephony.TelephonyIntents;
++
++import com.mediatek.simprocessor.SimProcessorService;
++import com.mediatek.simprocessor.SimServiceUtils;
++import com.mediatek.simprocessor.Log;
++
++import android.os.SystemProperties;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++
++public class BootCmpReceiver extends BroadcastReceiver {
++    private static final String TAG = "BootCmpReceiver";
++    private static final int ERROR_SUB_ID = -1000;
++    public static final String NEED_REFRESH_SIM_CONTACTS = "need_refresh_sim_contacts";
++    public static final String ACTION_REFRESH_SIM_CONTACT =
++            "com.android.contacts.REFRESH_SIM_CONTACT";
++    public static final boolean MTK_OWNER_SIM_SUPPORT =
++            isPropertyEnabled("ro.mtk_owner_sim_support");
++
++    public void onReceive(Context context, Intent intent) {
++        final String action = intent.getAction();
++        Log.i(TAG, "[onReceive], action is " + action);
++
++        // add for multi-user ALPS01964765, whether the current user is running.
++        // if not , will do nothing.
++        UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
++        boolean isRunning = userManager.isUserRunning(new UserHandle(UserHandle.myUserId()));
++        Log.d(TAG, "[onReceive], the current user is: " + UserHandle.myUserId()
++                + " isRunning: " + isRunning);
++        if (!isRunning) {
++            return;
++        }
++
++        /**
++         * M: Bug Fix for CR ALPS01328816: when other owner, do not show sms
++         * when share contact @{
++         */
++        if (action.equals("android.intent.action.USER_SWITCHED_FOR_MULTIUSER_APP")
++                && MTK_OWNER_SIM_SUPPORT) {
++            if (UserHandle.myUserId() == UserHandle.USER_OWNER) {
++                context.getPackageManager().setComponentEnabledSetting(
++                        new ComponentName("com.android.contacts",
++                                "com.mediatek.contacts.ShareContactViaSMSActivity"),
++                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
++                        PackageManager.DONT_KILL_APP);
++            } else {
++                context.getPackageManager().setComponentEnabledSetting(
++                        new ComponentName("com.android.contacts",
++                                "com.mediatek.contacts.ShareContactViaSMSActivity"),
++                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
++                        PackageManager.DONT_KILL_APP);
++            }
++            System.exit(0);
++        }
++        /** @} */
++
++        /// M: Not support SIM Contacts in guest mode.
++        if (UserHandle.myUserId() != UserHandle.USER_OWNER) {
++            Log.i(TAG, "[onReceive], The current user isn't owner !");
++            return;
++        }
++
++        /// Change for ALPS02377518, should prevent accessing SubInfo if has no
++        // basic permissions.
++        SharedPreferences perferences = context.getSharedPreferences(context.getPackageName(),
++                Context.MODE_PRIVATE);
++        if (SimProcessorUtils.hasBasicPermissions(context)) {
++            if (TelephonyIntents.ACTION_PHB_STATE_CHANGED.equals(action)) {
++                processPhoneBookChanged(context, intent);
++            } else if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
++                if (!isPhbReady()) {
++                    processBootComplete(context);
++                } else {
++                    processDupSimContacts(context);
++                }
++            } else if (ACTION_REFRESH_SIM_CONTACT.equals(action)) {
++                /// Add for ALPS02383518, when BootCmpReceiver received
++                // PHB_CHANGED intent but has no READ_PHONE permission,
++                //  marked NEED_REFRESH_SIM_CONTACTS as true. So refresh
++                // all SIM contacts after open all permission and back to
++                // contacts, this action is sent from PeopleActivity$onCreate. @{
++                boolean needRefreshSIMContacts = perferences.getBoolean(
++                        NEED_REFRESH_SIM_CONTACTS, false);
++                if (needRefreshSIMContacts) {
++                    resfreshAllSimContacts(context);
++                    perferences.edit().putBoolean(NEED_REFRESH_SIM_CONTACTS, false).apply();
++                } else if (!SimProcessorService.isSimProcessorRunning()) {
++                    Log.i(TAG, "[onReceive], No need refresh and service is not running!");
++                    System.exit(0);
++                }
++                /// @}
++            }
++        } else if (TelephonyIntents.ACTION_PHB_STATE_CHANGED.equals(action)
++                || Intent.ACTION_BOOT_COMPLETED.equals(action)) {
++            Log.e(TAG, "Contact has no basic permissions");
++            perferences.edit().putBoolean(NEED_REFRESH_SIM_CONTACTS, true).apply();
++            return;
++        }
++        /// @}
++    }
++
++    private boolean isPhbReady() {
++        final int simCount = TelephonyManager.getDefault().getSimCount();
++        Log.i(TAG, "isPhbReady simCount: " + simCount);
++        for (int slotId = 0; slotId < simCount; slotId++) {
++            int[] subId = SubscriptionManager.getSubId(slotId);
++            if (subId != null && subId.length > 0 && SimCardUtils.isPhoneBookReady(subId[0])) {
++                Log.i(TAG, "isPhbReady ready! ");
++                return true;
++            }
++        }
++        return false;
++    }
++
++    private void startSimService(Context context, int subId, int workType) {
++        Intent intent = null;
++        intent = new Intent(context, SimProcessorService.class);
++        intent.putExtra(SimServiceUtils.SERVICE_SUBSCRIPTION_KEY, subId);
++        intent.putExtra(SimServiceUtils.SERVICE_WORK_TYPE, workType);
++        Log.d(TAG, "[startSimService]subId:" + subId + "|workType:" + workType);
++        context.startService(intent);
++    }
++
++    private void processPhoneBookChanged(Context context, Intent intent) {
++        Log.d(TAG, "processPhoneBookChanged");
++        boolean phbReady = intent.getBooleanExtra("ready", false);
++        int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY, ERROR_SUB_ID);
++        Log.d(TAG, "[processPhoneBookChanged]phbReady:" + phbReady + "|subId:" + subId);
++        if (phbReady && subId > 0) {
++            startSimService(context, subId, SimServiceUtils.SERVICE_WORK_IMPORT);
++        } else if (subId > 0 && !phbReady) {
++            startSimService(context, subId, SimServiceUtils.SERVICE_WORK_REMOVE);
++        }
++    }
++
++    /**
++     * fix for [PHB Status Refatoring] ALPS01003520
++     * when boot complete,remove the contacts if the card of a slot had been removed
++     */
++    private void processBootComplete(Context context) {
++        Log.d(TAG, "processBootComplete");
++        startSimService(context, SimServiceUtils.SERVICE_FORCE_REMOVE_SUB_ID,
++            SimServiceUtils.SERVICE_WORK_REMOVE);
++    }
++
++    private void processDupSimContacts(Context context) {
++        Log.d(TAG, "processDupSimContacts");
++        startSimService(context, SimServiceUtils.SERVICE_REMOVE_DUP_SUB_ID,
++            SimServiceUtils.SERVICE_WORK_REMOVE);
++    }
++
++    public void resfreshAllSimContacts(Context context) {
++        Log.i(TAG, "resfreshSimContacts");
++        startSimService(context, SimServiceUtils.SERVICE_FORCE_REMOVE_SUB_ID,
++                SimServiceUtils.SERVICE_WORK_REMOVE);
++        List<SubscriptionInfo> subscriptionInfoList = SubscriptionManager.from(
++                context).getActiveSubscriptionInfoList();
++        if (subscriptionInfoList == null || subscriptionInfoList.size() == 0) {
++            Log.i(TAG, "resfreshSimContacts has no sim.");
++            return;
++        }
++        for (SubscriptionInfo subscriptionInfo : subscriptionInfoList) {
++            Log.i(TAG, "resfreshSimContacts start get sub " + subscriptionInfo.getSubscriptionId());
++            startSimService(context, subscriptionInfo.getSubscriptionId(),
++                    SimServiceUtils.SERVICE_WORK_IMPORT);
++        }
++    }
++
++    private static boolean isPropertyEnabled(String propertyString) {
++        return "1".equals(SystemProperties.get(propertyString));
++    }
++
++}
+
+Property changes on: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/BootCmpReceiver.java
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimServiceUtils.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimServiceUtils.java	(revision 0)
++++ vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimServiceUtils.java	(revision 15009)
+@@ -0,0 +1,259 @@
++/* Copyright Statement:
++ *
++ * This software/firmware and related documentation ("MediaTek Software") are
++ * protected under relevant copyright laws. The information contained herein
++ * is confidential and proprietary to MediaTek Inc. and/or its licensors.
++ * Without the prior written permission of MediaTek inc. and/or its licensors,
++ * any reproduction, modification, use or disclosure of MediaTek Software,
++ * and information contained herein, in whole or in part, shall be strictly prohibited.
++ *
++ * MediaTek Inc. (C) 2010. All rights reserved.
++ *
++ * BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
++ * THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
++ * RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
++ * AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
++ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
++ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
++ * NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
++ * SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
++ * SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
++ * THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
++ * THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
++ * CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
++ * SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
++ * STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
++ * CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
++ * AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
++ * OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
++ * MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
++ *
++ * The following software/firmware and/or related documentation ("MediaTek Software")
++ * have been modified by MediaTek Inc. All revisions are subject to any receiver's
++ * applicable license agreements with MediaTek Inc.
++ */
++package com.mediatek.simprocessor;
++
++import android.content.Context;
++import android.content.Intent;
++import android.database.Cursor;
++import android.os.UserHandle;
++import android.provider.ContactsContract.Groups;
++import android.provider.ContactsContract.RawContacts;
++import android.telephony.SubscriptionInfo;
++import android.text.TextUtils;
++
++import com.android.internal.telephony.PhoneConstants;
++
++import com.mediatek.simprocessor.SimCardUtils;
++import com.mediatek.simprocessor.SubInfoUtils;
++import com.mediatek.simprocessor.Log;
++
++import java.util.ArrayList;
++import java.util.List;
++
++public class SimServiceUtils {
++    private static final String TAG = "SimServiceUtils";
++
++    private static SimProcessorState sSimProcessorState;
++
++    public static final String ACTION_PHB_LOAD_FINISHED =
++            "com.android.contacts.ACTION_PHB_LOAD_FINISHED";
++
++    public static final String SERVICE_SUBSCRIPTION_KEY = "subscription_key";
++    public static final String SERVICE_SLOT_KEY = "which_slot";
++    public static final String SERVICE_WORK_TYPE = "work_type";
++
++    public static final int SERVICE_WORK_NONE = 0;
++    public static final int SERVICE_WORK_IMPORT = 1;
++    public static final int SERVICE_WORK_REMOVE = 2;
++    public static final int SERVICE_WORK_EDIT = 3;
++    public static final int SERVICE_WORK_DELETE = 4;
++    public static final int SERVICE_WORK_UNKNOWN = -1;
++    public static final int SERVICE_IDLE = 0;
++    public static final int SERVICE_FORCE_REMOVE_SUB_ID = -20;
++    public static final int SERVICE_REMOVE_DUP_SUB_ID = -30;
++
++    public static final int SERVICE_DELETE_CONTACTS = 1;
++    public static final int SERVICE_QUERY_SIM = 2;
++    public static final int SERVICE_IMPORT_CONTACTS = 3;
++
++    public static final int SIM_TYPE_SIM = SimCardUtils.SimType.SIM_TYPE_SIM;
++    public static final int SIM_TYPE_USIM = SimCardUtils.SimType.SIM_TYPE_USIM;
++    public static final int SIM_TYPE_RUIM = SimCardUtils.SimType.SIM_TYPE_RUIM;
++    public static final int SIM_TYPE_CSIM = SimCardUtils.SimType.SIM_TYPE_CSIM;
++    public static final int SIM_TYPE_UNKNOWN = SimCardUtils.SimType.SIM_TYPE_UNKNOWN;
++
++    public static final int TYPE_IMPORT = 1;
++    public static final int TYPE_REMOVE = 2;
++
++    public static class ServiceWorkData {
++        public int mSubId = -1;
++        public int mSimType = SIM_TYPE_UNKNOWN;
++        public Cursor mSimCursor = null;
++
++        ServiceWorkData() {
++        }
++
++        ServiceWorkData(int subId, int simType, Cursor simCursor) {
++            mSubId = subId;
++            mSimType = simType;
++            mSimCursor = simCursor;
++        }
++    }
++
++    public static void deleteSimContact(Context context, int subId) {
++        Log.i(TAG, "[deleteSimContact]subId:" + subId);
++        List<SubscriptionInfo> subscriptionInfoList = SubInfoUtils.getActivatedSubInfoList();
++
++        if (subId == SERVICE_REMOVE_DUP_SUB_ID && subscriptionInfoList != null
++                && subscriptionInfoList.size() > 0) {
++            deleteDupSimContact(context);
++            return;
++        }
++
++        ArrayList<Integer> deleteSubIds = new ArrayList<Integer>();
++        /// fix ALPS02816596.when force remove all sim contacts,deleteSubIds.size will be
++        //  zero.it will remove all sim contacts.@{
++        if (subId != SERVICE_FORCE_REMOVE_SUB_ID) {
++            deleteSubIds.add(subId);
++        }
++        /// @}
++
++        // Be going to delete the invalid SIM contacts records.
++        StringBuilder delSelection = new StringBuilder();
++        String filter = null;
++        for (int id : deleteSubIds) {
++            delSelection.append(id).append(",");
++        }
++        if (delSelection.length() > 0) {
++            delSelection.deleteCharAt(delSelection.length() - 1);
++            filter = delSelection.toString();
++        }
++        filter = TextUtils.isEmpty(filter) ? RawContacts.INDICATE_PHONE_SIM + " > 0 "
++                : RawContacts.INDICATE_PHONE_SIM + " > 0 " + " AND "
++                        + RawContacts.INDICATE_PHONE_SIM + " IN (" + filter + ")";
++        Log.d(TAG, "[deleteSimContact] sim contacts filter:" + filter +
++                ",deleteSubIds: " + deleteSubIds);
++        int count = context.getContentResolver().delete(
++                RawContacts.CONTENT_URI.buildUpon().appendQueryParameter("sim", "true").build(),
++                filter, null);
++        // add for ALPS01964765.
++        Log.d(TAG, "[deleteSimContact]the current user is: " + UserHandle.myUserId() +
++                ",count = " + count);
++
++        /// M:[ALPS03468089]Delete again to avoid DB insert sametime in the other thread. @{
++        try {
++            Thread.sleep(500);
++        } catch (InterruptedException e) {
++        }
++        Cursor cursor = context.getContentResolver().query(
++                RawContacts.CONTENT_URI.buildUpon().appendQueryParameter("sim", "true").build(),
++                null, filter, null,null);
++        if (cursor != null && cursor.getCount() > 0) {
++            int count2 = context.getContentResolver().delete(
++                RawContacts.CONTENT_URI.buildUpon().appendQueryParameter("sim", "true").build(),
++                filter, null);
++            Log.e(TAG, "[deleteSimContact]before detele again count = " +
++                    cursor.getCount() + ", delete again count = " + count2);
++        }
++        /// @}
++
++        // Be going to delete the invalid USIM group records.
++        delSelection = new StringBuilder();
++        filter = null;
++        for (int id : deleteSubIds) {
++            delSelection.append("'" + "USIM" + id + "'" + ",");
++        }
++
++        if (delSelection.length() > 0) {
++            delSelection.deleteCharAt(delSelection.length() - 1);
++            filter = delSelection.toString();
++        }
++        filter = TextUtils.isEmpty(filter) ? (Groups.ACCOUNT_TYPE + "='USIM Account'")
++                : (Groups.ACCOUNT_NAME + " IN " + "(" + filter + ")" + " AND "
++                        + Groups.ACCOUNT_TYPE + "='USIM Account'");
++        Log.d(TAG, "[deleteSimContact]usim group filter:" + filter);
++        count = context.getContentResolver().delete(Groups.CONTENT_URI, filter, null);
++        Log.d(TAG, "[deleteSimContact] group count:" + count);
++
++    }
++
++    private static void deleteDupSimContact(Context context) {
++        Log.i(TAG, "[deleteDupSimContact]");
++        ArrayList<Integer> validSubIds = new ArrayList<Integer>();
++        List<SubscriptionInfo> subscriptionInfoList = SubInfoUtils.getActivatedSubInfoList();
++        for (SubscriptionInfo subscriptionInfo : subscriptionInfoList) {
++            int subId = subscriptionInfo.getSubscriptionId();
++            if (SimCardUtils.isPhoneBookReady(subId)) {
++                //only keep the sim contacts whose subId is active(valid) && phb is ready
++                validSubIds.add(subId);
++            }
++        }
++
++        // Be going to delete the invalid SIM or phb unready contacts records.
++        StringBuilder delSelection = new StringBuilder();
++        String filter = null;
++        for (int id : validSubIds) {
++            delSelection.append(id).append(",");
++        }
++        if (delSelection.length() > 0) {
++            delSelection.deleteCharAt(delSelection.length() - 1);
++            filter = delSelection.toString();
++        }
++        filter = TextUtils.isEmpty(filter) ? RawContacts.INDICATE_PHONE_SIM + " > 0 "
++                : RawContacts.INDICATE_PHONE_SIM + " > 0 " + " AND "
++                        + RawContacts.INDICATE_PHONE_SIM + " NOT IN (" + filter + ")";
++        Log.d(TAG, "[deleteDupSimContact]sim contacts filter:" + filter);
++        int count = context.getContentResolver().delete(
++                RawContacts.CONTENT_URI.buildUpon().appendQueryParameter("sim", "true").build(),
++                filter, null);
++        // add for ALPS01964765.
++        Log.d(TAG, "[deleteDupSimContact]the current user is: " + UserHandle.myUserId() +
++                ",count = " + count);
++
++        // Be going to delete the invalid USIM group records.
++        delSelection = new StringBuilder();
++        filter = null;
++        for (int id : validSubIds) {
++            delSelection.append("'" + "USIM" + id + "'" + ",");
++        }
++
++        if (delSelection.length() > 0) {
++            delSelection.deleteCharAt(delSelection.length() - 1);
++            filter = delSelection.toString();
++        }
++        filter = TextUtils.isEmpty(filter) ? (Groups.ACCOUNT_TYPE + "='USIM Account'")
++                : (Groups.ACCOUNT_NAME + " NOT IN " + "(" + filter + ")" + " AND "
++                        + Groups.ACCOUNT_TYPE + "='USIM Account'");
++        Log.d(TAG, "[deleteDupSimContact]usim group filter:" + filter);
++        count = context.getContentResolver().delete(Groups.CONTENT_URI, filter, null);
++        Log.d(TAG, "[deleteDupSimContact] group count:" + count);
++    }
++
++    /**
++     * check PhoneBook State is ready if ready, then return true.
++     *
++     * @param subId
++     * @return
++     */
++    static boolean checkPhoneBookState(final int subId) {
++        return SimCardUtils.isPhoneBookReady(subId);
++    }
++
++    public static boolean isServiceRunning(int subId) {
++        if (sSimProcessorState != null) {
++            return sSimProcessorState.isImportRemoveRunning(subId);
++        }
++
++        return false;
++    }
++
++    public static void setSimProcessorState(SimProcessorState processorState) {
++        sSimProcessorState = processorState;
++    }
++
++    public interface SimProcessorState {
++        public boolean isImportRemoveRunning(int subId);
++    }
++}
+
+Property changes on: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimServiceUtils.java
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/PresetContactsImportProcessor.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/PresetContactsImportProcessor.java	(revision 0)
++++ vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/PresetContactsImportProcessor.java	(revision 15009)
+@@ -0,0 +1,111 @@
++package com.mediatek.simprocessor;
++
++import android.content.Context;
++import android.content.Intent;
++import android.content.ContentProviderOperation;
++import android.content.ContentValues;
++import android.content.OperationApplicationException;
++import android.database.Cursor;
++import android.net.Uri;
++import android.provider.ContactsContract;
++import android.provider.ContactsContract.CommonDataKinds.Phone;
++import android.provider.ContactsContract.CommonDataKinds.StructuredName;
++import android.provider.ContactsContract.Data;
++import android.provider.ContactsContract.RawContacts;
++import android.os.RemoteException;
++import java.util.ArrayList;
++import com.mediatek.simprocessor.SimProcessorManager.ProcessorCompleteListener;
++import com.mediatek.simprocessor.SimServiceUtils;
++import com.mediatek.simprocessor.Log;
++import android.provider.ContactsContract.PhoneLookup;
++
++public class PresetContactsImportProcessor extends SimProcessorBase {
++    private static final String TAG = "PresetContactsImportProcessor";
++    private static boolean sIsRunningNumberCheck = false;
++    private static final int INSERT_PRESET_NUMBER_COUNT = 3; //The number of preset contacts
++    private static final String INSERT_PRESET_NAME[] = {"Ambulancia","Bomberos","Hospital"}; //The name of each preset contact
++    private static final String INSERT_PRESET_NUMBER[] = {"115","116","117"}; //The number of each preset contact
++
++    private int mSubId;
++    private Context mContext;
++    
++    public PresetContactsImportProcessor(Context context, int subId, Intent intent, ProcessorCompleteListener listener) {
++        super(intent, listener);
++        mContext = context;
++        mSubId = subId;
++    }
++
++    @Override
++    public int getType() {
++        return SimServiceUtils.SERVICE_WORK_IMPORT_PRESET_CONTACTS;
++    }
++
++    @Override
++    public void doWork() {
++        if (isCancelled()) {
++            Log.d(TAG, "[doWork]cancel import preset contacts work. Thread id=" + Thread.currentThread().getId());
++        return;
++        }
++        importDefaultReadonlyContact();
++    }
++ 
++    private void importDefaultReadonlyContact(){
++        Log.i(TAG, "isRunningNumberCheck before: " + sIsRunningNumberCheck);
++        if (sIsRunningNumberCheck) {
++            return;
++        }
++        sIsRunningNumberCheck = true;
++        for(int i = 0;i < INSERT_PRESET_NUMBER_COUNT; i++) {
++            Log.i(TAG, "isRunningNumberCheck after: " + sIsRunningNumberCheck);
++            Uri uri = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI, Uri.encode(INSERT_PRESET_NUMBER[i]));
++            Log.i(TAG, "getContactInfoByPhoneNumbers(), uri = " + uri);
++            Cursor contactCursor = mContext.getContentResolver().query(uri, 
++                    new String[] {PhoneLookup.DISPLAY_NAME, PhoneLookup.PHOTO_ID}, null, null, null);
++            try {
++                if (contactCursor != null && contactCursor.getCount() > 0) {
++                    return;
++                } else {
++                    final ArrayList operationList = new ArrayList();
++                    ContentProviderOperation.Builder builder = ContentProviderOperation.newInsert(RawContacts.CONTENT_URI);
++                    ContentValues contactvalues = new ContentValues();
++                    contactvalues.put(RawContacts.ACCOUNT_NAME, "Phone");
++                    contactvalues.put(RawContacts.ACCOUNT_TYPE, "Local Phone Account");
++                    contactvalues.put(RawContacts.INDICATE_PHONE_SIM, ContactsContract.RawContacts.INDICATE_PHONE);
++                    builder.withValues(contactvalues);
++                    builder.withValue(RawContacts.AGGREGATION_MODE, RawContacts.AGGREGATION_MODE_DISABLED);
++                    operationList.add(builder.build());
++                    builder = ContentProviderOperation.newInsert(Data.CONTENT_URI);
++                    builder.withValueBackReference(Phone.RAW_CONTACT_ID, 0);
++                    builder.withValue(Data.MIMETYPE, Phone.CONTENT_ITEM_TYPE);
++                    builder.withValue(Phone.TYPE, Phone.TYPE_MOBILE);
++                    builder.withValue(Phone.NUMBER, INSERT_PRESET_NUMBER[i]);
++                    builder.withValue(Data.IS_PRIMARY, 1);
++                    operationList.add(builder.build());
++
++                    builder = ContentProviderOperation.newInsert(Data.CONTENT_URI);
++                    builder.withValueBackReference(StructuredName.RAW_CONTACT_ID, 0);
++                    builder.withValue(Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE);
++                    builder.withValue(StructuredName.DISPLAY_NAME, INSERT_PRESET_NAME[i]);
++                    operationList.add(builder.build());
++
++                    try {
++                        mContext.getContentResolver().applyBatch(ContactsContract.AUTHORITY, operationList);
++                    } catch (RemoteException e) {
++                        Log.e(TAG, String.format("%s: %s", e.toString(), e.getMessage()));
++                    } catch (OperationApplicationException e) {
++                        Log.e(TAG, String.format("%s: %s", e.toString(), e.getMessage()));
++                    }
++                }
++            } finally {
++                // when this service start,but the contactsprovider has not been started yet.
++                // the contactCursor perhaps null, but not always.(first load will weekup the provider)
++                // so add null block to avoid nullpointerexception
++                if (contactCursor != null) {
++                    contactCursor.close();
++                }
++            }
++            Log.i(TAG, "isRunningNumberCheck insert: " + sIsRunningNumberCheck);
++            sIsRunningNumberCheck = false;
++        }
++    }
++}
+\ No newline at end of file
+
+Property changes on: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/PresetContactsImportProcessor.java
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimProcessorManager.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimProcessorManager.java	(revision 0)
++++ vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimProcessorManager.java	(revision 15009)
+@@ -0,0 +1,267 @@
++/* Copyright Statement:
++ *
++ * This software/firmware and related documentation ("MediaTek Software") are
++ * protected under relevant copyright laws. The information contained herein
++ * is confidential and proprietary to MediaTek Inc. and/or its licensors.
++ * Without the prior written permission of MediaTek inc. and/or its licensors,
++ * any reproduction, modification, use or disclosure of MediaTek Software,
++ * and information contained herein, in whole or in part, shall be strictly prohibited.
++ *
++ * MediaTek Inc. (C) 2010. All rights reserved.
++ *
++ * BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
++ * THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
++ * RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
++ * AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
++ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
++ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
++ * NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
++ * SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
++ * SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
++ * THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
++ * THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
++ * CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
++ * SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
++ * STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
++ * CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
++ * AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
++ * OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
++ * MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
++ *
++ * The following software/firmware and/or related documentation ("MediaTek Software")
++ * have been modified by MediaTek Inc. All revisions are subject to any receiver's
++ * applicable license agreements with MediaTek Inc.
++ */
++package com.mediatek.simprocessor;
++
++import android.content.Context;
++import android.content.Intent;
++import android.os.Handler;
++import android.os.Message;
++//import android.util.Log;
++
++import com.mediatek.simprocessor.ProcessorBase;
++
++import com.mediatek.simprocessor.SimServiceUtils.SimProcessorState;
++import com.mediatek.simprocessor.Log;
++
++import java.util.concurrent.ConcurrentHashMap;
++
++public class SimProcessorManager implements SimProcessorState {
++    private static final String TAG = "SimProcessorManager";
++
++    public interface ProcessorManagerListener {
++        public void addProcessor(long scheduleTime, ProcessorBase processor);
++
++        public void onAllProcessorsFinished();
++    }
++
++    public interface ProcessorCompleteListener {
++        public void onProcessorCompleted(Intent intent);
++    }
++
++    private ProcessorManagerListener mListener;
++    private Handler mHandler;
++    private ConcurrentHashMap<Integer, SimProcessorBase> mImportRemoveProcessors;
++    private ConcurrentHashMap<Integer, SimProcessorBase> mOtherProcessors;
++
++    private static final int MSG_SEND_STOP_SERVICE = 1;
++
++    public SimProcessorManager(Context context, ProcessorManagerListener listener) {
++        Log.i(TAG, "[SimProcessorManager]new...");
++        mListener = listener;
++        mImportRemoveProcessors = new ConcurrentHashMap<Integer, SimProcessorBase>();
++        mOtherProcessors = new ConcurrentHashMap<Integer, SimProcessorBase>();
++        SimServiceUtils.setSimProcessorState(this);
++        mHandler = new Handler(context.getMainLooper()) {
++            @Override
++            public void handleMessage(Message msg) {
++                switch (msg.what) {
++                case MSG_SEND_STOP_SERVICE:
++                    callStopService();
++                    break;
++                default:
++                    break;
++                }
++            }
++        };
++    }
++
++    public void handleProcessor(Context context, int subId, int workType, Intent intent) {
++        Log.i(TAG, "[handleProcessor] subId=" + subId + ",time=" + System.currentTimeMillis());
++        SimProcessorBase processor = createProcessor(context, subId, workType, intent);
++        if (processor != null && mListener != null) {
++            Log.d(TAG, "[handleProcessor]Add processor [subId=" + subId + "] to threadPool.");
++            mListener.addProcessor(/* 1000 + slotId * 300 */0, processor);
++        }
++    }
++
++    public boolean isImportRemoveRunning(int subId) {
++        synchronized (mProcessorRemoveLock) {
++            if ((mImportRemoveProcessors != null) &&
++                (mImportRemoveProcessors.containsKey(subId))) {
++                SimProcessorBase processor = mImportRemoveProcessors.get(subId);
++                if (processor == null) {
++                    Log.i(TAG, "[isImportRemoveRunning]processor is null, return false.");
++                    return false;
++                }
++                if (processor.isRunning()) {
++                    Log.i(TAG, "[isImportRemoveRunning]has exist running processor,return true.");
++                    return true;
++                }
++            }
++        }
++
++        return false;
++    }
++
++    private SimProcessorBase createProcessor(Context context, int subId, int workType,
++            Intent intent) {
++        Log.d(TAG, "[createProcessor]subId = " + subId + ",workType = " + workType);
++        SimProcessorBase processor = null;
++        /**
++         * [ALPS01224227]the mImportRemoveProcessors is likely to be accessed by
++         * main thread and sub thread at the same time, we should protect the
++         * race condition
++         */
++        synchronized (mProcessorRemoveLock) {
++            // The rule to check whether or not create new processor
++            if (mImportRemoveProcessors.containsKey(subId)) {
++                processor = mImportRemoveProcessors.get(subId);
++                if (processor != null
++                        && (workType == SimServiceUtils.SERVICE_WORK_IMPORT ||
++                        workType == SimServiceUtils.SERVICE_WORK_REMOVE)) {
++                    if (processor.isRunning() && processor.getType() == workType) {
++                        Log.d(TAG,
++                                "[createProcessor]has exist running processor, return null.");
++                        return null;
++                    }
++                    Log.d(TAG, "[createProcessor]cancel processor.");
++                    processor.cancel(false);
++                    mImportRemoveProcessors.remove(subId);
++                }
++            } else {
++                Log.i(TAG, "[createProcessor]no processor for subId: " + subId);
++            }
++
++            processor = createProcessor(context, subId, workType, intent, mProcessoListener);
++
++            if (workType == SimServiceUtils.SERVICE_WORK_IMPORT
++                    || workType == SimServiceUtils.SERVICE_WORK_REMOVE) {
++                mImportRemoveProcessors.put(subId, processor);
++            } else {
++                mOtherProcessors.put(subId, processor);
++            }
++        }
++
++        return processor;
++    }
++
++    private SimProcessorBase createProcessor(Context context, int subId, int workType,
++            Intent intent, ProcessorCompleteListener listener) {
++        Log.d(TAG, "[createProcessor] create new processor for subId: " + subId + ", workType: "
++                + workType);
++        SimProcessorBase processor = null;
++
++        if (workType == SimServiceUtils.SERVICE_WORK_IMPORT) {
++            processor = new SimImportProcessor(context, subId, intent, listener);
++        } else if (workType == SimServiceUtils.SERVICE_WORK_REMOVE) {
++            processor = new SimRemoveProcessor(context, subId, intent, listener);
++        }
++
++        return processor;
++    }
++
++    private ProcessorCompleteListener mProcessoListener = new ProcessorCompleteListener() {
++
++        @Override
++        public void onProcessorCompleted(Intent intent) {
++            if (intent != null) {
++                int subId = intent.getIntExtra(SimServiceUtils.SERVICE_SUBSCRIPTION_KEY, 0);
++                int workType = intent.getIntExtra(SimServiceUtils.SERVICE_WORK_TYPE, -1);
++                Log.d(TAG,
++                        "[onProcessorCompleted] subId = " + subId + ",time="
++                                + System.currentTimeMillis() + ", workType = " + workType);
++                /**
++                 * [ALPS01224227]the mImportRemoveProcessors is likely to be
++                 * accessed by main thread and sub thread at the same time, we
++                 * should protect the race condition
++                 */
++                synchronized (mProcessorRemoveLock) {
++                    if ((workType == SimServiceUtils.SERVICE_WORK_IMPORT ||
++                            workType == SimServiceUtils.SERVICE_WORK_REMOVE)
++                            && mImportRemoveProcessors.containsKey(subId)) {
++                        Log.d(TAG,
++                                "[onProcessorCompleted] remove import/remove processor subId="
++                                        + subId);
++                        /**
++                         * [ALPS01224227]when we're going to remove the
++                         * processor, in seldom condition, it might have already
++                         * removed and replaced with another processor. in this
++                         * case, we should not remove it any more.
++                         */
++                        if (mImportRemoveProcessors.get(subId).identifyIntent(intent)) {
++                            mImportRemoveProcessors.remove(subId);
++                            checkStopService();
++                        } else {
++                            Log.w(TAG,
++                                    "[onProcessorCompleted] race condition");
++                        }
++                    } else if (mOtherProcessors.containsKey(subId)) {
++                        Log.d(TAG, "[onProcessorCompleted] remove other processor subId=" + subId);
++                        /**
++                         * [ALPS01224227]when we're going to remove the
++                         * processor, in seldom condition, it might have already
++                         * removed and replaced with another processor. in this
++                         * case, we should not remove it any more.
++                         */
++                        if (mOtherProcessors.get(subId).identifyIntent(intent)) {
++                            mOtherProcessors.remove(subId);
++                            checkStopService();
++                        } else {
++                            Log.w(TAG,
++                                    "[onProcessorCompleted] race condition2");
++                        }
++                    } else {
++                        Log.w(TAG, "[onProcessorCompleted] slotId processor not found");
++                    }
++                }
++            }
++        }
++    };
++
++    private void checkStopService() {
++        Log.v(TAG, "[checkStopService]...");
++        synchronized (mProcessorRemoveLock) {
++            if (mImportRemoveProcessors.size() == 0 && mOtherProcessors.size() == 0) {
++                if (mHandler != null) {
++                    Log.v(TAG, "[checkStopService] send stop service message.");
++                    mHandler.removeMessages(MSG_SEND_STOP_SERVICE);
++                    /* Fix [ALPS03435956] should send stop message immediately
++                     * without delay, to avoid new start request of SimProcessorService
++                     * coming just before stopping SimProcessorService in stop message.
++                     * Otherwise, this new start request will do nothing because
++                     * SimProcessorService will be stopped soon.
++                     */
++                    mHandler.sendEmptyMessage(MSG_SEND_STOP_SERVICE);
++                }
++            }
++        }
++    }
++
++    private void callStopService() {
++        Log.d(TAG, "[callStopService]...");
++        synchronized (mProcessorRemoveLock) {
++            if (mListener != null && mImportRemoveProcessors.size() == 0
++                    && mOtherProcessors.size() == 0) {
++                mListener.onAllProcessorsFinished();
++            }
++        }
++    }
++
++    /**
++     * [ALPS01224227]the lock for synchronized
++     */
++    private final Object mProcessorRemoveLock = new Object();
++
++}
+
+Property changes on: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimProcessorManager.java
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

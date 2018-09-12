@@ -1,0 +1,73 @@
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java	(revision 7139)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java	(revision 7140)
+@@ -390,7 +390,26 @@
+     @Override
+     protected void onFinishInflate() {
+         super.onFinishInflate();
++		
++        ///M: Dismiss button begin @{
++        final Button dismissButton = (Button) findViewById(R.id.key_dismiss);
++        if (dismissButton != null) {
++            dismissButton.setOnClickListener(new View.OnClickListener() {
++                @Override
++                public void onClick(View v) {
++                    Log.d(TAG, "dismissButton onClick, mPhoneId=" + mPhoneId);
++                    mUpdateMonitor.setPinPukMeDismissFlagOfPhoneId(mPhoneId, true);
++                    mPasswordEntry.reset(true, true) ;
++                    mCallback.userActivity();
++                    mCallback.dismiss(true);
+ 
++                    return;
++                }
++            });
++        }
++        dismissButton.setText(R.string.dismiss);
++        /// @}
++
+         mPhoneId = KeyguardUtils.INVALID_PHONE_ID ;
+         mSecurityMessageDisplay.setTimeout(0); // don't show ownerinfo/charging status by default
+ 
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/res_ext/layout/mtk_keyguard_sim_pin_puk_me_view.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/res_ext/layout/mtk_keyguard_sim_pin_puk_me_view.xml	(revision 7139)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/res_ext/layout/mtk_keyguard_sim_pin_puk_me_view.xml	(revision 7140)
+@@ -214,7 +214,7 @@
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/ripple_drawable"
+-               android:visibility="invisible"
++               android:visibility="visible"
+                />
+                
+             <com.android.keyguard.NumPadKey
+@@ -225,13 +225,13 @@
+                     androidprv:textView="@+id/simPinPukMeEntry"
+                     androidprv:digit="0"
+                     />
+-            <ImageButton
++            <Button
+                     android:id="@+id/key_enter"
+                     android:layout_width="0px"
+                     android:layout_height="match_parent"
+                     android:layout_weight="1"
+                     android:paddingBottom="11sp"
+-                    android:src="@drawable/ic_done_wht"
++                    android:text="@string/ok"
+                     android:background="@drawable/ripple_drawable"
+                     android:contentDescription="@string/keyboardview_keycode_enter"
+                     />
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/res_ext/values/mtk_styles.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/res_ext/values/mtk_styles.xml	(revision 7139)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/res_ext/values/mtk_styles.xml	(revision 7140)
+@@ -53,7 +53,7 @@
+         <item name="android:singleLine">true</item>
+         <item name="android:gravity">center</item>
+         <item name="android:background">?android:attr/selectableItemBackground</item>
+-        <item name="android:textSize">20dp</item>
++        <item name="android:textSize">15dp</item>
+         <item name="android:fontFamily">sans-serif</item>
+         <item name="android:textStyle">normal</item>
+         <item name="android:textColor">#ffffff</item>

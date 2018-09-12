@@ -1,0 +1,26 @@
+Index: vendor/branch/5058I/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java
+===================================================================
+--- vendor/branch/5058I/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java	(revision 16049)
++++ vendor/branch/5058I/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java	(revision 16050)
+@@ -260,13 +260,16 @@
+ 
+         ActivityManager activityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
+         boolean isDial = false;
+-        if (activityManager.getRunningTasks(1) != null && activityManager.getRunningTasks(1).get(0) != null){
+-            String topPackageName = activityManager.getRunningTasks(1).get(0).topActivity.getPackageName();
+-            if (topPackageName.equals("com.android.dialer") || topPackageName.equals("com.android.contacts")){
+-                isDial = true;
++		try{	
++            if (activityManager.getRunningTasks(1) != null && activityManager.getRunningTasks(1).get(0) != null){
++                String topPackageName = activityManager.getRunningTasks(1).get(0).topActivity.getPackageName();
++                if (topPackageName.equals("com.android.dialer") || topPackageName.equals("com.android.contacts")){
++                    isDial = true;
++                }
+             }
++        } catch (RemoteException e) {
++			// Ignore
+         }
+-
+         if (DndTile.isVisible(mContext) || DndTile.isCombinedIcon(mContext)) {
+             if (!isDial) {
+                 zenVisible = mZen != Global.ZEN_MODE_OFF;

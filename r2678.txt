@@ -1,0 +1,29 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 2677)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 2678)
+@@ -2224,12 +2224,22 @@
+ 				mState != StatusBarState.KEYGUARD &&
+ 				mNotificationData.hasActiveClearableNotifications();
+ 		} else {
+-			showDismissView =      
+-                mNotificationData.hasActiveClearableNotifications();
++			if (mState != StatusBarState.KEYGUARD) {
++				showDismissView =      
++					mNotificationData.hasActiveClearableNotifications();
++			} else {
++				showDismissView =      
++					mNotificationData.hasActiveClearableNotifications() && getLockscreenAllowPrivateNotifications();
++			}
+ 		}
+ 		// modify for 111725 by dongdongli 20171109 end
+ 		mStackScroller.updateDismissView(showDismissView);
+     }
++	
++	private boolean getLockscreenAllowPrivateNotifications() {
++        return Settings.Secure.getInt(mContext.getContentResolver(),
++                Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, 0) != 0;
++    }
+ 
+     private void updateEmptyShadeView() {
+         boolean showEmptyShade =

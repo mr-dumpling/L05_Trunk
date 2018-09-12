@@ -1,0 +1,94 @@
+Index: packages/apps/Settings/src/com/android/settings/users/UserSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/users/UserSettings.java	(revision 2125)
++++ packages/apps/Settings/src/com/android/settings/users/UserSettings.java	(revision 2126)
+@@ -76,9 +76,10 @@
+ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.List;
++import android.content.pm.UserInfo;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+-
++import android.app.ActivityManager;
+ /**
+  * Screen that manages the list of users on the device.
+  * Guest user is an always visible entry, even if the guest is not currently
+@@ -770,12 +771,17 @@
+                         showSettings ? this : null,
+                         showDelete ? this : null);
+                 pref.setKey("id=" + user.id);
++                //add by mzj for allow user switch user mode in settings --- start
++                pref.setOnPreferenceClickListener(this);
++                //add by mzj for allow user switch user mode in settings --- end
+                 userPreferences.add(pref);
+                 if (user.isAdmin()) {
+                     pref.setSummary(R.string.user_admin);
+                 }
+                 pref.setTitle(user.name);
+-                pref.setSelectable(false);
++                //add by mzj for allow user switch user mode in settings --- start
++                pref.setSelectable(true);
++                //add by mzj for allow user switch user mode in settings --- end
+             }
+             if (pref == null) {
+                 continue;
+@@ -825,10 +831,16 @@
+                     null /* delete icon handler */);
+             pref.setTitle(R.string.user_guest);
+             pref.setIcon(getEncircledDefaultIcon());
++            //add by mzj for allow user switch user mode in settings --- start
++            pref.setOnPreferenceClickListener(this);           
++            pref.setKey("id=" + UserPreference.USERID_GUEST_DEFAULTS);
++            //add by mzj for allow user switch user mode in settings --- end
+             userPreferences.add(pref);
+             pref.setDisabledByAdmin(
+                     mUserCaps.mDisallowAddUser ? mUserCaps.mEnforcedAdmin : null);
+-            pref.setSelectable(false);
++            //add by mzj for allow user switch user mode in settings --- start
++            pref.setSelectable(true);
++            //add by mzj for allow user switch user mode in settings --- end
+         }
+ 
+         // Sort list of users by serialNum
+@@ -963,9 +975,40 @@
+             int userId = ((UserPreference) pref).getUserId();
+             // Get the latest status of the user
+             UserInfo user = mUserManager.getUserInfo(userId);
++            
++			//add by mzj for allow user switch user mode in settings --- start
++            Log.e(TAG, "onPreferenceClick userId:" + userId);
++            
++            if(userId == UserPreference.USERID_GUEST_DEFAULTS){
++            	final List<UserInfo> users = mUserManager.getUsers();
++            	
++            	int guest = 0;
++            	for (int i = 0; i < users.size(); i++) {
++            		UserInfo temp = users.get(i);
++            		if(temp.isGuest()){
++            			guest = temp.id;
++            			break;
++            		}
++            	}
++            	
++            	if(guest == 0){
++                    UserInfo temp = mUserManager.createGuest(getContext(), getString(R.string.user_guest));
++                    guest = temp.id;
++            	}
++            	
++                Log.e(TAG, "onPreferenceClick id:" + guest);
++                if (ActivityManager.getCurrentUser() != guest) {
++                	switchUserNow(guest);
++                	return false;
++                }
++            }
++            //add by mzj for allow user switch user mode in settings --- end
++			
+             if (!isInitialized(user)) {
+                 mHandler.sendMessage(mHandler.obtainMessage(
+                         MESSAGE_SETUP_USER, user.id, user.serialNumber));
++            }else{
++            	switchUserNow(userId);
+             }
+         } else if (pref == mAddUser) {
+             // If we allow both types, show a picker, otherwise directly go to

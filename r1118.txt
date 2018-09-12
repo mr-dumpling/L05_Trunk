@@ -1,0 +1,55 @@
+Index: frameworks/base/core/java/android/preference/SeekBarVolumizer.java
+===================================================================
+--- frameworks/base/core/java/android/preference/SeekBarVolumizer.java	(revision 1117)
++++ frameworks/base/core/java/android/preference/SeekBarVolumizer.java	(revision 1118)
+@@ -120,7 +120,8 @@
+     }
+ 
+     private static boolean isNotificationOrRing(int stream) {
+-        return stream == AudioManager.STREAM_RING || stream == AudioManager.STREAM_NOTIFICATION;
++        // return stream == AudioManager.STREAM_RING /* || stream == AudioManager.STREAM_NOTIFICATION */; 
++		return stream == AudioManager.STREAM_RING || stream == AudioManager.STREAM_NOTIFICATION;
+     }
+ 
+     public void setSeekBar(SeekBar seekBar) {
+@@ -141,13 +142,20 @@
+ 
+     protected void updateSeekBar() {
+         final boolean zenMuted = isZenMuted();
+-        mSeekBar.setEnabled(!zenMuted);
++		if (zenMuted) {
++			mSeekBar.setEnabled(false);
++		} else if (mNotificationOrRing && mRingerMode == AudioManager.RINGER_MODE_VIBRATE && mStreamType == AudioManager.STREAM_NOTIFICATION){
++			mSeekBar.setEnabled(false);
++		} else {
++			mSeekBar.setEnabled(true);
++		}
++		//mSeekBar.setEnabled((!zenMuted));
+         if (zenMuted) {
+             mSeekBar.setProgress(mLastAudibleStreamVolume);
+         } else if (mNotificationOrRing && mRingerMode == AudioManager.RINGER_MODE_VIBRATE) {
+             mSeekBar.setProgress(0);
+         } else if (mMuted) {
+-            mSeekBar.setProgress(mLastAudibleStreamVolume);
++            mSeekBar.setProgress(0);
+         } else {
+             mSeekBar.setProgress(mLastProgress > -1 ? mLastProgress : mOriginalStreamVolume);
+         }
+Index: frameworks/base/core
+===================================================================
+--- frameworks/base/core	(revision 1117)
++++ frameworks/base/core	(revision 1118)
+
+Property changes on: frameworks/base/core
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/core:r710
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1117)
++++ frameworks/base	(revision 1118)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r710

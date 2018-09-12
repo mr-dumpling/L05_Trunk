@@ -1,0 +1,80 @@
+Index: packages/apps/SoundRecorder/src/com/android/soundrecorder/SoundRecorder.java
+===================================================================
+--- packages/apps/SoundRecorder/src/com/android/soundrecorder/SoundRecorder.java	(revision 1823)
++++ packages/apps/SoundRecorder/src/com/android/soundrecorder/SoundRecorder.java	(revision 1824)
+@@ -46,15 +46,20 @@
+ import android.util.Log;
+ import android.view.KeyEvent;
+ import android.view.View;
++import android.view.ViewGroup;
+ import android.widget.Button;
+ import android.widget.ImageButton;
+ import android.widget.ImageView;
+ import android.widget.LinearLayout;
++import android.widget.RelativeLayout;
+ import android.widget.ProgressBar;
+ import android.widget.TextView;
+ import android.widget.Toast;
+ import java.util.List;
+ import java.util.ArrayList;
++import android.util.TypedValue;
++import android.content.res.Configuration;
++import android.view.ViewGroup.LayoutParams;
+ 
+ /**
+  * Calculates remaining recording time based on available disk space and
+@@ -233,6 +238,7 @@
+     ImageButton mRecordButton;
+     ImageButton mPlayButton;
+     ImageButton mStopButton;
++	RelativeLayout mTimerViewLayout;
+     
+     ImageView mStateLED;
+     TextView mStateMessage1;
+@@ -332,6 +338,7 @@
+         mRecordButton = (ImageButton) findViewById(R.id.recordButton);
+         mPlayButton = (ImageButton) findViewById(R.id.playButton);
+         mStopButton = (ImageButton) findViewById(R.id.stopButton);
++		mTimerViewLayout = (RelativeLayout) findViewById(R.id.timerViewLayout);
+         
+         mStateLED = (ImageView) findViewById(R.id.stateLED);
+         mStateMessage1 = (TextView) findViewById(R.id.stateMessage1);
+@@ -353,6 +360,7 @@
+         mTimerFormat = getResources().getString(R.string.timer_format);
+         
+         mVUMeter.setRecorder(mRecorder);
++		changeTimerViewLocation();
+     }
+     
+     /*
+@@ -455,6 +463,7 @@
+         switch (button.getId()) {
+             case R.id.recordButton:
+                 onClickRecordButton();
++				changeTimerViewLocation();
+                 break;
+             case R.id.playButton:
+                 mRecorder.startPlayback();
+@@ -917,4 +926,22 @@
+                 .show();
+         }
+     }
++
++	public void changeTimerViewLocation() {
++		if (this.isInMultiWindowMode()) {
++			if (!mRecordButton.isEnabled() &&
++				this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
++				RelativeLayout.LayoutParams layoutParams =
++					new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
++				layoutParams.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
++				mTimerView.setLayoutParams(layoutParams);
++				mTimerView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 90);
++			}
++			if (this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
++				LayoutParams para = mTimerViewLayout.getLayoutParams();
++				para.height = 300;
++				mTimerViewLayout.setLayoutParams(para);
++			}
++		}
++	}
+ }

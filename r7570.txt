@@ -1,0 +1,341 @@
+Index: frameworks/opt/telephony/src/java/com/android/internal/telephony/IccSmsInterfaceManager.java
+===================================================================
+--- frameworks/opt/telephony/src/java/com/android/internal/telephony/IccSmsInterfaceManager.java	(revision 7569)
++++ frameworks/opt/telephony/src/java/com/android/internal/telephony/IccSmsInterfaceManager.java	(revision 7570)
+@@ -25,6 +25,7 @@
+ import android.app.PendingIntent;
+ import android.content.ContentResolver;
+ import android.content.ContentValues; // added by jiayi.wang for task 3682185 at 2017.01.04
++import android.os.SystemProperties;
+ import android.content.Context;
+ import android.database.Cursor;
+ import android.database.sqlite.SQLiteException;
+@@ -727,6 +728,12 @@
+         mDispatcher.sendData(destAddr, scAddr, destPort, data, sentIntent, deliveryIntent);
+     }
+ 
++    //lance modify for Diagnostic @{
++    private boolean isDiagnosticProject() {
++        return "1".equals(SystemProperties.get("ro.tct.diagnostic"));
++    }
++    // @}
++
+     /**
+      * A permissions check before passing to {@link IccSmsInterfaceManager#sendTextInternal}.
+      * This method checks only if the calling package has the permission to send the sms.
+@@ -738,15 +745,17 @@
+                 Manifest.permission.SEND_SMS,
+                 "Sending SMS message");
+         // begin added by jiayi.wang for task 3682185 at 2017.01.04
+-        try{
+-            ContentValues values = new ContentValues();
+-            values.put("action","ADD");
+-            values.put("FRM_MESSAGE_SMS_SEND", 1);
+-            Log.i("qiang.sun", "FRM_MESSAGE_SMS_SEND");
+-            mContext.getContentResolver().update(Uri.parse("content://com.tct.diagnostics.provider.diagnosticsinfo/diagnostics/"),
+-                        values, null, null);
+-        }catch(Exception e){
+-            Log.i("com.tct.diagnostics.provider.diagnosticsinfo : ", e.toString());
++        if (isDiagnosticProject()) {
++            try{
++                ContentValues values = new ContentValues();
++                values.put("action","ADD");
++                values.put("FRM_MESSAGE_SMS_SEND", 1);
++                Log.i("qiang.sun", "FRM_MESSAGE_SMS_SEND");
++                mContext.getContentResolver().update(Uri.parse("content://com.tct.diagnostics.provider.diagnosticsinfo/diagnostics/"),
++                            values, null, null);
++            }catch(Exception e){
++                Log.i("com.tct.diagnostics.provider.diagnosticsinfo : ", e.toString());
++            }
+         }
+         // end added by jiayi.wang for task 3682185 at 2017.01.04
+         sendTextInternal(callingPackage, destAddr, scAddr, text, sentIntent, deliveryIntent,
+Index: frameworks/opt/telephony/src/java/com/android/internal/telephony/gsm/GsmInboundSmsHandler.java
+===================================================================
+--- frameworks/opt/telephony/src/java/com/android/internal/telephony/gsm/GsmInboundSmsHandler.java	(revision 7569)
++++ frameworks/opt/telephony/src/java/com/android/internal/telephony/gsm/GsmInboundSmsHandler.java	(revision 7570)
+@@ -185,15 +185,17 @@
+         }
+ 
+         //begin added by jiayi.wang for task 3682185 at 2017.01.04
+-        try{
+-            ContentValues values = new ContentValues();
+-            values.put("action","ADD");
+-            values.put("FRM_MESSAGE_SMS_RECEIVE", 1);
+-            Log.i("qiang.sun", "FRM_MESSAGE_SMS_RECEIVE");
+-            mContext.getContentResolver().update(Uri.parse("content://com.tct.diagnostics.provider.diagnosticsinfo/diagnostics/"),
+-                        values, null, null);
+-        }catch(Exception e){
+-            Log.i("com.tct.diagnostics.provider.diagnosticsinfo : ", e.toString());
++        if (isDiagnosticProject()) {
++            try{
++                ContentValues values = new ContentValues();
++                values.put("action","ADD");
++                values.put("FRM_MESSAGE_SMS_RECEIVE", 1);
++                Log.i("qiang.sun", "FRM_MESSAGE_SMS_RECEIVE");
++                mContext.getContentResolver().update(Uri.parse("content://com.tct.diagnostics.provider.diagnosticsinfo/diagnostics/"),
++                            values, null, null);
++            }catch(Exception e){
++                Log.i("com.tct.diagnostics.provider.diagnosticsinfo : ", e.toString());
++            }
+         }
+         //end added by jiayi.wang for task 3682185 at 2017.01.04
+ 
+@@ -200,6 +202,12 @@
+         return dispatchNormalMessage(smsb);
+     }
+ 
++    //lance modify for Diagnostic @{
++    private boolean isDiagnosticProject() {
++        return "1".equals(SystemProperties.get("ro.tct.diagnostic"));
++    }
++    // @}
++
+     private void updateMessageWaitingIndicator(int voicemailCount) {
+         // range check
+         if (voicemailCount < 0) {
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 7569)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 7570)
+@@ -24,6 +24,7 @@
+ import org.json.JSONArray;
+ import org.json.JSONException;
+ import org.json.JSONObject;
++import android.os.SystemProperties;
+ // @}
+ 
+ /**
+@@ -146,7 +147,9 @@
+                             // modify for 110918 by dongdongli 20171115 end }
+                         }
+                     }
+-                    updateFuncShorts(); //lance modify for Diagnostic
++                    if(isDiagnosticProject()) {
++                        updateFuncShorts(); //lance modify for Diagnostic
++                    }
+                 }
+             });
+             holder.edit_icon.setOnClickListener(new View.OnClickListener() {
+@@ -195,6 +198,10 @@
+     }
+ 
+     //lance modify for Diagnostic @{
++    private boolean isDiagnosticProject() {
++        return "1".equals(SystemProperties.get("ro.tct.diagnostic"));
++    }
++
+     public void updateFuncShorts() {
+         JSONObject root = new JSONObject();
+         JSONArray jsonArray = new JSONArray();
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 7569)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 7570)
+@@ -108,6 +108,7 @@
+ import android.graphics.drawable.BitmapDrawable;
+ import android.net.Uri;
+ //lance modify for Diagnostic @{
++import android.os.SystemProperties;
+ import android.content.ContentProviderClient;
+ import android.content.ContentValues;
+ //@}
+@@ -1062,7 +1063,9 @@
+                    
+                         packagerName = list.get(index).getPackerName();
+                         Log.d(TAG, "xiawei packagerName = " + packagerName);
+-						saveUsageToDiagnostics(packagerName); //lance modify for Diagnostic
++                        if (isDiagnosticProject()) {
++                            saveUsageToDiagnostics(packagerName); //lance modify for Diagnostic
++                        }
+                         if (packagerName.equals(CAMERA)) {
+ 							// modify by dongdongli for 112586 20171114 start {
+ 							launchCamera(CAMERA_LAUNCH_SOURCE_AFFORDANCE);
+@@ -1125,6 +1128,10 @@
+     }
+ 	
+ 	//lance modify for Diagnostic @{
++    private boolean isDiagnosticProject() {
++        return "1".equals(SystemProperties.get("ro.tct.diagnostic"));
++    }
++
+     private void saveUsageToDiagnostics(String packageName) {
+         final String SCHEME = "content";
+         final String AUTHORITY = "com.tct.diagnostics.provider.diagnosticsinfo";
+Index: device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7569)
++++ device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7570)
+@@ -721,3 +721,4 @@
+ 
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ OP01SOUNDRECORDER_APP = yes
++TCT_DIAGNOSTIC = no
+\ No newline at end of file
+Index: device/mediatek/common/device.mk
+===================================================================
+--- device/mediatek/common/device.mk	(revision 7569)
++++ device/mediatek/common/device.mk	(revision 7570)
+@@ -3231,3 +3231,6 @@
+   PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
+ endif
+ 
++ifeq ($(strip $(TCT_DIAGNOSTIC)), yes)
++   PRODUCT_PROPERTY_OVERRIDES += ro.tct_diagnostic=1
++endif
+Index: packages/services/Telecomm/src/com/android/server/telecom/CallLogManager.java
+===================================================================
+--- packages/services/Telecomm/src/com/android/server/telecom/CallLogManager.java	(revision 7569)
++++ packages/services/Telecomm/src/com/android/server/telecom/CallLogManager.java	(revision 7570)
+@@ -53,7 +53,7 @@
+ //begin added by jiayi.wang for task 3682185 at 2017.01.04
+ import android.content.ContentProviderClient;
+ import android.os.RemoteException;
+-import android.content.ContentValues;
++import android.os.SystemProperties;
+ //end added by jiayi.wang for task 3682185 at 2017.01.04
+ 
+ // TODO: Needed for move to system service: import com.android.internal.R;
+@@ -229,7 +229,9 @@
+ 
+             logCall(call, type, true /*showNotificationForMissedCall*/);
+ 			//begin added by jiayi.wang for task 3682185 at 2017.01.04
+-            recordCall(disconnectCause,type);
++            if (isDiagnosticProject()) {
++                recordCall(disconnectCause,type);
++            }
+             //end added by jiayi.wang for task 3682185 at 2017.01.04
+         }
+ 
+@@ -443,6 +445,12 @@
+         }
+     }
+ 
++    //lance modify for Diagnostic @{
++    private boolean isDiagnosticProject() {
++        return "1".equals(SystemProperties.get("ro.tct.diagnostic"));
++    }
++    // @}
++
+     //begin added by jiayi.wang for task 3682185 at 2017.01.04
+     private void recordCall(int disconnectCause,int callType) {
+         ContentValues values = new ContentValues();
+Index: packages/services/Telephony/src/com/android/phone/CallNotifier.java
+===================================================================
+--- packages/services/Telephony/src/com/android/phone/CallNotifier.java	(revision 7569)
++++ packages/services/Telephony/src/com/android/phone/CallNotifier.java	(revision 7570)
+@@ -665,10 +665,17 @@
+             int subId = subInfos.get(i).getSubscriptionId();
+             if (!mPhoneStateListeners.containsKey(subId)) {
+                 CallNotifierPhoneStateListener listener = new CallNotifierPhoneStateListener(subId);
+-                mTelephonyManager.listen(listener,
++                if (isDiagnosticProject()) {
++                    mTelephonyManager.listen(listener,
+                         PhoneStateListener.LISTEN_MESSAGE_WAITING_INDICATOR
+                         | PhoneStateListener.LISTEN_CALL_STATE //added by jiayi.wang for task 3682185 at 2017.01.04
+                         | PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR);
++                } else {
++                    mTelephonyManager.listen(listener,
++                        PhoneStateListener.LISTEN_MESSAGE_WAITING_INDICATOR
++                        | PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR);
++                }
++                
+                 mPhoneStateListeners.put(subId, listener);
+             }
+         }
+@@ -675,6 +682,12 @@
+         log("#onSubscriptionsChanged# updatePhoneStateListeners end");
+     }
+ 
++    //lance modify for Diagnostic @{
++    private boolean isDiagnosticProject() {
++        return "1".equals(SystemProperties.get("ro.tct.diagnostic"));
++    }
++    // @}
++
+     /**
+      * @return {@code true} if the list contains SubscriptionInfo with the given subscription id.
+      */
+Index: vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7569)
++++ vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7570)
+@@ -723,4 +723,5 @@
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ TCL_LED_SUPPORT = no
+ OP01SOUNDRECORDER_APP = yes
+-BOOT_DEFAULT_LOCALE_BY_SIM = yes
+\ No newline at end of file
++BOOT_DEFAULT_LOCALE_BY_SIM = yes
++TCT_DIAGNOSTIC = yes
+\ No newline at end of file
+Index: vendor/branch/5058J/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058J/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7569)
++++ vendor/branch/5058J/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7570)
+@@ -722,4 +722,5 @@
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ TCL_LED_SUPPORT = no
+-OP01SOUNDRECORDER_APP = yes
+\ No newline at end of file
++OP01SOUNDRECORDER_APP = yes
++TCT_DIAGNOSTIC = yes
+\ No newline at end of file
+Index: vendor/branch/5058T/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058T/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7569)
++++ vendor/branch/5058T/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7570)
+@@ -722,4 +722,5 @@
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ TCL_LED_SUPPORT = no
+-OP01SOUNDRECORDER_APP = yes
+\ No newline at end of file
++OP01SOUNDRECORDER_APP = yes
++TCT_DIAGNOSTIC = yes
+\ No newline at end of file
+Index: vendor/branch/5058Y/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058Y/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7569)
++++ vendor/branch/5058Y/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7570)
+@@ -722,4 +722,5 @@
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ TCL_LED_SUPPORT = yes
+-OP01SOUNDRECORDER_APP = yes
+\ No newline at end of file
++OP01SOUNDRECORDER_APP = yes
++TCT_DIAGNOSTIC = yes
+\ No newline at end of file
+Index: vendor/branch/5058A/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7569)
++++ vendor/branch/5058A/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7570)
+@@ -722,4 +722,5 @@
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ TCL_LED_SUPPORT = no
+-OP01SOUNDRECORDER_APP = yes
+\ No newline at end of file
++OP01SOUNDRECORDER_APP = yes
++TCT_DIAGNOSTIC = yes
+\ No newline at end of file
+Index: vendor/customer/apps/Diagnostics/Android.mk
+===================================================================
+--- vendor/customer/apps/Diagnostics/Android.mk	(revision 7569)
++++ vendor/customer/apps/Diagnostics/Android.mk	(revision 7570)
+@@ -1,3 +1,4 @@
++ifneq ($(strip $(TCT_DIAGNOSTIC)),yes)
+ LOCAL_PATH:= $(call my-dir)
+ 
+ include $(CLEAR_VARS)
+@@ -9,4 +10,5 @@
+ LOCAL_PRIVILEGED_MODULE := true
+ LOCAL_DEX_PREOPT := true
+ LOCAL_CERTIFICATE := platform
+-include $(BUILD_PREBUILT)
+\ No newline at end of file
++include $(BUILD_PREBUILT)
++endif
+\ No newline at end of file

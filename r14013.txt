@@ -1,0 +1,183 @@
+Index: vendor/branch/5058Y_ALIE/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java	(revision 14012)
++++ vendor/branch/5058Y_ALIE/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java	(revision 14013)
+@@ -41,6 +41,7 @@
+ import android.provider.Settings;
+ import android.telephony.SubscriptionInfo;
+ import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
+ import android.util.AttributeSet;
+ import android.util.Log;
+ import android.view.Gravity;
+@@ -106,6 +107,7 @@
+     // size limits for the pin.
+     private static final int MIN_PIN_LENGTH = 4;
+     private static final int MAX_PIN_LENGTH = 8;
++    private static final int NETWORK_PIN_LENGTH = 16;
+ 
+     private static final int GET_SIM_RETRY_EMPTY = -1;
+ 
+@@ -288,8 +290,7 @@
+             } else if ((IccCardConstants.State.NETWORK_LOCKED == simState) &&
+                 KeyguardUtils.isMediatekSimMeLockSupport()) {
+                 int category = mUpdateMonitor.getSimMeCategoryOfPhoneId(mPhoneId);
+-                msg = rez.getString(R.string.simlock_entersimmelock)
+-                    + strLockName[category]
++                msg = rez.getString(R.string.simlock_entersimmelock_telcel)
+                     + getRetryMeString(mPhoneId);
+                 mUnlockEnterState = STATE_ENTER_ME;
+             }
+@@ -316,8 +317,7 @@
+             } else if ((IccCardConstants.State.NETWORK_LOCKED == simState) &&
+                 KeyguardUtils.isMediatekSimMeLockSupport()) {
+                 int category = mUpdateMonitor.getSimMeCategoryOfPhoneId(mPhoneId);
+-                msg = rez.getString(R.string.simlock_entersimmelock)
+-                    + strLockName[category]
++                msg = rez.getString(R.string.simlock_entersimmelock_telcel)
+                     + getRetryMeString(mPhoneId);
+                 mUnlockEnterState = STATE_ENTER_ME;
+             }
+@@ -471,7 +471,7 @@
+ 
+     private String getRetryMeString(final int phoneId) {
+         int meRetryCount = getRetryMeCount(phoneId);
+-        return "(" + mContext.getString(R.string.retries_left, meRetryCount) + ")";
++        return "" + mContext.getString(R.string.retries_left_telcel, meRetryCount);
+     }
+ 
+     private int getRetryMeCount(final int phoneId) {
+@@ -487,7 +487,7 @@
+         case GET_SIM_RETRY_EMPTY:
+             return " ";
+         default:
+-            return "(" + mContext.getString(R.string.retries_left, mPukRetryCount) + ")";
++            return "(" + mContext.getString(R.string.retries_left_telcel, mPukRetryCount) + ")";
+         }
+     }
+     private String getRetryPinString(final int phoneId) {
+@@ -496,7 +496,7 @@
+             case GET_SIM_RETRY_EMPTY:
+                 return " ";
+             default:
+-                return "(" + mContext.getString(R.string.retries_left, mPinRetryCount) + ")";
++                return "(" + mContext.getString(R.string.retries_left_telcel, mPinRetryCount) + ")";
+         }
+     }
+ 
+@@ -524,6 +524,15 @@
+         }
+     }
+ 
++    private boolean validateNetworkLock(String pin, boolean isPUK) {
++        // check validity
++        if (pin.length() != NETWORK_PIN_LENGTH) {
++            return false;
++        } else {
++            return true;
++        }
++    }
++
+     /**
+      * Enter puk to unlock, and let user to supply new SIM pin code.
+      */
+@@ -557,8 +566,8 @@
+                     mSecurityMessageDisplay.setMessage(mSb.toString(), true);
+                  } else {
+                     Log.d(TAG, "updatePinEnterScreen() - STATE_ENTER_NEW, validatePin = false ,"
+-                    + "mSecurityMessageDisplay.setMessage = R.string.keyguard_code_length_prompt") ;
+-                    mSecurityMessageDisplay.setMessage(R.string.keyguard_code_length_prompt, true);
++                    + "mSecurityMessageDisplay.setMessage = R.string.keyguard_code_length_prompt_telcel") ;
++                    mSecurityMessageDisplay.setMessage(R.string.keyguard_code_length_prompt_telcel, true);
+                  }
+                  break;
+ 
+@@ -686,7 +695,31 @@
+         private int mResult;
+ 
+         protected CheckSimMe(String passwd, int phoneId) {
+-            mPasswd = passwd;
++			String passwd_right = "1234567812345678";
++			String passwd_wrrong = "0000000000000000";
++			String imei_s = "";
++			String imei1 = ((TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE)).getDeviceId();
++			long l = 1010101010101010L;
++
++			if (imei1 != null) {
++				if (imei1.length() > 14) {
++					imei_s = imei1.substring(imei1.length() - 15);
++					long imei_i = (long) Long.parseLong(imei_s);
++					imei_i = (imei_i + 2017121910) * 13 - 84628197 + l;
++					imei_s = imei_i + "";
++					if (imei_s.length() > 16) {
++						imei_s = imei_s.substring(imei_s.length() - 16);
++					}
++				}
++			} else {
++				Log.d(TAG, "imei1==null");
++			}
++
++			if (passwd != null && passwd.equals(imei_s)) {
++				mPasswd = passwd_right;
++			} else {
++				mPasswd = passwd_wrrong;
++			}
+         }
+         abstract void onSimMeCheckResponse(final int ret);
+ 
+@@ -747,24 +780,21 @@
+ 
+         ///M: here only for PIN code
+         if ((false == validatePin(entry, false)) &&
+-            (mUpdateMonitor.getSimStateOfPhoneId(mPhoneId) == IccCardConstants.State.PIN_REQUIRED ||
+-            (mUpdateMonitor.getSimStateOfPhoneId(mPhoneId) == IccCardConstants.State.NETWORK_LOCKED)
+-             && KeyguardUtils.isMediatekSimMeLockSupport())) {
+-
+-            // otherwise, display a message to the user, and don't submit.
+-            if (mUpdateMonitor.getSimStateOfPhoneId(mPhoneId) ==
+-                IccCardConstants.State.PIN_REQUIRED) {
++            (mUpdateMonitor.getSimStateOfPhoneId(mPhoneId) == IccCardConstants.State.PIN_REQUIRED)
++             && KeyguardUtils.isMediatekSimMeLockSupport()){
+                 mSecurityMessageDisplay.setMessage(R.string.kg_invalid_sim_pin_hint, true);
+-            } else {
+-                // hint to enter 4-8 digits for network_lock mode
+-                mSecurityMessageDisplay.setMessage(R.string.keyguard_code_length_prompt, true);
+-            }
+-
+-            mPasswordEntry.reset(true, true);
+-            mPasswordEntry.setEnabled(true);
+-            mCallback.userActivity();
+-
+-            return;
++                mPasswordEntry.reset(true, true);
++                mPasswordEntry.setEnabled(true);
++                mCallback.userActivity();
++                return;
++        } else if((false == validateNetworkLock(entry, false)) 
++           && (mUpdateMonitor.getSimStateOfPhoneId(mPhoneId) == IccCardConstants.State.NETWORK_LOCKED) 
++           && KeyguardUtils.isMediatekSimMeLockSupport()){
++                mSecurityMessageDisplay.setMessage(R.string.keyguard_code_length_prompt_telcel, true);
++                mPasswordEntry.reset(true, true);
++                mPasswordEntry.setEnabled(true);
++                mCallback.userActivity();
++                return;
+         }
+         mPasswordEntry.setEnabled(true);
+         dealWithPinOrPukUnlock();
+@@ -925,13 +955,13 @@
+                         if (mUnlockEnterState == STATE_ENTER_ME) {
+                             if (0 == getRetryMeCount(mPhoneId)) { //permanently locked
+                                 setInputInvalidAlertDialog(mContext.getText(
+-                                        R.string.simlock_slot_locked_message), true);
++                                        R.string.simlock_slot_locked_message_telcel), true);
+                                 mCallback.dismiss(true);
+                             } else {
+                                 int category = mUpdateMonitor.getSimMeCategoryOfPhoneId(mPhoneId);
+                                 mSb.append(mContext.getText(R.string.keyguard_wrong_code_input));
+-                                mSb.append(mContext.getText(R.string.simlock_entersimmelock));
+-                                mSb.append(strLockName[category] + getRetryMeString(mPhoneId));
++                                mSb.append(mContext.getText(R.string.simlock_entersimmelock_telcel));
++                                mSb.append(mContext.getText(R.string.simlock_entersimmelock_try) + getRetryMeString(mPhoneId));
+                             }
+                             Log.d(TAG, "checkMe() - VERIFY_INCORRECT_PASSWORD == ret, "
+                                 + "mSecurityMessageDisplay.setMessage = " + mSb.toString()) ;

@@ -1,0 +1,152 @@
+Index: system/core/toolbox/suid.c
+===================================================================
+--- system/core/toolbox/suid.c	(revision 0)
++++ system/core/toolbox/suid.c	(revision 4953)
+@@ -0,0 +1,64 @@
++#include <errno.h>
++#include <string.h>
++#include "../../../vendor/mediatek/proprietary/external/nvram/libnvram/libnvram.h"
++#include "../../../vendor/mediatek/proprietary/custom/aus6739_66_n1/cgen/cfgfileinc/CFG_PRODUCT_INFO_File.h"
++
++int suid_main(int argc, char *argv[]) {
++    F_ID suid_nvram_id;
++    PRODUCT_INFO product_info;
++    int PRODUCT_INFO_LID = 61;
++    int rec_size;
++    int rec_num;
++    int result;
++    char suid[32];
++
++    if (argc != 2){
++        ALOGD("suid_main, argc: %d\n", argc);
++        fprintf(stderr, "please enter suid\n");
++        return -1;
++    }
++    if (strlen(argv[1]) != 32) {
++        ALOGD("suid_main, argv[1]: %s\n", argv[1]);
++        fprintf(stderr, "please enter 32 bits of suid\n");
++        return -1;
++    }
++
++    memset(&product_info, 0, sizeof(product_info));
++    ALOGD("suid_main, PRODUCT_INFO_LID: %d\n", PRODUCT_INFO_LID);
++    suid_nvram_id = NVM_GetFileDesc(PRODUCT_INFO_LID, &rec_size, &rec_num, true);
++    ALOGD("suid_main, rec_size: %d, rec_num: %d\n", rec_size, rec_num);
++    ALOGD("suid_main, suid_nvram_id.iFileDesc: %d\n", suid_nvram_id.iFileDesc);
++    if (suid_nvram_id.iFileDesc > 0) {
++        int result = read(suid_nvram_id.iFileDesc, &product_info, rec_size * rec_num);
++        ALOGD("suid_main, result: %d\n", result);
++        if (result < 0) {
++            ALOGD("read NVRAM error, %s\n", strerror(errno));
++        } else {
++            NVM_CloseFileDesc(suid_nvram_id);
++        }
++    } else {
++        ALOGD("suid_main, read NVRAM suid_nvram_id.iFileDesc == %d \n", suid_nvram_id.iFileDesc);
++    }
++
++    for (int i = 0; i < 32; i++) {
++        product_info.suid[i] = argv[1][i];
++    }
++
++    suid_nvram_id = NVM_GetFileDesc(PRODUCT_INFO_LID, &rec_size, &rec_num, false);
++    ALOGD("suid_main, rec_size: %d, rec_num: %d\n", rec_size, rec_num);
++    ALOGD("suid_main, suid_nvram_id.iFileDesc: %d\n", suid_nvram_id.iFileDesc);
++    if (suid_nvram_id.iFileDesc > 0) {
++        int result = write(suid_nvram_id.iFileDesc, &product_info, rec_size * rec_num);
++        ALOGD("suid_main, result: %d\n", result);
++        if (result < 0) {
++            ALOGD("write NVRAM error, %s\n", strerror(errno));
++        } else {
++            NVM_CloseFileDesc(suid_nvram_id);
++            fprintf(stderr, "successfully\n");
++        }
++    } else {
++        ALOGD("suid_main, write NVRAM suid_nvram_id.iFileDesc == %d \n", suid_nvram_id.iFileDesc);
++    }
++
++    return 0;
++}
+Index: system/core/toolbox/Android.mk
+===================================================================
+--- system/core/toolbox/Android.mk	(revision 4952)
++++ system/core/toolbox/Android.mk	(revision 4953)
+@@ -43,6 +43,8 @@
+     start \
+     stop \
+     top \
++    getpcbid \
++    suid \
+ 
+ ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
+ 
+@@ -57,6 +59,7 @@
+ LOCAL_SHARED_LIBRARIES := \
+     libcutils \
+     libselinux \
++    libnvram \
+ 
+ LOCAL_WHOLE_STATIC_LIBRARIES := $(patsubst %,libtoolbox_%,$(BSD_TOOLS))
+ 
+Index: system/core/toolbox/getpcbid.c
+===================================================================
+--- system/core/toolbox/getpcbid.c	(revision 0)
++++ system/core/toolbox/getpcbid.c	(revision 4953)
+@@ -0,0 +1,50 @@
++#include <errno.h>
++#include <string.h>
++#include "../../../vendor/mediatek/proprietary/external/nvram/libnvram/libnvram.h"
++#include "../../../vendor/mediatek/proprietary/custom/aus6739_66_n1/cgen/cfgfileinc/CFG_PRODUCT_INFO_File.h"
++
++int getpcbid_main(int argc, char *argv[]) {
++    F_ID pcbid_nvram_id;
++    PRODUCT_INFO product_info;
++    int PRODUCT_INFO_LID = 61;
++    int rec_size;
++    int rec_num;
++    int result;
++    char pcbid[15];
++
++    memset(&product_info, 0, sizeof(product_info));
++    ALOGD("getpcbid_main, PRODUCT_INFO_LID: %d\n", PRODUCT_INFO_LID);
++    pcbid_nvram_id = NVM_GetFileDesc(PRODUCT_INFO_LID, &rec_size, &rec_num, true);
++    ALOGD("getpcbid_main, rec_size: %d, rec_num: %d\n", rec_size, rec_num);
++    ALOGD("getpcbid_main, pcbid_nvram_id.iFileDesc: %d\n", pcbid_nvram_id.iFileDesc);
++    if (pcbid_nvram_id.iFileDesc > 0) {
++        int result = read(pcbid_nvram_id.iFileDesc, &product_info, rec_size * rec_num);
++        ALOGD("getpcbid_main, result: %d\n", result);
++        if (result < 0) {
++            ALOGD("read NVRAM error, %s\n", strerror(errno));
++        } else {
++            NVM_CloseFileDesc(pcbid_nvram_id);
++
++            pcbid[0] = product_info.trace_nvram_data.short_code[0];
++            pcbid[1] = product_info.trace_nvram_data.short_code[1];
++            pcbid[2] = product_info.trace_nvram_data.short_code[2];
++            pcbid[3] = product_info.trace_nvram_data.short_code[3];
++            pcbid[4] = product_info.trace_nvram_data.ics[0];
++            pcbid[5] = product_info.trace_nvram_data.ics[1];
++            pcbid[6] = product_info.trace_nvram_data.site_fac_pcba;
++            pcbid[7] = product_info.trace_nvram_data.line_fac_pcba;
++            pcbid[8] = product_info.trace_nvram_data.date_prod_pcba[0];
++            pcbid[9] = product_info.trace_nvram_data.date_prod_pcba[1];
++            pcbid[10] = product_info.trace_nvram_data.date_prod_pcba[2];
++            pcbid[11] = product_info.trace_nvram_data.sn_pcba[0];
++            pcbid[12] = product_info.trace_nvram_data.sn_pcba[1];
++            pcbid[13] = product_info.trace_nvram_data.sn_pcba[2];
++            pcbid[14] = product_info.trace_nvram_data.sn_pcba[3];
++            fprintf(stderr, "%s\n", pcbid);
++        }
++    } else {
++        ALOGD("getpcbid_main, read NVRAM pcbid_nvram_id.iFileDesc == %d \n", pcbid_nvram_id.iFileDesc);
++    }
++
++    return 0;
++}
+
+Property changes on: system/core/toolbox/getpcbid.c
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

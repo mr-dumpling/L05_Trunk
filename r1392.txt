@@ -1,0 +1,318 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1391)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1392)
+@@ -170,6 +170,7 @@
+ import android.view.MotionEvent;
+ import android.content.Intent;
+ import android.provider.Settings.Secure;
++import android.os.SystemClock;
+ //add wqq end}
+ 
+ /**
+@@ -6278,6 +6279,16 @@
+                 }
+                 break;
+             }
++			//add by wqq start{
++			case KeyEvent.KEYCODE_U:		
++					Log.d("WQQ", "KEYCODE= "+keyCode);
++					int doubleTapEnabled = Secure.getInt(
++                    	mContext.getContentResolver(), Secure.DOUBLE_TAP_SCREEN_ENABLE, 0);
++					if(!mPowerManager.isScreenOn() && (doubleTapEnabled==1)){
++						mPowerManager.wakeUp(SystemClock.uptimeMillis());
++					}
++				break;
++		 //add by wqq end}
+         }
+ 
+         if (useHapticFeedback) {
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 1391)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 1392)
+@@ -6789,6 +6789,14 @@
+ 	*/
+ 		public static final String FILP_TO_SNOOZE_ENABLED =
+                 "filp_to_snooze_enabled";
++	/*
++	*add for double tap screen on
++	**/
++		public static final String DOUBLE_TAP_SCREEN_ENABLE="double_tap_screen_on";
++	/*
++	*add for glove mode on
++	**/
++		public static final String GLOVE_MODE_ENABLE="glove_mode_on";
+         /**
+          * Control whether Night display is currently activated.
+          * @hide
+@@ -7048,7 +7056,9 @@
+             NAVIGATION_BAR_BACKGROUND_COLOR,
+             //ADD-E By Justin.Shen for Hide/Show navigation-bar
+             FILP_TO_MUTE_ENABLED,
+-            FILP_TO_SNOOZE_ENABLED
++            FILP_TO_SNOOZE_ENABLED,
++            DOUBLE_TAP_SCREEN_ENABLE,
++            GLOVE_MODE_ENABLE
+         };
+ 
+         /**
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1391)
++++ frameworks/base/api/test-current.txt	(revision 1392)
+@@ -32630,11 +32630,13 @@
+     field public static final java.lang.String DEFAULT_INPUT_METHOD = "default_input_method";
+     field public static final deprecated java.lang.String DEVELOPMENT_SETTINGS_ENABLED = "development_settings_enabled";
+     field public static final deprecated java.lang.String DEVICE_PROVISIONED = "device_provisioned";
++    field public static final java.lang.String DOUBLE_TAP_SCREEN_ENABLE = "double_tap_screen_on";
+     field public static final java.lang.String ENABLED_ACCESSIBILITY_SERVICES = "enabled_accessibility_services";
+     field public static final java.lang.String ENABLED_INPUT_METHODS = "enabled_input_methods";
+     field public static final java.lang.String ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES = "enabled_notification_policy_access_packages";
+     field public static final java.lang.String FILP_TO_MUTE_ENABLED = "filp_to_mute_enabled";
+     field public static final java.lang.String FILP_TO_SNOOZE_ENABLED = "filp_to_snooze_enabled";
++    field public static final java.lang.String GLOVE_MODE_ENABLE = "glove_mode_on";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final java.lang.String INPUT_METHOD_SELECTOR_VISIBILITY = "input_method_selector_visibility";
+     field public static final java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1391)
++++ frameworks/base/api/current.txt	(revision 1392)
+@@ -32552,10 +32552,12 @@
+     field public static final java.lang.String DEFAULT_INPUT_METHOD = "default_input_method";
+     field public static final deprecated java.lang.String DEVELOPMENT_SETTINGS_ENABLED = "development_settings_enabled";
+     field public static final deprecated java.lang.String DEVICE_PROVISIONED = "device_provisioned";
++    field public static final java.lang.String DOUBLE_TAP_SCREEN_ENABLE = "double_tap_screen_on";
+     field public static final java.lang.String ENABLED_ACCESSIBILITY_SERVICES = "enabled_accessibility_services";
+     field public static final java.lang.String ENABLED_INPUT_METHODS = "enabled_input_methods";
+     field public static final java.lang.String FILP_TO_MUTE_ENABLED = "filp_to_mute_enabled";
+     field public static final java.lang.String FILP_TO_SNOOZE_ENABLED = "filp_to_snooze_enabled";
++    field public static final java.lang.String GLOVE_MODE_ENABLE = "glove_mode_on";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final java.lang.String INPUT_METHOD_SELECTOR_VISIBILITY = "input_method_selector_visibility";
+     field public static final java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1391)
++++ frameworks/base/api/system-current.txt	(revision 1392)
+@@ -35311,10 +35311,12 @@
+     field public static final java.lang.String DEFAULT_INPUT_METHOD = "default_input_method";
+     field public static final deprecated java.lang.String DEVELOPMENT_SETTINGS_ENABLED = "development_settings_enabled";
+     field public static final deprecated java.lang.String DEVICE_PROVISIONED = "device_provisioned";
++    field public static final java.lang.String DOUBLE_TAP_SCREEN_ENABLE = "double_tap_screen_on";
+     field public static final java.lang.String ENABLED_ACCESSIBILITY_SERVICES = "enabled_accessibility_services";
+     field public static final java.lang.String ENABLED_INPUT_METHODS = "enabled_input_methods";
+     field public static final java.lang.String FILP_TO_MUTE_ENABLED = "filp_to_mute_enabled";
+     field public static final java.lang.String FILP_TO_SNOOZE_ENABLED = "filp_to_snooze_enabled";
++    field public static final java.lang.String GLOVE_MODE_ENABLE = "glove_mode_on";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final java.lang.String INPUT_METHOD_SELECTOR_VISIBILITY = "input_method_selector_visibility";
+     field public static final java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: device/mediatek/mt6739/init.mt6739.rc
+===================================================================
+--- device/mediatek/mt6739/init.mt6739.rc	(revision 1391)
++++ device/mediatek/mt6739/init.mt6739.rc	(revision 1392)
+@@ -583,6 +583,13 @@
+ # End of adding by MTK drivers
+ # -----------------------
+ 
++	# add by dejin tech start {
++	#fts_gesture_mode
++	chmod 0664 /sys/bus/i2c/drivers/fts_ts/0-0070/fts_gesture_mode
++	#fts_glove_mode
++	chmod 0664 /sys/bus/i2c/drivers/fts_ts/0-0070/fts_glove_mode
++	# add by dejin tech end }
++	
+ on boot
+     write /proc/bootprof "INIT:boot"
+ 
+Index: packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 1391)
++++ packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 1392)
+@@ -40,6 +40,8 @@
+ 
+ import java.util.ArrayList;
+ import java.util.List;
++import android.content.Context;
++import com.android.settings.Util;
+ 
+ /**
+  * Top level fragment for gesture settings.
+@@ -57,19 +59,21 @@
+     private static final String PREF_KEY_DOUBLE_TAP_SCREEN = "gesture_double_tap_screen";
+     private static final String DEBUG_DOZE_COMPONENT = "debug.doze.component";
+ 	//add by wqq start{
++	private static final String GLOVE_MODE="glove_mode";
+ 	private static final String THREE_FINGER_SHOTSCREEN ="three_finger_shotscreen";
+ 	private static final String FILP_TO_MUTE ="mute_incoming";
+ 	private static final String FILP_TO_SNOOZE ="alarm_soonz_mode";
++	private static final String DOUBLE_TAP_SCREEN="double_tap_screen";
+ 	//add by wqq end}
+     private List<GesturePreference> mPreferences;
+ 
+     private AmbientDisplayConfiguration mAmbientConfig;
+-
++	private Context mContext;
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
+         addPreferencesFromResource(R.xml.gesture_settings);
+-        Context context = getActivity();
++        mContext = getActivity();
+         mPreferences = new ArrayList();
+ 
+         // Double tap power for camera
+@@ -82,7 +86,7 @@
+         }
+ 
+         // Ambient Display
+-        mAmbientConfig = new AmbientDisplayConfiguration(context);
++        mAmbientConfig = new AmbientDisplayConfiguration(mContext);
+         if (mAmbientConfig.pulseOnPickupAvailable()) {
+             boolean pickup = mAmbientConfig.pulseOnPickupEnabled(UserHandle.myUserId());
+             addPreference(PREF_KEY_PICK_UP, pickup);
+@@ -97,14 +101,14 @@
+         }
+ 
+         // Fingerprint slide for notifications
+-        if (isSystemUINavigationAvailable(context)) {
+-            addPreference(PREF_KEY_SWIPE_DOWN_FINGERPRINT, isSystemUINavigationEnabled(context));
++        if (isSystemUINavigationAvailable(mContext)) {
++            addPreference(PREF_KEY_SWIPE_DOWN_FINGERPRINT, isSystemUINavigationEnabled(mContext));
+         } else {
+             removePreference(PREF_KEY_SWIPE_DOWN_FINGERPRINT);
+         }
+ 
+         // Double twist for camera mode
+-        if (isDoubleTwistAvailable(context)) {
++        if (isDoubleTwistAvailable(mContext)) {
+             int doubleTwistEnabled = Secure.getInt(
+                     getContentResolver(), Secure.CAMERA_DOUBLE_TWIST_TO_FLIP_ENABLED, 1);
+             addPreference(PREF_KEY_DOUBLE_TWIST, doubleTwistEnabled != 0);
+@@ -123,6 +127,15 @@
+ 		int filpToSnoozeEnabled = Secure.getInt(
+                     getContentResolver(), Secure.FILP_TO_SNOOZE_ENABLED, 0);
+ 		addPreference(FILP_TO_SNOOZE,filpToSnoozeEnabled != 0);
++
++		
++		int gloveModeEnabled = Secure.getInt(
++                    getContentResolver(), Secure.GLOVE_MODE_ENABLE, 0);
++		addPreference(GLOVE_MODE,gloveModeEnabled!= 0);
++		
++		int doubleTapEnabled = Secure.getInt(
++                    getContentResolver(), Secure.DOUBLE_TAP_SCREEN_ENABLE, 0);
++		addPreference(DOUBLE_TAP_SCREEN,doubleTapEnabled != 0);
+ 		//add by wqq end}
+     }
+ 
+@@ -196,6 +209,14 @@
+ 		}else if(FILP_TO_SNOOZE.equals(key)){
+ 			Secure.putInt(getContentResolver(),
+                     Secure.FILP_TO_SNOOZE_ENABLED, enabled ? 1 : 0);
++		}else if(GLOVE_MODE.equals(key)){
++			Secure.putInt(getContentResolver(),
++                    Secure.GLOVE_MODE_ENABLE, enabled ? 1 : 0);
++			Util.setFlags(mContext,Util.FALG_GESTURE_GLOVE,enabled ? 1 : 0)	;
++		}else if(DOUBLE_TAP_SCREEN.equals(key)){
++			Secure.putInt(getContentResolver(),
++                    Secure.DOUBLE_TAP_SCREEN_ENABLE, enabled ? 1 : 0);
++			Util.setFlags(mContext,Util.KEY_GESTURE_DOUBLE_TAP,enabled ? 1 : 0)	;
+ 		}
+ 		//add by wqq end
+         return true;
+Index: packages/apps/Settings/src/com/android/settings/Util.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/Util.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/Util.java	(revision 1392)
+@@ -0,0 +1,89 @@
++package com.android.settings;
++
++import android.os.SystemProperties;
++import android.content.Context;
++import android.provider.Settings;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.FileNotFoundException;
++import java.io.BufferedInputStream;
++import java.io.BufferedOutputStream;
++import java.io.File;
++import java.io.IOException;
++import android.util.Log;
++import java.io.FileWriter;
++import java.io.DataOutputStream;
++public final class Util  {
++    private static final String TAG = "Gesture/Util";
++    private static final String gfileName = "/sys/bus/i2c/drivers/fts_ts/0-0070/fts_gesture_mode";
++	private static final String dfileName = "/sys/bus/i2c/drivers/fts_ts/0-0070/fts_glove_mode";
++    public static final int FALG_GESTURE_GLOVE= 100;
++    public static final int KEY_GESTURE_DOUBLE_TAP= 101;
++	private static String fileName;
++    public static void setFlags(Context mContext, int key,int vaule){
++		if(key==FALG_GESTURE_GLOVE){
++			fileName=gfileName;
++			Log.e("wqq-->glove", "fileName= "+fileName);
++		}else{
++			fileName=dfileName;
++			Log.e("wqq-->doubleTap", "fileName= "+fileName);
++		}
++        //writeFile(vaule);
++        writeSysFile(fileName,vaule);
++		Log.e("wqq-->writeSysFile", "vaule= "+vaule);
++    }
++
++   /* public static void writeFile(int gestureValue) {
++        int value = gestureValue;
++
++        FileWriter file = null;
++        try {
++            file = new FileWriter(fileName);
++            String buf = String.valueOf(value);
++            file.write(buf);
++            if (file != null) {
++                file.close();
++                file = null;
++            }
++        } catch (IOException e) {
++            Log.e(TAG, "saveParamToFile " + e.getMessage());
++            try {
++                if (file != null) {
++                    file.close();
++                    file = null;
++                }
++            } catch (IOException io) {
++                Log.e(TAG, "saveParamToFile fail");
++            }
++        }
++    }*/
++
++	public static void writeSysFile(String sys_path,int gretureVaule){
++
++        Process p = null;
++        DataOutputStream os = null;
++        try {
++            p = Runtime.getRuntime().exec("sh");
++            os = new DataOutputStream(p.getOutputStream());
++            os.writeBytes("echo"+ gretureVaule+" > "+sys_path + "\n");
++			Log.e("wqq-->writeBytes", "sys_path= "+sys_path);
++            os.writeBytes("exit\n");
++            os.flush();
++			Log.e("wqq-->writeSysFile", "gretureVaule= "+gretureVaule);
++        } catch (IOException e) {
++            e.printStackTrace();
++            Log.e(TAG, " can't write " + sys_path+e.getMessage());
++        } finally {
++            if(p != null){
++                p.destroy();
++            }
++            if(os != null){
++                try {
++                    os.close();
++                } catch (IOException e) {
++                    e.printStackTrace();
++                }
++            }
++        }
++    }
++}

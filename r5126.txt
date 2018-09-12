@@ -1,0 +1,91 @@
+Index: packages/apps/Settings/src/com/android/settings/applications/ManageApplications.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/applications/ManageApplications.java	(revision 5125)
++++ packages/apps/Settings/src/com/android/settings/applications/ManageApplications.java	(revision 5126)
+@@ -74,6 +74,9 @@
+ import com.android.settings.notification.ConfigureNotificationSettings;
+ import com.android.settings.notification.NotificationBackend;
+ import com.android.settings.notification.NotificationBackend.AppRow;
++import com.android.settings.search.BaseSearchIndexProvider;
++import com.android.settings.search.Indexable;
++import com.android.settings.search.SearchIndexableRaw;
+ import com.android.settingslib.HelpUtils;
+ import com.android.settingslib.applications.ApplicationsState;
+ import com.android.settingslib.applications.ApplicationsState.AppEntry;
+@@ -98,7 +101,7 @@
+  * intent.
+  */
+ public class ManageApplications extends InstrumentedFragment
+-        implements OnItemClickListener, OnItemSelectedListener {
++        implements OnItemClickListener, OnItemSelectedListener, Indexable {
+ 
+     static final String TAG = "ManageApplications";
+     static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+@@ -1344,4 +1347,21 @@
+             return new SummaryProvider(activity, summaryLoader);
+         }
+     };
++
++    public static final SearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
++            new BaseSearchIndexProvider() {
++
++        @Override
++        public List<SearchIndexableRaw> getRawDataToIndex(Context context, boolean enabled) {
++            final List<SearchIndexableRaw> result = new ArrayList<SearchIndexableRaw>();
++            String screenTitle = context.getResources().getString(R.string.applications_settings);
++
++            SearchIndexableRaw data = new SearchIndexableRaw(context);
++            data.screenTitle = screenTitle;
++            data.title = screenTitle;
++            result.add(data);
++
++            return result;
++        }
++    };
+ }
+Index: packages/apps/Settings/src/com/android/settings/search/Ranking.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/search/Ranking.java	(revision 5125)
++++ packages/apps/Settings/src/com/android/settings/search/Ranking.java	(revision 5126)
+@@ -30,6 +30,7 @@
+ import com.android.settings.accessibility.AccessibilitySettings;
+ import com.android.settings.accounts.AccountSettings;
+ import com.android.settings.applications.AdvancedAppSettings;
++import com.android.settings.applications.ManageApplications;
+ import com.android.settings.applications.SpecialAccessSettings;
+ import com.android.settings.bluetooth.BluetoothSettings;
+ import com.android.settings.datausage.DataUsageMeteredSettings;
+@@ -149,6 +150,7 @@
+         // Advanced app settings
+         sRankMap.put(AdvancedAppSettings.class.getName(), RANK_APPS);
+         sRankMap.put(SpecialAccessSettings.class.getName(), RANK_APPS);
++        sRankMap.put(ManageApplications.class.getName(), RANK_APPS);
+ 
+         // Users
+         sRankMap.put(UserSettings.class.getName(), RANK_USERS);
+Index: packages/apps/Settings/src/com/android/settings/search/SearchIndexableResources.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/search/SearchIndexableResources.java	(revision 5125)
++++ packages/apps/Settings/src/com/android/settings/search/SearchIndexableResources.java	(revision 5126)
+@@ -31,6 +31,7 @@
+ import com.android.settings.accessibility.AccessibilitySettings;
+ import com.android.settings.accounts.AccountSettings;
+ import com.android.settings.applications.AdvancedAppSettings;
++import com.android.settings.applications.ManageApplications;
+ import com.android.settings.applications.SpecialAccessSettings;
+ import com.android.settings.bluetooth.BluetoothSettings;
+ import com.android.settings.datausage.DataUsageMeteredSettings;
+@@ -230,6 +231,13 @@
+                         SpecialAccessSettings.class.getName(),
+                         R.drawable.ic_settings_applications));
+ 
++        sResMap.put(ManageApplications.class.getName(),
++                new SearchIndexableResource(
++                        Ranking.getRankForClassName(ManageApplications.class.getName()),
++                        NO_DATA_RES_ID,
++                        ManageApplications.class.getName(),
++                        R.drawable.ic_settings_applications));
++
+         sResMap.put(UserSettings.class.getName(),
+                 new SearchIndexableResource(
+                         Ranking.getRankForClassName(UserSettings.class.getName()),

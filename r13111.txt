@@ -1,0 +1,187 @@
+Index: vendor/branch/5058A_Argentina_OpenMarket/vendor/mediatek/proprietary/packages/apps/Stk/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/vendor/mediatek/proprietary/packages/apps/Stk/AndroidManifest.xml	(revision 13110)
++++ vendor/branch/5058A_Argentina_OpenMarket/vendor/mediatek/proprietary/packages/apps/Stk/AndroidManifest.xml	(revision 13111)
+@@ -131,7 +131,14 @@
+                 <action android:name="android.intent.action.USER_INITIALIZE" />
+             </intent-filter>
+         </receiver>
+-
++        <!--BEGIN-chenhu-->
++        <receiver android:name=".ProactiveSetTitleReceiver">
++            <intent-filter>
++                <action android:name="proactive_set_stkselection_app_title" />
++				<action android:name="android.intent.action.SIM_STATE_CHANGED" />
++            </intent-filter>
++        </receiver>
++        <!--END-chenhu-->
+         <service android:name="StkAppService"
+                 android:directBootAware="true"/>
+ 
+Index: vendor/branch/5058A_Argentina_OpenMarket/device/ausshine/aus6739_66_n1/system.prop
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/device/ausshine/aus6739_66_n1/system.prop	(revision 13110)
++++ vendor/branch/5058A_Argentina_OpenMarket/device/ausshine/aus6739_66_n1/system.prop	(revision 13111)
+@@ -95,4 +95,6 @@
+ # add customer client id
+ ro.com.google.clientidbase=android-alcatel
+ ro.product.first_api_level=25
+-persist.radio.fd.on.only.r8=1
+\ No newline at end of file
++persist.radio.fd.on.only.r8=1
++
++ro.telcel.enabled = true
+\ No newline at end of file
+Index: vendor/branch/5058A_Argentina_OpenMarket/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMFileHandler.java
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMFileHandler.java	(revision 13110)
++++ vendor/branch/5058A_Argentina_OpenMarket/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMFileHandler.java	(revision 13111)
+@@ -73,6 +73,7 @@
+         case EF_SPN_SHORT_CPHS:
+         case EF_INFO_CPHS:
+         case EF_CSP_CPHS:
++        case EF_SUME: //add by chenhu
+             return MF_SIM + DF_GSM;
+         // MTK-START
+         case EF_ECC:
+Index: vendor/branch/5058A_Argentina_OpenMarket/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 13110)
++++ vendor/branch/5058A_Argentina_OpenMarket/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 13111)
+@@ -1900,6 +1900,12 @@
+                         log("[sume tag = " + tag + ", len = " + len);
+                         mMenuTitleFromEf = IccUtils.adnStringFieldToString(data, 2, len);
+                         log("[sume menu title is " + mMenuTitleFromEf);
++                        /*-begin-chenhu*/
++                        int def = mContext.getResources().getInteger(com.android.internal.R.integer.def_customized_stk_app_name);
++                        if (def == 2) {
++                            SystemProperties.set("gsm.stk.perso.app_title", mMenuTitleFromEf);
++                        }
++                        /*-end-chenhu*/
+                     }
+                 } else {
+                     if (ar.exception != null) {
+@@ -2488,7 +2494,17 @@
+         } else {
+             log("onAllRecordsLoaded empty 'gsm.sim.operator.numeric' skipping");
+         }
+-
++        /*-begin-chenhu*/
++        if(operator != null ){
++            log("SIMRecords: update stk name. operator = " + operator);
++            final int def = mContext.getResources().getInteger(com.android.internal.R.integer.def_customized_stk_app_name);
++            if(def == 3 || def ==2){
++                Intent intent = new Intent("proactive_set_stkselection_app_title");
++                intent.putExtra("simId", mParentApp.getSlotId());
++                mContext.sendBroadcast(intent);
++            }
++        }
++        /*-end-chenhu*/
+         if (!TextUtils.isEmpty(mImsi)) {
+             log("onAllRecordsLoaded set mcc imsi" + (VDBG ? ("=" + mImsi) : ""));
+             // MTK-START
+Index: vendor/branch/5058A_Argentina_OpenMarket/frameworks/opt/telephony/src/java/com/android/internal/telephony/cat/CommandParamsFactory.java
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/frameworks/opt/telephony/src/java/com/android/internal/telephony/cat/CommandParamsFactory.java	(revision 13110)
++++ vendor/branch/5058A_Argentina_OpenMarket/frameworks/opt/telephony/src/java/com/android/internal/telephony/cat/CommandParamsFactory.java	(revision 13111)
+@@ -21,6 +21,7 @@
+ import android.graphics.Bitmap;
+ import android.os.Handler;
+ import android.os.Message;
++import android.os.SystemProperties;
+ 
+ import com.android.internal.telephony.GsmAlphabet;
+ import com.android.internal.telephony.uicc.IccFileHandler;
+@@ -777,6 +778,16 @@
+                 CatLog.e(this, "retrieveAlphaId ResultException: " + e.result());
+             }
+             CatLog.d(this, "add AlphaId: " + menu.title);
++            /*begin-chenhu*/
++            int def = mContext.getResources().getInteger(com.android.internal.R.integer.def_customized_stk_app_name);
++            if(def == 2) {
++                if (cmdDet.typeOfCommand == AppInterface.CommandType.SET_UP_MENU.value()) {
++                    if (menu.title != null && menu.title.length() <= SystemProperties.PROP_VALUE_MAX) {
++                        SystemProperties.set("gsm.stk.perso.app_title", menu.title);
++                    }
++                }
++            }
++            /*end-chenhu*/
+         } else if (cmdType == AppInterface.CommandType.SET_UP_MENU) {
+             // According to spec ETSI TS 102 223 section 6.10.3, the
+             // Alpha ID is mandatory (and also part of minimum set of
+Index: vendor/branch/5058A_Argentina_OpenMarket/frameworks/base/core/java/android/app/ApplicationPackageManager.java
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/frameworks/base/core/java/android/app/ApplicationPackageManager.java	(revision 13110)
++++ vendor/branch/5058A_Argentina_OpenMarket/frameworks/base/core/java/android/app/ApplicationPackageManager.java	(revision 13111)
+@@ -1496,10 +1496,70 @@
+     @Override
+     public CharSequence getText(String packageName, @StringRes int resid,
+                                 ApplicationInfo appInfo) {
+-        ResourceName name = new ResourceName(packageName, resid);
++		ResourceName name = new ResourceName(packageName, resid);
+         if (false) Log.d("PackageManager", "Query text for package: " + packageName
+                         + "resid: " + resid);
+         CharSequence text = getCachedString(name);
++        /*begin-20151020-yangning.hong-add-for-T730276,T730254,T730263,T730245,T742200*/
++        if ("com.android.stk".equals(packageName)) {
++            int def = mContext.getResources().getInteger(com.android.internal.R.integer.def_customized_stk_app_name);
++            Log.d("PackageManager", "def_customized_stk_app_name is " + def);
++
++            /*-begin-20151020-yangning.hong-add-for-T742207-ssv-to-custom-stk-name*/
++            boolean mSsvEnabled = SystemProperties.getBoolean("ro.telcel.enabled", false);
++            if(mSsvEnabled){
++                if (def == 1 || def == 2) {
++                    //If def = 2, so read SATK name from EF_SUME and Set up menu alpha ID firstly.
++                    String title = SystemProperties.get("gsm.stk.perso.app_title");
++                    if (title == null || title.length() <= 0) {
++                        title = text;
++                    }
++                    Log.d(TAG, "ssv version run in customize STK shortcut name = " + title);
++                    if ((title != null) && (title.length() > 0)) {
++                        return title;
++                    }
++                }
++            /*-end-20151020-yangning.hong-add-for-T742207-ssv-to-custom-stk-name*/
++            }else{
++                if (def == 1 || def == 2) {//T730276,T730254,T730263
++                    String title = SystemProperties.get("gsm.stk.perso.app_title");
++                    Log.d(TAG, "run in customize STK shortcut name by reading sim card SUME." + title);
++                    if ((title != null) && (title.length() > 0)) {
++                        return title;
++                    }
++                } else if (def == 3) {//T730245
++                    String[] ideaOperatorNumerics = {"334020", "46001"};
++                    String[] plmns = SystemProperties.get("gsm.sim.operator.numeric", "").split(",");
++                    if(plmns != null && plmns.length > 0){
++                        String operatorNumeric = "";
++                        String operatorNumeric2 = "";
++                        if(plmns.length > 1){
++                            operatorNumeric = plmns[0];
++                            operatorNumeric2 = plmns[1];
++                        }else{
++                            operatorNumeric = plmns[0];
++                        }
++                        Log.d(TAG,"ideaOperatorNumberic:" + operatorNumeric);
++                        Log.d(TAG,"ideaOperatorNumberic2:" + operatorNumeric2);
++                        for (String ideaOperatorNumeric : ideaOperatorNumerics) {
++                            if (operatorNumeric.equals(ideaOperatorNumeric)
++                                    || operatorNumeric2.equals(ideaOperatorNumeric)){
++                                Log.d(TAG, "IDEA_PLMN");
++                                return "SIM Telcel";
++                            }
++                        }
++                    }
++                }else if (def == 4){//T742200
++                    String stkUnicodeTitle = mContext.getResources().getString(com.android.internal.R.string.gsm_stk_title_unicode);
++                    Log.d(TAG,"############Test for TIM card");
++                    if (stkUnicodeTitle != null && stkUnicodeTitle.length() > 0)
++                        return stkUnicodeTitle;
++                }
++            }
++        }
++        /*end-20151020-yangning.hong-add-for-T730276,T730254,T730263,T730245,T742200*/
++
++
+         if (text != null) {
+ 			if(isSupportedRenameStk()){
+                 if(SubscriptionManager.getDefaultSubId() == 0 && PACKAGE_NAME_STK.equals(packageName)){

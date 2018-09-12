@@ -1,0 +1,68 @@
+Index: vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java	(revision 7744)
++++ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java	(revision 7745)
+@@ -26,6 +26,8 @@
+ import android.telephony.SubscriptionInfo;
+ import android.telephony.SubscriptionManager;
+ import android.telephony.TelephonyManager;
++import android.telephony.PreciseDataConnectionState;
++
+ import android.text.TextUtils;
+ import android.util.Log;
+ import android.util.SparseArray;
+@@ -79,6 +81,7 @@
+     private SignalStrength mSignalStrength;
+     private MobileIconGroup mDefaultIcons;
+     private Config mConfig;
++    private String mApnType = "unknow";
+ 
+     /// M: Add for Plugin feature. @ {
+     private IMobileIconExt mMobileIconExt;
+@@ -192,7 +195,8 @@
+                         | PhoneStateListener.LISTEN_CALL_STATE
+                         | PhoneStateListener.LISTEN_DATA_CONNECTION_STATE
+                         | PhoneStateListener.LISTEN_DATA_ACTIVITY
+-                        | PhoneStateListener.LISTEN_CARRIER_NETWORK_CHANGE);
++                        | PhoneStateListener.LISTEN_CARRIER_NETWORK_CHANGE
++                        | PhoneStateListener.LISTEN_PRECISE_DATA_CONNECTION_STATE);
+         mStatusBarExt.registerOpStateListener();
+     }
+ 
+@@ -311,7 +315,7 @@
+                         && mCurrentState.activityOut;
+         showDataIcon &= mCurrentState.isDefault
+                 || mCurrentState.iconGroup == TelephonyIcons.ROAMING
+-                || dataDisabled;
++                || dataDisabled || mApnType.equals("mms");
+         int typeIcon = showDataIcon ? icons.mDataType : 0;
+         /** M: Support [Network Type on StatusBar], change the implement methods.
+           * Get the network icon base on service state.
+@@ -616,7 +620,7 @@
+                 mCurrentState.iconGroup = TelephonyIcons.ROAMING;
+             }
+         } else if (isDataDisabled()) {
+-            mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
++            //mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
+         }
+         if (isEmergencyOnly() != mCurrentState.isEmergency) {
+             mCurrentState.isEmergency = isEmergencyOnly();
+@@ -723,6 +727,18 @@
+             }
+             updateTelephony();
+         }
++        
++        @Override 
++        public void onPreciseDataConnectionStateChanged(PreciseDataConnectionState dataConnectionState){
++            if (DEBUG) {
++                Log.d(mTag, "onPreciseDataConnectionStateChanged: dataConnectionState=" + dataConnectionState);
++            }
++            if ((mDataState == dataConnectionState.getDataConnectionState()) && (mDataNetType == dataConnectionState.getDataConnectionNetworkType())) {
++                mApnType = dataConnectionState.getDataConnectionAPNType();
++                Log.d(TAG, "mtk onPreciseDataConnectionStateChanged mApnType: " + mApnType);
++                notifyListenersIfNecessary();
++            }
++        }
+ 
+         @Override
+         public void onDataActivity(int direction) {

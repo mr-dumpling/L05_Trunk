@@ -1,0 +1,73 @@
+Index: vendor/branch/5058A_Telefonica/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java
+===================================================================
+--- vendor/branch/5058A_Telefonica/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 8112)
++++ vendor/branch/5058A_Telefonica/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 8113)
+@@ -3686,6 +3686,9 @@
+                 invalidateOptionsMenu();
+             }
+         }
++		if (mWorkingMessage != null && mWorkingMessage.getConversation().hasDraft()) {
++            loadDraft();
++        }
+     }
+ 
+     @Override
+Index: vendor/branch/5058A_Telefonica/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058A_Telefonica/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 8112)
++++ vendor/branch/5058A_Telefonica/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 8113)
+@@ -2149,6 +2149,8 @@
+             ///M: Plug-in to customize the LTE switch @{
+             mExt.customizeEnhanced4GLteSwitchPreference(this, mEnhancedButton4glte);
+             ///@}
++		} else {
++            mEnhancedButton4glte = null;
+         }
+     }
+ 
+@@ -2208,10 +2210,12 @@
+             /// M: [CMCC DUAl VOLTE] @{
+             enableForCtVolte = mExt.customizeDualVolteOpDisable(subId, enableForCtVolte);
+             /// @}
++			boolean secondEnabled = isSecondVolteEnabled();
+             log("updateEnhanced4glteEnableState, incall = " + inCall + ", nontty = " + nontty
+-                    + ", enableForCtVolte = " + enableForCtVolte);
++                    + ", enableForCtVolte = " + enableForCtVolte + ", secondEnabled = "
++                    + secondEnabled);
+             mEnhancedButton4glte.setEnabled(!inCall && nontty && hasActiveSubscriptions()
+-                    && enableForCtVolte);
++                    && enableForCtVolte && secondEnabled);
+             /// M: [CMCC DUAl VOLTE] @{
+             mExt.customizeDualVolteOpHide(getPreferenceScreen(), mEnhancedButton4glte, enableForCtVolte);
+             /// @}
+@@ -2434,6 +2438,17 @@
+         }
+         mPreNetworkMode = -1;
+     }
++	
++	private boolean isSecondVolteEnabled() {
++        if (!TelephonyUtilsEx.isBothslotCtSim(mSubscriptionManager)) {
++            return true;
++        }
++        if (TelephonyUtilsEx.getMainPhoneId() == mPhone.getPhoneId()) {
++            return true;
++        } else {
++            return false;
++        }
++    }
+ 
+     /// M: [CT VOLTE]
+     private ContentObserver mContentObserver = new ContentObserver(new Handler()) {
+Index: vendor/branch/5058A_Telefonica/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A_Telefonica/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 8112)
++++ vendor/branch/5058A_Telefonica/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 8113)
+@@ -224,7 +224,7 @@
+ MTK_BT_SUPPORT = yes
+ MTK_BT_WIFI_COEX_RADIO_MODIFY = no
+ MTK_BUFFER_COMPRESSION_SUPPORT = no
+-MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P54
++MTK_BUILD_VERNO = alps-mp-n1.mp18-V1_aus6739.66.n1_P57
+ MTK_BWC_SUPPORT = yes
+ MTK_C2K_LTE_MODE = 0
+ MTK_CACHE_MERGE_SUPPORT = no

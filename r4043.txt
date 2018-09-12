@@ -1,0 +1,90 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 4042)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 4043)
+@@ -500,20 +500,26 @@
+         getRecentsButton().setVisibility(disableRecent ? View.INVISIBLE : View.VISIBLE);
+         
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        final boolean disableNail = ((disabledFlags & View.STATUS_BAR_DISABLE_HOME) != 0);
+-        if(isLeftNail()) {
+-            getLeftNailButton().setVisibility(disableNail      ? View.INVISIBLE : View.VISIBLE);
++        if (isBootWizardMode()) {
++            Log.d(TAG, "setDisabledFlags: isBootWizardMode, hide nail!");
++            getLeftNailButton().setVisibility(View.INVISIBLE);
+             getRightNailButton().setVisibility(View.INVISIBLE);
+-        } else if(isRightNail()) {
+-            if(mShowMenu || mShowImeButton) {
++        } else {
++            final boolean disableNail = ((disabledFlags & View.STATUS_BAR_DISABLE_HOME) != 0);
++            if(isLeftNail()) {
++                getLeftNailButton().setVisibility(disableNail      ? View.INVISIBLE : View.VISIBLE);
+                 getRightNailButton().setVisibility(View.INVISIBLE);
++            } else if(isRightNail()) {
++                if(mShowMenu || mShowImeButton) {
++                    getRightNailButton().setVisibility(View.INVISIBLE);
++                } else {
++                    getRightNailButton().setVisibility(disableNail      ? View.INVISIBLE : View.VISIBLE);
++                }
++                getLeftNailButton().setVisibility(View.INVISIBLE);
+             } else {
+-                getRightNailButton().setVisibility(disableNail      ? View.INVISIBLE : View.VISIBLE);
++                getLeftNailButton().setVisibility(View.INVISIBLE);
++                getRightNailButton().setVisibility(View.INVISIBLE);
+             }
+-            getLeftNailButton().setVisibility(View.INVISIBLE);
+-        } else {
+-            getLeftNailButton().setVisibility(View.INVISIBLE);
+-            getRightNailButton().setVisibility(View.INVISIBLE);
+         }
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+@@ -937,6 +943,13 @@
+         getRightNailButton().setImageDrawable(
+                 mNavBarPlugin.getRecentImage(isFixed ? mNailFixedIcon : mNailUnFixedIcon));
+                 
++        if(isBootWizardMode()) {
++            Log.d(TAG, "updateNailIcon: isBootWizardMode, hide nail!");
++            getLeftNailButton().setVisibility(View.INVISIBLE);
++            getRightNailButton().setVisibility(View.INVISIBLE);
++            return;
++        }
++        
+         if(isLeftNail()) {
+             getLeftNailButton().setVisibility(View.VISIBLE);
+             getRightNailButton().setVisibility(View.INVISIBLE);
+@@ -951,11 +964,6 @@
+             getLeftNailButton().setVisibility(View.INVISIBLE);
+             getRightNailButton().setVisibility(View.INVISIBLE);
+         }
+-        
+-        if(isBootWizardMode()) {
+-            getLeftNailButton().setVisibility(View.INVISIBLE);
+-            getRightNailButton().setVisibility(View.INVISIBLE);
+-        }
+     }
+     
+     public void setCurrentUserId(int currentUserId) {
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 4042)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 4043)
+@@ -5938,12 +5938,12 @@
+         if (resolveinfo != null) {
+             className = resolveinfo.activityInfo.name;
+         }
+-		*/
+-		Iterator <ResolveInfo> it = resolveinfoList.iterator();
+-		if(it.hasNext())
+-        {  
+-			ResolveInfo resolveinfo = it.next();
+-			className = resolveinfo.activityInfo.name;
++        */
++        Iterator <ResolveInfo> it = resolveinfoList.iterator();
++        if((it != null) && it.hasNext())
++        {
++            ResolveInfo resolveinfo = it.next();
++            className = resolveinfo.activityInfo.name;
+         }
+         Log.d(TAG, "getClassNameByPackageName: className = " + className);
+         return className;

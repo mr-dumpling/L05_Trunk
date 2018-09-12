@@ -1,0 +1,137 @@
+Index: vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/NetworkSetting.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 15156)
++++ vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 15157)
+@@ -24,6 +24,7 @@
+ import static android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+ 
+ import java.util.HashMap;
++import java.util.LinkedHashMap; 
+ import java.util.List;
+ 
+ import android.app.AlertDialog;
+@@ -189,7 +190,7 @@
+             if (DBG) log("connection created, binding local service.");
+             mNetworkQueryService = ((NetworkQueryService.LocalBinder) service).getService();
+             // as soon as it is bound, run a query.
+-            loadNetworksList();
++            //loadNetworksList();
+         }
+ 
+         /** Handle the task of cleaning up the local binding */
+@@ -243,19 +244,16 @@
+                     .setPositiveButton(R.string.attention_dialog_ok, new DialogInterface.OnClickListener() {
+                         @Override
+                         public void onClick(DialogInterface dialogInterface, int i) {
+-                            loadNetworksList();
+-                            handled = true;
++            loadNetworksList();
++            handled = true;
+                         }
+-
+                     })
+                     .setNegativeButton(R.string.attention_dialog_cancel, new DialogInterface.OnClickListener() {
+                         @Override
+                         public void onClick(DialogInterface dialogInterface, int i) {
+-
+                         }
+                     })
+                     .create().show();
+-
+         } else if (preference == mAutoSelect) {
+             new AlertDialog.Builder(NetworkSetting.this)
+                     .setIconAttribute(android.R.attr.alertDialogIcon)
+@@ -264,19 +262,16 @@
+                     .setPositiveButton(R.string.attention_dialog_ok, new DialogInterface.OnClickListener() {
+                         @Override
+                         public void onClick(DialogInterface dialogInterface, int i) {
+-                            selectNetworkAutomatic();
+-                            handled = true;
++            selectNetworkAutomatic();
++            handled = true;
+                         }
+-
+                     })
+                     .setNegativeButton(R.string.attention_dialog_cancel, new DialogInterface.OnClickListener() {
+                         @Override
+                         public void onClick(DialogInterface dialogInterface, int i) {
+-
+                         }
+                     })
+                     .create().show();
+-
+             /// M: For CSG feature @{
+         } else if (preference == mManuSelectFemtocell) {
+             selectFemtocellManually();
+@@ -678,6 +673,8 @@
+                 // just use the operator name instead of the mildly
+                 // confusing mcc/mnc.
+                 /// M: add forbidden at the end of operator name
++				LinkedHashMap<String,Preference> tempMap = new LinkedHashMap<String,Preference>();
++				HashMap<String,Preference> currentCarrierMap = new HashMap<String,Preference>();
+                 int forbiddenCount = 0;
+                 for (OperatorInfo ni : result) {
+                     String forbidden = "";
+@@ -685,15 +682,32 @@
+                         forbidden = " (" + getResources().getString(
+                                 R.string.network_forbidden) + ")";
+                         forbiddenCount++;
++						//continue;
+                     }
+                     Preference carrier = new Preference(this, null);
+-                    carrier.setTitle(getNetworkTitle(ni) + forbidden);
++					String operatorName = getNetworkTitle(ni).replaceAll("2G|3G|4G","");
++					String state = (!"AVAILABLE".equals(String.valueOf(ni.getState()))) ? " (" + upperCaseEx(String.valueOf(ni.getState())) + ")" : "";
++                    carrier.setTitle(operatorName + state/* forbidden */);
+                     carrier.setPersistent(false);
+-                    mNetworkList.addPreference(carrier);
++					if ("CURRENT".equals(String.valueOf(ni.getState()))) {
++						currentCarrierMap.put(ni.getOperatorNumeric(),carrier);
++					} else {
++						tempMap.put(ni.getOperatorNumeric(),carrier);
++					}										
+                     mNetworkMap.put(carrier, ni);
+-
++					Log.d("NetWorkSetting.TAG",ni.toString());
+                     if (DBG) log("  " + ni);
+                 }
++				if (currentCarrierMap !=null) {
++					for (String operatorNumberic:currentCarrierMap.keySet()) {
++						tempMap.put(operatorNumberic, currentCarrierMap.get(operatorNumberic));
++					}
++				}				
++				if (tempMap !=null) {
++					for (String operatorNumberic:tempMap.keySet()) {
++						mNetworkList.addPreference(tempMap.get(operatorNumberic));
++					}
++				}			                    
+                 if (mIsForeground && forbiddenCount == result.size()) {
+                     if (DBG) {
+                         log("show DIALOG_ALL_FORBIDDEN forbiddenCount:" + forbiddenCount);
+@@ -705,7 +719,16 @@
+             }
+         }
+     }
+-
++	
++	/**
++	* Return the String with first letter upper 
++	*
++	*/
++	public String upperCaseEx(String str) {  
++		
++		return str.substring(0, 1) + str.substring(1).toLowerCase();  
++	}
++	
+     /**
+      * Returns the title of the network obtained in the manual search.
+      *
+@@ -722,7 +745,7 @@
+             return ni.getOperatorAlphaShort();
+         } else {
+             BidiFormatter bidiFormatter = BidiFormatter.getInstance();
+-            return bidiFormatter.unicodeWrap(ni.getOperatorNumeric(), TextDirectionHeuristics.LTR);
++			return bidiFormatter.unicodeWrap(ni.getOperatorNumeric(), TextDirectionHeuristics.LTR);
+         }
+     }
+ 

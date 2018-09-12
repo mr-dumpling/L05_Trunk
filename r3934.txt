@@ -1,0 +1,80 @@
+Index: packages/services/Telecomm/src/com/android/server/telecom/CallsManager.java
+===================================================================
+--- packages/services/Telecomm/src/com/android/server/telecom/CallsManager.java	(revision 3933)
++++ packages/services/Telecomm/src/com/android/server/telecom/CallsManager.java	(revision 3934)
+@@ -94,6 +94,9 @@
+ import java.util.Set;
+ import java.util.concurrent.ConcurrentHashMap;
+ import android.widget.Toast;
++import android.content.Intent;  
++import android.content.BroadcastReceiver; 
++import android.content.IntentFilter;
+ 
+ /**
+  * Singleton.
+@@ -263,7 +266,8 @@
+     /// M: [EccDisconnectAll] Add for Ecc disconnect all calls @{
+     private Call mPendingEccCall;
+     /// @}
+-
++	private static final String ACTION_VIBRATOR_OFF="intent.action.OFF.VIBRATOR";
++	private SystemVibrator systemVibrator;
+     /**
+      * Initializes the required Telecom components.
+      */
+@@ -329,7 +333,7 @@
+ 
+         SystemSettingsUtil systemSettingsUtil = new SystemSettingsUtil();
+         RingtoneFactory ringtoneFactory = new RingtoneFactory(this, context);
+-        SystemVibrator systemVibrator = new SystemVibrator(context);
++        systemVibrator = new SystemVibrator(context);
+         mInCallController = new InCallController(
+                 context, mLock, this, systemStateProvider, defaultDialerAdapter, mTimeoutsAdapter);
+         mRinger = new Ringer(playerFactory, context, systemSettingsUtil, asyncRingtonePlayer,
+@@ -367,8 +371,20 @@
+         if (userManager.isPrimaryUser()) {
+             onUserSwitch(Process.myUserHandle());
+         }
++		IntentFilter OffVibratorFilter=new IntentFilter();
++		OffVibratorFilter.addAction(ACTION_VIBRATOR_OFF);
++		context.registerReceiver(OffVibratorReceiver, OffVibratorFilter);
+     }
+ 
++	BroadcastReceiver  OffVibratorReceiver  = new BroadcastReceiver() {
++		@Override
++			public void onReceive(Context context, Intent intent) {
++			String action = intent.getAction(); 
++			if (ACTION_VIBRATOR_OFF.equals(action)) {
++				 systemVibrator.cancel();
++				}
++			}
++		};
+     public void setRespondViaSmsManager(RespondViaSmsManager respondViaSmsManager) {
+         if (mRespondViaSmsManager != null) {
+             mListeners.remove(mRespondViaSmsManager);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/SensorFunctionServiceIncall.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/SensorFunctionServiceIncall.java	(revision 3933)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/SensorFunctionServiceIncall.java	(revision 3934)
+@@ -19,7 +19,7 @@
+     private static final float CRITICAL_DOWN_ANGLE = -5.0f;  
+     private static final float CRITICAL_UP_ANGLE = 5.0f;  
+     private static final int Z_ORATIATION = 2;  
+-      
++    private static final String ACTION_CALL_VIBRATOR_OFF="intent.action.OFF.VIBRATOR";  
+     private AudioManager mAudioManager;  
+     private SensorManager mSensorManager;  
+     private Sensor mGsensor;  
+@@ -50,8 +50,10 @@
+                     mReverseDownFlg = 1;  
+                 }  
+                 Log.d(TAG,"onSensorChanged()---mReverseDownFlg = " + mReverseDownFlg+"  previousMuteMode="+previousMuteMode);  
+-                if (mReverseDownFlg == 1) {  
+-                    if (previousMuteMode == -1 && mAudioManager != null) {  
++                if (mReverseDownFlg == 1) { 
++                    if (previousMuteMode == -1 && mAudioManager != null) { 
++						Intent intent = new Intent(ACTION_CALL_VIBRATOR_OFF);
++						sendBroadcast(intent);
+                         previousMuteMode = mAudioManager.getRingerMode();  
+                         mAudioManager.setRingerMode(AudioManager.RINGER_MODE_SILENT); 
+                         Log.d(TAG,"onSensorChanged()---mute---previousMuteMode="+previousMuteMode);  

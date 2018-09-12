@@ -1,0 +1,79 @@
+Index: vendor/branch/5058A_Cable_Bahamas/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 6574)
++++ vendor/branch/5058A_Cable_Bahamas/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 6575)
+@@ -535,13 +535,11 @@
+ 
+             List<String> deviceIds = new ArrayList<String>();
+             try {
+-				String svnver ="SVN: ";
+-				String version=SystemProperties.get("ro.def.software.version");
+-				if(!TextUtils.isEmpty(version)&& version!=null){
+-					svnver = svnver + version; 
+-				}
+-				int len=version.length();
+-    			String vers=version.substring(len-2, len);
++                String svnver ="SVN: ";
++                String version=SystemProperties.get("ro.def.software.version");
++                if(!TextUtils.isEmpty(version)&& version!=null){
++                    svnver = svnver + version; 
++                }
+                 if (TelephonyManagerCompat.getPhoneCount(telephonyManager) > 1 &&
+                     CompatUtils.isMethodAvailable(TelephonyManagerCompat.TELEPHONY_MANAGER_CLASS,
+                             "getDeviceId", Integer.TYPE)) {
+@@ -548,35 +546,36 @@
+                     for (int slot = 0; slot < telephonyManager.getPhoneCount(); slot++) {
+                         String deviceId = telephonyManager.getDeviceId(slot);
+                         if (!TextUtils.isEmpty(deviceId)) {
+-							deviceId="IMEI"+(slot+1)+":"+deviceId;
++                            deviceId="IMEI"+(slot+1)+":"+deviceId;
+                             deviceIds.add(deviceId);
+                         }
++                        
++                        String imeisv = telephonyManager.getDeviceSoftwareVersion(slot);
++                        if (!TextUtils.isEmpty(imeisv)) {
++                        	imeisv = "IMEISV" + (slot + 1) + ":" + imeisv;
++                        	deviceIds.add(imeisv);
++                        }
+                     }
+-					for(int slot = 0; slot < telephonyManager.getPhoneCount(); slot++){
+-						if (!TextUtils.isEmpty(vers)) {
+-					 	 	String vers1="IMEISV"+(slot+1)+":"+vers;
+-                         	deviceIds.add(vers1);
+-                     	}
+-					}
+                 } else {
+-                   String deviceId = telephonyManager.getDeviceId(0);
+-					/// M: Avoid null object be added
+-					if(!TextUtils.isEmpty(deviceId)&& deviceId!=null){
+-						deviceId="IMEI:"+deviceId;
+-						deviceIds.add(deviceId);
+-					}
+-					if (!TextUtils.isEmpty(vers)) {
+-					 	vers="IMEISV:"+vers;
+-                        deviceIds.add(vers);
++                    String deviceId = telephonyManager.getDeviceId(0);
++                    /// M: Avoid null object be added
++                    if(!TextUtils.isEmpty(deviceId)&& deviceId!=null){
++                        deviceId="IMEI:"+deviceId;
++                        deviceIds.add(deviceId);
+                     }
++                    String imeisv = telephonyManager.getDeviceSoftwareVersion();
++                    if (!TextUtils.isEmpty(imeisv)) {
++                        imeisv = "IMEISV:" + imeisv;
++                        deviceIds.add(imeisv);
++                    }
+                 }
+-				deviceIds.add(svnver); 
+-				/*
++                deviceIds.add(svnver); 
++                /*
+                 /// M: Add single IMEI plugin. @{
+                 deviceIds = ExtensionManager.getInstance().getDialPadExtension().getSingleIMEI(
+                         deviceIds);
+                 /// @}
+-				*/
++                */
+ 
+                 /// M: Add single IMEI and MEID handle for OP01 OM project. @{
+                 if (DialerFeatureOptions.isOpLightCustSupport()) {

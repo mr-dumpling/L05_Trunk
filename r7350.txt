@@ -1,0 +1,683 @@
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 0)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 7350)
+@@ -0,0 +1,678 @@
++package com.android.settings.faceunlock;
++
++import java.util.ArrayList;
++import android.annotation.TargetApi;
++import android.content.Intent;
++import android.graphics.Color;
++import android.os.Build.VERSION;
++import android.os.Build.VERSION_CODES;
++import android.os.Build;
++import android.os.Bundle;
++import android.os.UserHandle;
++import android.provider.Settings;
++import android.support.v4.app.Fragment;
++import android.support.v4.app.FragmentActivity;
++import android.support.v4.app.FragmentManager;
++import android.support.v4.app.FragmentPagerAdapter;
++import android.support.v4.view.ViewPager;
++import android.support.v4.view.ViewPager.OnPageChangeListener;
++import com.android.settings.ChooseLockSettingsHelper;
++import com.android.settings.ChooseLockGeneric;
++import android.app.admin.DevicePolicyManager;
++import android.content.DialogInterface;
++import android.view.LayoutInflater;
++import android.app.AlertDialog;
++import android.app.ActionBar;
++import android.app.Dialog;
++import android.app.Activity;
++import android.view.View;
++import android.util.Log;
++import android.content.Context;
++import android.view.View.OnClickListener;
++import android.view.Window;
++import com.android.settings.R;
++import android.view.WindowManager;
++import android.widget.TextView;
++import android.widget.Button;
++import android.widget.ImageButton;
++import android.widget.CompoundButton;
++import android.widget.CompoundButton.OnCheckedChangeListener;
++import android.widget.ImageView;
++import android.widget.LinearLayout;
++import android.widget.RelativeLayout;
++import android.widget.Switch;
++import android.os.Handler;
++import android.os.Message;
++import android.annotation.SuppressLint;
++import android.widget.Toast;
++import android.graphics.Color;
++import android.graphics.drawable.ColorDrawable;
++import android.content.ContentResolver;
++import android.net.Uri;
++import android.database.ContentObserver;
++import android.view.Gravity;
++import android.widget.Toolbar;
++import android.content.ComponentName;
++
++@TargetApi(23)
++public class FaceUnlockMainActivity extends FragmentActivity implements OnClickListener, OnCheckedChangeListener {
++
++	private static final String TAG = "FaceUnlockMainActivity";
++	private static final int START_ENTRY_BTN_NUM = 1;
++	private static final int PRIVATE_MODEL_LAYOUT_NUM = 2;
++	private static final int PRIVATE_MODEL_SWITCH_NUM = 3;
++	private static final int DEMONSTRATION_MODEL_LAYOUT_NUM = 4;
++	private static final int DEMONSTRATION_MODEL_SWITCH_NUM = 5;
++	private static final int FACE_MANAGER_LAYOUT_NUM = 6;
++	private static final int ACTIONBAR_BACK_NUM = 7;
++
++	private static final int REMOVE_FACEUNLOCK_BTN_NUM = 10;
++	private static final int CHOOSE_LOCK_GENERIC_REQUEST = 227;
++    private static final int CONFIRM_REQUEST = 226;
++    private static final int FACE_NEW_REQUEST = 300;
++    private static final int FACE_REPLACE_REQUEST = 301;
++    private static final int FACE_REMOVE_REQUEST = 302;
++    private static final int FROM_SETTING = 400;
++
++    private static final int REFLASUH_UI_ENTRY_FACEDATA_NUM = 11; 
++	private Button start_btn;
++	private Context mcontext;
++	private ActionBar myactionbar;
++    private ImageButton myactionbar_back_btn;
++	public static Handler handler;
++	private TextView mDialogTitle,mDialogHint,myactionbar_title,face_unlock_demonstration_model_title,face_unlock_private_model_title;
++	private ImageView circle_01, circle_03;
++	private Switch private_model_switch, demonstration_model_switch;
++	private RelativeLayout private_model_layout, demonstration_model_layout, face_unlock_manager_layout,
++			face_unlock_main_layout,circle_layout;
++	private ViewPager mPager;
++	public AlertDialog mAlertDialog;
++
++	private FragmentManager fm;
++	private LinearLayout face_unlock_manager_title, mLinearLayout;
++	
++	private RelativeLayout face_security_layout, face_excrypted_content_layout, face_app_lock_layout;
++	private static final int INIT_ACTIONBAR_NUM = -1;
++	private static final int LAYOUT_SECURITY_SYSTEM_NUM = 1;
++	private static final int LAYOUT_APP_UNLOCK_NUM = 2;
++	private static final int LAYOUT_EXCRPTED_CONTENT_NUM = 3;
++	/**IUV:add-end*/
++	private boolean mFromBootWizard;
++	private final String EXTRA_FROM_BOOTWIZARD ="is_from_boot_wizard";
++	private Fragment fragment_one, fragment_two;
++	private boolean isExistSafetyPwd = false;
++	private boolean verificationPassed = false;
++	private boolean faceUnlockNew = false;
++    private boolean scannerStart = false;
++	private ArrayList<Fragment> fragmentlists = new ArrayList<Fragment>();
++	private boolean faceIsDelSuccess = false;
++	private Handler mhandler = new Handler() {
++
++		@Override
++		public void handleMessage(Message msg) {
++			super.handleMessage(msg);
++			switch (msg.what) {
++			case 0x01:
++				startFaceScannerSetting();
++				break;
++			case REFLASUH_UI_ENTRY_FACEDATA_NUM:
++				if(isExistFaceData()){
++					setBackgroundTheme();
++					face_unlock_manager_title.setVisibility(View.VISIBLE);
++					face_unlock_manager_layout.setVisibility(View.VISIBLE);
++					face_unlock_main_layout.setVisibility(View.GONE);
++					initCustomActionBar();
++				}else{
++					setBackgroundTheme();
++					face_unlock_manager_title.setVisibility(View.GONE);
++					face_unlock_manager_layout.setVisibility(View.GONE);
++					face_unlock_main_layout.setVisibility(View.VISIBLE);
++					if (faceIsDelSuccess == true) {
++						Toast.makeText(mcontext,R.string.delete_success,Toast.LENGTH_SHORT).show();
++						faceIsDelSuccess = false;
++					}
++				}
++				break;
++			default:
++				break;
++			}
++		}
++	};
++
++
++	@Override
++	protected void onResume() {
++		super.onResume();
++		if(isExistFaceData()){
++            if(!verificationPassed && !faceUnlockNew){
++			    verifypassword();			
++		    }
++		}
++
++		if(isExistFaceData()){
++			setBackgroundTheme();
++			face_unlock_manager_title.setVisibility(View.VISIBLE);
++			face_unlock_manager_layout.setVisibility(View.VISIBLE);
++			face_unlock_main_layout.setVisibility(View.GONE);
++			initCustomActionBar();
++		}else{
++			setBackgroundTheme();
++			face_unlock_manager_title.setVisibility(View.GONE);
++			face_unlock_manager_layout.setVisibility(View.GONE);
++			face_unlock_main_layout.setVisibility(View.VISIBLE);
++		}
++		if(mAlertDialog != null){
++			ChooseLockSettingsHelper helper = new ChooseLockSettingsHelper(this);
++			final double passwordQuality = helper.utils().getActivePasswordQuality(UserHandle.myUserId());
++			boolean hasPassword = passwordQuality != DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED;
++			if(!hasPassword){
++				mAlertDialog.dismiss();
++			}
++		}
++	}
++
++	@Override
++	protected void onCreate(Bundle savedInstanceState) {
++		super.onCreate(savedInstanceState);
++		mcontext = FaceUnlockMainActivity.this;
++
++		if (!isExistFaceData()) {
++			setBackgroundTheme();
++		}
++		setContentView(R.layout.face_unlock_main);
++		final Intent intent = getIntent();
++        mFromBootWizard = intent.getBooleanExtra(EXTRA_FROM_BOOTWIZARD, false);
++		InitViewPager();
++
++		getViews();
++
++	}
++
++	private boolean isExistFaceData() {
++
++		String state = Settings.System.getStringForUser(getContentResolver(),Settings.System.FACE_STATE_ENABLED, 0);
++		state = (state == null) ? "0" :state;
++
++		return (state.equals("1") ? true : false);
++
++	}
++
++	private void updateStatus() {
++		
++		mhandler.sendEmptyMessageDelayed(REFLASUH_UI_ENTRY_FACEDATA_NUM, 100);
++
++    }
++	
++	private void InitViewPager() {
++		mPager = (ViewPager) this.findViewById(R.id.demonstration_model_bottom_view);
++		fm = getSupportFragmentManager();
++
++		fragment_one = new FaceUnlockDemonstrationModelViewOne();
++		fragment_two = new FaceUnlockDemonstrationModelViewTwo();
++
++		fragmentlists.add(fragment_one);
++		fragmentlists.add(fragment_two);
++
++
++
++
++
++	}
++
++	
++
++	private void getViews() {
++		// TODO Auto-generated method stub
++		start_btn = (Button) findViewById(R.id.face_unlock_main_start_btn);
++		start_btn.setTag(START_ENTRY_BTN_NUM);
++		start_btn.setOnClickListener(this);
++	
++		face_unlock_manager_title = (LinearLayout) findViewById(R.id.face_unlock_manager_title);
++		face_unlock_manager_layout = (RelativeLayout) findViewById(R.id.face_unlock_manager_layout);
++		face_unlock_manager_layout.setTag(FACE_MANAGER_LAYOUT_NUM);
++		face_unlock_manager_layout.setOnClickListener(this);
++		face_unlock_main_layout = (RelativeLayout) findViewById(R.id.face_unlock_main_layout);
++		face_unlock_demonstration_model_title = (TextView)findViewById(R.id.face_unlock_demonstration_model_title);
++		demonstration_model_layout = (RelativeLayout) findViewById(R.id.face_unlock_demonstration_model_layout);
++		demonstration_model_layout.setTag(DEMONSTRATION_MODEL_LAYOUT_NUM);
++		demonstration_model_layout.setOnClickListener(this);
++		demonstration_model_switch = (Switch) findViewById(R.id.face_unlock_demonstration_model_switch);
++		demonstration_model_switch.setTag(DEMONSTRATION_MODEL_SWITCH_NUM);
++		demonstration_model_switch.setOnCheckedChangeListener(this);
++		
++		/**IUV:add-start for faceLock use by yunlong.shen on 2017/07/01 */
++		if(Settings.System.getInt(getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0) == 1){
++			demonstration_model_switch.setChecked(true);
++			face_unlock_demonstration_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
++		}else{
++			demonstration_model_switch.setChecked(false);
++		}
++		if (isExistFaceData()) {
++			face_unlock_manager_title.setVisibility(View.VISIBLE);
++			face_unlock_manager_layout.setVisibility(View.VISIBLE);
++			face_unlock_main_layout.setVisibility(View.GONE);
++			initCustomActionBar();
++		} else {
++			face_unlock_manager_title.setVisibility(View.GONE);
++			face_unlock_manager_layout.setVisibility(View.GONE);
++			face_unlock_main_layout.setVisibility(View.VISIBLE);
++		}
++	}
++	
++
++
++	// Hide method
++	private void setBackgroundTheme() {
++
++		if(isExistFaceData()){
++			getActionBar().show();
++			getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
++			getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
++			getWindow().setStatusBarColor(0XFFEFEFF0);
++			getWindow().setContentView(R.layout.face_unlock_main);
++		}else{
++			getWindow().setContentView(R.layout.face_unlock_main);
++			if (VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
++				Window window = getWindow();
++				window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
++					| WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
++				window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN); //| View.SYSTEM_UI_FLAG_LAYOUT_STABLE
++				window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
++				window.setStatusBarColor(Color.TRANSPARENT);
++				window.setNavigationBarColor(Color.TRANSPARENT);
++			}
++			getActionBar().hide();
++		}
++
++		InitViewPager();
++		getViews();
++	}
++	
++	@Override
++    public void onBackPressed() {
++       if(mFromBootWizard){
++			ComponentName cn = new ComponentName("com.gome.bootwizard", "com.gome.bootwizard.activity.FaceCodeActivity");
++            Intent intent = new Intent();
++            intent.setComponent(cn);
++            startActivity(intent);
++			overridePendingTransition(R.anim.gome_activity_close_enter,R.anim.gome_activity_close_exit);
++			finish();
++		}else{
++            super.onBackPressed();
++        }
++    }
++	
++	@Override
++	public void onClick(View v) {
++		switch ((int) v.getTag()) {
++		case ACTIONBAR_BACK_NUM:
++			if(mFromBootWizard){
++				ComponentName cn = new ComponentName("com.gome.bootwizard", "com.gome.bootwizard.activity.FaceCodeActivity");
++				Intent intent = new Intent();
++				intent.setComponent(cn);
++				startActivity(intent);
++				overridePendingTransition(R.anim.gome_activity_close_enter,R.anim.gome_activity_close_exit);
++			}
++			finish();
++			break;
++		case START_ENTRY_BTN_NUM:
++		    if(verifypassword()){
++			    scannerStart = true;
++		    }
++			else{
++				createNewPwd();
++			}
++			break;
++		case DEMONSTRATION_MODEL_LAYOUT_NUM:
++			if(demonstration_model_switch.isChecked() && isExistFaceData()){
++				demonstration_model_switch.setChecked(false);
++				Settings.System
++						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);//IUV:add for faceLock use by yunlong.shen on 2017/07/01
++			}else{
++				if(isExistFaceData()){
++					demonstration_model_switch.setChecked(true);
++                    face_unlock_demonstration_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));					
++					Settings.System
++						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 1);//IUV:add for faceLock use by yunlong.shen on 2017/07/01
++				}
++			}
++			break;
++		case FACE_MANAGER_LAYOUT_NUM:
++			hintDialogShow(REMOVE_FACEUNLOCK_BTN_NUM);
++			break;
++		default:
++			break;
++		}
++	}
++
++	View inflate;
++    public void hintDialogShow(int index) {
++
++    	final int showText = index;
++
++        AlertDialog.Builder alertDialog = new AlertDialog.Builder(mcontext);
++        Dialog dialog = new Dialog(mcontext);
++
++        inflate=LayoutInflater.from(getApplicationContext())
++                .inflate(R.layout.re_enter_face_dialog,null);
++        mLinearLayout=(LinearLayout)inflate.findViewById(R.id.layout_dialog);
++		mDialogTitle=(TextView)inflate.findViewById(R.id.face_input_dialog_title);
++	    mDialogHint=(TextView)inflate.findViewById(R.id.face_input_dialog_hint);
++	    mDialogTitle.setText(R.string.reenter_face_dialog_title);
++
++        if(showText == FACE_MANAGER_LAYOUT_NUM){
++	        mDialogHint.setText(R.string.reenter_face_dialog_info);
++        }else{
++	        mDialogHint.setText(R.string.remove_face_dialog_info_remove);        	
++        }
++
++        mLinearLayout.setVisibility(View.GONE);
++        alertDialog.setView(inflate);
++        alertDialog.setNegativeButton(R.string.button_cancel, new DialogInterface.OnClickListener() {
++            @Override
++            public void onClick(DialogInterface dialog, int which) {
++            }
++        });
++        alertDialog.setPositiveButton(R.string.button_remove, new DialogInterface.OnClickListener() {
++            @Override
++            public void onClick(DialogInterface dialog, int which) {
++            	if(showText == FACE_MANAGER_LAYOUT_NUM){
++                	startFaceScanner(FACE_REPLACE_REQUEST);
++                }else{
++                	startFaceScanner(FACE_REMOVE_REQUEST);	
++                }
++            }
++        });
++
++        mAlertDialog = alertDialog.create();
++        mAlertDialog.show();
++    }
++
++	void startFaceScanner(int request){
++        Intent intent = new Intent();
++        intent.setClassName("com.android.systemui", "com.face.scanner.FaceActivity");//
++		intent.putExtra("requestType",request);
++		intent.putExtra("source",FROM_SETTING);
++        startActivityForResult(intent,request);
++    }
++
++	@Override
++	public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
++		if (isChecked && isExistFaceData()) {
++			if (((int) buttonView.getTag()) == PRIVATE_MODEL_SWITCH_NUM) {
++				mPager.setVisibility(View.GONE);
++			} else {
++				Settings.System
++						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 1);
++				face_unlock_demonstration_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
++			}
++		} else {
++			if(!isExistFaceData()){
++				buttonView.setChecked(false);
++				updateStatus();
++			}
++
++				Settings.System
++						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
++		}
++	}
++
++	public boolean  verifypassword(){
++		ChooseLockSettingsHelper helper = new ChooseLockSettingsHelper(this);
++        final double passwordQuality = helper.utils().getActivePasswordQuality(UserHandle.myUserId());
++        boolean hasPassword = passwordQuality != DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED;
++
++        if(hasPassword) {
++        	Log.i(TAG,"exist pwd");
++        	isExistSafetyPwd = true;
++            helper.launchConfirmationActivity(CONFIRM_REQUEST, getResources().getString(R.string.security_settings_face_preference_title), null, null, 0);
++        } else {
++        	isExistSafetyPwd = false;
++        	Log.i(TAG,"no exist pwd");
++        }
++		
++		return isExistSafetyPwd;
++	}
++
++	void createNewPwd(){
++		AlertDialog createNewPwdDialog = new AlertDialog.Builder(mcontext)
++			.setTitle(R.string.add_fingerprint_title_secturity_alwe)
++			.setMessage(R.string.add_fingerprint_message_secturity_alwe)
++			.setPositiveButton(R.string.ok_alwe, new DialogInterface.OnClickListener() {
++				@Override
++				public void onClick(DialogInterface dialog, int which) {
++					dialog.dismiss();
++					Intent intent = new Intent(mcontext, ChooseLockGeneric.class);
++					intent.putExtra(ChooseLockGeneric.ChooseLockGenericFragment.MINIMUM_QUALITY_KEY,
++						DevicePolicyManager.PASSWORD_QUALITY_SOMETHING);
++					intent.putExtra(ChooseLockGeneric.ChooseLockGenericFragment.HIDE_DISABLED_PREFS, true);
++					intent.putExtra(ChooseLockSettingsHelper.EXTRA_KEY_HAS_CHALLENGE, true);
++					intent.putExtra(ChooseLockSettingsHelper.EXTRA_KEY_CHALLENGE, 0);
++					intent.putExtra(ChooseLockSettingsHelper.EXTRA_KEY_FOR_FINGERPRINT, false);
++					startActivityForResult(intent, CHOOSE_LOCK_GENERIC_REQUEST);
++				}
++			})
++			.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
++				@Override
++				public void onClick(DialogInterface dialog, int which) {
++					dialog.dismiss();
++					// updateStatus();
++				}
++			})
++			.setOnDismissListener(new DialogInterface.OnDismissListener() {
++				@Override
++				public void onDismiss(DialogInterface dialogInterface) {
++					// updateStatus();
++				}
++			}).create();
++		createNewPwdDialog.show();
++	}
++
++	void startFaceScannerSetting() {
++        ChooseLockSettingsHelper helper = new ChooseLockSettingsHelper(this);
++        final double passwordQuality = helper.utils().getActivePasswordQuality(UserHandle.myUserId());
++        boolean hasPassword = passwordQuality != DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED;
++
++        if(hasPassword) {
++            helper.launchConfirmationActivity(CONFIRM_REQUEST, getResources().getString(R.string.security_settings_face_preference_title), null, null, 0);
++        } else {
++			AlertDialog createPwdDialog = new AlertDialog.Builder(mcontext)
++					.setTitle(R.string.add_fingerprint_message_secturity)
++					.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
++						@Override
++						public void onClick(DialogInterface dialog, int which) {
++							dialog.dismiss();
++							Intent intent = new Intent(mcontext, ChooseLockGeneric.class);
++							intent.putExtra(ChooseLockGeneric.ChooseLockGenericFragment.MINIMUM_QUALITY_KEY,
++									DevicePolicyManager.PASSWORD_QUALITY_SOMETHING);
++							intent.putExtra(ChooseLockGeneric.ChooseLockGenericFragment.HIDE_DISABLED_PREFS, true);
++							intent.putExtra(ChooseLockSettingsHelper.EXTRA_KEY_HAS_CHALLENGE, true);
++							intent.putExtra(ChooseLockSettingsHelper.EXTRA_KEY_CHALLENGE, 0);
++							intent.putExtra(ChooseLockSettingsHelper.EXTRA_KEY_FOR_FINGERPRINT, false);
++							startActivityForResult(intent, CHOOSE_LOCK_GENERIC_REQUEST);
++						}
++					})
++					.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
++						@Override
++						public void onClick(DialogInterface dialog, int which) {
++							dialog.dismiss();
++							// updateStatus();
++						}
++					})
++					.setOnDismissListener(new DialogInterface.OnDismissListener() {
++						@Override
++						public void onDismiss(DialogInterface dialogInterface) {
++							// updateStatus();
++						}
++					}).create();
++			createPwdDialog.show();
++        }
++    }
++
++    @Override
++    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
++        super.onActivityResult(requestCode, resultCode, data);
++        Log.i(TAG,"requestCode = "+requestCode+"   resultCode = "+resultCode);
++        if (requestCode == CHOOSE_LOCK_GENERIC_REQUEST && resultCode != Activity.RESULT_CANCELED) {
++        	verificationPassed = true;
++        	isExistSafetyPwd = true;
++            startFaceScanner(FACE_NEW_REQUEST);
++        } else if (requestCode == CONFIRM_REQUEST && resultCode  != Activity.RESULT_CANCELED && resultCode != 10000) {
++            verificationPassed = true;
++            if(scannerStart){
++            	startFaceScanner(FACE_NEW_REQUEST);
++            }
++        } else if (requestCode == FACE_NEW_REQUEST && resultCode  == Activity.RESULT_OK) {
++			if(mFromBootWizard){
++				ComponentName cn = new ComponentName("com.gome.bootwizard", "com.gome.bootwizard.activity.FaceCodeActivity");
++				Intent intent = new Intent();
++				intent.putExtra("isAddFaceComplete", true);
++				intent.setComponent(cn);
++				startActivity(intent);
++				overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
++				finish();
++			}
++        	faceUnlockNew = true;
++            updateStatus();
++        } else if (requestCode == CONFIRM_REQUEST && resultCode  == Activity.RESULT_CANCELED && isExistFaceData()) {
++        	verificationPassed = false;
++        	isExistSafetyPwd = false;
++        	scannerStart = false;
++			if(mFromBootWizard){
++				ComponentName cn = new ComponentName("com.gome.bootwizard", "com.gome.bootwizard.activity.FaceCodeActivity");
++				Intent intent = new Intent();
++				intent.setComponent(cn);
++				startActivity(intent);
++				overridePendingTransition(R.anim.gome_activity_close_enter,R.anim.gome_activity_close_exit);
++			}
++
++            finish();
++        } else if (requestCode == FACE_REMOVE_REQUEST && resultCode  == Activity.RESULT_OK) {
++            updateStatus();
++			faceIsDelSuccess = true;
++			faceUnlockNew = false;
++        }
++    }
++
++    private boolean initCustomActionBar() {
++        myactionbar = getActionBar();
++        if (myactionbar == null) {
++            return false;
++        } else {
++            myactionbar.setDisplayOptions(ActionBar.DISPLAY_SHOW_CUSTOM);
++			View actionBarButtons = LayoutInflater.from(this).inflate(R.layout.my_actionbar_style,
++                    new RelativeLayout(mcontext), false);
++
++			ActionBar.LayoutParams layoutParams =new ActionBar.LayoutParams(ActionBar.LayoutParams.MATCH_PARENT, ActionBar.LayoutParams.MATCH_PARENT); 
++			layoutParams.gravity =Gravity.CENTER_HORIZONTAL |Gravity.CENTER_HORIZONTAL; 
++			myactionbar.setDisplayShowHomeEnabled(false);
++			myactionbar.setDisplayShowCustomEnabled(true); 
++			myactionbar.setDisplayShowTitleEnabled(false); 
++		
++ 
++ 
++            //myactionbar.setCustomView(R.layout.my_actionbar_style);
++            myactionbar.setCustomView(actionBarButtons,layoutParams);
++
++			Toolbar parent =(Toolbar) actionBarButtons.getParent(); 
++					parent.setContentInsetsAbsolute(0,0);
++
++			
++            myactionbar_title = (TextView) myactionbar.getCustomView().findViewById(R.id.my_actionbar_title);
++            myactionbar_back_btn = (ImageButton) myactionbar.getCustomView().findViewById(R.id.ps_back_btn);
++            myactionbar_back_btn.setTag(ACTIONBAR_BACK_NUM);
++            myactionbar_back_btn.setOnClickListener(this);
++            myactionbar_title.setText(getResources().getString(R.string.ic_default_face_unlock_name));
++            return true;
++        }
++    }
++	
++	/*added by luyang*/	
++	private void mUpdateUi(){
++		/*if(Settings.System.getInt(getContentResolver(),Settings.System.PRIVACY_PROTECTION_ENABLED, 0) == 1){
++			private_model_switch.setChecked(true);
++			face_unlock_private_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
++		}else{
++			private_model_switch.setChecked(false);
++			//face_unlock_private_model_title.setTextColor(getColor(R.color.items_summary_color));
++		}zxp*/private_model_switch.setChecked(false);
++		/**IUV:add-start for faceLock use by yunlong.shen on 2017/07/01 */
++		if(Settings.System.getInt(getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0) == 1){
++			demonstration_model_switch.setChecked(true);
++			face_unlock_demonstration_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
++		}else{
++			demonstration_model_switch.setChecked(false);
++			//face_unlock_demonstration_model_title.setTextColor(getColor(R.color.items_summary_color));
++		}
++		/**IUV:add-end*/
++	}
++	
++	private final class PrivacyObserver extends ContentObserver {
++       /* private final Uri PRIVACY_PROTECTION_ENABLED_URI =
++                Settings.System.getUriFor(Settings.System.PRIVACY_PROTECTION_ENABLED);zxp*/
++		private final Uri FACE_STATE_ENABLED_URI =
++				Settings.System.getUriFor(Settings.System.FACE_STATE_ENABLED);
++
++        public PrivacyObserver() {
++            super(new Handler());
++        }
++
++        public void register(boolean register) {
++            final ContentResolver cr = mcontext.getContentResolver();
++            /*if (register) {
++                cr.registerContentObserver(PRIVACY_PROTECTION_ENABLED_URI, false, this);
++				cr.registerContentObserver(FACE_STATE_ENABLED_URI, false, this);
++            } else {
++                cr.unregisterContentObserver(this);
++            }zxp*/
++        }
++
++        @Override
++        public void onChange(boolean selfChange, Uri uri) {
++            super.onChange(selfChange, uri);
++            /*if (PRIVACY_PROTECTION_ENABLED_URI.equals(uri)) {
++                mUpdateUi();
++            }zxp*/
++			if (FACE_STATE_ENABLED_URI.equals(uri)) {
++				updateStatus();
++			}
++        }
++    }
++	/*end by iuv luyang*/
++	
++	/**IUV:add-start for faceLock use by yunlong.shen on 2017/06/30 */
++	class MyFaceMainOnClick implements OnClickListener {
++
++		int temp_index = INIT_ACTIONBAR_NUM;
++
++		public MyFaceMainOnClick(int index) {
++			super();
++			// TODO Auto-generated constructor stub
++			temp_index = index;
++		}
++
++		@Override
++		public void onClick(View v) {
++			// TODO Auto-generated method stub
++			Intent intent = new Intent();
++			switch (temp_index) {
++			case LAYOUT_SECURITY_SYSTEM_NUM:
++				intent.setClass(FaceUnlockMainActivity.this, FaceUnlockSecuritySystemActivity.class);
++				startActivity(intent);
++				break;
++			case LAYOUT_EXCRPTED_CONTENT_NUM:
++				intent.setClass(FaceUnlockMainActivity.this, FaceUnlockPerceptionContentActivity.class);
++				startActivity(intent);
++				break;
++			case LAYOUT_APP_UNLOCK_NUM:
++				intent.setClass(FaceUnlockMainActivity.this, FaceUnlockAppLockMainActivity.class);
++				startActivity(intent);
++				break;
++			default:
++				break;
++			}
++		}
++	}
++	/**IUV:add-end*/
++	
++}

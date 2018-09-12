@@ -1,0 +1,60 @@
+Index: packages/services/Telephony/res/values/strings.xml
+===================================================================
+--- packages/services/Telephony/res/values/strings.xml	(revision 4912)
++++ packages/services/Telephony/res/values/strings.xml	(revision 4913)
+@@ -1103,6 +1103,7 @@
+     <string name="importingSimContacts">Importing SIM contacts</string>
+     <!-- Import a single contact entry from contacts to the SIM card -->
+     <string name="importToFDNfromContacts">Import from contacts</string>
++    <string name="fdnContactsTooMore">There are more than 10 contacts in FDN list, please remove some before adding.</string>
+ 
+     <!-- Message shown when a single contact is imported from SIM card -->
+     <string name="singleContactImportedMsg">Imported contact</string>
+Index: vendor/branch/5058A_Cable_Bahamas/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnList.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnList.java	(revision 4912)
++++ vendor/branch/5058A_Cable_Bahamas/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnList.java	(revision 4913)
+@@ -40,6 +40,7 @@
+ import android.app.AlertDialog;
+ import android.telecom.PhoneAccount;
+ import android.telecom.TelecomManager;
++import android.widget.Toast;
+ 
+ /**
+  * Fixed Dialing Number (FDN) List UI for the Phone app. FDN is a feature of the service provider
+@@ -57,6 +58,8 @@
+     private static final Uri FDN_CONTENT_URI = Uri.parse("content://icc/fdn");
+     private static final String FDN_CONTENT_PATH_WITH_SUB_ID = "content://icc/fdn/subId/";
+     private SubscriptionInfoHelper mSubscriptionInfoHelper;
++    
++    private ListView list;
+ 
+     @Override
+     public void onCreate(Bundle icicle) {
+@@ -78,6 +81,7 @@
+         final IntentFilter ifilter = new IntentFilter();
+         ifilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+         registerReceiver(mReceiver, ifilter);
++        
+     }
+ 
+     @Override
+@@ -207,10 +211,17 @@
+     }
+ 
+     private void addContact() {
++    	list = getListView();
++    	int count = list.getAdapter().getCount();
+         //If there is no INTENT_EXTRA_NAME provided, EditFdnContactScreen treats it as an "add".
+         Intent intent = mSubscriptionInfoHelper.getIntent(EditFdnContactScreen.class);
+         intent.putExtra(INTENT_EXTRA_ADD, true);
+-        startActivity(intent);
++        log("FDN list size = " + count);
++        if (count < 10) {
++            startActivity(intent);
++        } else {
++        	Toast.makeText(this, R.string.fdnContactsTooMore, Toast.LENGTH_LONG).show();
++        }
+     }
+ 
+     /**

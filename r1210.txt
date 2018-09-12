@@ -1,0 +1,472 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/DiracTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/DiracTile.java	(revision 1209)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/DiracTile.java	(revision 1210)
+@@ -16,6 +16,7 @@
+ import com.aa.dirac.IAADiracService;
+ import com.android.systemui.dirac.DiracTuneManager;
+ import android.os.RemoteException;
++import android.provider.Settings;
+ 
+ /**
+  * Created by Administrator on 2017/10/16.
+@@ -25,28 +26,71 @@
+     
+ 	private final String mEnableContont=mContext.getString(R.string.dirac_enable);
+ 	private final String mDisableContont=mContext.getString(R.string.dirac_disable);
+-	private boolean refreshState=false;
++	private boolean mRefreshState=false;
+ 	private IAADiracService  mDiracService;
+ 	private SharedPreferencesUtil mSp;
+ 	private DiracTuneManager mDiracTuneManager;
++	private DiracTuneManager.BindSuccessCallback mBindSuccessCallback;
++	private String mModeText;
+     public DiracTile(Host host) {
+         super(host);
+-		/*
+-		DiracTuneManager.BindSuccessCallback mBindSuccessCallback = new DiracTuneManager.BindSuccessCallback() {
++		mSp=SharedPreferencesUtil.instance(mContext);
++		mBindSuccessCallback = new DiracTuneManager.BindSuccessCallback() {
+             public void onBindSuccess(IAADiracService service) {
+                 mDiracService = service;
++				Log.d("fangyi","onBindSuccess");
+             }
++			@Override
++            public void onBindError() {
++                Log.d("fangyi","onBindError");
++            }
+         };
+         mDiracTuneManager=DiracTuneManager.getInstance(mContext);		
+         mDiracTuneManager.setBindSuccessCallback(mBindSuccessCallback);
+-        mDiracTuneManager.bindDiracService(mContext);
+-        try {
+-           refreshState=mDiracService.getEffectEnable();
+-        } catch (RemoteException e) {
+-            e.printStackTrace();
+-        }
+-        */
++        mDiracTuneManager.bindDiracService(mContext);	
++    }
++	private void getTitle(){
++		String dirac_switch_text=Settings.System.getString(mContext.getContentResolver(),"dirac_switch");
++		boolean dirac_switch=true;
++
++		if(dirac_switch_text==null){
++			dirac_switch=true;
++		}else{
++			dirac_switch=Boolean.parseBoolean(dirac_switch_text);
++
++		}
+ 		
++		mRefreshState=dirac_switch;
++		if(mDiracService!=null){
++	     	try {
++	           mRefreshState=mDiracService.getEffectEnable();
++			   
++	        } catch (RemoteException e) {
++	            e.printStackTrace();
++	        }
++		}
++        if(mRefreshState){
++			String dirac_mode=Settings.System.getString(mContext.getContentResolver(),"dirac_mode");
++			Log.d("fangyi","mode==="+dirac_mode);
++			if(dirac_mode==null||dirac_mode.equals("auto")){
++                          
++				mModeText=mContext.getString(R.string.dirac_auto);
++            }else if(dirac_mode.equals("music")){
++                           
++				mModeText=mContext.getString(R.string.dirac_music);
++            }else if(dirac_mode.equals("movie")){
++                            
++				mModeText=mContext.getString(R.string.dirac_movie);
++            }else if(dirac_mode.equals("game")){
++                           
++				mModeText=mContext.getString(R.string.dirac_game);
++            }else{
++            	mModeText=mContext.getString(R.string.dirac_auto);
++            }
++		}else{
++			mModeText=mContext.getString(R.string.switch_off);
++		}
++		
+     }
+     @Override
+     public void setListening(boolean listening) {
+@@ -59,7 +103,7 @@
+     }
+     @Override
+     public Intent getLongClickIntent() {
+-    	mSp=SharedPreferencesUtil.instance(mContext);
++    	
+         boolean b=mSp.getBoolean(Constant.DIRAC_IS_FIRST_LONG_CLICK);
+ 		Intent intent =null;
+         if(b){
+@@ -74,15 +118,28 @@
+     }
+     @Override
+     protected void handleClick() {
+-    /*
+-    	try {
+-           mDiracService.setEffectEnable(!refreshState);
+-        } catch (RemoteException e) {
+-            e.printStackTrace();
+-        }
+-        */
+-        refreshState=!refreshState;
+-        refreshState();
++    if(mDiracTuneManager.getAAService()!=null){
++		Log.d("fangyi","getAAService!!!!===null");
++		mDiracService=mDiracTuneManager.getAAService();
++
++	}
++	if(mDiracService!=null){
++	  try {
++	      mRefreshState=mDiracService.getEffectEnable();
++		  mDiracService.setEffectEnable(!mRefreshState);
++		  mRefreshState=!mRefreshState;
++		  mSp.putBoolean(Constant.DIRAC_SWITCH,mRefreshState);
++		  Settings.System.putString(mContext.getContentResolver(),"dirac_switch",String.valueOf(mRefreshState));
++		  Intent intent = new Intent("android.intent.action.dirac_switch");
++          mContext.sendBroadcast(intent);
++          refreshState();
++	   } catch (RemoteException e) {
++	      e.printStackTrace();
++	   }
++	}else{
++		Log.d("fangyi","mDiracService=====null");
++	}
++        
+     }
+     @Override
+     public CharSequence getTileLabel() {
+@@ -95,15 +152,11 @@
+      @Override  
+     protected void handleUpdateState(BooleanState state, Object arg) {  
+         // TODO: Right now this is just a dropper, needs an actual night icon.
+-        /*
+-        try {
+-           refreshState=mDiracService.getEffectEnable();
+-        } catch (RemoteException e) {
+-            e.printStackTrace();
+-        }
+-        */
+-        state.icon = ResourceIcon.get(R.drawable.shop);
+-        state.label = refreshState ?mEnableContont:mDisableContont;
++    
++        getTitle();
++        //state.icon = mRefreshState?ResourceIcon.get(R.drawable.shop):ResourceIcon.get(R.drawable.icon_headset);
++        state.icon = ResourceIcon.get(R.drawable.icon_headset);
++        state.label = mModeText;
+         state.contentDescription =mEnableContont;
+     }
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/dirac/DiracActivity.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/dirac/DiracActivity.java	(revision 1209)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/dirac/DiracActivity.java	(revision 1210)
+@@ -17,6 +17,10 @@
+ import com.aa.dirac.IAADiracService;
+ import android.os.RemoteException;
+ import android.util.Log;
++import android.provider.Settings;
++import android.content.BroadcastReceiver;
++import android.content.IntentFilter;
++import android.content.Intent;
+ 
+ public class DiracActivity extends AppCompatActivity {
+ 
+@@ -34,7 +38,41 @@
+ 	private DiracTuneManager mDiracTuneManager;
+ 	private List<ItemInfo> mList;
+ 	private DiracAdapter mAdapter;
++	private BroadcastReceiver myReceiver = new BroadcastReceiver(){  
++				@Override  
++				public void onReceive(Context context, Intent intent) {  
++					// TODO Auto-generated method stub	
++					Log.d("fangyi","intent.getAction()="+intent.getAction());
++					if(intent.getAction().equals("android.intent.action.dirac_switch")){
++						String dirac_switch_text=Settings.System.getString(mContext.getContentResolver(),"dirac_switch");
++						boolean dirac_switch=true;
++						if(dirac_switch_text==null){
++							dirac_switch=true;
++						}else{
++							dirac_switch=Boolean.parseBoolean(dirac_switch_text);
+ 
++						}
++						if(dirac_switch){
++							if(mAdapter!=null){
++					            mSwitchContont.setText(mOn);
++					            mSwitch.setChecked(true);
++					            mRecyclerView.setVisibility(View.VISIBLE);
++					            mSwitchOff.setVisibility(View.GONE);
++							}
++							
++				        }else{
++				            mSwitchContont.setText(mOff);
++				            mSwitch.setChecked(false);
++				            mRecyclerView.setVisibility(View.GONE);
++				            mSwitchOff.setVisibility(View.VISIBLE);
++				        }
++	
++					}
++					
++				}  
++				  
++	}; 
++
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
+@@ -41,9 +79,22 @@
+         setContentView(R.layout.activity_dirac);
+ 	
+         initActionBar();
++		
++		initReceiver();
++		initView();
+ 		initDirac();
+ 
+     }
++	@Override
++	public void onDestroy() {
++		super.onDestroy();
++		this.unregisterReceiver(myReceiver);
++	}
++	private void initReceiver(){
++		IntentFilter filter = new IntentFilter();
++        filter.addAction("android.intent.action.dirac_switch");
++        this.registerReceiver(myReceiver,filter);
++		}
+ 	private void initDirac() {
+ 		mSp = SharedPreferencesUtil.instance(this);
+         DiracTuneManager.BindSuccessCallback mBindSuccessCallback = new DiracTuneManager.BindSuccessCallback() {
+@@ -50,7 +101,7 @@
+             public void onBindSuccess(IAADiracService service) {
+                 mDiracService = service;
+                 try {
+-                    initView(mDiracService.getEffectEnable());
++                    displayView(mDiracService.getEffectEnable());
+                     initListener();
+                     initData();
+ 					
+@@ -90,6 +141,8 @@
+ 				try {
+                     mDiracService.setEffectEnable(isChecked);
+ 					mSp.putBoolean(Constant.DIRAC_SWITCH,isChecked);
++					Settings.System.putString(getContentResolver(),"dirac_switch",String.valueOf(isChecked));
++					
+                 } catch (RemoteException e) {
+                     e.printStackTrace();
+                 }
+@@ -148,7 +201,9 @@
+ 
+ 	}
+ 
+-    private void initView(boolean isShow) {
++    private void initView() {
++		mOn = getString(R.string.switch_on);
++        mOff = getString(R.string.switch_off);
+         mRecyclerView = (RecyclerView) findViewById(R.id.recycler_view);
+         mRecyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+         mSwitchContont = (TextView) findViewById(R.id.switch_contont);
+@@ -155,11 +210,8 @@
+         mSwitch = (Switch) findViewById(R.id.switch_dirac);
+         mSwitchOff = (TextView) findViewById(R.id.dirac_off);
+ 		mSwitchOff.setText(getString(R.string.audio_off));
+-		
+-        
+-		mOn = getString(R.string.switch_on);
+-        mOff = getString(R.string.switch_off);
+-
++    }
++    private void displayView(boolean isShow){
+         if(isShow){
+             mSwitchContont.setText(mOn);
+             mSwitch.setChecked(true);
+Index: frameworks/base/packages/SystemUI
+===================================================================
+--- frameworks/base/packages/SystemUI	(revision 1209)
++++ frameworks/base/packages/SystemUI	(revision 1210)
+
+Property changes on: frameworks/base/packages/SystemUI
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages/SystemUI:r981
+Index: frameworks/base/packages
+===================================================================
+--- frameworks/base/packages	(revision 1209)
++++ frameworks/base/packages	(revision 1210)
+
+Property changes on: frameworks/base/packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages:r981
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1209)
++++ frameworks/base	(revision 1210)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r981
+Index: frameworks
+===================================================================
+--- frameworks	(revision 1209)
++++ frameworks	(revision 1210)
+
+Property changes on: frameworks
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks:r981
+Index: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1209)
++++ packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1210)
+@@ -76,6 +76,9 @@
+ import android.os.SystemProperties;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
++import android.content.BroadcastReceiver;
++import android.content.IntentFilter;
++import android.content.Intent;
+ 
+ public class SoundSettings extends SettingsPreferenceFragment implements Indexable {
+     private static final String TAG = "SoundSettings";
+@@ -208,7 +211,15 @@
+                 mRequestPreference = (RingtonePreference) findPreference(selectedPreference);
+             }
+         }
++		IntentFilter filter = new IntentFilter();
++        filter.addAction("android.intent.action.dirac_switch");
++        getActivity().registerReceiver(myReceiver,filter);
+     }
++	@Override
++	public void onDestroy() {
++		super.onDestroy();
++		getActivity().unregisterReceiver(myReceiver);
++	}
+ 
+     @Override
+     public void onResume() {
+@@ -246,14 +257,47 @@
+                     UserManager.DISALLOW_CONFIG_CELL_BROADCASTS);
+         }
+         mExt.onAudioProfileSettingResumed(this);
+-		String diracMode=Settings.System.getString(getContentResolver(),"dirac_mode");
+-		if(diracMode==null){
+-			diracMode="auto";
+-		}
++		getDiracMode();
++          
++
++	
+ 		
+-		mDiracPreference.setSummary("Headset("+diracMode+")");
+     }
++	public void getDiracMode( ){
++		String dirac_switch_text=Settings.System.getString(mContext.getContentResolver(),"dirac_switch");
++		boolean dirac_switch=true;
++		if(dirac_switch_text==null){
++			dirac_switch=true;
++		}else{
++			dirac_switch=Boolean.parseBoolean(dirac_switch_text);
+ 
++		}
++		String displayModeText="";
++		if(dirac_switch){
++			String dirac_mode=Settings.System.getString(mContext.getContentResolver(),"dirac_mode");
++			Log.d("fangyi","mode==="+dirac_mode);
++			if(dirac_mode==null||dirac_mode.equals("auto")){
++                          
++				displayModeText=mContext.getString(R.string.dirac_auto);
++            }else if(dirac_mode.equals("music")){
++                           
++				displayModeText=mContext.getString(R.string.dirac_music);
++            }else if(dirac_mode.equals("movie")){
++                            
++				displayModeText=mContext.getString(R.string.dirac_movie);
++            }else if(dirac_mode.equals("game")){
++                           
++				displayModeText=mContext.getString(R.string.dirac_game);
++            }else{
++				  	displayModeText=mContext.getString(R.string.dirac_auto);
++            }
++			mDiracPreference.setSummary("Headset("+displayModeText+")");
++		}else{
++			displayModeText=mContext.getString(R.string.switch_off);
++			mDiracPreference.setSummary(displayModeText);
++		}
++	}
++
+     @Override
+     public void onPause() {
+         super.onPause();
+@@ -266,7 +310,20 @@
+         mExt.onAudioProfileSettingPaused(this);
+ 
+     }
++	private BroadcastReceiver myReceiver = new BroadcastReceiver(){  
++			@Override  
++			public void onReceive(Context context, Intent intent) {  
++				// TODO Auto-generated method stub	
++				Log.d(TAG,"intent.getAction()="+intent.getAction());
++				if(intent.getAction().equals("android.intent.action.dirac_switch")){
++					getDiracMode();
+ 
++				}
++				
++			}  
++			  
++		}; 
++
+     @Override
+     public boolean onPreferenceTreeClick(Preference preference) {
+         if (preference instanceof RingtonePreference) {
+
+Property changes on: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java:r981
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1209)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1210)
+@@ -8036,4 +8036,10 @@
+ 	<string name="dirac_title">Audio Enhancement</string>
+ 	<string name="dirac_content">Auto</string>
+ 
++	<!--dirac-->
++	<string name="dirac_auto">Auto</string>
++    	<string name="dirac_music">Music</string>
++    	<string name="dirac_movie">Movie</string>
++    	<string name="dirac_game">Game</string>  
++    	<string name="switch_off">Off</string>
+ </resources>
+Index: packages/apps/Settings
+===================================================================
+--- packages/apps/Settings	(revision 1209)
++++ packages/apps/Settings	(revision 1210)
+
+Property changes on: packages/apps/Settings
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Settings:r981
+Index: packages/apps
+===================================================================
+--- packages/apps	(revision 1209)
++++ packages/apps	(revision 1210)
+
+Property changes on: packages/apps
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps:r981
+Index: packages
+===================================================================
+--- packages	(revision 1209)
++++ packages	(revision 1210)
+
+Property changes on: packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages:r981

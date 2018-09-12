@@ -1,0 +1,29 @@
+Index: vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 9485)
++++ vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 9486)
+@@ -1111,6 +1111,24 @@
+                 mButtonDataRoam.checkRestrictionAndSetDisabled(UserManager.DISALLOW_DATA_ROAMING);
+             }
+         }
++
++        mButtonPreferredDataRoam.setEnabled(true);
++        final String userRestriction = UserManager.DISALLOW_DATA_ROAMING;
++        if (RestrictedLockUtils.hasBaseUserRestriction(context,
++                    userRestriction, UserHandle.myUserId())) {
++            mButtonPreferredDataRoam.setEnabled(false);
++        } else {
++            UserManager um = UserManager.get(mPhone.getContext());
++            UserHandle user = UserHandle.of(um.getUserHandle());
++            boolean disabledByAdmin = (um.hasUserRestriction(userRestriction, user)
++                && !um.hasBaseUserRestriction(userRestriction, user));
++            mButtonPreferredDataRoam.setEnabled(!disabledByAdmin);
++            if (disabledByAdmin) {
++                mButtonPreferredDataRoam.setSummary(R.string.disabled_by_admin);
++            } else {
++                updatePreferredRoamingFromDb();
++            }
++        }
+         /*
+         mButtonPreferredNetworkMode.setEnabled(hasActiveSubscriptions);
+         mButtonEnabledNetworks.setEnabled(hasActiveSubscriptions);

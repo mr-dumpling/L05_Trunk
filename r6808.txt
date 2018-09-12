@@ -1,0 +1,90 @@
+Index: vendor/branch/5058A_Cable_Bahamas/diff.txt
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/diff.txt	(revision 6807)
++++ vendor/branch/5058A_Cable_Bahamas/diff.txt	(revision 6808)
+@@ -1,4 +1,5 @@
+ vendor/branch/5058A_Cable_Bahamas/vendor/customer/custom.mk:
++>                     Diagnostics \
+ >                     SimpleLauncher \
+ >                     MotocrossTrialExtreme \
+ >                     PuzzlePets \
+@@ -617,6 +618,14 @@
+ >                 menu.findItem(R.id.menu_ip_dial).setVisible(
+ >                         DialerFeatureOptions.isIpPrefixSupport() && enable
+ >                         && !PhoneNumberHelper.isUriNumber(mDigits.getText().toString()));
++> 			playTone(ToneGenerator.TONE_DTMF_0 , TONE_LENGTH_INFINITE);
++> 			Handler mHandler=new Handler();
++> 			mHandler.postDelayed(new Runnable() {
++> 				@Override
++> 				public void run() {
++> 					stopTone();
++> 				}
++> 			}, 1000);
+ 
+ vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/res/values/bools.xml:
+ > 	
+@@ -836,63 +845,11 @@
+ >     public static ArrayList<String> fragmentText(String text, int encodingType) {
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java:
+->     // add for FDN
+->     Cursor cursor = null;
+->     private static final String[] COLUMN_NAMES = new String[] {
+->             "index"/*MTK*/,
+->             "name",
+->             "number"
+->     };
+ >                 !dcHelper.isDataSupportConcurrent(mPhone.getPhoneId()) &&
+->                 !(dcHelper.isWifiCallingEnabled() && !mPhone.isInEmergencyCall())) {
+ >             if ((mTelDevController.getModem(0) != null &&
+->                     mTelDevController.getModem(0).hasMdAutoSetupImsCapability() == false)
+->                     //Don't retry IMS PDN for reason Phone.REASON_MD_DATA_RETRY_COUNT_RESET
+->                     //as it's originally designed for default PDN.
+->                     || TextUtils.equals(reason, Phone.REASON_MD_DATA_RETRY_COUNT_RESET)) {
+ >         if ((TelephonyManager.getDefault().getSimCount() == 1) || resource == null) {
+ >             logd("fetchDunApn: get sysResource mcc=" + sysMcc + ", mnc=" + sysMnc );
+-> 				checkFdnList();
+->     private Uri getUri(int subId){
+-> 		Uri fdnContentUri;    
+->         fdnContentUri = Uri.parse("content://icc/fdn/subId/"+subId);
+->         return fdnContentUri;
+-> 	}
+->    
+-> 	private void checkFdnList(){
+-> 		new Thread(new Runnable() {
+->             @Override
+->             public void run() {
+->                 try {
+->                     cursor = mResolver.query(getUri(mPhone.getSubId()),COLUMN_NAMES,null,null,null);
+->                     if(cursor != null){
+-> 						List<String> numberList = new ArrayList<String>();
+->                         cursor.moveToFirst();
+->                         do{
+-> 						   numberList.add(cursor.getString(2));
+->                            android.util.Log.i("cursor.count && number",cursor.getCount()+"***"+cursor.getString(2));
+->                         }while (cursor.moveToNext());
+-> 						if(numberList != null){
+-> 						if (numberList.contains("*99#")){
+->                                setupDataOnConnectableApns(Phone.REASON_FDN_DISABLED);
+->                            }else{
+-> 							   cleanUpAllConnections(true, Phone.REASON_FDN_ENABLED);
+-> 						   }
+-> 						}
+->                     }
+->                 } catch (Exception e) {
+->                     e.printStackTrace();
+->                 } finally {
+->                     if(cursor != null){
+->                         cursor.close();
+->                     }
+->                 }
+->             }
+->         }).start();
+-> 	}
+-> 	
+-> 	
+->             tmpAllApnSettings.add(dunApnSetting);
++>                 cleanUpAllConnections(true, Phone.REASON_FDN_ENABLED);
+ 
+ vendor/branch/5058A_Cable_Bahamas/build/tools/buildinfo.sh:
+ > echo "ro.build.display.id=5058A_LATAM_V2.0_180111"

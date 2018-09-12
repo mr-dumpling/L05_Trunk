@@ -1,0 +1,122 @@
+Index: packages/apps/Dialer/src/com/mediatek/dialer/activities/UnlockSettingActivity.java
+===================================================================
+--- packages/apps/Dialer/src/com/mediatek/dialer/activities/UnlockSettingActivity.java	(revision 6180)
++++ packages/apps/Dialer/src/com/mediatek/dialer/activities/UnlockSettingActivity.java	(revision 6181)
+@@ -66,6 +66,7 @@
+     private static final int DIALOG_UNLOCKFAILED = 3;
+     private static final int DIALOG_QUERYFAIL = 4;
+     private static final int DIALOG_ALREADY_UNLOCK = 5;
++    private static final int DIALOG_LOCKED_PERMANENTLY =6;
+     private static final int UNLOCK_ICC_SML_COMPLETE = 120;
+     private static final int UNLOCK_ICC_SML_QUERYLEFTTIMES = 110;
+ 
+@@ -109,13 +110,12 @@
+                         mEtPwdLeftChances.setText(String.valueOf(mPwdLeftChances));
+                         Log.i(TAG, "query mPwdLeftChances: " + mPwdLeftChances);
+                     } else {
+-                        UnlockSettingActivity.this.finish();
++                        // locked permanently
++                        showDialog(DIALOG_LOCKED_PERMANENTLY);
+                     }
+                     if (lockState[1] == 2) {
+                         // already unlock
+                         showDialog(DIALOG_ALREADY_UNLOCK);
+-                    } else if (lockState[2] <= 0) {
+-                        UnlockSettingActivity.this.finish();
+                     }
+                 }
+                 break;
+@@ -214,7 +214,7 @@
+     protected Dialog onCreateDialog(int id) {
+         if (id == DIALOG_UNLOCKFAILED || id == DIALOG_PASSWORDLENGTHINCORRECT
+                 || id == DIALOG_UNLOCKSUCCEED || id == DIALOG_QUERYFAIL
+-                || id == DIALOG_ALREADY_UNLOCK) {
++                || id == DIALOG_ALREADY_UNLOCK || id == DIALOG_LOCKED_PERMANENTLY) {
+             AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                 .setCancelable(false)
+                 .setTitle(R.string.strAttention)
+@@ -290,6 +290,18 @@
+                             }
+                         });
+                 return builder.create();
++            case DIALOG_LOCKED_PERMANENTLY:// locked permanently
++                Log.i(TAG, "show DIALOG_LOCKED_PERMANENTLY");
++                builder.setMessage(R.string.strLockedPermanently).setPositiveButton(
++                        R.string.strYes, new DialogInterface.OnClickListener() {
++                            public void onClick(DialogInterface dialog, int id) {
++                                dialog.cancel();
++                                finish();
++                                mClickFlag = false;
++                                Log.i(TAG, "Locked permanently.");
++                            }
++                        });
++                return builder.create();
+             default:
+                 break;
+             }
+Index: packages/apps/Dialer/res/values-es-rUS/strings.xml
+===================================================================
+--- packages/apps/Dialer/res/values-es-rUS/strings.xml	(revision 6180)
++++ packages/apps/Dialer/res/values-es-rUS/strings.xml	(revision 6181)
+@@ -1,4 +1,4 @@
+-<?xml version="1.0" encoding="utf-8" standalone="no"?>
++<?xml version="1.0" encoding="utf-8" standalone="no"?>
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ 
+     <!-- Application name used in Settings/Apps. Default label for activities
+@@ -998,9 +998,23 @@
+     <string name="search_product_name">Product name</string>
+     <string name="search_sw_version">SW Version</string>
+     <string name="search_hw_version">HW Version</string>
+-    <string name="search_customer_ver_external_title">Version Info</string>
+-    <string name="search_product_name_telcel">Nombre del producto</string>
+-    <string name="search_sw_version_telcel">Versión de software</string>
+-    <string name="search_hw_version_telcel">Versión de hardware</string>
++    <string name="search_customer_ver_external_title">Version Info</string>
++    <string name="search_product_name_telcel">Nombre del producto</string>
++    <string name="search_sw_version_telcel">Versión de software</string>
++    <string name="search_hw_version_telcel">Versión de hardware</string>
+     <string name="search_customer_ver_external_title_telcel">Información de versión</string>
++
++    <string name="simmelock_name">SIM ME Lock</string>
++    <string name="strInputPassword">Por favor ingrese la contraseña:</string>
++    <string name="strConfirm">Aceptar</string>
++    <string name="strCancel">Cancelar</string>
++    <string name="strInputChancesleft">El número de excedentes:</string>
++    <string name="strAttention">Atención</string>
++    <string name="strYes">Sí</string>
++    <string name="strUnlockFail">Desbloquear falla</string>
++    <string name="strUnlockSucceed">Desbloquear éxito</string>
++    <string name="strPasswordLengthIncorrect">16 números!</string>
++    <string name="strQueryFailed">Consulta fallida</string>
++    <string name="strAlreadyUnlocked">Ya desbloqueado</string>
++    <string name="strLockedPermanently">El teléfono ha sido bloqueado permanentemente.</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/Dialer/res/values/strings.xml
+===================================================================
+--- packages/apps/Dialer/res/values/strings.xml	(revision 6180)
++++ packages/apps/Dialer/res/values/strings.xml	(revision 6181)
+@@ -1,4 +1,4 @@
+-<?xml version="1.0" encoding="utf-8" standalone="no"?>
++<?xml version="1.0" encoding="utf-8" standalone="no"?>
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ 
+     <!-- Application name used in Settings/Apps. Default label for activities
+@@ -1023,7 +1023,7 @@
+     <!--
+     <string name="strInputNumebers_4to8">Please input 4-8 numbers:</string>
+     -->
+-    <string name="strInputChancesleft">Retires left :</string>
++    <string name="strInputChancesleft">Retries left :</string>
+     <string name="strMCCMNC">MCC+MNC :</string>
+     <string name="strMCCMNCHLR">MCC+MNC+HLR :</string>
+     <string name="strGID1">GID1 :</string>
+@@ -1083,6 +1083,7 @@
+     -->
+     <string name="str_simme_passwords_dont_match">Passwords don\'t match</string>
+     <string name="strAlreadyUnlocked">Already Unlocked</string>
++    <string name="strLockedPermanently">Device has been locked permanently</string>
+     <string name="strnosim">please input sim</string>
+     <string name="strunlocksim">Please insert sim you want to unlock</string>
+     <!-- add simlokck string by chenhu end -->

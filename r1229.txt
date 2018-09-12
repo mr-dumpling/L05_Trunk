@@ -1,0 +1,121 @@
+Index: packages/apps/DeskClock/src/com/android/deskclock/alarms/dataadapter/AlarmTimeAdapter.java
+===================================================================
+--- packages/apps/DeskClock/src/com/android/deskclock/alarms/dataadapter/AlarmTimeAdapter.java	(revision 1228)
++++ packages/apps/DeskClock/src/com/android/deskclock/alarms/dataadapter/AlarmTimeAdapter.java	(revision 1229)
+@@ -59,6 +59,12 @@
+     private long mExpandedId = Alarm.INVALID_ID;
+     private Cursor mCursor;
+     private AlarmUpdateHandler mAlarmUpdateHandler;
++	private static final String[] INTERNAL_COLUMNS = new String[] {
++        MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
++        "\"" + MediaStore.Audio.Media.INTERNAL_CONTENT_URI + "\"",
++        MediaStore.Audio.Media.TITLE_KEY
++    };
++	
+     public AlarmTimeAdapter(Context context, Bundle savedState,
+             AlarmTimeClickHandler alarmTimeClickHandler, ScrollHandler smoothScrollController) {
+         mContext = context;
+@@ -107,7 +113,7 @@
+         Uri ringtoneUri = alarm.alert;
+        
+         // Is it a silent ringtone?
+-        if (ringtoneUri == null) {
++        if (ringtoneUri == null || ringtoneUri.toString().startsWith(MediaStore.Audio.Media.INTERNAL_CONTENT_URI.toString()) ) {
+             return alarm;
+         } else {
+             Cursor cursor = null;
+@@ -123,10 +129,16 @@
+                     if (cursor.moveToFirst()) {
+                         return alarm;
+                     }else{
+-                        Uri uri = RingtoneManager.getActualDefaultRingtoneUri(mContext, RingtoneManager.TYPE_ALARM);
+-                        DataModel.getDataModel().setDefaultAlarmRingtoneUri(uri);
+-                        alarm.alert = uri;
+-                        mAlarmUpdateHandler.asyncUpdateAlarm(alarm, false ,true);
++				    ringtoneUri=RingtoneManager.getActualDefaultRingtoneUri(mContext, RingtoneManager.TYPE_ALARM);
++					ringtoneUri = isVaildUri(alarm,ringtoneUri);
++	                if(ringtoneUri== null) {
++					    ringtoneUri =queryAlarmDefaultUri();
++						if(ringtoneUri == null) ringtoneUri = Alarm.NO_RINGTONE_URI;
++					}
++					DataModel.getDataModel().setDefaultAlarmRingtoneUri(ringtoneUri);
++					alarm.alert = ringtoneUri;
++					mAlarmUpdateHandler.asyncUpdateAlarm(alarm, false ,true);
++					return alarm;
+                     }
+                 }
+             } catch (SQLiteException sqle) {
+@@ -139,6 +151,61 @@
+         }
+         return alarm;
+     }
++	
++	public Uri queryAlarmDefaultUri(){
++	Cursor cursor = null;
++	try {
++	  cursor = mContext.getContentResolver().query(MediaStore.Audio.Media.INTERNAL_CONTENT_URI, INTERNAL_COLUMNS, null,
++                null, MediaStore.Audio.Media.DEFAULT_SORT_ORDER);
++	  if(cursor.moveToFirst()){
++	  while(cursor != null){
++	     if(cursor.getString(1).equals("Galactic")){
++		    Uri aUri = Uri.parse(cursor.getString(2)+"/"+cursor.getString(0));
++		    return aUri;
++		 }
++		if(!cursor.moveToNext()) break;
++	  }
++	  }
++	  }catch (SQLiteException sqle) {
++			    return null;
++            } catch (IllegalArgumentException iae) {
++			    return null;
++            } finally {
++                if (cursor != null) {
++                    cursor.close();
++                }
++      }
++	  return null;
++	}
++	
++    private Uri isVaildUri(Alarm alarm, Uri ringtoneUri){
++	     Cursor cursor = null;
++            try {
++                if (MediaStore.AUTHORITY.equals(ringtoneUri.getAuthority())) {
++                    cursor = mContext.getContentResolver().query(ringtoneUri,
++                            new String[] { MediaStore.Audio.Media.TITLE }, null, null, null);
++                } else if (ContentResolver.SCHEME_CONTENT.equals(ringtoneUri.getScheme())) {
++                    cursor = mContext.getContentResolver().query(ringtoneUri,
++                            new String[] { OpenableColumns.DISPLAY_NAME }, null, null, null);
++                }
++                if (cursor != null) {
++                    if (cursor.moveToFirst()) {				    
++                        return ringtoneUri;
++                    }
++                }
++				return ringtoneUri;
++            } catch (SQLiteException sqle) {
++			    return null;
++            } catch (IllegalArgumentException iae) {
++			    return null;
++            } finally {
++                if (cursor != null) {
++                    cursor.close();
++                }
++            }
++		
++	}
++	
+     @Override
+     public int getItemCount() {
+         return mCursor == null ? 0 : mCursor.getCount();
+Index: packages/apps/DeskClock/src/com/android/deskclock/AlarmClockFragment.java
+===================================================================
+--- packages/apps/DeskClock/src/com/android/deskclock/AlarmClockFragment.java	(revision 1228)
++++ packages/apps/DeskClock/src/com/android/deskclock/AlarmClockFragment.java	(revision 1229)
+@@ -141,6 +141,7 @@
+             // Remove the SCROLL_TO_ALARM extra now that we've processed it.
+             intent.removeExtra(SCROLL_TO_ALARM_INTENT_EXTRA);
+         }
++		refreshData();
+     }
+ 
+     @Override

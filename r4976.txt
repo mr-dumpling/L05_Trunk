@@ -1,0 +1,64 @@
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountSetupFinal.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountSetupFinal.java	(revision 4975)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountSetupFinal.java	(revision 4976)
+@@ -59,6 +59,13 @@
+ import java.util.HashMap;
+ import java.util.Map;
+ 
++import android.Manifest;
++import java.util.ArrayList;
++import android.app.Activity;
++import android.support.v4.app.ActivityCompat;
++import android.support.v4.content.ContextCompat;
++import android.content.pm.PackageManager;
++
+ public class AccountSetupFinal extends AccountSetupActivity
+         implements AccountFinalizeFragment.Callback,
+         AccountSetupNoteDialogFragment.Callback, AccountCreationFragment.Callback,
+@@ -191,10 +198,45 @@
+ 
+     private static final int EXISTING_ACCOUNTS_LOADER_ID = 1;
+     private Map<String, String> mExistingAccountsMap;
++	
++	    public boolean checkAndRequestForEmail(Activity activity) {
++        // get permissions needed in current scenario
++        ArrayList<String> permissionsNeeded = new ArrayList<String>();
++        permissionsNeeded.add(Manifest.permission.READ_CONTACTS);
++		permissionsNeeded.add(Manifest.permission.READ_PHONE_STATE);
++		permissionsNeeded.add(Manifest.permission.READ_CALENDAR);
++		permissionsNeeded.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
++        // check status of permissions, get which permissions need to request
++        ArrayList<String> permissionsNeedRequest = new ArrayList<String>();
++        for (String permission : permissionsNeeded) {
++            if (ContextCompat.checkSelfPermission(activity, permission)
++                    == PackageManager.PERMISSION_GRANTED) {
++                continue;
++            }
++            permissionsNeedRequest.add(permission);
++        }
++        // request permissions
++        if (permissionsNeedRequest.size() == 0) {
++            LogUtils.d(LogUtils.TAG,"<checkAndRequestForEmail> all permissions are granted");
++            return true;
++        } else {
++            LogUtils.d(LogUtils.TAG, "<checkAndRequestForEmail> not all permissions are granted, reuqest");
++            String[] permissions = new String[permissionsNeedRequest.size()];
++            permissions = permissionsNeedRequest.toArray(permissions);
++            ActivityCompat.requestPermissions(activity, permissions, 0);
++            return false;
++        }
++    }
+ 
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
++		
++		  boolean hasReadContactsPermission = checkAndRequestForEmail(this);
++    	  if (!hasReadContactsPermission) {
++				Toast.makeText(this,"You have disabled a required permission", Toast.LENGTH_SHORT).show();
++				finish();
++		}
+ 
+         final Intent intent = getIntent();
+         final String action = intent.getAction();

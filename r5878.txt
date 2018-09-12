@@ -1,0 +1,297 @@
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 5877)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 5878)
+@@ -210,7 +210,7 @@
+             }
+         }
+ 		
+-		if (CellBroadcastReceiverApp.isCmasDefaultChannel(message.getServiceCategory())) {
++		if (CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), message.getServiceCategory())) {
+ 			SystemProperties.set("persist.sys.cmasalert", "1");
+ 		}
+ 
+@@ -279,7 +279,7 @@
+         }	
+ 		
+ 		
+-		if (CellBroadcastReceiverApp.isCellAreaInChile() && CellBroadcastReceiverApp.isCmasDefaultChannel(cbm.getServiceCategory())) {
++		if (CellBroadcastReceiverApp.isCellAreaInChile() && CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), cbm.getServiceCategory())) {
+ 			Log.e(TAG, "received CMAS Chile emergency cb message");
+ 			return;
+ 		}
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertAudio.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 5877)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 5878)
+@@ -328,6 +328,12 @@
+                 mEnableAudio = true;
+                 break;
+         }
++		//Add for 5058i_alav requirement, always Enable Audio
++		Resources res = getApplicationContext().getResources();
++        boolean bAlavCb = res.getBoolean(R.bool.project_5058i_alav_cb);
++		if(bAlavCb == true){
++			mEnableAudio = true;
++		}
+ 
+         if (mMessageBody != null && mEnableAudio) {
+             if (mTts == null) {
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 5877)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 5878)
+@@ -35,7 +35,7 @@
+ 
+ import java.util.ArrayList;
+ import java.util.concurrent.atomic.AtomicInteger;
+-
++import android.content.res.Resources;
+ /**
+  * The application class loads the default preferences at first start,
+  * and remembers the time of the most recently received broadcast.
+@@ -138,16 +138,25 @@
+         return sLatestAreaInfo;
+     }
+ 	
+-	public static boolean isCmasDefaultChannel(int channelId) {
+-        if ((channelId == 4356) || (channelId == 4355) || (channelId == 4352) || (channelId == 4353) 
+-				|| (channelId == 4354) || (channelId == 4370) || (channelId == 4371) || (channelId == 4372)
+-				|| (channelId == 4373) || (channelId == 4374) || (channelId == 4375) || (channelId == 4376)
+-				|| (channelId == 4377) || (channelId == 4378) || (channelId == 4379) || (channelId == 4383)
+-				|| (channelId == 4384) || (channelId == 4385) || (channelId == 4386) || (channelId == 4387)
+-				|| (channelId == 4388) || (channelId == 4389) || (channelId == 4390) || (channelId == 4391)
+-				|| (channelId == 4392) || (channelId == 919) || (channelId == 921) || (channelId == 4411)) {
+-            return true;
+-        }
++	public static boolean isCmasDefaultChannel(Context cntx, int channelId) {
++		Resources res = cntx.getResources();
++        boolean bAlavCb = res.getBoolean(R.bool.project_5058i_alav_cb);
++		if(bAlavCb == true){
++			if (((channelId >= 4370) && (channelId <= 4381)) || ((channelId >= 4383) && (channelId <= 4394))) {
++				return true;
++			}
++		}else{
++			if ((channelId == 4356) || (channelId == 4355) || (channelId == 4352) || (channelId == 4353) 
++					|| (channelId == 4354) || (channelId == 4370) || (channelId == 4371) || (channelId == 4372)
++					|| (channelId == 4373) || (channelId == 4374) || (channelId == 4375) || (channelId == 4376)
++					|| (channelId == 4377) || (channelId == 4378) || (channelId == 4379) || (channelId == 4383)
++					|| (channelId == 4384) || (channelId == 4385) || (channelId == 4386) || (channelId == 4387)
++					|| (channelId == 4388) || (channelId == 4389) || (channelId == 4390) || (channelId == 4391)
++					|| (channelId == 4392) || (channelId == 919) || (channelId == 921) || (channelId == 4411)) {
++				return true;
++			}
++		}
++		
+         return false;
+     }
+ }
+Index: packages/apps/CellBroadcastReceiver/res/values/customer.xml
+===================================================================
+--- packages/apps/CellBroadcastReceiver/res/values/customer.xml	(revision 0)
++++ packages/apps/CellBroadcastReceiver/res/values/customer.xml	(revision 5878)
+@@ -0,0 +1,20 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2011 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<resources>
++    <!-- Whether to enable 5058i_alav settings -->
++	<bool name="project_5058i_alav_cb">false</bool>
++</resources>
+Index: vendor/branch/5058I_ALAV1/packages/apps/CellBroadcastReceiver/res/values/customer.xml
+===================================================================
+--- vendor/branch/5058I_ALAV1/packages/apps/CellBroadcastReceiver/res/values/customer.xml	(revision 0)
++++ vendor/branch/5058I_ALAV1/packages/apps/CellBroadcastReceiver/res/values/customer.xml	(revision 5878)
+@@ -0,0 +1,20 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2011 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<resources>
++    <!-- Whether to enable 5058i_alav settings -->
++	<bool name="project_5058i_alav_cb">true</bool>
++</resources>
+
+Property changes on: vendor/branch/5058I_ALAV1/packages/apps/CellBroadcastReceiver/res/values/customer.xml
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058I_ALAV1/packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- vendor/branch/5058I_ALAV1/packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 5877)
++++ vendor/branch/5058I_ALAV1/packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 5878)
+@@ -1,147 +0,0 @@
+-/*
+-* Copyright (C) 2014 MediaTek Inc.
+-* Modification based on code covered by the mentioned copyright
+-* and/or permission notice(s).
+-*/
+-/*
+- * Copyright (C) 2011 The Android Open Source Project
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *      http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package com.android.cellbroadcastreceiver;
+-
+-import android.app.Application;
+-import android.content.BroadcastReceiver;
+-import android.content.Context;
+-import android.content.Intent;
+-import android.content.IntentFilter;
+-import android.telephony.CellBroadcastMessage;
+-import android.text.TextUtils;
+-//Taiwan PWS
+-import com.android.internal.telephony.TelephonyIntents;
+-import android.util.Log;
+-import android.preference.PreferenceManager;
+-
+-import java.util.ArrayList;
+-import java.util.concurrent.atomic.AtomicInteger;
+-
+-/**
+- * The application class loads the default preferences at first start,
+- * and remembers the time of the most recently received broadcast.
+- */
+-public class CellBroadcastReceiverApp extends Application {
+-    private static final String TAG = "CellBroadcastReceiverApp";
+-
+-    // For Taiwan PWS
+-    private static boolean sIsCellAreaInTw = false;
+-    // For Chile SAE
+-    private static boolean sIsCellAreaInChile = false;
+-    @Override
+-    public void onCreate() {
+-        super.onCreate();
+-        // TODO: fix strict mode violation from the following method call during app creation
+-        PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
+-        // For PWS
+-        IntentFilter plmnFliter = new IntentFilter();
+-        plmnFliter.addAction(TelephonyIntents.ACTION_LOCATED_PLMN_CHANGED);
+-        registerReceiver(mPLMNChangedBroadcastReceiver, plmnFliter);
+-    }
+-
+-    // For Taiwan PWS-START
+-    private final BroadcastReceiver mPLMNChangedBroadcastReceiver = new BroadcastReceiver() {
+-        public void onReceive(Context context, Intent intent) {
+-            if (intent.getAction().equals(TelephonyIntents.ACTION_LOCATED_PLMN_CHANGED)) {
+-                String plmn = intent.getStringExtra(TelephonyIntents.EXTRA_PLMN);
+-                if (!TextUtils.isEmpty(plmn)) {
+-                    String iso = intent.getStringExtra(TelephonyIntents.EXTRA_ISO);
+-                    String mcc = plmn.substring(0, 3);
+-                    Log.d(TAG, "receive Plmn Changed " + plmn + ", mcc " + mcc + ", iso " + iso);
+-                    if (TextUtils.isEmpty(iso)) {
+-                        Log.d(TAG, "empty iso! It maybe test in lab so ignore this change");
+-                    } else if (mcc.equals("466")) {
+-                        sIsCellAreaInTw = true;
+-                    } else if (mcc.equals("730")) {
+-                        sIsCellAreaInChile = true;
+-                    } else {
+-                        sIsCellAreaInTw = false;
+-                        sIsCellAreaInChile = false;
+-                    }
+-                } else {
+-                    sIsCellAreaInTw = false;
+-                    sIsCellAreaInChile = false;
+-                }
+-            }
+-        }
+-    };
+-
+-
+-    public static boolean isCellAreaInTw() {
+-        return sIsCellAreaInTw;
+-    }
+-
+-    /**
+-     * Check if user in Chile or any other region.
+-     * @return true if in chile
+-     */
+-    public static boolean isCellAreaInChile() {
+-        return sIsCellAreaInChile;
+-    }
+-
+-    /** Set Cell area basedon MCC.
+-     * @param mcc mcc from SIM Operator
+-     */
+-    public static void setCellAreaMcc(String mcc) {
+-        if (mcc.equals("466")) {
+-            sIsCellAreaInTw = true;
+-        } else if (mcc.equals("730")) {
+-            sIsCellAreaInChile = true;
+-        }
+-    }
+-    // For Taiwan PWS-END
+-
+-    /** List of unread non-emergency alerts to show when user selects the notification. */
+-    private static final ArrayList<CellBroadcastMessage> sNewMessageList =
+-            new ArrayList<CellBroadcastMessage>(4);
+-
+-    /** Latest area info cell broadcast received. */
+-    private static CellBroadcastMessage sLatestAreaInfo;
+-
+-    /** Adds a new unread non-emergency message and returns the current list. */
+-    static ArrayList<CellBroadcastMessage> addNewMessageToList(CellBroadcastMessage message) {
+-        sNewMessageList.add(message);
+-        return sNewMessageList;
+-    }
+-
+-    /** Clears the list of unread non-emergency messages. */
+-    static void clearNewMessageList() {
+-        sNewMessageList.clear();
+-    }
+-
+-    /** Saves the latest area info broadcast received. */
+-    static void setLatestAreaInfo(CellBroadcastMessage areaInfo) {
+-        sLatestAreaInfo = areaInfo;
+-    }
+-
+-    /** Returns the latest area info broadcast received. */
+-    static CellBroadcastMessage getLatestAreaInfo() {
+-        return sLatestAreaInfo;
+-    }
+-	
+-	public static boolean isCmasDefaultChannel(int channelId) {
+-       if (((channelId >= 4370) && (channelId <= 4381)) || ((channelId >= 4383) && (channelId <= 4394))) {
+-            return true;
+-        }
+-        return false;
+-    }
+-}

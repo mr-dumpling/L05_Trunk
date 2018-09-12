@@ -1,0 +1,212 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1196)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1197)
+@@ -161,6 +161,7 @@
+ import java.io.PrintWriter;
+ import java.util.HashSet;
+ import java.util.List;
++import android.app.Instrumentation;
+ 
+ /// M: Add import.
+ import android.hardware.input.InputManager;
+@@ -496,7 +497,7 @@
+     boolean mHasSoftInput = false;
+     boolean mTranslucentDecorEnabled = true;
+     boolean mUseTvRouting;
+-
++	boolean mMenuConsumed;
+     int mPointerLocationMode = 0; // guarded by mLock
+ 
+     // The last window we were told about in focusChanged.
+@@ -3143,6 +3144,18 @@
+             WindowManager.LayoutParams.TYPE_SYSTEM_ERROR,
+         };
+ 
++	private boolean mMenuLongPressed;
++    private final Runnable mMenuLongPress = new Runnable() {
++        @Override
++        public void run() {
++            if (!keyguardOn()) {
++                Slog.d(TAG, "long menu clicked");
++                mMenuLongPressed = true;
++                new Instrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_MENU);
++            }
++        }
++    };
++	
+     /** {@inheritDoc} */
+     @Override
+     public long interceptKeyBeforeDispatching(WindowState win, KeyEvent event, int policyFlags) {
+@@ -3180,6 +3193,24 @@
+                 }
+                 return -1;
+             }
++			
++			 //[BUGFIX]-Mod-BEGIN by TCTNB.yubin.ying,10/21/2016,3179079,
++            if (mScreenRecordVolumeUpKeyTriggered && !mScreenshotChordPowerKeyTriggered) {
++                final long now = SystemClock.uptimeMillis();
++                final long timeoutTime = mScreenRecordVolumeUpKeyTime
++                        + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS;
++                if (now < timeoutTime) {
++                    return timeoutTime - now;
++                }
++            }
++            if (keyCode == KeyEvent.KEYCODE_VOLUME_UP
++                    && mScreenRecordVolumeUpKeyConsumed ) {
++                    if (!down) {
++                        mScreenRecordVolumeUpKeyConsumed = false;
++                    }
++                return -1;
++            }
++         //[BUGFIX]-Mod-END by TCTNB.yubin.ying
+         }
+ 
+         /// M: Screen unpinning @{
+@@ -3206,7 +3237,11 @@
+         // it handle it, because that gives us the correct 5 second
+         // timeout.
+         if (keyCode == KeyEvent.KEYCODE_HOME) {
+-
++			ActivityManager activityManager = (ActivityManager)mContext.getSystemService(Context.ACTIVITY_SERVICE);
++            ComponentName topActivity = activityManager.getRunningTasks(1).get(0).topActivity;
++            if (topActivity.getPackageName().equals("com.mediatek.factorymode") || topActivity.getPackageName().equals("com.android.mmi")){
++                return 0;
++            }
+ 			
+ 			//modified by bing.wang.hz for Task4940849 begin
+             if (SystemProperties.get("persist.sys.powersaver.mode","normal_mode").equals("super_mode") ) {
+@@ -3315,11 +3350,25 @@
+             }
+             return 0;
+         } else if (keyCode == KeyEvent.KEYCODE_APP_SWITCH) {
++			 WindowManager.LayoutParams attrs = win != null ? win.getAttrs() : null;
++            if((attrs != null ) && (null != attrs.packageName) && attrs.packageName.startsWith("com.mediatek.factorymode") 
++                || attrs.packageName.startsWith("com.android.mmi")){
++                return 0;
++            }
+             if (!keyguardOn) {
+-                if (down && repeatCount == 0) {
+-                    preloadRecentApps();
+-                } else if (!down) {
+-                    toggleRecentApps();
++                if(down){
++                    if(repeatCount == 0){
++                        mMenuConsumed = false;
++                    }else if(repeatCount == 1){
++                        mMenuConsumed = true;
++                        mHandler.post(mMenuLongPress);
++                    }
++                }else{
++                    if(mMenuConsumed){
++                        mMenuConsumed = false;
++                    }else{
++                        toggleRecentApps();
++                    }
+                 }
+             }
+             return -1;
+@@ -5790,6 +5839,11 @@
+                 Intent.FLAG_RECEIVER_FOREGROUND);
+         mContext.sendBroadcastAsUser(errorIntent, UserHandle.CURRENT);
+     }
++	private String getRunningActivityName(){
++        ActivityManager activityManager=(ActivityManager)mContext.getSystemService(Context.ACTIVITY_SERVICE);
++        String runningActivity=activityManager.getRunningTasks(1).get(0).topActivity.getClassName();
++        return runningActivity;
++    }
+ 
+     /** {@inheritDoc} */
+     @Override
+@@ -6017,6 +6071,14 @@
+                             mScreenshotChordVolumeUpKeyTriggered = true;
+                             cancelPendingPowerKeyAction();
+                             cancelPendingScreenshotChordAction();
++							//[BUGFIX]-Mod-BEGIN by TCTNB.yubin.ying,10/21/2016,3179079,
++                            if (true) {//tcl Default feature 
++                                mScreenRecordVolumeUpKeyTriggered = true;
++                                mScreenRecordVolumeUpKeyTime = event.getDownTime();
++                                mScreenRecordVolumeUpKeyConsumed = false;
++                                interceptScreenRecord();
++                            }
++                            //[BUGFIX]-Mod-END by TCTNB.yubin.ying
+                         }
+                     } else {
+                         mScreenshotChordVolumeUpKeyTriggered = false;
+@@ -6250,6 +6312,42 @@
+         return result;
+     }
+ 
++	    //[BUGFIX]-Mod-BEGIN by TCTNB.yubin.ying,10/21/2016,3179079,
++    private void interceptScreenRecord() {
++        if(mScreenRecordVolumeUpKeyTriggered && mScreenshotChordPowerKeyTriggered) {
++            final long now = SystemClock.uptimeMillis();
++            if (now <= mScreenRecordVolumeUpKeyTime
++                    + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS) {
++                mScreenRecordVolumeUpKeyConsumed = true;
++                Intent intent = new Intent("com.tct.screenrecorder.recordservice.LAUNCH");
++                try{
++                    mContext.startService(createExplicitIntent(mContext, intent));
++                }catch(Exception e){
++                    Slog.e(TAG, "Exception when start Screen Record service", e);
++                }
++            }
++        }
++    }
++
++    private Intent createExplicitIntent(Context context, Intent implicitIntent) {
++        PackageManager pm = context.getPackageManager();
++        List<ResolveInfo> resolveInfo = pm.queryIntentServices(implicitIntent, 0);
++
++        if (resolveInfo == null || resolveInfo.size() != 1) {
++            return null;
++        }
++
++        ResolveInfo serviceInfo = resolveInfo.get(0);
++        String packageName = serviceInfo.serviceInfo.packageName;
++        String className = serviceInfo.serviceInfo.name;
++        ComponentName component = new ComponentName(packageName, className);
++
++        Intent explicitIntent = new Intent(implicitIntent);
++        explicitIntent.setComponent(component);
++        return explicitIntent;
++    }
++    //[BUGFIX]-Mod-END by TCTNB.yubin.ying
++
+     /**
+      * Handle statusbar expansion events.
+      * @param event
+Index: frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java	(revision 1196)
++++ frameworks/base/services/core/java/com/android/server/power/PowerManagerService.java	(revision 1197)
+@@ -4250,6 +4250,16 @@
+         	}
+         }
+         //added by yongfeng.zhang for task 3720739 on 2017-01-11 end
++		
++		 @Override
++        public void setButtonOffForWfd(boolean enable) {
++            if(enable) {
++                Slog.d(TAG, "setButtonOffForWfd true");
++                mButtonLight.setBrightness(255);
++            } else {
++                mButtonLight.turnOff();
++            }
++        }
+     }
+ 
+     private final class LocalService extends PowerManagerInternal {
+Index: device/ausshine/aus6739_66_n1/device.mk
+===================================================================
+--- device/ausshine/aus6739_66_n1/device.mk	(revision 1196)
++++ device/ausshine/aus6739_66_n1/device.mk	(revision 1197)
+@@ -167,6 +167,8 @@
+     PRODUCT_PACKAGES += DangerDash
+ endif
+ 
++PRODUCT_PACKAGES += MMITestDevice
++
+ # inherit 6752 platform
+ $(call inherit-product, device/mediatek/mt6739/device.mk)
+ 

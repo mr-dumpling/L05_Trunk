@@ -1,0 +1,67 @@
+Index: vendor/mediatek/proprietary/frameworks/opt/fullscreenswitchservice/src/com/mediatek/fullscreenswitch/FullscreenDataHelper.java
+===================================================================
+--- vendor/mediatek/proprietary/frameworks/opt/fullscreenswitchservice/src/com/mediatek/fullscreenswitch/FullscreenDataHelper.java	(revision 4216)
++++ vendor/mediatek/proprietary/frameworks/opt/fullscreenswitchservice/src/com/mediatek/fullscreenswitch/FullscreenDataHelper.java	(revision 4217)
+@@ -252,37 +252,38 @@
+ 
+         FullscreenMode mode = new FullscreenMode();
+         mode.packageName = pkgName;
+-        if (isBuiltinApp(appInfo) || isWhiteList(pkgName)) {
++        if (isBuiltinApp(appInfo)) {
+             mode.level = FullscreenMode.APP_LEVEL_SYSTEM;
+             mode.mode = FullscreenMode.APP_FULL_SCREEN_MODE;
+         } else {
+             mode.level = FullscreenMode.APP_LEVEL_THIRD_PARTY;
+-            //mode.mode = FullscreenMode.APP_FULL_SCREEN_MODE;
+-            mode.mode = FullscreenMode.APP_CROP_SCREEN_MODE;
+-            try {
+-                PackageInfo pkgInfo = packageManager.getPackageInfo(pkgName,
+-                        PackageManager.GET_ACTIVITIES);
+-                ActivityInfo[] activities = pkgInfo.activities;
+-                if (activities != null) {
+-                    int length = activities.length;
+-                    int unresizeNum = 0;
+-                    for (int i = 0; i < length; i++) {
+-                        if (activities[i].resizeMode == ActivityInfo.RESIZE_MODE_UNRESIZEABLE) {
+-                            unresizeNum++;
+-                            Log.i(FullscreenSwitchService.TAG, "UNRESIZEABLE:" + activities[i]);
+-                            break;
++            mode.mode = FullscreenMode.APP_FULL_SCREEN_MODE;
++            if(!isWhiteList(pkgName)) {
++                try {
++                    PackageInfo pkgInfo = packageManager.getPackageInfo(pkgName,
++                            PackageManager.GET_ACTIVITIES);
++                    ActivityInfo[] activities = pkgInfo.activities;
++                    if (activities != null) {
++                        int length = activities.length;
++                        int unresizeNum = 0;
++                        for (int i = 0; i < length; i++) {
++                            if (activities[i].resizeMode == ActivityInfo.RESIZE_MODE_UNRESIZEABLE) {
++                                unresizeNum++;
++                                Log.i(FullscreenSwitchService.TAG, "UNRESIZEABLE:" + activities[i]);
++                                break;
++                            }
+                         }
++                        if (length == unresizeNum) {
++                            mode.mode = FullscreenMode.APP_CROP_SCREEN_MODE;
++                        }
++                        Log.i(FullscreenSwitchService.TAG, pkgName
++                                + " initAppMode: mode = " + mode.mode
++                                + " ,activities.length = " + length
++                                + " ,unresizeNum = " + unresizeNum);
+                     }
+-                    if (length == unresizeNum) {
+-                        mode.mode = FullscreenMode.APP_CROP_SCREEN_MODE;
+-                    }
+-                    Log.i(FullscreenSwitchService.TAG, pkgName
+-                            + " initAppMode: mode = " + mode.mode
+-                            + " ,activities.length = " + length
+-                            + " ,unresizeNum = " + unresizeNum);
++                } catch (PackageManager.NameNotFoundException e) {
++                    Log.e(FullscreenSwitchService.TAG, "Can't find my package : " + pkgName);
+                 }
+-            } catch (PackageManager.NameNotFoundException e) {
+-                Log.e(FullscreenSwitchService.TAG, "Can't find my package : " + pkgName);
+             }
+         }
+ 

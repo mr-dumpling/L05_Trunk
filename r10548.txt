@@ -1,0 +1,139 @@
+Index: frameworks/base/services/core/java/com/android/server/wm/WindowManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/wm/WindowManagerService.java	(revision 10547)
++++ frameworks/base/services/core/java/com/android/server/wm/WindowManagerService.java	(revision 10548)
+@@ -475,6 +475,12 @@
+                 Slog.d(TAG,"Configuration changed, remove fast starting window catch");
+                 mBitmaps.evictAll();
+             }
++            
++            /// for solving black screen when boot up
++            else if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
++				mUserUnlocked = true;
++			}            
++            ///end
+         }
+     };
+     final WindowSurfacePlacer mWindowPlacerLocked;
+@@ -649,6 +655,16 @@
+     boolean mForceDisplayEnabled = false;
+     boolean mShowingBootMessages = false;
+     boolean mBootAnimationStopped = false;
++    
++    //Following are variables to solve black screen when boot up for GMS and FallbackHome
++	private boolean mUserUnlocked = false;
++	private boolean isProvisioned = false;
++	private boolean installedGmsPackage = false;
++	private boolean hasNofifyAMSFinishBooting=false;
++	private boolean hasGmsFirstVisibleActivity = false;
++	private String gmsFirstVisibleActivity="google.android.setupwizard.user.WelcomeActivity";
++	private String gmsPackageName="com.google.android.setupwizard";
++    //end
+ 
+     // Following variables are for debugging screen wakelock only.
+     WindowState mLastWakeLockHoldingWindow = null;
+@@ -1171,6 +1187,11 @@
+             filter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
+         }
+         /// @}
++        
++        ///for solving black screen in boot up        
++        filter.addAction(Intent.ACTION_USER_UNLOCKED); // receive USER_UNLOCKED broadcast
++        ///end
++
+         mContext.registerReceiver(mBroadcastReceiver, filter);
+ 
+         mSettingsObserver = new SettingsObserver();
+@@ -6198,9 +6219,25 @@
+             }
+             mSystemBooted = true;
+             hideBootMessagesLocked();
++            
++            ///add for solving black screen when boot up
++			try {
++				isProvisioned = Settings.Global.getInt(mContext.getContentResolver(),
++						Settings.Global.DEVICE_PROVISIONED, 0) == 1;
++				installedGmsPackage = mContext.getPackageManager().getPackageInfo(gmsPackageName, 0) != null;
++				Slog.d(TAG, "installedGmsPackage=" + installedGmsPackage);
++			} catch (Exception e) {
++			}
++			long timeout = 0;
++			if (isProvisioned)// when device not providioned increase the timeout for avoid black screen when boot up
++				timeout = 30 * 1000;
++			else
++				timeout = 40 * 1000;
++
+             // If the screen still doesn't come up after 30 seconds, give
+             // up and turn it on.
+-            mH.sendEmptyMessageDelayed(H.BOOT_TIMEOUT, 30*1000);
++            //mH.sendEmptyMessageDelayed(H.BOOT_TIMEOUT, 30*1000);
++            mH.sendEmptyMessageDelayed(H.BOOT_TIMEOUT, timeout);
+         }
+ 
+         mPolicy.systemBooted();
+@@ -6261,6 +6298,17 @@
+         final int N = windows.size();
+         for (int i=0; i<N; i++) {
+             WindowState w = windows.get(i);
++            
++            ///for solving black screen when boot up            
++        	String title = null;
++			if (w.getAttrs() != null)
++				title = w.getAttrs().getTitle().toString();
++			if (installedGmsPackage && title.contains(gmsFirstVisibleActivity) && w.mHasSurface) {
++				hasGmsFirstVisibleActivity = true;
++			}
++			Slog.d(TAG, "hasGmsFirstVisibleActivity=" + hasGmsFirstVisibleActivity);            
++            ///end
++
+             if (w.isVisibleLw() && !w.mObscured && !w.isDrawnLw()) {
+                 return true;
+             }
+@@ -6334,6 +6382,31 @@
+             }
+             /// @}
+ 
++            ///for solving black screen when boot up
++            Slog.d(TAG, "mUserUnlock=" + mUserUnlocked);
++            //when all windows drawn in boot up,going to notify ams finishBooting,let ams send USER_UNLOCKED early to avoid FallbackHome block
++            //launcher's starting and then can avoid black screen when boot up
++            if (!hasNofifyAMSFinishBooting) {
++                try {
++                    hasNofifyAMSFinishBooting = true;
++                    Slog.d(TAG, "begin bootAnimationComplete");
++                    mActivityManager.bootAnimationComplete();
++                } catch (Exception e) {
++                }
++            }
++            
++            //when user_unlocked start to stop the boot animation			 
++			if (!mUserUnlocked && !mForceDisplayEnabled) {
++				return;
++			}			
++			// if install GMS and the first boot, wait for the first visible window show, 
++			//and then stop the bootanimation
++			//this can avoid the black screen by the reason of lower load speed of gms(activity) 
++			if (installedGmsPackage && !isProvisioned && !hasGmsFirstVisibleActivity && !mForceDisplayEnabled) {
++				return;
++			}
++            /// end.
++
+             if (!mBootAnimationStopped) {
+                 // Do this one time.
+                 Trace.asyncTraceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "Stop bootanim", 0);
+@@ -6374,7 +6447,14 @@
+         }
+ 
+         try {
+-            mActivityManager.bootAnimationComplete();
++            //mActivityManager.bootAnimationComplete();
++            ///for solving black screen when bootup
++        	if (!hasNofifyAMSFinishBooting){
++        		hasNofifyAMSFinishBooting=true;
++        		mActivityManager.bootAnimationComplete();
++        	
++        	}
++        	///end.
+         } catch (RemoteException e) {
+         }
+ 

@@ -1,0 +1,373 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1163)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1164)
+@@ -165,6 +165,11 @@
+ /// M: Add import.
+ import android.hardware.input.InputManager;
+ import android.content.res.TypedArray;
++//add wqq start{
++import android.view.MotionEvent;
++import android.content.Intent;
++import android.provider.Settings.Secure;
++//add wqq end}
+ 
+ /**
+  * WindowManagerPolicy implementation for the Android phone UI.  This
+@@ -1735,7 +1740,9 @@
+         // register for multiuser-relevant broadcasts
+         filter = new IntentFilter(Intent.ACTION_USER_SWITCHED);
+         context.registerReceiver(mMultiuserReceiver, filter);
+-
++		//register for three finger shotscreen 
++		filter.addAction("intent.action.SendKey");
++		context.registerReceiver(mKeyReceiver, filter);
+         // monitor for system gestures
+         mSystemGestures = new SystemGesturesPointerEventListener(context,
+                 new SystemGesturesPointerEventListener.Callbacks() {
+@@ -8726,5 +8733,27 @@
+         });
+     }
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+-
++    /**add by wqq for three finger shotscreen**/
++	BroadcastReceiver mKeyReceiver = new BroadcastReceiver() {
++	@Override
++		public void onReceive(Context context, Intent intent) {
++			String action = intent.getAction();
++			boolean m3PTouchScreenshot;
++			if ("intent.action.SendKey".equals(action)) {
++				Bundle bundle = intent.getExtras();
++				int keycode = bundle.getInt("KeyCode");
++				Log.i(TAG, "mKeyReceiver:" + keycode);
++				switch(keycode) { 
++					case KeyEvent.KEYCODE_SYSRQ:
++						m3PTouchScreenshot = Secure.getInt(context.getContentResolver(), Secure.THREE_FINGER_SHOTSCREEN_ENABLED, 0)==1;
++						Log.i(TAG, "m3PTouchScreenshot:" + m3PTouchScreenshot);
++						if(m3PTouchScreenshot){
++							Handler handler=new Handler();
++							handler.post(mScreenshotRunnable);
++						}
++						break;
++				}
++			}
++		}
++	};
+ }
+Index: frameworks/base/core/java/com/android/internal/policy/PhoneWindow.java
+===================================================================
+--- frameworks/base/core/java/com/android/internal/policy/PhoneWindow.java	(revision 1163)
++++ frameworks/base/core/java/com/android/internal/policy/PhoneWindow.java	(revision 1164)
+@@ -102,7 +102,9 @@
+ 
+ import java.lang.ref.WeakReference;
+ import java.util.ArrayList;
++import android.content.Intent;
+ 
++
+ /**
+  * Android-specific Window.
+  * <p>
+@@ -297,6 +299,17 @@
+ 
+     private boolean mUseDecorContext = false;
+ 
++	//add by wqq for shorscreen start
++	private static float downX[]=new float[5];
++	private static float downY[]=new float[5];
++	private static float upX[]=new float[5];
++	private static float upY[]=new float[5];
++	private static float mathX[]=new float[5];
++	private static float mathY[]=new float[5];
++	private int X_OFFSET=80;
++	private int Y_OFFSET=180;
++	//add by wqq for shorscreen end
++	
+     static class WindowManagerHolder {
+         static final IWindowManager sWindowManager = IWindowManager.Stub.asInterface(
+                 ServiceManager.getService("window"));
+@@ -1835,7 +1848,54 @@
+         if (DBG_MOTION) {
+             Log.d(TAG, "superDispatchTouchEvent = " + event + ", handled = " + handled);
+         }
+-        return handled;
++		//add wqq for shotscreen start{
++		int count=event.getPointerCount();
++		Log.d("wqq-->", "superDispatchTouchEvent = " + event + ", handled = " + handled+"  count = "+count);
++			if(count==3){
++				switch (event.getAction() & MotionEvent.ACTION_MASK) {
++				case MotionEvent.ACTION_POINTER_DOWN:
++					for(int i=0;i<count;i++){
++						int pointerIndex=event.getPointerId(i);
++						if(pointerIndex<0){
++							pointerIndex=0;
++						}else if(pointerIndex>=count){
++							pointerIndex=count-1;
++						}
++						downX[i]=event.getX(pointerIndex);
++						downY[i]=event.getY(pointerIndex);
++					}
++					break;
++	
++				case MotionEvent.ACTION_POINTER_UP:
++					for(int i=0;i<count;i++){
++						int pointerIndex=event.getPointerId(i);
++						if(pointerIndex<0){
++							pointerIndex=0;
++						}else if(pointerIndex>=count){
++							pointerIndex=count-1;
++						}
++						upX[i]=event.getX(pointerIndex);
++						upY[i]=event.getY(pointerIndex);
++						mathX[i]=Math.abs(upX[i]-downX[i]);
++						mathY[i]=Math.abs(upY[i]-downY[i]);
++					}
++					
++					break;
++				case MotionEvent.ACTION_DOWN:
++					break;
++				case MotionEvent.ACTION_MOVE:
++					break;
++				case MotionEvent.ACTION_UP:
++					break;
++				}
++				if(mathY[0]>Y_OFFSET && mathY[1]>Y_OFFSET && mathY[2]>Y_OFFSET ){
++					Intent intent = new Intent("intent.action.SendKey");
++					intent.putExtra("KeyCode", KeyEvent.KEYCODE_SYSRQ);
++					getContext().sendBroadcast(intent);
++				}
++			}
++        return count==3 ? true: handled;
++		//add wqq for shotscreen end}
+     }
+ 
+     @Override
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 1163)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 1164)
+@@ -6774,7 +6774,11 @@
+          */
+         public static final String CAMERA_DOUBLE_TWIST_TO_FLIP_ENABLED =
+                 "camera_double_twist_to_flip_enabled";
+-
++	/**
++	*add for three finger shotscreen
++	*/
++		public static final String THREE_FINGER_SHOTSCREEN_ENABLED =
++                "three_finger_shotscreen_enabled";
+         /**
+          * Control whether Night display is currently activated.
+          * @hide
+@@ -7018,7 +7022,9 @@
+             QS_TILES,
+             DOZE_ENABLED,
+             DOZE_PULSE_ON_PICK_UP,
+-            DOZE_PULSE_ON_DOUBLE_TAP
++            DOZE_PULSE_ON_DOUBLE_TAP,
++            THREE_FINGER_SHOTSCREEN_ENABLED
++            //add end
+         };
+ 
+         /**
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1163)
++++ frameworks/base/api/system-current.txt	(revision 1164)
+@@ -35335,6 +35335,7 @@
+     field public static final java.lang.String SELECTED_INPUT_METHOD_SUBTYPE = "selected_input_method_subtype";
+     field public static final java.lang.String SETTINGS_CLASSNAME = "settings_classname";
+     field public static final java.lang.String SKIP_FIRST_USE_HINTS = "skip_first_use_hints";
++    field public static final java.lang.String THREE_FINGER_SHOTSCREEN_ENABLED = "three_finger_shotscreen_enabled";
+     field public static final java.lang.String TOUCH_EXPLORATION_ENABLED = "touch_exploration_enabled";
+     field public static final deprecated java.lang.String TTS_DEFAULT_COUNTRY = "tts_default_country";
+     field public static final deprecated java.lang.String TTS_DEFAULT_LANG = "tts_default_lang";
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1163)
++++ frameworks/base/api/test-current.txt	(revision 1164)
+@@ -32655,6 +32655,7 @@
+     field public static final java.lang.String SELECTED_INPUT_METHOD_SUBTYPE = "selected_input_method_subtype";
+     field public static final java.lang.String SETTINGS_CLASSNAME = "settings_classname";
+     field public static final java.lang.String SKIP_FIRST_USE_HINTS = "skip_first_use_hints";
++    field public static final java.lang.String THREE_FINGER_SHOTSCREEN_ENABLED = "three_finger_shotscreen_enabled";
+     field public static final java.lang.String TOUCH_EXPLORATION_ENABLED = "touch_exploration_enabled";
+     field public static final deprecated java.lang.String TTS_DEFAULT_COUNTRY = "tts_default_country";
+     field public static final deprecated java.lang.String TTS_DEFAULT_LANG = "tts_default_lang";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1163)
++++ frameworks/base/api/current.txt	(revision 1164)
+@@ -32576,6 +32576,7 @@
+     field public static final java.lang.String SELECTED_INPUT_METHOD_SUBTYPE = "selected_input_method_subtype";
+     field public static final java.lang.String SETTINGS_CLASSNAME = "settings_classname";
+     field public static final java.lang.String SKIP_FIRST_USE_HINTS = "skip_first_use_hints";
++    field public static final java.lang.String THREE_FINGER_SHOTSCREEN_ENABLED = "three_finger_shotscreen_enabled";
+     field public static final java.lang.String TOUCH_EXPLORATION_ENABLED = "touch_exploration_enabled";
+     field public static final deprecated java.lang.String TTS_DEFAULT_COUNTRY = "tts_default_country";
+     field public static final deprecated java.lang.String TTS_DEFAULT_LANG = "tts_default_lang";
+Index: packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 1163)
++++ packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 1164)
+@@ -56,7 +56,9 @@
+     private static final String PREF_KEY_SWIPE_DOWN_FINGERPRINT = "gesture_swipe_down_fingerprint";
+     private static final String PREF_KEY_DOUBLE_TAP_SCREEN = "gesture_double_tap_screen";
+     private static final String DEBUG_DOZE_COMPONENT = "debug.doze.component";
+-
++	//add by wqq start{
++	private static final String THREE_FINGER_SHOTSCREEN ="three_finger_shotscreen";
++	//add by wqq end}
+     private List<GesturePreference> mPreferences;
+ 
+     private AmbientDisplayConfiguration mAmbientConfig;
+@@ -107,7 +109,12 @@
+         } else {
+             removePreference(PREF_KEY_DOUBLE_TWIST);
+         }
+-
++		//add by wqq start{
++		int threeFingerShotscreenEnabled = Secure.getInt(
++                    getContentResolver(), Secure.THREE_FINGER_SHOTSCREEN_ENABLED, 0);
++		addPreference(THREE_FINGER_SHOTSCREEN, threeFingerShotscreenEnabled != 0);
++		
++		//add by wqq end}
+     }
+ 
+     @Override
+@@ -170,6 +177,12 @@
+             Secure.putInt(getContentResolver(),
+                     Secure.CAMERA_DOUBLE_TWIST_TO_FLIP_ENABLED, enabled ? 1 : 0);
+         }
++		//add by wqq start
++		else if(THREE_FINGER_SHOTSCREEN.equals(key)){
++			Secure.putInt(getContentResolver(),
++                    Secure.THREE_FINGER_SHOTSCREEN_ENABLED, enabled ? 1 : 0);
++		}
++		//add by wqq end
+         return true;
+     }
+ 
+Index: packages/apps/Settings/res/values/config.xml
+===================================================================
+--- packages/apps/Settings/res/values/config.xml	(revision 1163)
++++ packages/apps/Settings/res/values/config.xml	(revision 1164)
+@@ -53,7 +53,7 @@
+     <string name="gesture_double_twist_sensor_vendor" translatable="false"></string>
+ 
+     <!-- When true enable gesture setting. -->
+-    <bool name="config_gesture_settings_enabled">false</bool>
++    <bool name="config_gesture_settings_enabled">true</bool>
+ 
+     <!-- If the Storage Manager settings are enabled. -->
+     <bool name="config_storage_manager_settings_enabled">false</bool>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1163)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1164)
+@@ -8014,4 +8014,19 @@
+ 	<string name="notifications_color_highlight">Highlighted in colour</string>
+ 	<!-- Add for bug_id 111336 by dongdongli 20171101 end -->
+     <string name="lock_screen_title">Lock screen</string>
++    <!--add for tcl gesture start-->
++	<string name="sensor_touch_category_title">Sensor and touch</string>
++	<string name="glove_mode_prefrence_title">Glove mode</string>
++	<string name="glove_mode_prefrence_summary">Operate phone with thin gloves on</string>
++	<string name="incoming_calls_category_title">Incoming calls</string>
++	<string name="incoming_calls_prefrence_title">Turn over to mute</string>
++	<string name="incoming_calls_prefrence_summary">Mute incoming calls by turning the phone over</string>
++	<string name="alarm_soonz_category_title">Alarm</string>
++	<string name="alarm_soonz_prefrence_title">Turn over to activite snooze</string>
++	<string name="screen_gesture_category_title">Screen gesture</string>
++	<string name="double_tap_prefrence_title">Double tap screen</string>
++	<string name="double_tap_prefrence_summary">When screen is off, double tap to light up. And double tap idle space on Home screens to turn screen off.</string>
++	<string name="three_finger_screenshot_title">Three fingers screenshot</string>
++	<string name="three_finger_screenshot_summary">Slide 3 fingers simultaneously in a downwards motion on screen to make screenshot.</string>
++	<!--add for tcl gesture end-->
+ </resources>
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1163)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1164)
+@@ -3303,4 +3303,19 @@
+     <string name="battery_info_health_cold" msgid="3835692786176707318">"电量低"</string>
+ 	<string name="testing_battery_info" msgid="4132685016148679403">"电池信息"</string>
+     <string name="lock_screen_title">"锁屏"</string>
++    <!--add for tcl gesture start-->
++	<string name="sensor_touch_category_title">传感器和触摸</string>
++	<string name="glove_mode_prefrence_title">手套模式</string>
++	<string name="glove_mode_prefrence_summary">用薄手套操作手机</string>
++	<string name="incoming_calls_category_title">来电</string>
++	<string name="incoming_calls_prefrence_title">翻转静音</string>
++	<string name="incoming_calls_prefrence_summary">通过转动手机来静音来电</string>
++	<string name="alarm_soonz_category_title">闹钟</string>
++	<string name="alarm_soonz_prefrence_title">翻转手机休眠闹铃</string>
++	<string name="screen_gesture_category_title">屏幕手势</string>
++	<string name="double_tap_prefrence_title">双击屏幕</string>
++	<string name="double_tap_prefrence_summary">当屏幕关闭时，双击点亮。 并在主屏幕上双击空闲空间以关闭屏幕。</string>
++	<string name="three_finger_screenshot_title">三个手指截图</string>
++	<string name="three_finger_screenshot_summary">同时在屏幕上向下滑动3个手指来制作屏幕截图。</string>
++	<!--add for tcl gesture end-->
+ </resources>
+Index: packages/apps/Settings/res/xml/gesture_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/gesture_settings.xml	(revision 1163)
++++ packages/apps/Settings/res/xml/gesture_settings.xml	(revision 1164)
+@@ -18,7 +18,57 @@
+     xmlns:settings="http://schemas.android.com/apk/res-auto"
+     android:title="@string/gesture_preference_title"
+     settings:keywords="@string/keywords_gesture">
++	<!--add for tcl start-->
++	<PreferenceCategory 
++			android:key="sensor_touch"
++            android:title="@string/sensor_touch_category_title"
++            android:persistent="false">
+ 
++        <com.android.settings.gestures.GesturePreference
++				android:key="glove_mode"
++                android:title="@string/glove_mode_prefrence_title"
++				android:summary="@string/fingerprint_swipe_for_notifications_summary"
++                android:persistent="false"/>
++    </PreferenceCategory>
++	<PreferenceCategory 
++			android:key="incoming_calls"
++            android:title="@string/incoming_calls_category_title"
++            android:persistent="false">
++
++        <com.android.settings.gestures.GesturePreference
++				android:key="mute_incoming"
++                android:title="@string/incoming_calls_prefrence_title"
++				android:summary="@string/incoming_calls_prefrence_summary"
++                android:persistent="false"/>
++    </PreferenceCategory>
++	<PreferenceCategory 
++			android:key="alarm_soonz"
++            android:title="@string/alarm_soonz_category_title"
++            android:persistent="false">
++
++        <com.android.settings.gestures.GesturePreference
++				android:key="alarm_soonz_mode"
++                android:title="@string/alarm_soonz_prefrence_title"
++                android:persistent="false"/>
++    </PreferenceCategory>
++	<PreferenceCategory 
++			android:key="screen_gesture"
++            android:title="@string/screen_gesture_category_title"
++            android:persistent="false">
++
++        <com.android.settings.gestures.GesturePreference
++				android:key="double_tap_screen"
++                android:title="@string/double_tap_prefrence_title"
++				android:summary="@string/double_tap_prefrence_summary"
++                android:persistent="false"/>
++    </PreferenceCategory>
++	
++	<com.android.settings.gestures.GesturePreference
++        android:key="three_finger_shotscreen"
++        android:title="@string/three_finger_screenshot_title"
++        android:summary="@string/three_finger_screenshot_summary"
++		android:persistent="false"/>
++	<!--add for tcl end-->	
+     <com.android.settings.gestures.GesturePreference
+         android:key="gesture_swipe_down_fingerprint"
+         android:title="@string/fingerprint_swipe_for_notifications_title"

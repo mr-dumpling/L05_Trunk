@@ -1,0 +1,41 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1393)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1394)
+@@ -2128,6 +2128,7 @@
+             <intent-filter>
+                 <action android:name="android.bluetooth.adapter.action.DISCOVERY_STARTED" />
+                 <action android:name="android.bluetooth.adapter.action.DISCOVERY_FINISHED" />
++                <action android:name="android.bluetooth.adapter.action.STATE_CHANGED" />
+                 <category android:name="android.intent.category.DEFAULT" />
+             </intent-filter>
+         </receiver>
+Index: packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothDiscoveryReceiver.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothDiscoveryReceiver.java	(revision 1393)
++++ packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothDiscoveryReceiver.java	(revision 1394)
+@@ -44,6 +44,11 @@
+         if (action.equals(BluetoothAdapter.ACTION_DISCOVERY_STARTED) ||
+                 action.equals(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)) {
+             LocalBluetoothPreferences.persistDiscoveringTimestamp(context);
++        } else if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
++            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
++            if (adapter.isEnabled()) {
++                adapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE);
++            }
+         }
+     }
+ }
+Index: packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java	(revision 1393)
++++ packages/apps/Settings/src/com/android/settings/bluetooth/BluetoothSettings.java	(revision 1394)
+@@ -214,7 +214,7 @@
+         }
+ 
+         // Make the device only visible to connected devices.
+-        mLocalAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE);
++        //mLocalAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE);
+ 
+         if (isUiRestricted()) {
+             return;

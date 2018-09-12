@@ -1,0 +1,23 @@
+Index: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1642)
++++ packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1643)
+@@ -442,9 +442,16 @@
+         Uri ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(context, type);
+         CharSequence summary = context.getString(com.android.internal.R.string.ringtone_unknown);
+         // Is it a silent ringtone?
+-        if (ringtoneUri == null) {
++         if (ringtoneUri == null && type!= RingtoneManager.TYPE_RINGTONE) {
+             summary = context.getString(com.android.internal.R.string.ringtone_silent);
+-        } else {
++        } else if(ringtoneUri == null && (!"980CN1".equals(SystemProperties.get("ro.product.model")) || !"true".equals(SystemProperties.get("ro.config.isFirstForRing","true")))){
++        	summary = context.getString(com.android.internal.R.string.ringtone_silent);
++        }else {
++			if(type== RingtoneManager.TYPE_RINGTONE && "980CN1".equals(SystemProperties.get("ro.product.model"))){
++				SystemProperties.set("ro.config.isFirstForRing", "false");	
++				ringtoneUri = queryDefaultUri(context,type);
++				RingtoneManager.setActualDefaultRingtoneUri(context,type,ringtoneUri);
++			}
+             Cursor cursor = null;
+             try {
+                 if (MediaStore.AUTHORITY.equals(ringtoneUri.getAuthority())) {

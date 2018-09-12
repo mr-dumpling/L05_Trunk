@@ -1,0 +1,161 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 9100)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 9101)
+@@ -3538,6 +3538,10 @@
+             android:name=".faceunlock.FaceUnlockMainActivity"
+             android:screenOrientation="portrait" 
+ 			android:exported="true">
++	    <intent-filter android:priority="2">
++                <action android:name="com.android.setupwizard.Faceunlock" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
+             <intent-filter>
+                 <action android:name="android.settings.FaceUnlock_SETUP" />
+                 <category android:name="android.intent.category.DEFAULT" />
+Index: packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 9100)
++++ packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 9101)
+@@ -53,7 +53,7 @@
+ import android.view.Gravity;
+ import android.widget.Toolbar;
+ import android.content.ComponentName;
+-
++import com.android.setupwizardlib.util.WizardManagerHelper;
+ @TargetApi(23)
+ public class FaceUnlockMainActivity extends FragmentActivity implements OnClickListener, OnCheckedChangeListener {
+ 
+@@ -65,7 +65,7 @@
+ 	private static final int DEMONSTRATION_MODEL_SWITCH_NUM = 5;
+ 	private static final int FACE_MANAGER_LAYOUT_NUM = 6;
+ 	private static final int ACTIONBAR_BACK_NUM = 7;
+-
++    private static final int ACTIONBAR_NEXT = 20;
+ 	private static final int REMOVE_FACEUNLOCK_BTN_NUM = 10;
+ 	private static final int CHOOSE_LOCK_GENERIC_REQUEST = 227;
+     private static final int CONFIRM_REQUEST = 226;
+@@ -257,6 +257,14 @@
+ 			face_unlock_manager_layout.setVisibility(View.GONE);
+ 			face_unlock_main_layout.setVisibility(View.VISIBLE);
+ 		}
++		
++		if(Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0 ){
++			Button mBtn = (Button) findViewById(R.id.btn_next);
++			mBtn.setVisibility(View.VISIBLE);
++			mBtn.setTag(ACTIONBAR_NEXT);
++			mBtn.setOnClickListener(this);
++			getWindow().setStatusBarColor(0XFFEFEFF0);
++		}
+ 	}
+ 	
+ 
+@@ -264,8 +272,12 @@
+ 	// Hide method
+ 	private void setBackgroundTheme() {
+ 
+-		if(isExistFaceData()){
+-			getActionBar().show();
++		if(isExistFaceData() || (!mFromBootWizard && Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0 )){
++			if(Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) != 0 )
++				getActionBar().show();
++			else{
++				getActionBar().hide();
++			}
+ 			getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+ 			getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+ 			getWindow().setStatusBarColor(0XFFEFEFF0);
+@@ -305,6 +317,11 @@
+ 	@Override
+ 	public void onClick(View v) {
+ 		switch ((int) v.getTag()) {
++		case ACTIONBAR_NEXT:
++			Intent intentForGoogle = WizardManagerHelper.getNextIntent(getIntent(), Activity.RESULT_OK);
++			startActivityForResult(intentForGoogle, 1000);
++			overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
++			break;
+ 		case ACTIONBAR_BACK_NUM:
+ 			if(mFromBootWizard){
+ 				ComponentName cn = new ComponentName("com.gome.bootwizard", "com.gome.bootwizard.activity.FaceCodeActivity");
+@@ -531,8 +548,14 @@
+ 				overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+ 				finish();
+ 			}
+-        	faceUnlockNew = true;
+-            updateStatus();
++			if(!mFromBootWizard && (Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0)){
++				Intent intent = WizardManagerHelper.getNextIntent(getIntent(), Activity.RESULT_OK);
++			    startActivityForResult(intent, 1000);
++				overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
++			}else{
++				faceUnlockNew = true;
++				updateStatus();
++			}	
+         } else if (requestCode == CONFIRM_REQUEST && resultCode  == Activity.RESULT_CANCELED && isExistFaceData()) {
+         	verificationPassed = false;
+         	isExistSafetyPwd = false;
+@@ -555,7 +578,7 @@
+ 
+     private boolean initCustomActionBar() {
+         myactionbar = getActionBar();
+-        if (myactionbar == null) {
++        if (myactionbar == null || (Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0)) {
+             return false;
+         } else {
+             myactionbar.setDisplayOptions(ActionBar.DISPLAY_SHOW_CUSTOM);
+Index: packages/apps/Settings/src/com/android/settings/DateTimeSettingsSetupWizard.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DateTimeSettingsSetupWizard.java	(revision 9100)
++++ packages/apps/Settings/src/com/android/settings/DateTimeSettingsSetupWizard.java	(revision 9101)
+@@ -190,6 +190,7 @@
+             }
+ 			Intent intent = WizardManagerHelper.getNextIntent(getIntent(), Activity.RESULT_OK);
+ 			startActivityForResult(intent, 1000);
++			overridePendingTransition(R.anim.gome_activity_open_enter,R.anim.gome_activity_open_exit);
+ 			break;
+         }  // $FALL-THROUGH$
+         case R.id.skip_button: {
+Index: packages/apps/Settings/res/layout/face_unlock_main.xml
+===================================================================
+--- packages/apps/Settings/res/layout/face_unlock_main.xml	(revision 9100)
++++ packages/apps/Settings/res/layout/face_unlock_main.xml	(revision 9101)
+@@ -396,4 +396,24 @@
+ 
+     </RelativeLayout>
+ -->
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++	android:padding="10dip"
++        android:orientation="vertical" >
++        <Button
++	    style="@style/SetupWizardButton.Positive"
++            android:id="@+id/btn_next"
++            android:layout_width="wrap_content"
++            android:layout_height="40dp"
++	    android:visibility="gone"
++            android:layout_alignParentEnd="true"
++            android:layout_gravity="right"
++	    android:textColor="#FFFFFF"
++            android:background="#2E64FE"
++	    android:textSize="20dp"
++            android:text="@string/next_label"
++         >
++        </Button>
++    </LinearLayout>
+ </LinearLayout>
+Index: packages/apps/Settings/res/layout/date_time_settings_setupwizard.xml
+===================================================================
+--- packages/apps/Settings/res/layout/date_time_settings_setupwizard.xml	(revision 9100)
++++ packages/apps/Settings/res/layout/date_time_settings_setupwizard.xml	(revision 9101)
+@@ -58,8 +58,9 @@
+             style="@style/SetupWizardButton.Positive"
+             android:layout_width="wrap_content"
+             android:textColor="#FFFFFF"
++	    android:textSize="20dp"
+             android:background="#2E64FE"
+-            android:layout_height="wrap_content"
++            android:layout_height="40dp"
+             android:layout_alignParentEnd="true"
+             android:text="@string/next_label"
+         />

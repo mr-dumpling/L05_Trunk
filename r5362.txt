@@ -1,0 +1,55 @@
+Index: packages/apps/Dialer/src/com/android/dialer/calllog/MissedCallNotifier.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/calllog/MissedCallNotifier.java	(revision 5361)
++++ packages/apps/Dialer/src/com/android/dialer/calllog/MissedCallNotifier.java	(revision 5362)
+@@ -24,6 +24,7 @@
+ import android.graphics.Bitmap;
+ import android.os.AsyncTask;
+ import android.provider.CallLog.Calls;
++import android.provider.Settings;
+ import android.text.TextUtils;
+ import android.util.Log;
+ 
+@@ -156,8 +157,9 @@
+                 // Include a public version of the notification to be shown when the missed call
+                 // notification is shown on the user's lock screen and they have chosen to hide
+                 // sensitive notification information.
+-                .setPublicVersion(publicBuilder.build());
+-
++                .setPublicVersion(publicBuilder.build())
++                .setSound(Settings.System.DEFAULT_NOTIFICATION_URI);
++	
+         // Add additional actions when there is only 1 missed call and the user isn't locked
+         if (UserManagerCompat.isUserUnlocked(mContext) && count == 1) {
+             if (!TextUtils.isEmpty(number)
+Index: frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 5361)
++++ frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 5362)
+@@ -3778,6 +3778,7 @@
+                 }
+             } else {
+                 final Notification ledno = ledNotification.sbn.getNotification();
++				final String packageName = ledNotification.sbn.getPackageName();
+                 int ledARGB = ledno.ledARGB;
+                 int ledOnMS = ledno.ledOnMS;
+                 int ledOffMS = ledno.ledOffMS;
+@@ -3815,8 +3816,17 @@
+                         ledOffMS = 1000;
+                     }
+                     // pulse repeatedly
+-                    mNotificationLight.setFlashing(ledARGB, Light.LIGHT_FLASH_TIMED,
++                   if("com.android.dialer".equals(packageName)){
++						ContentResolver contentResolver=getContext().getContentResolver();
++						int value=Settings.Global.getInt(contentResolver,KEY_LEDEVENT,1);
++						if(value==1){
++							mNotificationLight.setFlashing(ledARGB, Light.LIGHT_FLASH_TIMED,
+                             ledOnMS, ledOffMS);
++						}
++					}else{
++						 mNotificationLight.setFlashing(ledARGB, Light.LIGHT_FLASH_TIMED,
++                            ledOnMS, ledOffMS);
++					}
+                 }
+                 if (mStatusBar != null) {
+                     // let SystemUI make an independent decision

@@ -1,0 +1,78 @@
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 7556)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 7557)
+@@ -324,7 +324,9 @@
+ 			    scannerStart = true;
+ 		    }
+ 			else{
+-				createNewPwd();
++				if (checkFirstSetFaceKey()){
++					createNewPwd();
++				}
+ 			}
+ 			break;
+ 		case DEMONSTRATION_MODEL_LAYOUT_NUM:
+@@ -353,7 +355,7 @@
+ 		boolean checkValue = mSharedPreference.getBoolean("is_first_set_face_key", true);
+ 		return checkValue;
+ 	}
+-
++/* 
+ 	private void createDisclaimerDialog(int mRequest) {
+ 		final int requestValue = mRequest;
+ 		AlertDialog mDisclaimerDialog = new AlertDialog.Builder(mcontext)
+@@ -374,7 +376,7 @@
+ 				}).create();
+ 		mDisclaimerDialog.show();
+ 	}
+-
++ */
+ 	View inflate;
+     public void hintDialogShow(int index) {
+ 
+@@ -419,15 +421,11 @@
+     }
+ 
+ 	void startFaceScanner(int request){
+-		if (checkFirstSetFaceKey()){
+-			createDisclaimerDialog(request);
+-		} else {
+ 			Intent intent = new Intent();
+ 			intent.setClassName("com.android.systemui", "com.face.scanner.FaceActivity");//
+ 			intent.putExtra("requestType",request);
+ 			intent.putExtra("source",FROM_SETTING);
+ 			startActivityForResult(intent,request);
+-		}
+     }
+ 
+ 	@Override
+@@ -475,6 +473,8 @@
+ 			.setPositiveButton(R.string.ok_alwe, new DialogInterface.OnClickListener() {
+ 				@Override
+ 				public void onClick(DialogInterface dialog, int which) {
++					mEditor.putBoolean("is_first_set_face_key", false);
++					mEditor.commit();
+ 					dialog.dismiss();
+ 					Intent intent = new Intent(mcontext, ChooseLockGeneric.class);
+ 					intent.putExtra(ChooseLockGeneric.ChooseLockGenericFragment.MINIMUM_QUALITY_KEY,
+@@ -485,19 +485,6 @@
+ 					intent.putExtra(ChooseLockSettingsHelper.EXTRA_KEY_FOR_FINGERPRINT, false);
+ 					startActivityForResult(intent, CHOOSE_LOCK_GENERIC_REQUEST);
+ 				}
+-			})
+-			.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
+-				@Override
+-				public void onClick(DialogInterface dialog, int which) {
+-					dialog.dismiss();
+-					// updateStatus();
+-				}
+-			})
+-			.setOnDismissListener(new DialogInterface.OnDismissListener() {
+-				@Override
+-				public void onDismiss(DialogInterface dialogInterface) {
+-					// updateStatus();
+-				}
+ 			}).create();
+ 		createNewPwdDialog.show();
+ 	}

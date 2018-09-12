@@ -1,0 +1,416 @@
+Index: frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 2515)
++++ frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 2516)
+@@ -172,6 +172,8 @@
+ import java.util.Map;
+ import java.util.Map.Entry;
+ import java.util.Set;
++import java.util.Timer;
++import java.util.TimerTask;
+ import java.util.concurrent.TimeUnit;
+ 
+ /// M: MTK components for DM lock.
+@@ -323,6 +325,8 @@
+     private long mLastOverRateLogTime;
+     private float mMaxPackageEnqueueRate = DEFAULT_MAX_NOTIFICATION_ENQUEUE_RATE;
+     private String mSystemNotificationSound;
++    private Timer timer;
++    private TimerTask task;
+ 
+     private static class Archive {
+         final int mBufferSize;
+@@ -3763,34 +3767,67 @@
+                 mLights.remove(owner);
+             }
+         }
++        if ((mNotificationList.size() - 1) > 0 && SystemProperties.getInt("persist.sys.notification_led", 1) != 0) {
++            // Don't flash while we are in a call or screen is on
++            // if (mLedNotification == null || mInCall || mScreenOn) {
++            /// M: Add DM/PPL lock related.
++            if (ledNotification == null || mInCall /*|| mScreenOn */ || mDmLock || mPplLock) {
++                mNotificationLight.turnOff();
++                if (mStatusBar != null) {
++                    mStatusBar.notificationLightOff();
++                }
++            } else {
++                final Notification ledno = ledNotification.sbn.getNotification();
++                int ledARGB = ledno.ledARGB;
++                int ledOnMS = ledno.ledOnMS;
++                int ledOffMS = ledno.ledOffMS;
++                if ((ledno.defaults & Notification.DEFAULT_LIGHTS) != 0) {
++                    ledARGB = mDefaultNotificationColor;
++                    ledOnMS = mDefaultNotificationLedOn;
++                    ledOffMS = mDefaultNotificationLedOff;
++                }
+ 
+-        // Don't flash while we are in a call or screen is on
+-        // if (mLedNotification == null || mInCall || mScreenOn) {
+-        /// M: Add DM/PPL lock related.
+-        if (ledNotification == null || mInCall /*|| mScreenOn */ || mDmLock || mPplLock) {
++                if (mNotificationPulseEnabled) {
++                    if (SystemProperties.getBoolean("ro.tcl.led", false)) {
++                        if (!mScreenOn) {
++                            return;
++                        }
++                        if (timer == null) {
++                            timer = new Timer();
++                            task = new TimerTask() {
++                                @Override
++                                public void run() {
++                                    mNotificationLight.turnOff();
++                                }
++                            };
++                            timer.schedule(task, 60*60*1000);
++                        } else {
++                            task.cancel();
++                            task = new TimerTask() {
++                                @Override
++                                public void run() {
++                                    mNotificationLight.turnOff();
++                                }
++                            };
++                            timer.schedule(task, 60*60*1000);
++                        }
++                        ledOnMS = 1000;
++                        ledOffMS = 1000;
++                    }
++                    // pulse repeatedly
++                    mNotificationLight.setFlashing(ledARGB, Light.LIGHT_FLASH_TIMED,
++                            ledOnMS, ledOffMS);
++                }
++                if (mStatusBar != null) {
++                    // let SystemUI make an independent decision
++                    mStatusBar.notificationLightPulse(ledARGB, ledOnMS, ledOffMS);
++                }
++            }
++        } else {
+             mNotificationLight.turnOff();
+             if (mStatusBar != null) {
+                 mStatusBar.notificationLightOff();
+             }
+-        } else {
+-            final Notification ledno = ledNotification.sbn.getNotification();
+-            int ledARGB = ledno.ledARGB;
+-            int ledOnMS = ledno.ledOnMS;
+-            int ledOffMS = ledno.ledOffMS;
+-            if ((ledno.defaults & Notification.DEFAULT_LIGHTS) != 0) {
+-                ledARGB = mDefaultNotificationColor;
+-                ledOnMS = mDefaultNotificationLedOn;
+-                ledOffMS = mDefaultNotificationLedOff;
+-            }
+-            if (mNotificationPulseEnabled) {
+-                // pulse repeatedly
+-                mNotificationLight.setFlashing(ledARGB, Light.LIGHT_FLASH_TIMED,
+-                        ledOnMS, ledOffMS);
+-            }
+-            if (mStatusBar != null) {
+-                // let SystemUI make an independent decision
+-                mStatusBar.notificationLightPulse(ledARGB, ledOnMS, ledOffMS);
+-            }
+         }
+     }
+ 
+Index: frameworks/base/services/core/java/com/android/server/BatteryService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/BatteryService.java	(revision 2515)
++++ frameworks/base/services/core/java/com/android/server/BatteryService.java	(revision 2516)
+@@ -1025,41 +1025,44 @@
+                 //Get led status in IPO mode
+                 getIpoLedStatus();
+             }
+-            if (level < mLowBatteryWarningLevel) {
+-                if (status == BatteryManager.BATTERY_STATUS_CHARGING) {
+-                    updateLedStatus();
+-                    // Solid red when battery is charging
+-                    mBatteryLight.setColor(mBatteryLowARGB);
+-                } else {
+-                    LowLevelFlag = true;
+-                    updateLedStatus();
+-                    // Flash red when battery is low and not charging
+-                    mBatteryLight.setFlashing(mBatteryLowARGB, Light.LIGHT_FLASH_TIMED,
+-                            mBatteryLedOn, mBatteryLedOff);
+-                }
+-            } else if (status == BatteryManager.BATTERY_STATUS_CHARGING
+-                    || status == BatteryManager.BATTERY_STATUS_FULL) {
+-                if (status == BatteryManager.BATTERY_STATUS_FULL || level >= 90) {
+-                    updateLedStatus();
+-                    // Solid green when full or charging and nearly full
+-                    mBatteryLight.setColor(mBatteryFullARGB);
+-                } else {
+-                    updateLedStatus();
+-                    // Solid orange when charging and halfway full
+-                    mBatteryLight.setColor(mBatteryMediumARGB);
+-                }
+-            } else {
+-                if (ipo_led_on && mIPOBoot) {
++            if (SystemProperties.getInt("persist.sys.battery_led", 1) != 0) {
++                if (level < mLowBatteryWarningLevel) {
++                    if (status == BatteryManager.BATTERY_STATUS_CHARGING) {
++                        updateLedStatus();
++                        // Solid red when battery is charging
++                        mBatteryLight.setColor(mBatteryLowARGB);
++                    } else {
++                        LowLevelFlag = true;
++                        updateLedStatus();
++                        // Flash red when battery is low and not charging
++                        mBatteryLight.setFlashing(mBatteryLowARGB, Light.LIGHT_FLASH_TIMED,
++                                mBatteryLedOn, mBatteryLedOff);
++                    }
++                } else if (status == BatteryManager.BATTERY_STATUS_CHARGING
++                        || status == BatteryManager.BATTERY_STATUS_FULL) {
+                     if (status == BatteryManager.BATTERY_STATUS_FULL || level >= 90) {
++                        updateLedStatus();
++                        // Solid green when full or charging and nearly full
+                         mBatteryLight.setColor(mBatteryFullARGB);
+-                    }
+-                    else {
++                    } else {
++                        updateLedStatus();
++                        // Solid orange when charging and halfway full
+                         mBatteryLight.setColor(mBatteryMediumARGB);
+                     }
+-                    mIPOBoot = false;
+-                    ipo_led_on = false;
++                } else {
++                    if (ipo_led_on && mIPOBoot) {
++                        if (status == BatteryManager.BATTERY_STATUS_FULL || level >= 90) {
++                            mBatteryLight.setColor(mBatteryFullARGB);
++                        } else {
++                            mBatteryLight.setColor(mBatteryMediumARGB);
++                        }
++                        mIPOBoot = false;
++                        ipo_led_on = false;
++                    }
++                    // No lights if not charging and not low
++                    mBatteryLight.turnOff();
+                 }
+-                // No lights if not charging and not low
++            } else {
+                 mBatteryLight.turnOff();
+             }
+         }
+Index: device/ausshine/aus6739_66_n1/device.mk
+===================================================================
+--- device/ausshine/aus6739_66_n1/device.mk	(revision 2515)
++++ device/ausshine/aus6739_66_n1/device.mk	(revision 2516)
+@@ -190,3 +190,10 @@
+ else
+   PRODUCT_PROPERTY_OVERRIDES += ro.tcl.lscreen=false
+ endif
++
++ifeq (yes,$(strip $(TCL_LED_SUPPORT)))
++  PRODUCT_PROPERTY_OVERRIDES += ro.tcl.led=true
++else
++  PRODUCT_PROPERTY_OVERRIDES += ro.tcl.led=false
++endif
++
+Index: packages/apps/Settings/src/com/android/settings/LEDSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/LEDSettings.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/LEDSettings.java	(revision 2516)
+@@ -0,0 +1,62 @@
++package com.android.settings;
++
++import android.os.Bundle;
++import android.os.SystemProperties;
++import android.support.v7.preference.Preference;
++import android.support.v14.preference.SwitchPreference;
++import android.util.Log;
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++/**
++ * Created by Administrator on 2017/11/21.
++ */
++public class LEDSettings  extends SettingsPreferenceFragment implements Preference.OnPreferenceChangeListener{
++    private static final String TAG = "LEDSettings";
++    private SwitchPreference NSwitchPreference,BSwitchPreference;
++    private static final String KEY_SP_NOTIFICATION = "notification";
++    private static final String KEY_SP_BATTERY = "battery";
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        addPreferencesFromResource(R.xml.led_settings);
++        NSwitchPreference=(SwitchPreference)findPreference(KEY_SP_NOTIFICATION);
++        BSwitchPreference=(SwitchPreference)findPreference(KEY_SP_BATTERY);
++
++        NSwitchPreference.setOnPreferenceChangeListener(this);
++        BSwitchPreference.setOnPreferenceChangeListener(this);
++    }
++    @Override
++    protected int getMetricsCategory() {
++        return MetricsEvent.PRIVACY;
++    }
++    @Override
++    public void onResume() {
++        super.onResume();
++        updataState();
++    }
++public  void  updataState(){
++    if (NSwitchPreference != null) {
++        int NS = SystemProperties.getInt("persist.sys.notification_led",1);
++        Log.d("wanghongjian", "updataState: NS = "+NS);
++        NSwitchPreference.setChecked(NS != 0);
++    }
++    if (BSwitchPreference != null) {
++        int BS =SystemProperties.getInt("persist.sys.battery_led",1);
++        Log.d("wanghongjian", "updataState: BS = "+BS);
++        BSwitchPreference.setChecked(BS != 0);
++    }
++}
++    @Override
++    public boolean onPreferenceChange(Preference preference, Object objValue) {
++        String key = preference.getKey();
++        if (KEY_SP_NOTIFICATION.equals(key)){
++            boolean auto = (Boolean) objValue;
++            SystemProperties.set("persist.sys.notification_led",auto?"1":"0");
++            Log.d("wanghongjian", "updataState: get N = "+SystemProperties.getInt("persist.sys.notification_led",1));
++        }else if (KEY_SP_BATTERY.equals(key)){
++            boolean auto = (Boolean) objValue;
++            SystemProperties.set("persist.sys.battery_led",auto?"1":"0");
++            Log.d("wanghongjian", "updataState: get B = "+SystemProperties.getInt("persist.sys.battery_led",1));
++        }
++        return true;
++    }
++}
+Index: packages/apps/Settings/src/com/android/settings/DisplaySettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 2515)
++++ packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 2516)
+@@ -90,6 +90,7 @@
+     private static final String KEY_SCREEN_TIMEOUT = "screen_timeout";
+     private static final String KEY_FONT_SIZE = "font_size";
+     private static final String KEY_CUSTOM_FONT_SIZE = "custom_font_size";
++    private static final String KEY_NOTIFICATION_LED = "notification_led";
+     private static final String KEY_SCREEN_SAVER = "screensaver";
+     private static final String KEY_LIFT_TO_WAKE = "lift_to_wake";
+     private static final String KEY_DOZE = "doze";
+@@ -110,6 +111,7 @@
+     private TimeoutListPreference mScreenTimeoutPreference;
+     private Preference mNightModePreference;
+     private Preference mScreenSaverPreference;
++    private Preference mNotificationLEDPreference;
+     private SwitchPreference mLiftToWakePreference;
+     private SwitchPreference mDozePreference;
+     private SwitchPreference mTapToWakePreference;
+@@ -138,6 +140,11 @@
+                         com.android.internal.R.bool.config_dreamsSupported) == false) {
+             getPreferenceScreen().removePreference(mScreenSaverPreference);
+         }
++		mNotificationLEDPreference = findPreference(KEY_NOTIFICATION_LED);
++        Log.d("whj", "onCreate: = "+(SystemProperties.getBoolean("ro.tcl.led", false) == true));
++        if (SystemProperties.getBoolean("ro.tcl.led", false) == false) {
++            getPreferenceScreen().removePreference(mNotificationLEDPreference);
++			}
+         mScreenTimeoutPreference = (TimeoutListPreference) findPreference(KEY_SCREEN_TIMEOUT);
+ 
+         mFontSizePref = findPreference(KEY_FONT_SIZE);
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 2515)
++++ packages/apps/Settings/res/values/strings.xml	(revision 2516)
+@@ -8090,4 +8090,10 @@
+     <string name="title_activity_face_entry_settings">Facecode</string>
+     <string name="backup_and_reset_summary">Backup disabled</string>
+     <string name="unlock_mode_off_toast">The current lock screen mode can not be jumped</string>
++	
++	<!-- add for Notification LED-->
++    <string name="notification_led_title">Notification LED</string>
++    <string name="notification_led">Pluse notification light</string>
++    <string name="battery_led">Battery charging</string>
++
+ </resources>
+Index: packages/apps/Settings/res/xml/led_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/led_settings.xml	(revision 0)
++++ packages/apps/Settings/res/xml/led_settings.xml	(revision 2516)
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:settings="http://schemas.android.com/apk/res/com.android.settings"
++    android:title="@string/notification_led_title">
++    <SwitchPreference
++        android:key="notification"
++        android:title="@string/notification_led"
++        />
++    <SwitchPreference
++        android:key="battery"
++        android:title="@string/battery_led"
++        />
++</PreferenceScreen>
+\ No newline at end of file
+Index: packages/apps/Settings/res/xml/display_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/display_settings.xml	(revision 2515)
++++ packages/apps/Settings/res/xml/display_settings.xml	(revision 2516)
+@@ -77,6 +77,11 @@
+                 android:summary="@string/camera_gesture_desc" />
+ 
+         <PreferenceScreen
++                android:key="notification_led"
++                android:title="@string/notification_led_title"
++            android:fragment="com.android.settings.LEDSettings"/>
++
++        <PreferenceScreen
+                 android:key="screensaver"
+                 android:title="@string/screensaver_settings_title"
+                 android:fragment="com.android.settings.DreamSettings" />
+Index: vendor/branch/5058J/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058J/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2515)
++++ vendor/branch/5058J/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2516)
+@@ -720,3 +720,4 @@
+ 
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
++TCL_LED_SUPPORT = no
+\ No newline at end of file
+Index: vendor/branch/5058A/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2515)
++++ vendor/branch/5058A/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2516)
+@@ -720,3 +720,4 @@
+ 
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
++TCL_LED_SUPPORT = no
+\ No newline at end of file
+Index: vendor/branch/980CN1/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/980CN1/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2515)
++++ vendor/branch/980CN1/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2516)
+@@ -717,5 +717,5 @@
+ #CREATE_PROJECT_INFO=20171102102954
+ DMNR_COMPLEX_ARCH_SUPPORT = yes
+ MTK_BOOT_WIZARD = yes
+-
++TCL_LED_SUPPORT = no
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+Index: vendor/branch/5058T/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058T/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2515)
++++ vendor/branch/5058T/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2516)
+@@ -720,3 +720,4 @@
+ 
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
++TCL_LED_SUPPORT = no
+\ No newline at end of file
+Index: vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2515)
++++ vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2516)
+@@ -720,3 +720,4 @@
+ 
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
++TCL_LED_SUPPORT = no
+\ No newline at end of file
+Index: vendor/branch/5058Y/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058Y/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2515)
++++ vendor/branch/5058Y/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 2516)
+@@ -720,3 +720,4 @@
+ 
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
++TCL_LED_SUPPORT = yes

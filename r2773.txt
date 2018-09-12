@@ -1,0 +1,1520 @@
+Index: vendor/branch/5058Y/packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/AndroidManifest.xml	(revision 2772)
++++ vendor/branch/5058Y/packages/apps/Settings/AndroidManifest.xml	(revision 2773)
+@@ -3534,5 +3534,17 @@
+         <service android:name=".WakeService"
+ 				android:exported="true"
+ 				android:permission="android.permission.WAKE_LOCK" />
++     
++      <!-- wizard for apn selection when multiple choice found by auto-selection -->
++        <activity android:name="ApnSelectionActivity"
++            android:label="@string/apn_settings"
++            android:theme="@*android:style/Theme.Material.Light.Dialog.Alert"
++            android:finishOnCloseSystemDialogs="true">
++            <intent-filter>
++                <action android:name="android.apn.action.APN_SELECTION" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++    
+     </application>
+ </manifest>
+Index: vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 0)
++++ vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 2773)
+@@ -0,0 +1,632 @@
++package com.android.settings;
++
++/**
++ * Created by Administrator on 2017/12/4.
++ */
++
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++
++import android.net.Uri;
++import android.os.PersistableBundle;
++import android.os.ServiceManager;
++import android.support.v4.app.Fragment;
++import android.app.Activity;
++import android.os.Bundle;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.PreferenceGroup;
++import android.telephony.CarrierConfigManager;
++import android.text.TextUtils;
++import android.view.LayoutInflater;
++import android.view.Menu;
++import android.view.MenuItem;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.ArrayAdapter;
++import android.widget.ListAdapter;
++import android.widget.ListView;
++import android.widget.SimpleAdapter;
++import android.os.Build;
++import android.widget.AdapterView;
++import android.widget.AdapterView.OnItemClickListener;
++import android.provider.Telephony;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.content.Context;
++import android.os.UserManager;
++import android.util.Log;
++import android.content.ContentResolver;
++import android.database.Cursor;
++import android.widget.Button;
++import android.view.View.OnClickListener;
++import android.view.View;
++import android.widget.Toast;
++import android.content.ContentValues;
++import android.os.SystemProperties;
++import android.provider.Settings;
++
++
++import com.android.internal.telephony.ITelephony;
++import com.android.internal.telephony.PhoneConstants;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.internal.telephony.TelephonyProperties;
++import com.android.internal.telephony.uicc.IccRecords;
++import com.android.internal.telephony.uicc.UiccController;
++import com.mediatek.settings.FeatureOption;
++import com.mediatek.settings.cdma.CdmaApnSetting;
++import com.mediatek.settings.cdma.CdmaUtils;
++import com.mediatek.settings.ext.IApnSettingsExt;
++import com.mediatek.settings.ext.IRcseOnlyApnExt;
++import com.mediatek.settings.ext.IRcseOnlyApnExt.OnRcseOnlyApnStateChangedListener;
++import com.mediatek.settings.sim.SimHotSwapHandler;
++import com.mediatek.settings.sim.TelephonyUtils;
++import com.mediatek.telephony.TelephonyManagerEx;
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++import com.android.internal.telephony.PhoneConstants;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.internal.telephony.dataconnection.ApnSetting;
++import com.android.internal.telephony.uicc.IccRecords;
++import com.android.internal.telephony.uicc.UiccController;
++import com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
++import com.mediatek.settings.UtilsExt;
++import com.mediatek.settings.sim.SimHotSwapHandler.OnSimHotSwapListener;
++
++public class ApnSelectionActivity extends Activity implements
++        Preference.OnPreferenceChangeListener{
++
++    private SubscriptionInfo sir;
++    private SubscriptionInfo mSubscriptionInfo;
++    private SubscriptionInfo mSubscriptionInfo1;
++    private List<SubscriptionInfo> mAvailableSubInfos = null;
++    private String mSelectedKey;
++//    private UiccController mUiccController;
++    private boolean mUnavailable;
++//    private boolean mHideImsApn;
++    public static final String PREFERRED_APN_URI =
++            "content://telephony/carriers/preferapn";
++    public static final String MVNO_TYPE = "mvno_type";
++    public static final String MVNO_MATCH_DATA = "mvno_match_data";
++    public static final String APN_ID = "apn_id";
++    public static final String SUB_ID = "sub_id";
++    private static final String TAG = "ApnSelectionActivity";
++    /// M: add for SVLTE project to update preferred APN @{
++    private static final String CT_NUMERIC_CDMA = "46003";
++    private static final String CT_NUMERIC_LTE = "46011";
++    private static final int ID_INDEX = 0;
++    private static final int NAME_INDEX = 1;
++    private static final int APN_INDEX = 2;
++    private static final int TYPES_INDEX = 3;
++    private static final int SOURCE_TYPE_INDEX = 4;
++    Button apnBtn = null;
++    ListView listmenu_mms = null;
++    ListView menuListView = null;
++    ArrayList list = new ArrayList();
++
++    List<Map<String, Object>> list_apn = new ArrayList<Map<String, Object>>();
++    List<Map<String, Object>> list_sms = new ArrayList<Map<String, Object>>();
++    /// @}
++    SimpleAdapter adapter;
++    private UserManager mUm;
++    private IApnSettingsExt mApnExt;
++    private IRcseOnlyApnExt mRcseExt;
++    private ContentResolver mContentResolver;
++
++
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.apn_activity);
++        final int subId = getIntent().getIntExtra(SUB_ID,
++                SubscriptionManager.INVALID_SUBSCRIPTION_ID);
++//        mSubscriptionInfo = SubscriptionManager.from(this).getActiveSubscriptionInfo(subId);
++////        mUiccController = UiccController.getInstance();
++//        if (mSubscriptionInfo == null) {
++//            Log.d(TAG, "onCreate()... Invalid subId: " + subId);
++//            finish();
++//        }
++        apnBtn = (Button) findViewById(R.id.btn_apn);
++        TelephonyManager telephonyManager = TelephonyManager.getDefault();
++        ITelephony iTelephony =
++                ITelephony.Stub.asInterface(ServiceManager.getService("phone"));
++        final int numSlots = telephonyManager.getSimCount();
++
++        mAvailableSubInfos = new ArrayList<SubscriptionInfo>();
++        for (int i = 0; i < numSlots; i++) {
++            sir = findRecordBySlotId(ApnSelectionActivity.this, i);
++            Log.d(TAG, "mSubscriptionInfomSubscriptionInfo==" + mSubscriptionInfo);
++            if (sir != null) {
++                Log.d(TAG, "mSubscriptionInfo==" + mSubscriptionInfo);
++                mAvailableSubInfos.add(sir);
++            }
++        }
++        for (int i = 0; i < mAvailableSubInfos.size(); i++) {
++            mSubscriptionInfo = mAvailableSubInfos.get(i);
++            Log.d(TAG, "mAvailableSubInfos.get(i)==" + mAvailableSubInfos.get(i) + "mSubscriptionInfo==" + mSubscriptionInfo);
++        }
++
++        Log.d(TAG, "mAvailableSubInfos.size()==" + mAvailableSubInfos.size() + "mSubscriptionInfo1==" + mSubscriptionInfo);
++
++        Log.d(TAG, "numSlots=" + numSlots);
++        mUm = (UserManager) getSystemService(Context.USER_SERVICE);
++
++        mApnExt = UtilsExt.getApnSettingsPlugin(this);
++        mApnExt.updateTetherState();
++
++        mRcseExt = UtilsExt.getRcseApnPlugin(this);
++        mRcseExt.onCreate(new OnRcseOnlyApnStateChangedListener() {
++            @Override
++            public void OnRcseOnlyApnStateChanged() {
++                Log.d(TAG, "OnRcseOnlyApnStateChanged()");
++                if (mSubscriptionInfo.getSubscriptionId() !=
++                        SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
++                    fillList(0);
++                }
++            }
++        }, subId);
++        if(mAvailableSubInfos.size()>1){
++            apnBtn.setText(this.getString(R.string.next_label));//next_label
++        }
++        fillList(0);
++        menuListView = (ListView) findViewById(R.id.listmenu);
++        menuListView.setAdapter((ListAdapter) new ArrayAdapter<String>(this,
++                android.R.layout.simple_list_item_single_choice, list));
++        menuListView.setItemChecked(0, true);///
++
++        menuListView.setOnItemClickListener(new OnItemClickListener() {
++            @Override
++            public void onItemClick(AdapterView<?> arg0, View view, int position, long arg3) {
++                Log.d(TAG, "position=" + position);
++                Log.d(TAG, "mSubscriptionInfo=" + mSubscriptionInfo);
++                String name = list.get(position).toString();
++                String key = "";
++
++                for (Map<String, Object> map : list_apn) {
++                    for (String k : map.keySet()) {
++                        if (map.get(k).equals(name)) {
++                            key = map.get("key").toString();
++                            ;
++                        }
++                        Log.d("TAG", "map.get(k)=" + map.get(k));
++                    }
++
++                }
++
++                Log.d("TAG", "view.getText()=" + name);
++                setSelectedApnKey(key);
++            }
++        });
++
++        listmenu_mms = (ListView) findViewById(R.id.listmenu_mms);
++        adapter = new SimpleAdapter(this, list_sms, R.layout.listmenu,
++                new String[]{"name", "apn"},
++                new int[]{R.id.title, R.id.summary});
++        listmenu_mms.setAdapter(adapter);
++        apnBtn.setOnClickListener(new OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                Toast.makeText(ApnSelectionActivity.this, R.string.dashboard_title,
++                        Toast.LENGTH_SHORT).show();
++                if (apnBtn.getText().equals(getResources().getString(R.string.next_label))) {
++                    fillList(1);
++                    ArrayAdapter sAdapter = (ArrayAdapter) menuListView.getAdapter();
++                    sAdapter.notifyDataSetChanged();
++                    SimpleAdapter sAdapter_sms = (SimpleAdapter) listmenu_mms.getAdapter();
++                    sAdapter_sms.notifyDataSetChanged();
++                    apnBtn.setText(getResources().getString(R.string.finish_button_label));//getResources().getString
++                } else {
++                    finish();
++                }
++
++            }
++        });
++        if (!(list_apn.size()>1))finish();
++       /* CarrierConfigManager configManager = (CarrierConfigManager)
++                getSystemService(Context.CARRIER_CONFIG_SERVICE);
++        PersistableBundle b = configManager.getConfig();
++        mHideImsApn = b.getBoolean(CarrierConfigManager.KEY_HIDE_IMS_APN_BOOL);*/
++    }
++
++    @Override
++    public void onResume() {
++
++        super.onResume();
++    }
++
++
++
++
++    private void setSelectedApnKey(String key) {
++        mSelectedKey = key;
++        ContentResolver resolver = getContentResolver();
++
++        ContentValues values = new ContentValues();
++        values.put(APN_ID, mSelectedKey);
++
++        /// M: add sub id for prefer APN
++        // resolver.update(PREFERAPN_URI, values, null, null);
++        resolver.update(getPreferApnUri(mSubscriptionInfo.getSubscriptionId()), values,
++                null, null);
++    }
++
++    private Uri getPreferApnUri(int subId) {
++        Uri preferredUri = Uri.withAppendedPath(Uri.parse(PREFERRED_APN_URI), "/subId/" + subId);
++        Log.d(TAG, "getPreferredApnUri: " + preferredUri);
++        /// M: for plug-in
++        preferredUri = mApnExt.getPreferCarrierUri(preferredUri, subId);
++        return preferredUri;
++    }
++    /*private void fillList() {
++        final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++        String mccmnc = mSubscriptionInfo == null ? ""
++                : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
++
++        /// M: for plug-in @{
++        // use mcc&mnc in IMPI to query apn.
++        Log.d(TAG, "before plugin, mccmnc = " + mccmnc);
++        mccmnc = mApnExt.getOperatorNumericFromImpi(mccmnc,
++                SubscriptionManager.getPhoneId(mSubscriptionInfo.getSubscriptionId()));
++        /// @}
++
++        Log.d(TAG, "mccmnc = " + mccmnc);
++
++        String where = "numeric=\"" + mccmnc + "\"";
++        /// M: for [C2K APN Customization] @{
++        if (mSubscriptionInfo != null) {
++            int subId = mSubscriptionInfo.getSubscriptionId();
++            if (CdmaUtils.isSupportCdma(subId)) {
++                where = CdmaApnSetting.customizeQuerySelectionforCdma(where, mccmnc, subId);
++            }
++        }
++        /// @}
++
++        where += " AND NOT (type='ia' AND (apn=\"\" OR apn IS NULL)) AND user_visible!=0";
++
++        /// M: for VoLTE, do not show ims apn for non-VoLTE project @{
++        *//*
++        if (mHideImsApn) {
++            where.append(" AND NOT (type='ims')");
++        }
++        *//*
++        if (!FeatureOption.MTK_VOLTE_SUPPORT || mHideImsApn) {
++            where += " AND NOT (type='ims' OR type='ia,ims')";
++        }
++        /// @}
++
++        /// M: for plug-in
++        where = mApnExt.getFillListQuery(where, mccmnc);
++
++        Log.d(TAG, "fillList where: " + where);
++
++        /// M: for CU default APN set.
++        *//*
++        Cursor cursor = getContentResolver().query(Telephony.Carriers.CONTENT_URI, new String[] {
++                "_id", "name", "apn", "type", "mvno_type", "mvno_match_data"}, where.toString(),
++                null, Telephony.Carriers.DEFAULT_SORT_ORDER);
++        *//*
++        String order = mApnExt.getApnSortOrder(Telephony.Carriers.DEFAULT_SORT_ORDER);
++        Log.d(TAG, "fillList sort: " + order);
++        Cursor cursor = getContentResolver().query(
++                Telephony.Carriers.CONTENT_URI,
++                new String[] { "_id", "name", "apn", "type", "mvno_type", "mvno_match_data",
++                        "sourcetype" }, where, null, order);
++        /// @}
++
++        if (cursor != null) {
++            Log.d(TAG, "fillList, cursor count: " + cursor.getCount());
++            IccRecords r = null;
++            if (mUiccController != null && mSubscriptionInfo != null) {
++                r = mUiccController.getIccRecords(SubscriptionManager.getPhoneId(
++                        mSubscriptionInfo.getSubscriptionId()), UiccController.APP_FAM_3GPP);
++            }
++            PreferenceGroup apnList = (PreferenceGroup) findPreference("apn_list");
++            apnList.removeAll();
++
++            /// M: for plug-in, use Preference instead ApnPreference for the
++            // convenience of plug-in side
++            ArrayList<Preference> mnoApnList = new ArrayList<Preference>();
++            ArrayList<Preference> mvnoApnList = new ArrayList<Preference>();
++            ArrayList<Preference> mnoMmsApnList = new ArrayList<Preference>();
++            ArrayList<Preference> mvnoMmsApnList = new ArrayList<Preference>();
++
++            mSelectedKey = getSelectedApnKey();
++            cursor.moveToFirst();
++
++            while (!cursor.isAfterLast()) {
++                String name = cursor.getString(NAME_INDEX);
++                String apn = cursor.getString(APN_INDEX);
++                String key = cursor.getString(ID_INDEX);
++                String type = cursor.getString(TYPES_INDEX);
++                String mvnoType = cursor.getString(MVNO_TYPE_INDEX);
++                String mvnoMatchData = cursor.getString(MVNO_MATCH_DATA_INDEX);
++                /// M: check source type, some types are not editable
++                int sourcetype = cursor.getInt(SOURCE_TYPE_INDEX);
++
++                /// M: skip specific APN type
++                if(shouldSkipApn(type)) {
++                    cursor.moveToNext();
++                    continue;
++                }
++
++                /// M: for plug-in
++                name = mApnExt.updateApnName(name, sourcetype);
++
++                ApnPreference pref = new ApnPreference(getApplicationContext());
++
++                pref.setKey(key);
++                pref.setTitle(name);
++                pref.setSummary(apn);
++                pref.setPersistent(false);
++                pref.setOnPreferenceChangeListener(this);
++
++                /// M: for [Read Only APN]
++                pref.setApnEditable(mApnExt.isAllowEditPresetApn(type, apn, mccmnc, sourcetype));
++                pref.setSubId(mSubscriptionInfo == null ? null : mSubscriptionInfo
++                        .getSubscriptionId());
++
++                /// M: for ALPS02500557, do not select emergency APN
++                boolean selectable = ((type == null) || (!type.equals("mms")
++                        && !type.equals("ia") && !type.equals("ims")&& !type.equals("emergency")))
++                        /// M: for plug-in
++                        && mApnExt.isSelectable(type);
++                pref.setSelectable(selectable);
++                Log.d(TAG, "mSelectedKey = " + mSelectedKey + " key = " + key + " name = " + name +
++                        " selectable=" + selectable);
++                if (selectable) {
++                    /// M: select prefer APN later, as the apn list are not solid now @{
++                    *//*
++                    if ((mSelectedKey != null) && mSelectedKey.equals(key)) {
++                        pref.setChecked();
++                    }
++                    *//*
++                    /// @}
++                    addApnToList(pref, mnoApnList, mvnoApnList, r, mvnoType, mvnoMatchData);
++                    /// M: For CT feature,when apns-conf.xml add type extra value "supl",
++                    //     selectable maybe ture when 46011 mms, so need this method.
++                    mApnExt.customizeUnselectableApn(type, mvnoType, mvnoMatchData, mnoApnList, mvnoApnList,
++                            mSubscriptionInfo == null ? null : mSubscriptionInfo
++                                    .getSubscriptionId());
++                } else {
++                    addApnToList(pref, mnoMmsApnList, mvnoMmsApnList, r, mvnoType, mvnoMatchData);
++                    /// M: for plug-in
++                    mApnExt.customizeUnselectableApn(type, mvnoType, mvnoMatchData, mnoMmsApnList, mvnoMmsApnList,
++                            mSubscriptionInfo == null ? null : mSubscriptionInfo
++                                    .getSubscriptionId());
++                }
++                cursor.moveToNext();
++            }
++            cursor.close();
++
++            if (!mvnoApnList.isEmpty()) {
++                mnoApnList = mvnoApnList;
++                mnoMmsApnList = mvnoMmsApnList;
++
++                // Also save the mvno info
++            }
++
++            for (Preference preference : mnoApnList) {
++                apnList.addPreference(preference);
++            }
++            for (Preference preference : mnoMmsApnList) {
++                apnList.addPreference(preference);
++            }
++
++            /// M: always set a prefer APN
++            setPreferApnChecked(mnoApnList);
++
++            /// M: update screen enable state according to airplane mode, SIM radio status, etc.
++            updateScreenEnableState(pref);
++        }
++    }*/
++    private void fillList(int id){
++        final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++        mSubscriptionInfo = mAvailableSubInfos.get(id);
++        if(mSubscriptionInfo !=null){
++            setTitle(mSubscriptionInfo.getCarrierName());
++        }
++
++        final String mccmnc = mSubscriptionInfo == null ? ""
++                : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
++        Log.d(TAG,"mccmnc="+mccmnc+"mSubscriptionInfo.getSubscriptionId()=="+mSubscriptionInfo.getSubscriptionId());
++        String where1 = "numeric=\'" + android.os.SystemProperties.get(TelephonyProperties.PROPERTY_ICC_OPERATOR_NUMERIC, "")+ "\'";
++        String where = mApnExt.getFillListQuery(where1,mccmnc);
++        Log.d(TAG,"where1="+where1);
++        Log.d(TAG,"where="+where);
++        where += " AND NOT (type='ia' AND (apn=\'\' OR apn IS NULL))";
++        where1 +=" AND NOT (type='ia' AND (apn=\'\' OR apn IS NULL))";
++        Log.d(TAG,"where1="+where1);
++        Log.d(TAG,"where="+where);
++
++        /// M: for CU default APN set.
++       /* Cursor cursor = getContentResolver().query(Telephony.Carriers.CONTENT_URI, new String[] {
++                        "_id", "name", "apn", "type", "mvno_type", "mvno_match_data"}, where.toString(),
++                null, Telephony.Carriers.DEFAULT_SORT_ORDER);*/
++        String order = mApnExt.getApnSortOrder(Telephony.Carriers.DEFAULT_SORT_ORDER);
++        Log.d(TAG, "fillList sort: " + order);
++        Cursor cursor = getContentResolver().query(
++                Telephony.Carriers.CONTENT_URI,
++                new String[] { "_id", "name", "apn", "type", "mvno_type", "mvno_match_data",
++                        "sourcetype" }, where, null, order);
++        /// @}
++        if(id==1){
++            list.clear();
++            list_apn.clear();
++            list_sms.clear();
++        }
++       /* while (cursor == null){
++            cursor = getContentResolver().query(
++                    Telephony.Carriers.CONTENT_URI, new String[] {
++                            "_id", "name", "apn", "type", "sourcetype"}, where, null, null);
++            cursor = mApnExt.customizeUnselectableApn(type, mvnoType, mvnoMatchData, mnoMmsApnList, mvnoMmsApnList,
++                    mSubscriptionInfo == null ? null : mSubscriptionInfo
++                            .getSubscriptionId());
++
++        }*/
++        if (cursor != null) {
++
++            // M: define tmp select key
++            String selectedKey = null;
++            cursor.moveToFirst();
++            while (!cursor.isAfterLast()) {
++                String name = cursor.getString(NAME_INDEX);
++                String apn = cursor.getString(APN_INDEX);
++                String key = cursor.getString(ID_INDEX);
++                String type = cursor.getString(TYPES_INDEX);
++                int sourcetype = cursor.getInt(SOURCE_TYPE_INDEX);
++
++                /// M: All tether apn will be selectable for otthers , mms will not be selectable.
++                boolean selectable = mApnExt.isSelectable(type);
++                if (type.contains("default")){
++                if(selectable){
++                    list.add(name);
++                    Map<String, Object> map = new HashMap<String, Object>();
++                    map.put("name", name);
++                    map.put("key", key);
++                    list_apn.add(map);
++                }else{
++                    Map<String, Object> map_sms = new HashMap<String, Object>();
++                    map_sms.put("name", name);
++                    map_sms.put("apn", apn);
++                    list_sms.add(map_sms);
++                }}
++
++                if (shouldSkipApn(type)) {
++                    cursor.moveToNext();
++                    continue;
++                }
++
++                /// M: All tether apn will be selectable for otthers , mms will not be selectable.
++                // boolean selectable = mApnExt.isSelectable(type);
++
++                Log.d(TAG,"mSelectedKey = " + mSelectedKey + " key = " + key + " name = " + name);
++
++                cursor.moveToNext();
++            }
++            cursor.close();
++
++        }
++
++    }
++   /* private void addApnToList(ApnPreference pref, ArrayList<Preference> mnoList,
++                              ArrayList<Preference> mvnoList, IccRecords r, String mvnoType,
++                              String mvnoMatchData) {
++        Log.d(TAG, "mvnoType = " + mvnoType + ", mvnoMatchData = " + mvnoMatchData);
++        if (r != null && !TextUtils.isEmpty(mvnoType) && !TextUtils.isEmpty(mvnoMatchData)) {
++            if (ApnSetting.mvnoMatches(r, mvnoType, mvnoMatchData)) {
++                mvnoList.add(pref);
++                // Since adding to mvno list, save mvno info
++                mMvnoType = mvnoType;
++                mMvnoMatchData = mvnoMatchData;
++                Log.d(TAG, "mvnoMatches...");
++            }
++        } else {
++            mnoList.add(pref);
++        }
++    }*/
++
++    private void setPreferApnChecked(ArrayList<Preference> apnList) {
++        if (apnList == null || apnList.isEmpty()) {
++            return;
++        }
++
++        String selectedKey = null;
++        if (mSelectedKey != null) {
++            for (Preference pref : apnList) {
++                if (mSelectedKey.equals(pref.getKey())) {
++                    ((ApnPreference) pref).setChecked();
++                    selectedKey = mSelectedKey;
++                }
++            }
++        }
++
++        // can't find prefer APN in the list, reset to the first one
++        if (selectedKey == null && apnList.get(0) != null) {
++            ((ApnPreference) apnList.get(0)).setChecked();
++            selectedKey = apnList.get(0).getKey();
++        }
++
++        // save the new APN
++        if (selectedKey != null && selectedKey != mSelectedKey) {
++            setSelectedApnKey(selectedKey);
++            mSelectedKey = selectedKey;
++        }
++
++        Log.d(TAG, "setPreferApnChecked, APN = " + mSelectedKey);
++    }
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++
++        mRcseExt.onDestory();
++    }
++
++
++    private String getSelectedApnKey() {
++        String key = null;
++
++        /// M: add sub id for prefer APN @{
++        /*
++        Cursor cursor = getContentResolver().query(PREFERAPN_URI, new String[] {"_id"},
++                null, null, Telephony.Carriers.DEFAULT_SORT_ORDER);
++                */
++        int subId = mSubscriptionInfo.getSubscriptionId();
++        Cursor cursor = getContentResolver().query(getPreferApnUri(subId), new String[] { "_id" },
++                null, null, Telephony.Carriers.DEFAULT_SORT_ORDER);
++        /// @}
++        if (cursor.getCount() > 0) {
++            cursor.moveToFirst();
++            key = cursor.getString(ID_INDEX);
++        }
++        cursor.close();
++        Log.d(TAG,"getSelectedApnKey(), key = " + key);
++        return key;
++    }
++
++    public static SubscriptionInfo findRecordBySlotId(Context context, final int slotId) {
++        final List<SubscriptionInfo> subInfoList =
++                SubscriptionManager.from(context).getActiveSubscriptionInfoList();
++        if (subInfoList != null) {
++            final int subInfoLength = subInfoList.size();
++
++            for (int i = 0; i < subInfoLength; ++i) {
++                final SubscriptionInfo sir = subInfoList.get(i);
++                if (sir.getSimSlotIndex() == slotId) {
++                    //Right now we take the first subscription on a SIM.
++                    return sir;
++                }
++            }
++        }
++
++        return null;
++    }
++    public boolean onPreferenceChange(Preference preference, Object newValue) {
++        Log.d(TAG, "onPreferenceChange(): Preference - " + preference
++                + ", newValue - " + newValue + ", newValue type - "
++                + newValue.getClass());
++        if (newValue instanceof String) {
++            setSelectedApnKey((String) newValue);
++        }
++
++        return true;
++    }
++    public boolean shouldSkipApn(String type) {
++        /// M: for plug-in
++        return "cmmail".equals(type) || !mRcseExt.isRcseOnlyApnEnabled(type);
++    }
++    /*private void updateScreenEnableState(Context context) {
++        int subId = mSubscriptionInfo.getSubscriptionId();
++        boolean simReady = TelephonyManager.SIM_STATE_READY == TelephonyManager.getDefault()
++                .getSimState(SubscriptionManager.getSlotId(subId));
++        boolean airplaneModeEnabled = android.provider.Settings.System.getInt(context
++                .getContentResolver(), android.provider.Settings.System.AIRPLANE_MODE_ON, -1) == 1;
++
++        boolean enable = !airplaneModeEnabled && simReady;
++        Log.d(TAG, "updateScreenEnableState(), subId = " + subId + " ,airplaneModeEnabled = "
++                + airplaneModeEnabled + " ,simReady = " + simReady);
++        context.setEnabled(
++                /// M: for plug-in
++                enable && mApnExt.getScreenEnableState(subId, this));
++
++    }*/
++}
+Index: vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/sim/SimDialogActivity.java
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/sim/SimDialogActivity.java	(revision 0)
++++ vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/sim/SimDialogActivity.java	(revision 2773)
+@@ -0,0 +1,759 @@
++/*
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings.sim;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.app.Dialog;
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.content.DialogInterface.OnDismissListener;
++import android.content.res.Resources;
++import android.os.Bundle;
++import android.os.SystemProperties;
++import android.telecom.PhoneAccount;
++import android.telecom.PhoneAccountHandle;
++import android.telecom.TelecomManager;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.util.Log;
++import android.view.KeyEvent;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.ArrayAdapter;
++import android.widget.ImageView;
++import android.widget.ListAdapter;
++import android.widget.TextView;
++import android.widget.Toast;
++
++import com.android.settings.R;
++import com.mediatek.internal.telephony.DefaultSmsSimSettings;
++/// M: Add for CT 6M.
++import com.mediatek.settings.FeatureOption;
++import com.mediatek.settings.UtilsExt;
++import com.mediatek.settings.cdma.CdmaUtils;
++import com.mediatek.settings.cdma.OmhEventHandler;
++import com.mediatek.settings.ext.IRCSSettings;
++import com.mediatek.settings.ext.ISettingsMiscExt;
++import com.mediatek.settings.ext.ISimManagementExt;
++import com.mediatek.settings.sim.SimHotSwapHandler;
++import com.mediatek.settings.sim.SimHotSwapHandler.OnSimHotSwapListener;
++import com.mediatek.settings.sim.TelephonyUtils;
++
++import java.util.ArrayList;
++import java.util.Iterator;
++import java.util.List;
++
++public class SimDialogActivity extends Activity {
++    private static String TAG = "SimDialogActivity";
++
++    public static String PREFERRED_SIM = "preferred_sim";
++    public static String DIALOG_TYPE_KEY = "dialog_type";
++    public static final int INVALID_PICK = -1;
++    public static final int DATA_PICK = 0;
++    public static final int CALLS_PICK = 1;
++    public static final int SMS_PICK = 2;
++    public static final int PREFERRED_PICK = 3;
++    private boolean mSwitchInfoFlag = false;
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        final Bundle extras = getIntent().getExtras();
++
++        /// M: [SIM Hot Swap]
++        setSimStateCheck();
++
++        /// M: for plug-in @{
++        mSimManagementExt = UtilsExt.getSimManagmentExtPlugin(getApplicationContext());
++        mMiscExt = UtilsExt.getMiscPlugin(getApplicationContext());
++        mRCSExt = UtilsExt.getRcsSettingsPlugin(getApplicationContext());
++        /// @}
++
++        final int dialogType = extras.getInt(DIALOG_TYPE_KEY, INVALID_PICK);
++
++        switch (dialogType) {
++            case DATA_PICK:
++            case CALLS_PICK:
++            case SMS_PICK:
++                /// M: for AlPS02113443, avoid window leak @{
++                // createDialog(this, dialogType).show();
++                /// M: for ALPS02463456, activity state chaos, add log to check,
++                // can be removed if not happen again @{
++                if (isFinishing()) {
++                    Log.e(TAG, "Activity Finishing!");
++                }
++                /// @}
++
++                mDialog = createDialog(this, dialogType);
++                mDialog.show();
++                /// @}
++                break;
++            case PREFERRED_PICK:
++                /// M: for ALPS02423087, hot plug timing issue, the sub list may already changed @{
++                List<SubscriptionInfo> subs = SubscriptionManager.from(this)
++                        .getActiveSubscriptionInfoList();
++                if (subs == null || subs.size() != 1) {
++                    Log.w(TAG, "Subscription count is not 1, skip preferred SIM dialog");
++                    finish();
++                    return;
++                }
++                Intent intent = new Intent();
++                intent.setAction("android.apn.action.APN_SELECTION");
++                Log.d(TAG, "onCreate: intent android.apn.action.APN_SELECTION");
++                startActivity(intent);
++                /// @}
++                displayPreferredDialog(extras.getInt(PREFERRED_SIM));
++                break;
++            default:
++                throw new IllegalArgumentException("Invalid dialog type " + dialogType + " sent.");
++        }
++    }
++
++    private void displayPreferredDialog(final int slotId) {
++        final Resources res = getResources();
++        final Context context = getApplicationContext();
++        final SubscriptionInfo sir = SubscriptionManager.from(context)
++                .getActiveSubscriptionInfoForSimSlotIndex(slotId);
++
++        if (sir != null) {
++            AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(this);
++
++            /// M: for Plug-in @{
++            /*
++            alertDialogBuilder.setTitle(R.string.sim_preferred_title);
++            alertDialogBuilder.setMessage(res.getString(
++                        R.string.sim_preferred_message, sir.getDisplayName()));
++            */
++            int subId = SubscriptionManager.getSubIdUsingPhoneId(slotId);
++            String title = mMiscExt.customizeSimDisplayString(res
++                    .getString(R.string.sim_preferred_title), subId);
++            String message = mMiscExt.customizeSimDisplayString(res.getString(
++                    R.string.sim_preferred_message, sir.getDisplayName()), subId);
++            alertDialogBuilder.setTitle(title);
++            alertDialogBuilder.setMessage(message);
++            /// @}
++
++            alertDialogBuilder.setPositiveButton(R.string.yes, new
++                    DialogInterface.OnClickListener() {
++                @Override
++                public void onClick(DialogInterface dialog, int id) {
++                    final int subId = sir.getSubscriptionId();
++                    PhoneAccountHandle phoneAccountHandle =
++                            subscriptionIdToPhoneAccountHandle(subId);
++                    setDefaultDataSubId(context, subId);
++                    setDefaultSmsSubId(context, subId);
++                    setUserSelectedOutgoingPhoneAccount(phoneAccountHandle);
++                    /// M: Add dismiss dialog before finish to void screen flash.
++                    dismissSimDialog();
++                    finish();
++                }
++            });
++            alertDialogBuilder.setNegativeButton(R.string.no, new
++                    DialogInterface.OnClickListener() {
++                @Override
++                public void onClick(DialogInterface dialog,int id) {
++                    /// M: Add dismiss dialog before finish to void screen flash.
++                    dismissSimDialog();
++                    finish();
++                }
++            });
++
++            /// M: when dialog dismissed, finish the activity as well @{
++            alertDialogBuilder.setOnDismissListener(new OnDismissListener() {
++                @Override
++                public void onDismiss(DialogInterface dialog) {
++                    finish();
++                }
++            });
++            /// @}
++
++            /// M: for ALPS02422990 avoid window leak @{
++            mDialog = alertDialogBuilder.create();
++            mDialog.show();
++            /// @}
++        } else {
++            finish();
++        }
++    }
++
++    private void setDefaultDataSubId(final Context context, final int subId) {
++        Log.d(TAG, "setDefaultDataSubId, sub = " + subId);
++        final SubscriptionManager subscriptionManager = SubscriptionManager.from(context);
++        /// M: for plug-in, need to call before setDefaultDataSubId
++        mSimManagementExt.setDataState(subId);
++        subscriptionManager.setDefaultDataSubId(subId);
++        /// M: for plug-in, need to call after setDefaultDataSubId
++        mSimManagementExt.setDataStateEnable(subId);
++        /// M: for plug-in @{
++        // Toast.makeText(context, R.string.data_switch_started, Toast.LENGTH_LONG).show();
++        mDataSub = subId;
++        /// @}
++    }
++
++    private static void setDefaultSmsSubId(final Context context, final int subId) {
++        Log.d(TAG, "setDefaultSmsSubId, sub = " + subId);
++        final SubscriptionManager subscriptionManager = SubscriptionManager.from(context);
++        subscriptionManager.setDefaultSmsSubId(subId);
++    }
++
++    private void setUserSelectedOutgoingPhoneAccount(PhoneAccountHandle phoneAccount) {
++        Log.d(TAG, "setUserSelectedOutgoingPhoneAccount phoneAccount = " + phoneAccount);
++        final TelecomManager telecomManager = TelecomManager.from(this);
++        telecomManager.setUserSelectedOutgoingPhoneAccount(phoneAccount);
++    }
++
++    private PhoneAccountHandle subscriptionIdToPhoneAccountHandle(final int subId) {
++        final TelecomManager telecomManager = TelecomManager.from(this);
++        final TelephonyManager telephonyManager = TelephonyManager.from(this);
++        final Iterator<PhoneAccountHandle> phoneAccounts =
++                telecomManager.getCallCapablePhoneAccounts().listIterator();
++
++        while (phoneAccounts.hasNext()) {
++            final PhoneAccountHandle phoneAccountHandle = phoneAccounts.next();
++            final PhoneAccount phoneAccount = telecomManager.getPhoneAccount(phoneAccountHandle);
++            if (subId == telephonyManager.getSubIdForPhoneAccount(phoneAccount)) {
++                return phoneAccountHandle;
++            }
++        }
++
++        return null;
++    }
++
++    public Dialog createDialog(final Context context, final int id) {
++        final ArrayList<String> list = new ArrayList<String>();
++        final SubscriptionManager subscriptionManager = SubscriptionManager.from(context);
++        final List<SubscriptionInfo> subInfoList =
++            subscriptionManager.getActiveSubscriptionInfoList();
++        final int selectableSubInfoLength = subInfoList == null ? 0 : subInfoList.size();
++
++        final DialogInterface.OnClickListener selectionListener =
++                new DialogInterface.OnClickListener() {
++                    @Override
++                    public void onClick(DialogInterface dialog, int value) {
++                        final SubscriptionInfo sir;
++                        // set the network setting as current network
++                        // if the current network option is set, then no further handling needed
++                        // Return if handled by plugin
++                        if (mSimManagementExt.simDialogOnClick(id, value, context)) {
++                            Log.d(TAG, "finish() ,onclick handled by simDialogOnClick in Plugin");
++                            dismissSimDialog();
++                            finish();
++                            return;
++                        }
++
++                        switch (id) {
++                            case DATA_PICK:
++                                sir = subInfoList.get(value);
++                                /// M: for plug-in
++                                int targetSub = (sir == null ? null : sir.getSubscriptionId());
++                                /// M: [C2K solution 2 enhancement] @{
++                                if (CdmaUtils.isCdmaCardCompetionForData(context)) {
++                                    int defaultId = SubscriptionManager
++                                    .getDefaultDataSubscriptionId();
++                                    Log.d(TAG, "currnt default Id is: " + defaultId
++                                            + " ,target Id: " + targetSub);
++
++                                    if (defaultId != targetSub) {
++                                        if (TelecomManager.from(context).isInCall()) {
++                                            Toast.makeText(context,
++                                                    R.string.default_data_switch_err_msg1,
++                                                    Toast.LENGTH_SHORT).show();
++                                        } else {
++                                            //03462966: Change default data along with
++                                            //subid dialog alert.
++                                            if (targetSub !=
++                                                    SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
++                                                setDefaultDataSubId(context, targetSub);
++                                            }
++                                            CdmaUtils.startAlertCdmaDialog(context, targetSub,
++                                                    id);
++                                        }
++                                    }
++                                    /// @}
++                                /// M: for [C2K OMH Warning] @{
++                                } else if (CdmaUtils.isNonOmhSimInOmhDevice(targetSub)) {
++                                    OmhEventHandler.getInstance(context).obtainMessage(
++                                            OmhEventHandler.NEW_REQUEST,
++                                            OmhEventHandler.TYPE_OMH_DATA_PICK, targetSub)
++                                            .sendToTarget();
++                                    /// @}
++                                } else {
++                                    int defaultId = SubscriptionManager.getDefaultDataSubscriptionId();
++                                    if (targetSub != defaultId) {
++                                        mSwitchInfoFlag = true;
++                                        AlertDialog.Builder builder = new AlertDialog.Builder(context);
++                                        builder.setMessage(R.string.switch_sim_data_message);
++                                        builder.setPositiveButton(R.string.switch_sim_button, new DialogInterface.OnClickListener() {
++                                            @Override
++                                            public void onClick(DialogInterface dialog, int which) {
++                                                setDefaultDataSubId(context, targetSub);
++                                                finish();
++                                            }
++                                        });
++                                        builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
++                                            @Override
++                                            public void onCancel(DialogInterface dialog) {
++                                                finish();
++                                            }
++                                        });
++                                        builder.create();
++                                        builder.show();
++                                    }
++                                }
++                                break;
++                            case CALLS_PICK:
++                                final TelecomManager telecomManager =
++                                        TelecomManager.from(context);
++                                final List<PhoneAccountHandle> phoneAccountsList =
++                                        telecomManager.getCallCapablePhoneAccounts();
++                                Log.d(TAG, "phoneAccountsList = " + phoneAccountsList.toString());
++
++                                /// M: add for CMCC OM project @{
++                                if (SystemProperties.
++                                        get("ro.cmcc_light_cust_support").equals("1")) {
++                                    Log.d(TAG, "CMCC OM project value = " + value);
++                                    TelephonyManager.MultiSimVariants mSimConfig = TelephonyManager
++                                            .from(context).getMultiSimConfiguration();
++                                    if ((value == 0) && (SubscriptionManager.from(context)
++                                        .getActiveSubscriptionInfoCount() == 1) &&
++                                        (mSimConfig == TelephonyManager.MultiSimVariants.DSDS ||
++                                        mSimConfig == TelephonyManager.MultiSimVariants.DSDA)) {
++                                            value = 1;
++                                    }
++                                }
++                                /// @}
++
++                                /// M: for ALPS02320816 @{
++                                // phone account may changed in background
++                                if (value > phoneAccountsList.size()) {
++                                    Log.w(TAG, "phone account changed, do noting! value = " +
++                                            value + ", phone account size = " +
++                                            phoneAccountsList.size());
++                                    break;
++                                }
++                                /// @}
++                                Log.d(TAG, "value = " + value);
++                                setUserSelectedOutgoingPhoneAccount(value < 1 ?
++                                        null : phoneAccountsList.get(value - 1));
++                                break;
++                            case SMS_PICK:
++                                /// M: for [SMS Always Ask]
++                                // sir = subInfoList.get(value);
++                                int subId = getPickSmsDefaultSub(subInfoList, value);
++                                setDefaultSmsSubId(context, subId);
++
++                                break;
++                            default:
++                                throw new IllegalArgumentException("Invalid dialog type "
++                                        + id + " in SIM dialog.");
++                        }
++                        /// M: Add dismiss dialog before finish to void screen flash.
++                        dismissSimDialog();
++                        if (!mSwitchInfoFlag) {
++                            finish();
++                        }
++                    }
++                };
++
++        Dialog.OnKeyListener keyListener = new Dialog.OnKeyListener() {
++            @Override
++            public boolean onKey(DialogInterface arg0, int keyCode,
++                    KeyEvent event) {
++                    if (keyCode == KeyEvent.KEYCODE_BACK) {
++                        finish();
++                    }
++                    return true;
++                }
++            };
++
++        ArrayList<SubscriptionInfo> callsSubInfoList = new ArrayList<SubscriptionInfo>();
++        /// M: for [SMS Always Ask] @{
++        ArrayList<SubscriptionInfo> smsSubInfoList = new ArrayList<SubscriptionInfo>();
++        /// @}
++        if (id == CALLS_PICK) {
++            final TelecomManager telecomManager = TelecomManager.from(context);
++            final TelephonyManager telephonyManager = TelephonyManager.from(context);
++            final Iterator<PhoneAccountHandle> phoneAccounts =
++                    telecomManager.getCallCapablePhoneAccounts().listIterator();
++
++            /// M: only for multiple accounts
++            mSimManagementExt.updateList(list, callsSubInfoList,
++                            telecomManager.getCallCapablePhoneAccounts().size());
++            int accountSize = telecomManager.getCallCapablePhoneAccounts().size();
++            Log.d(TAG, "phoneAccounts size = " + accountSize);
++            if (accountSize > 1) {
++                list.add(getResources().getString(R.string.sim_calls_ask_first_prefs_title));
++                callsSubInfoList.add(null);
++            }
++
++            while (phoneAccounts.hasNext()) {
++                final PhoneAccount phoneAccount =
++                        telecomManager.getPhoneAccount(phoneAccounts.next());
++                /// M: for ALPS02362894, seldom happened that phone account
++                // unregistered in the background @{
++                if (phoneAccount == null) {
++                    Log.d(TAG, "phoneAccount is null");
++                    continue;
++                }
++                /// @}
++                list.add((String)phoneAccount.getLabel());
++                int subId = telephonyManager.getSubIdForPhoneAccount(phoneAccount);
++                Log.d(TAG, "phoneAccount label = " + phoneAccount.getLabel()
++                        + ", subId = " + subId);
++                if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
++                    final SubscriptionInfo sir = SubscriptionManager.from(context)
++                            .getActiveSubscriptionInfo(subId);
++                    callsSubInfoList.add(sir);
++                } else {
++                    callsSubInfoList.add(null);
++                }
++            }
++            Log.d(TAG, "callsSubInfoList = " + callsSubInfoList + ", list = " + list);
++            /// M:for plug-in @{
++            mSimManagementExt.customizeListArray(list);
++            mSimManagementExt.customizeSubscriptionInfoArray(callsSubInfoList);
++            /// @}
++        /// M: for [SMS Always Ask] @{
++        } else if (id == SMS_PICK) {
++            setupSmsSubInfoList(list, subInfoList, selectableSubInfoLength, smsSubInfoList);
++        /// @}
++        } else {
++            for (int i = 0; i < selectableSubInfoLength; ++i) {
++                final SubscriptionInfo sir = subInfoList.get(i);
++                CharSequence displayName = sir.getDisplayName();
++                if (displayName == null) {
++                    displayName = "";
++                }
++                list.add(displayName.toString());
++            }
++        }
++
++        String[] arr = list.toArray(new String[0]);
++
++        AlertDialog.Builder builder = new AlertDialog.Builder(context);
++
++        ListAdapter adapter = new SelectAccountListAdapter(
++                /// M: for [SMS Always Ask] @{
++                // id == CALLS_PICK ? callsSubInfoList : subInfoList,
++                getAdapterData(id, subInfoList, callsSubInfoList, smsSubInfoList),
++                /// @}
++                builder.getContext(),
++                R.layout.select_account_list_item,
++                arr, id);
++
++        switch (id) {
++            case DATA_PICK:
++                builder.setTitle(R.string.select_sim_for_data);
++                break;
++            case CALLS_PICK:
++                builder.setTitle(R.string.select_sim_for_calls);
++                break;
++            case SMS_PICK:
++                builder.setTitle(R.string.sim_card_select_title);
++                break;
++            default:
++                throw new IllegalArgumentException("Invalid dialog type "
++                        + id + " in SIM dialog.");
++        }
++
++        /// M: for plug-in
++        changeDialogTitle(builder, id);
++
++        Dialog dialog = builder.setAdapter(adapter, selectionListener).create();
++        dialog.setOnKeyListener(keyListener);
++
++        dialog.setOnCancelListener(new DialogInterface.OnCancelListener() {
++            @Override
++            public void onCancel(DialogInterface dialogInterface) {
++                finish();
++            }
++        });
++
++        return dialog;
++
++    }
++
++    private class SelectAccountListAdapter extends ArrayAdapter<String> {
++        private Context mContext;
++        private int mResId;
++        private int mDialogId;
++        private final float OPACITY = 0.54f;
++        private List<SubscriptionInfo> mSubInfoList;
++
++        public SelectAccountListAdapter(List<SubscriptionInfo> subInfoList,
++                Context context, int resource, String[] arr, int dialogId) {
++            super(context, resource, arr);
++            mContext = context;
++            mResId = resource;
++            mDialogId = dialogId;
++            mSubInfoList = subInfoList;
++        }
++
++        @Override
++        public View getView(int position, View convertView, ViewGroup parent) {
++            LayoutInflater inflater = (LayoutInflater)
++                    mContext.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
++            View rowView;
++            final ViewHolder holder;
++
++            if (convertView == null) {
++                // Cache views for faster scrolling
++                rowView = inflater.inflate(mResId, null);
++                holder = new ViewHolder();
++                holder.title = (TextView) rowView.findViewById(R.id.title);
++                holder.summary = (TextView) rowView.findViewById(R.id.summary);
++                holder.icon = (ImageView) rowView.findViewById(R.id.icon);
++                rowView.setTag(holder);
++            } else {
++                rowView = convertView;
++                holder = (ViewHolder) rowView.getTag();
++            }
++
++            final SubscriptionInfo sir = mSubInfoList.get(position);
++            if (sir == null) {
++                holder.title.setText(getItem(position));
++                holder.summary.setText("");
++                /// M: display icon for non-sub accounts @{
++                if (mDialogId == CALLS_PICK) {
++                    setPhoneAccountIcon(holder, position);
++                } else {
++                /// @}
++                    holder.icon.setImageDrawable(getResources()
++                            .getDrawable(R.drawable.ic_live_help));
++                }
++                /// @}
++                /// M: for plug-in
++                mSimManagementExt.setSmsAutoItemIcon(holder.icon, mDialogId, position);
++                mSimManagementExt.setCurrNetworkIcon(holder.icon, mDialogId, position);
++                holder.icon.setAlpha(OPACITY);
++            } else {
++                holder.title.setText(sir.getDisplayName());
++                holder.summary.setText(sir.getNumber());
++                holder.icon.setImageBitmap(sir.createIconBitmap(mContext));
++                /// M: when item numbers is over the screen, should set alpha 1.0f.
++                holder.icon.setAlpha(1.0f);
++            }
++            return rowView;
++        }
++
++        private class ViewHolder {
++            TextView title;
++            TextView summary;
++            ImageView icon;
++        }
++
++        private void setPhoneAccountIcon(ViewHolder holder, int location) {
++            Log.d(TAG, "setSipAccountBitmap()... location: " + location);
++            String askFirst = getResources().getString(R.string.sim_calls_ask_first_prefs_title);
++            String lableString = getItem(location);
++            final TelecomManager telecomManager = TelecomManager.from(mContext);
++            List<PhoneAccountHandle> phoneAccountHandles=
++                    telecomManager.getCallCapablePhoneAccounts();
++            if (!askFirst.equals(lableString)) {
++                if (phoneAccountHandles.size() > 1) {
++                    location = location - 1;
++                }
++                PhoneAccount phoneAccount = null;
++                if (location >= 0 && location < phoneAccountHandles.size()) {
++                    phoneAccount =
++                            telecomManager.getPhoneAccount(phoneAccountHandles.get(location));
++                }
++                Log.d(TAG, "setSipAccountBitmap()... position: " + location
++                        + " account: "  + phoneAccount);
++                if (phoneAccount != null) {
++                    holder.icon.setImageDrawable(phoneAccount.getIcon().loadDrawable(mContext));
++                }
++            } else {
++                holder.icon.setImageDrawable(getResources().getDrawable(R.drawable.ic_live_help));
++            }
++        }
++    }
++
++    ///-----------------------------------------MTK-----------------------------------------------
++
++    /// M: for [SIM Hot Swap]
++    private SimHotSwapHandler mSimHotSwapHandler;
++    private ISimManagementExt mSimManagementExt;
++    private ISettingsMiscExt mMiscExt;
++    private Dialog mDialog;
++    private IRCSSettings mRCSExt;
++    ///M: ALPS02783578, add it for avoid screen flash
++    private int mDataSub = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
++
++    // Receiver to handle different actions
++    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++            Log.d(TAG, "onReceive, action = " + action);
++            dismissSimDialog();
++            finish();
++        }
++    };
++
++    private void setSimStateCheck() {
++        /// M: for [SIM Hot Swap] @{
++        mSimHotSwapHandler = new SimHotSwapHandler(getApplicationContext());
++        mSimHotSwapHandler.registerOnSimHotSwap(new OnSimHotSwapListener() {
++            @Override
++            public void onSimHotSwap() {
++                Log.d(TAG, "onSimHotSwap, finish Activity");
++                dismissSimDialog();
++                finish();
++            }
++        });
++        /// @}
++        IntentFilter itentFilter = new IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED);
++        registerReceiver(mReceiver, itentFilter);
++    }
++
++    private void unsetSimStateCheck() {
++        /// M: for [SIM Hot Swap]
++        mSimHotSwapHandler.unregisterOnSimHotSwap();
++        unregisterReceiver(mReceiver);
++    }
++
++    @Override
++    protected void onPause() {
++        /// M: for [C2K OMH Warning]
++        OmhEventHandler.getInstance(this).sendEmptyMessage(OmhEventHandler.CLEAR_BUSY);
++        super.onPause();
++    }
++
++    @Override
++    protected void onDestroy() {
++        unsetSimStateCheck();
++
++        // M: for AlPS02113443, avoid window leak.
++        dismissSimDialog();
++        /// M: Show toast when destory to void screen flash.
++        if (mDataSub != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
++            Toast.makeText(
++                    this,
++                    mMiscExt.customizeSimDisplayString(getResources().getString(
++                            R.string.data_switch_started), mDataSub), Toast.LENGTH_LONG).show();
++        }
++        super.onDestroy();
++    }
++
++    private int getPickSmsDefaultSub(final List<SubscriptionInfo> subInfoList,
++            int value) {
++        int subId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
++        if (value < 1) {
++            int length = subInfoList == null ? 0 : subInfoList.size();
++            if (length == 1) {
++                subId = subInfoList.get(value).getSubscriptionId();
++            } else {
++                subId = DefaultSmsSimSettings.ASK_USER_SUB_ID;
++            }
++        } else if (value >= 1 && value < subInfoList.size() + 1) {
++            subId = subInfoList.get(value - 1).getSubscriptionId();
++        }
++        subId = mRCSExt.getDefaultSmsClickContentExt(subInfoList, value, subId);
++        Log.d(TAG, "getPickSmsDefaultSub, value: " + value + ", subId: " + subId);
++        return subId;
++    }
++
++    private void setupSmsSubInfoList(final ArrayList<String> list,
++            final List<SubscriptionInfo> subInfoList, final int selectableSubInfoLength,
++            ArrayList<SubscriptionInfo> smsSubInfoList) {
++
++            mSimManagementExt.updateList(list, smsSubInfoList,  selectableSubInfoLength);
++        if ((selectableSubInfoLength > 1) && (mRCSExt.isNeedAskFirstItemForSms())) {
++            list.add(getResources().getString(R.string.sim_calls_ask_first_prefs_title));
++            smsSubInfoList.add(null);
++        }
++        for (int i = 0; i < selectableSubInfoLength; ++i) {
++            final SubscriptionInfo sir = subInfoList.get(i);
++            smsSubInfoList.add(sir);
++            CharSequence displayName = sir.getDisplayName();
++            if (displayName == null) {
++                displayName = "";
++            }
++            list.add(displayName.toString());
++        }
++        /// M: for plug-in @{
++        mSimManagementExt.customizeListArray(list);
++        mSimManagementExt.customizeSubscriptionInfoArray(smsSubInfoList);
++        mSimManagementExt.initAutoItemForSms(list, smsSubInfoList);
++        /// @}
++    }
++
++    private List<SubscriptionInfo> getAdapterData(final int id,
++            final List<SubscriptionInfo> subInfoList, ArrayList<SubscriptionInfo> callsSubInfoList,
++            ArrayList<SubscriptionInfo> smsSubInfoList) {
++        List<SubscriptionInfo> listForAdpter = null;
++        switch (id) {
++            case DATA_PICK:
++                listForAdpter = subInfoList;
++                break;
++            case CALLS_PICK:
++                listForAdpter = callsSubInfoList;
++                break;
++            case SMS_PICK:
++                listForAdpter = smsSubInfoList;
++                break;
++            default:
++                listForAdpter = null;
++                throw new IllegalArgumentException("Invalid dialog type "
++                        + id + " in SIM dialog.");
++        }
++        return listForAdpter;
++    }
++
++    /**
++     * only for plug-in, change "SIM" to "SIM/UIM".
++     *
++     * @param builder the dialog builder need to modify.
++     * @param id the dialog id.
++     */
++    private void changeDialogTitle(AlertDialog.Builder builder, int id) {
++        switch (id) {
++            case DATA_PICK:
++                builder.setTitle(mMiscExt.customizeSimDisplayString(
++                                    getResources().getString(R.string.select_sim_for_data),
++                                    SubscriptionManager.INVALID_SUBSCRIPTION_ID));
++                break;
++            case CALLS_PICK:
++                builder.setTitle(mMiscExt.customizeSimDisplayString(
++                                    getResources().getString(R.string.select_sim_for_calls),
++                                    SubscriptionManager.INVALID_SUBSCRIPTION_ID));
++                break;
++            case SMS_PICK:
++                builder.setTitle(mMiscExt.customizeSimDisplayString(
++                                    getResources().getString(R.string.sim_card_select_title),
++                                    SubscriptionManager.INVALID_SUBSCRIPTION_ID));
++                break;
++            default:
++                throw new IllegalArgumentException("Invalid dialog type "
++                        + id + " in SIM dialog.");
++        }
++    }
++
++    private void dismissSimDialog() {
++        if (mDialog != null && mDialog.isShowing()) {
++            mDialog.dismiss();
++            mDialog = null;
++        }
++    }
++}
+Index: vendor/branch/5058Y/packages/apps/Settings/res/layout/apn_activity.xml
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/res/layout/apn_activity.xml	(revision 0)
++++ vendor/branch/5058Y/packages/apps/Settings/res/layout/apn_activity.xml	(revision 2773)
+@@ -0,0 +1,66 @@
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:tools="http://schemas.android.com/tools"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="#ffffff"
++    android:orientation="vertical" >
++
++    <TextView
++        android:id="@+id/titlebar"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_centerVertical="true"
++        android:layout_marginBottom="3dp"
++        android:gravity="center"
++        android:text="@string/lockpattern_retry_button_text"
++        android:textColor="#ffffff"
++        android:textSize="20sp"
++        android:textStyle="bold"
++        android:visibility="gone"/>
++
++    <TextView
++        android:id="@+id/menuconfigerro"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:layout_centerVertical="true"
++        android:gravity="center"
++        android:textColor="#ffffff"
++        android:visibility="gone" />
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_below="@+id/search"
++        android:orientation="vertical" >
++
++        <ListView
++            android:id="@+id/listmenu"
++            android:layout_width="match_parent"
++            android:layout_height="match_parent"
++            android:cacheColorHint="#FFFFFFFF"
++            android:choiceMode="singleChoice"
++            android:listSelector="@null" >
++        </ListView>
++    </LinearLayout>
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_below="@+id/listmenu"
++        android:orientation="vertical" >
++
++        <ListView
++            android:id="@+id/listmenu_mms"
++            android:layout_width="match_parent"
++            android:layout_height="match_parent"
++            android:cacheColorHint="#FFFFFFFF"
++            android:listSelector="@null" >
++        </ListView>
++    </LinearLayout>
++
++    <Button
++        android:id="@+id/btn_apn"
++        android:layout_width="match_parent"
++        android:layout_height="60dp"
++        android:text="@string/finish_button_label" />
++
++</LinearLayout>
+\ No newline at end of file
+Index: vendor/branch/5058Y/packages/apps/Settings/res/layout/listmenu.xml
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/res/layout/listmenu.xml	(revision 0)
++++ vendor/branch/5058Y/packages/apps/Settings/res/layout/listmenu.xml	(revision 2773)
+@@ -0,0 +1,19 @@
++<?xml version="1.0" encoding="utf-8"?>
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:id="@+id/linelayout"
++    android:layout_height="wrap_content"
++    android:layout_width="fill_parent"
++    android:orientation="vertical">
++    <TextView
++        android:id="@+id/title"
++        android:layout_height="wrap_content"
++        android:layout_width="wrap_content"
++        android:paddingLeft = "25dp"
++        android:textColor="#000000"/>
++    <TextView
++        android:id="@+id/summary"
++        android:layout_height="wrap_content"
++        android:layout_width="wrap_content"
++        android:paddingLeft = "25dp"/>
++</LinearLayout>
+\ No newline at end of file

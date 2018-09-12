@@ -1,0 +1,40 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1060)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1061)
+@@ -5871,7 +5871,34 @@
+                 + " useHapticFeedback = " + useHapticFeedback
+                 + " isInjected = " + isInjected);
+         }
+-
++        int iReturn = 0;
++        if (keyCode == 0 && down) {
++            final int scanCode = event.getScanCode();
++            String activityName = getRunningActivityName();
++            Log.d(TAG, "yuxingmin 00 keyCode=" + keyCode + " scanCode=" + scanCode);
++            if ((scanCode == 134 || scanCode == 206) && (activityName != null) && (activityName.indexOf("mediatek.factorymode") >= 0)) {
++                Intent intent = new Intent();
++                intent.setAction("intent.action.HALL_FACTORY_MODE_TEST");
++                mContext.sendBroadcast(intent);	
++                Log.d(TAG, "yuxingmin 0000  factory mode");
++            }
++            else {
++                if (scanCode == 206) {
++                    iReturn &= ~ACTION_PASS_TO_USER;
++                    cancelPendingScreenshotChordAction();
++                    mPowerManager.goToSleep(event.getEventTime(),PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON, 0);
++                    isWakeKey = false;
++                }
++                else if(scanCode == 134) {
++                    iReturn = ACTION_PASS_TO_USER;
++                    mPowerManager.wakeUp(event.getEventTime());
++                    Intent intent = new Intent();
++                    intent.setAction("intent.action.HALL_OPEN_TO_UNLOCK");
++                    mContext.sendBroadcast(intent);	
++                }
++                return iReturn;
++            }
++        }
+         // Handle special keys.
+         switch (keyCode) {
+             case KeyEvent.KEYCODE_BACK: {

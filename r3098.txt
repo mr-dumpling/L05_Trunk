@@ -1,0 +1,95 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 3097)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 3098)
+@@ -1170,6 +1170,8 @@
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+         filter.addAction("android.intent.action.RESET_NAVIGATION_BAR");
+         filter.addAction("android.intent.action.NAVIGATION_BAR_TIPS_ANIMATION_FINISH");
++        filter.addAction("bootwizardstart");
++        filter.addAction("bootwizardstop");
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 		filter.addAction("battery_percentage_on_off");
+ 		//added by lei.shi for task927658 at 2015.11.22 begin
+@@ -3918,6 +3920,12 @@
+                     mNavigationBarView.updateNailIcon();
+                 }
+             }
++            else if ("bootwizardstart".equals(action)) {
++                setNavigationBarLayout(true, false);
++            }
++            else if ("bootwizardstop".equals(action)) {
++                setNavigationBarLayout(false, false);
++            }
+             //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 			//add by wqq start{
+             else if(action.equals("battery_percentage_on_off")){
+@@ -5797,6 +5805,7 @@
+                 String flags[] = record.split(";");
+                 if("1".equals(flags[0])) {
+                     mCameraOpened = true;
++                    /*
+                     mOldLayout = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
+                     mOldBackground = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
+                     mOldNailStatus = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
+@@ -5812,13 +5821,18 @@
+                     Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, newLayout, mCurrentUserId);
+                     Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
+                     resetNavigationBar();
++                    */
++                    setNavigationBarLayout(true, true);
+                 } else {
+                     if(mCameraOpened) {
+                         mCameraOpened = false;
++                        /*
+                         Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, mOldNailStatus, mCurrentUserId);
+                         Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, mOldLayout, mCurrentUserId);
+                         Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, mOldBackground, mCurrentUserId);
+                         resetNavigationBar();
++                        */
++                        setNavigationBarLayout(false, true);
+                     } else {
+                         if("1".equals(flags[1])) {
+                             boolean isFixed = checkNavigationBarFixed();
+@@ -5836,6 +5850,41 @@
+             }
+         }
+     };
++    
++    private void setNavigationBarLayout(boolean hideNail, boolean forCamera) {
++        if(hideNail) {
++            mOldLayout = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
++            mOldBackground = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
++            mOldNailStatus = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
++            
++            int newLayout = mOldLayout;
++            if(mOldLayout == 0 || mOldLayout == 2) {
++                newLayout = 4;
++            } else if(mOldLayout == 1 || mOldLayout == 3) {
++                newLayout = 5;
++            }
++            
++            Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
++            Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, newLayout, mCurrentUserId);
++            if(forCamera) {
++                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
++                if(mNavigationBarView != null) {
++                    mNavigationBarView.setBackgroundColor(0x00000000);
++                }
++            }
++            changeNavigationBarStatus(true);
++        } else {
++            Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, mOldNailStatus, mCurrentUserId);
++            Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, mOldLayout, mCurrentUserId);
++            if(forCamera) {
++                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, mOldBackground, mCurrentUserId);
++                if(mNavigationBarView != null) {
++                    mNavigationBarView.setBackgroundColor(mOldBackground);
++                }
++            }
++            changeNavigationBarStatus((mOldNailStatus == 1) ? true : false);
++        }
++    }
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     
+     //ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9

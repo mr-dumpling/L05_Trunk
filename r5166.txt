@@ -1,0 +1,116 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardServiceDelegate.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardServiceDelegate.java	(revision 5165)
++++ frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardServiceDelegate.java	(revision 5166)
+@@ -51,6 +51,7 @@
+     private final KeyguardState mKeyguardState = new KeyguardState();
+     private DrawnListener mDrawnListenerWhenConnect;
+     private final OnShowingStateChangedCallback mShowingStateChangedCallback;
++    private boolean firstHide = false;
+ 
+     private static final class KeyguardState {
+         KeyguardState() {
+@@ -409,6 +410,16 @@
+         mScrimHandler.post(new Runnable() {
+             @Override
+             public void run() {
++            	
++            	try{
++                  int delaytime=0;
++                 if(!firstHide){
++                    delaytime=10; 
++                    firstHide=true;
++                }
++              Thread.sleep(delaytime);
++              }
++              catch(Exception e){}
+                 mScrim.setVisibility(View.GONE);
+             }
+         });
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/ImageWallpaper.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/ImageWallpaper.java	(revision 5165)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/ImageWallpaper.java	(revision 5166)
+@@ -79,6 +79,9 @@
+     WallpaperManager mWallpaperManager;
+ 
+     DrawableEngine mEngine;
++      boolean wallpapaerLoaded=false;
++      boolean wallpapaerLoading=false;
++       boolean firstLoad=true;
+ 
+     boolean mIsHwAccelerated;
+     private BroadcastReceiver mReceiver = new BroadcastReceiver() {
+@@ -510,7 +513,58 @@
+                 }
+             }
+         }
+-
++      void loadWallSync() {
++             firstLoad=false;
++             wallpapaerLoading=true;
++             Bitmap bt = null;
++             Exception exception=null;
++              try {
++            Log.d(TAG, "enter loadWallSync");
++             bt = mWallpaperManager.getBitmap();
++             Log.d(TAG, "exit doInBackloadWallSyncground");
++           // return bt;
++            } catch (RuntimeException | OutOfMemoryError e) {
++             exception = (Exception)e;
++            }
++           if (exception != null) {
++           // Note that if we do fail at this, and the default wallpaper
++            // can't
++           // be loaded, we will go into a cycle. Don't do a build where
++             // the
++            // default wallpaper can't be loaded.
++           Log.w(TAG, "Unable to load wallpaper!", exception);
++            try {
++          mWallpaperManager.clear();
++           } catch (IOException ex) {
++             // now we're really screwed.
++          Log.w(TAG, "Unable reset to default wallpaper!", ex);
++           }
++          try {
++               bt = mWallpaperManager.getBitmap();
++               } catch (RuntimeException | OutOfMemoryError e) {
++               Log.w(TAG, "Unable to load default wallpaper!", e);
++                 }
++               }
++               mBackground = null;
++               mBackgroundWidth = -1;
++               mBackgroundHeight = -1;
++               if (bt != null) {
++               mBackground = bt;
++               mBackgroundWidth = mBackground.getWidth();
++               mBackgroundHeight = mBackground.getHeight();
++               }
++               if (DEBUG) {
++               Log.d(TAG, "Wallpaper loaded: " + mBackground);
++               }
++               updateSurfaceSize(getSurfaceHolder(), getDefaultDisplayInfo(), false /* forDraw */);
++               if (true) {
++               drawFrame();
++               }
++               mLoader = null;
++               mNeedsDrawAfterLoadingWallpaper = false;
++               wallpapaerLoaded=true;
++               wallpapaerLoading=false;
++        }
+         /**
+          * Loads the wallpaper on background thread and schedules updating the surface frame,
+          * and if {@param needsDraw} is set also draws a frame.
+@@ -519,6 +573,12 @@
+          * the active request).
+          */
+         private void loadWallpaper(boolean needsDraw) {
++        	 if(firstLoad){
++
++          if(wallpapaerLoading||wallpapaerLoaded)return;
++          loadWallSync();
++          firstLoad=false;
++          }
+             mNeedsDrawAfterLoadingWallpaper |= needsDraw;
+             if (mLoader != null) {
+                 if (DEBUG) {

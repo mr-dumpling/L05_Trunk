@@ -1,0 +1,60 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/recents/RecentsActivity.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/recents/RecentsActivity.java	(revision 4962)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/recents/RecentsActivity.java	(revision 4963)
+@@ -92,6 +92,7 @@
+ import java.util.List;
+ import android.widget.Toast;
+ import java.text.DecimalFormat;
++import android.widget.FrameLayout;
+ 
+ /**
+  * The main Recents activity that is started from RecentsComponent.
+@@ -380,6 +381,23 @@
+         // Reload the stack view
+         reloadStackView();
+     }
++	private void ResetClearButtonMargin(boolean bMult){
++		ImageButton clearButton = (ImageButton) findViewById(R.id.clear_button);
++		float scale = getResources().getDisplayMetrics().scaledDensity;
++		//Log.d(TAG,"javen----scale="+scale + "," + this.isInMultiWindowMode() + ", bMult = " + bMult);
++		bMult = bMult || this.isInMultiWindowMode();
++		if(bMult && scale>2.2f){
++			FrameLayout.LayoutParams ll = (FrameLayout.LayoutParams)clearButton.getLayoutParams();
++			//Log.d(TAG,"javen----ll.bottomMargin1="+ll.bottomMargin);
++			ll.bottomMargin=55;//half of 45dp more
++			clearButton.setLayoutParams(ll);
++		}else{
++			FrameLayout.LayoutParams ll = (FrameLayout.LayoutParams)clearButton.getLayoutParams();
++			//Log.d(TAG,"javen----ll.bottomMargin2="+ll.bottomMargin);
++			ll.bottomMargin=101;//45dp of clear_button
++			clearButton.setLayoutParams(ll);
++		}
++	}
+ 
+     @Override
+     protected void onStart() {
+@@ -469,6 +487,7 @@
+ 
+         // After we have resumed, set the visible state until the next onStop() call
+         mIsVisible = true;
++		ResetClearButtonMargin(false);
+     }
+ 
+     @Override
+@@ -534,6 +553,7 @@
+                 numStackTasks > 0));
+         EventBus.getDefault().send(new MultiWindowStateChangedEvent(isInMultiWindowMode,
+                 showDeferredAnimation, stack));
++		ResetClearButtonMargin(isInMultiWindowMode);
+     }
+ 
+     @Override
+@@ -576,6 +596,7 @@
+     public void onAttachedToWindow() {
+         super.onAttachedToWindow();
+         EventBus.getDefault().register(mScrimViews, EVENT_BUS_PRIORITY);
++		ResetClearButtonMargin(false);
+     }
+ 
+     @Override

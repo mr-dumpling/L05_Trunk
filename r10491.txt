@@ -1,0 +1,41 @@
+Index: vendor/branch/5058A_Claro/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Claro/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 10490)
++++ vendor/branch/5058A_Claro/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 10491)
+@@ -639,16 +639,27 @@
+ 			initProductInfo();
+ 			String SW_Version="SW Version: "+ SystemProperties.get("ro.build.version.custintid");
+ 			deviceIds.add(SW_Version);
+-			String[] directory = SW_Version.split("_");
+-			String sw_ver = "Build Version:20"+ directory[3];
+-			//String Build_Version="Build Version:"+ SystemProperties.get("ro.build.date");
+-		    deviceIds.add(sw_ver);
+-			String stringBuffer =  new String(product_info, CU_REF_START, CU_REF_LENGTH);
+-			//String su_ref="CU REF: "+SystemProperties.get("ro.tct.curef");
+-			if(stringBuffer ==null ||stringBuffer.equals("")){
+-				stringBuffer="0000";
++			String build="Build Version:"+SystemProperties.get("ro.build.date");
++			deviceIds.add(build);
++			String stringInfo =  new String(product_info, CU_REF_START, CU_REF_LENGTH);
++			boolean haseChar=false;
++			for(int i=0;i<CU_REF_LENGTH;i++){
++				if((product_info[i+CU_REF_START]^0)!=0){
++					haseChar=true;
++					break;
++				}
+ 			}
+-			String su_ref="CU REF: "+stringBuffer.toString().toUpperCase();
++			/*
++			if(stringInfo.startsWith("50") || stringInfo.startsWith("98")){
++				haseChar=true;
++			}
++			*/
++			String su_ref=null;
++			if(!TextUtils.isEmpty(stringInfo ) && haseChar){
++				 su_ref="CU REF: "+stringInfo .toString().toUpperCase().trim();
++			}else{
++				su_ref="CU REF: "+SystemProperties.get("ro.tct.curef.default");
++			}
+ 			deviceIds.add(su_ref);
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+ 				.setTitle("Version Info")								

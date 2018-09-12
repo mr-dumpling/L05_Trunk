@@ -1,0 +1,78 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 1618)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 1619)
+@@ -24,9 +24,10 @@
+ import android.support.v7.app.AppCompatActivity;
+ import android.support.v7.widget.Toolbar;
+ 
++import android.content.pm.PackageManager;
++import android.content.pm.PackageInfo;
++import android.content.Context;
+ 
+-
+-
+ /**
+  * Func Setting List
+  */
+@@ -121,10 +122,21 @@
+         db = AppDB.getInstance();
+         list.clear();
+         list.add(AppUtils.getDefaultAppInfoTitle(getApplicationContext()));
+-        list.addAll(db.getDefaultApp(DEFAULT_TABLE));
++        List<AppInfo> defaultApps = db.getDefaultApp(DEFAULT_TABLE);
++		for(AppInfo appinfo:defaultApps){
++			if(isAppInstalled(getApplicationContext(),appinfo.getPackerName())){
++				list.add(appinfo);
++			}
++		}
+         defaultNum= list.size()-1;
+         list.add(AppUtils.getAppInfoTitle(getApplicationContext()));
+-        list.addAll(db.getApp(TABLE));	
++        List<AppInfo> availableApps = db.getApp(TABLE);
++		for(AppInfo appinfo:availableApps){
++			if(isAppInstalled(getApplicationContext(),appinfo.getPackerName())){
++				list.add(appinfo);
++			}
++		}
++			
+         list.add(AppUtils.getFooterView(getResources().getString(R.string.func_add_app)));
+ 		for(AppInfo info:list){
+ 			if(info.getPackerName().equals("com.alcatel.music5")){
+@@ -134,6 +146,23 @@
+         list =AppUtils.getAppInfo(this, list);
+         return list;
+     }
++	
++	private boolean isAppInstalled(Context context, String packageName) {  
++        final PackageManager packageManager = context.getPackageManager();  
++        List<PackageInfo> pinfo = packageManager.getInstalledPackages(0);  
++        List<String> pName = new ArrayList<String>();
++        if (packageName.equals(AppUtils.TORCH)) {
++        	return true;
++        }
++        if (pinfo != null) {  
++            for (int i = 0; i < pinfo.size(); i++) {  
++                String pn = pinfo.get(i).packageName;  
++                pName.add(pn);  
++            }  
++        }  
++        return pName.contains(packageName);  
++    }
++	
+     @Override
+     protected void onRestart() {
+         super.onRestart();
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 1618)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 1619)
+@@ -113,7 +113,7 @@
+                     	ApplicationInfo licationInfo = pm.getApplicationInfo(info.getPackerName(), PackageManager.GET_META_DATA | PackageManager.GET_SHARED_LIBRARY_FILES);
+                     	info.setDrawable(licationInfo.loadIcon(pm));
+                     	info.setAppName(licationInfo.loadLabel(pm).toString());
+-						}
++					}
+                 } catch (PackageManager.NameNotFoundException e) {
+                     e.printStackTrace();
+                     Log.e("NameNotFoundException", e.toString());

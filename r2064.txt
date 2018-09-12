@@ -1,0 +1,286 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 2063)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 2064)
+@@ -3486,5 +3486,15 @@
+            </intent-filter>
+ 		</receiver>
+ 
++	<receiver android:name=".BootReceiver"
++		android:enabled="true"
++            	exported = "true">
++        	<intent-filter>
++            		<action android:name="android.intent.action.BOOT_COMPLETED"/>
++        	</intent-filter>
++        </receiver>
++        <service android:name=".WakeService"
++		android:exported="true"
++		android:permission="android.permission.WAKE_LOCK" />
+     </application>
+ </manifest>
+Index: packages/apps/Settings/src/com/android/settings/DisplaySettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 2063)
++++ packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 2064)
+@@ -138,7 +138,6 @@
+                         com.android.internal.R.bool.config_dreamsSupported) == false) {
+             getPreferenceScreen().removePreference(mScreenSaverPreference);
+         }
+-
+         mScreenTimeoutPreference = (TimeoutListPreference) findPreference(KEY_SCREEN_TIMEOUT);
+ 
+         mFontSizePref = findPreference(KEY_FONT_SIZE);
+@@ -164,6 +163,12 @@
+ 
+         if (isDozeAvailable(activity)) {
+             mDozePreference = (SwitchPreference) findPreference(KEY_DOZE);
++            StringBuffer sb =new StringBuffer();
++            sb.append(getResources().getString(R.string.doze_summary));
++            sb.append(",");
++            sb.append(getResources().getString(R.string.lift_to_wake_title));
++            sb.append(".");
++            mDozePreference.setSummary(sb);
+             mDozePreference.setOnPreferenceChangeListener(this);
+         } else {
+             removePreference(KEY_DOZE);
+@@ -429,6 +434,11 @@
+         if (mDozePreference != null) {
+             int value = Settings.Secure.getInt(getContentResolver(), DOZE_ENABLED, 1);
+             mDozePreference.setChecked(value != 0);
++            if (value!=0){
++                mDozePreference.getContext().startService(new Intent(getActivity(), WakeService.class));
++            }else{
++                mDozePreference.getContext().stopService(new Intent(getActivity(), WakeService.class));                
++            }
+         }
+ 
+         // Update camera gesture #1 if it is available.
+@@ -488,6 +498,11 @@
+         if (preference == mDozePreference) {
+             boolean value = (Boolean) objValue;
+             Settings.Secure.putInt(getContentResolver(), DOZE_ENABLED, value ? 1 : 0);
++            if (value){
++                mDozePreference.getContext().startService(new Intent(getActivity(), WakeService.class));
++            }else{
++                mDozePreference.getContext().stopService(new Intent(getActivity(), WakeService.class));
++            }
+         }
+         if (preference == mTapToWakePreference) {
+             boolean value = (Boolean) objValue;
+Index: packages/apps/Settings/src/com/android/settings/BootReceiver.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/BootReceiver.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/BootReceiver.java	(revision 2064)
+@@ -0,0 +1,33 @@
++package com.android.settings;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.os.Build;
++import android.os.SystemProperties;
++import android.text.TextUtils;
++import android.util.Log;
++
++/**
++ * Created by whj on 2017/11/25.
++ */
++public class BootReceiver extends BroadcastReceiver {
++    @Override
++    public void onReceive(Context context, Intent intent) {
++        if (isDozeAvailable(context)) {
++            if (android.provider.Settings.Secure.getInt(context.getContentResolver(), android.provider.Settings.Secure.DOZE_ENABLED, 1) != 0) {
++                Log.d("whj1", "onReceive: boot");
++                context.startService(new Intent(context, WakeService.class));
++            }
++        }
++    }
++
++    private static boolean isDozeAvailable(Context context) {
++        String name = Build.IS_DEBUGGABLE ? SystemProperties.get("debug.doze.component") : null;
++        if (TextUtils.isEmpty(name)) {
++            name = context.getResources().getString(
++                    com.android.internal.R.string.config_dozeComponent);
++        }
++        return !TextUtils.isEmpty(name);
++    }
++}
+Index: packages/apps/Settings/src/com/android/settings/WakeService.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/WakeService.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/WakeService.java	(revision 2064)
+@@ -0,0 +1,174 @@
++package com.android.settings;
++
++import android.app.Service;
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.hardware.Sensor;
++import android.hardware.SensorEvent;
++import android.hardware.SensorEventListener;
++import android.hardware.SensorManager;
++import android.os.Bundle;
++import android.os.IBinder;
++import android.os.PowerManager;
++import android.os.PowerManager.WakeLock;
++import android.os.SystemClock;
++import android.util.Log;
++
++/**
++ * Created by Administrator on 2017/11/25.
++ */
++public class WakeService extends Service implements SensorEventListener {
++    float x1, y1, z1;
++    float x2, y2, z2,z3;
++    private SensorManager mSensorManager;
++    private WakeLock mWakeLock;
++    private PowerManager manager;
++    boolean isScreenOff = false;
++    private String TAG = "whj1";
++    Context myapp = this;
++    public BroadcastReceiver mReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++
++            if (!intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
++                return;
++            } else if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
++                isScreenOff = true;
++                Log.d(TAG, "onReceive: ");
++            }
++            if (mSensorManager != null) {// 取消监听后重写监听，以保持后台运行
++                mSensorManager.unregisterListener(WakeService.this);
++                mSensorManager
++                        .registerListener(
++                                WakeService.this,
++                                mSensorManager
++                                        .getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
++                                SensorManager.SENSOR_DELAY_NORMAL);
++            }
++        }
++    };
++
++    @Override
++    public void onCreate() {
++        super.onCreate();
++        Log.d(TAG, "onCreate: ");
++        mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
++        manager = (PowerManager) getSystemService(Context.POWER_SERVICE);
++        mWakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
++                "AccleratePersist");// CPU保存运行
++        IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);// 屏幕熄掉后依然运行
++        filter.addAction(Intent.ACTION_SCREEN_OFF);
++        mSensorManager.registerListener(this,
++                mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
++                SensorManager.SENSOR_DELAY_NORMAL);
++        registerReceiver(mReceiver, filter);
++    }
++
++    @Override
++    public void onAccuracyChanged(Sensor arg0, int arg1) {
++        // TODO Auto-generated method stub
++    }
++
++    @Override
++    public void onSensorChanged(SensorEvent arg0) {
++        // TODO Auto-generated method stub
++        boolean x, y, z;
++//        Log.d("whj1", "onSensorChanged: ");
++        x = arg0.values[0] < 3 && arg0.values[0] > -3;
++        y = arg0.values[1] > 6.5 && arg0.values[1] < 10;
++        z = arg0.values[2] < 7;
++        if (arg0.values[0] > 0) {
++            if (x1 > arg0.values[0]) {
++                x2 = x1 - arg0.values[0];
++                x1 = arg0.values[0];
++            } else {
++                x2 = arg0.values[0] - x1;
++            }
++        } else {
++            if (x1 > arg0.values[0]) {
++                x2 = x1 - arg0.values[0];
++                x1=arg0.values[0];
++            } else {
++                x2 = arg0.values[0] - x1;
++            }
++        }
++        if (arg0.values[1] > 0) {
++            if (y1 > arg0.values[1]) {
++                y2 = y1 - arg0.values[1];
++            } else {
++                y2 = arg0.values[1] - y1;
++                y1 = arg0.values[1];
++            }
++        }
++        if (arg0.values[2] > 0) {
++            if (z1 > arg0.values[2]) {
++                z2 = z1 - arg0.values[2];
++            } else {
++                z2 = arg0.values[2] - z1;
++                z1 = arg0.values[2];
++            }
++            z3= z3 + z2;
++        } else {
++            if (z1>arg0.values[2]){
++                z3=z1-arg0.values[2];
++                z1=arg0.values[2];
++            }else {
++                z3=arg0.values[2]-z1;
++            }
++        }
++        if (isScreenOff) {
++            if (x && y && z && 10 > y2 && y2 > 7 && z2 < 8 && z2 > 4) {
++                x1 = 0;
++                y1 = 0;
++                z1 = 0;
++                y2 = 0;
++                z2 = 0;
++                z3=0;x2=0;
++                mWakeLock = manager.newWakeLock(
++                        PowerManager.FULL_WAKE_LOCK
++                                | PowerManager.ACQUIRE_CAUSES_WAKEUP
++                                | PowerManager.ON_AFTER_RELEASE,
++                        "SimpleTimer");
++                mWakeLock.acquire(6000);
++                isScreenOff = false;
++            } else if (z3 > 12 && x2 > 8) {
++                z3=0;x2=0; x1 = 0;
++                y1 = 0;
++                z1 = 0;
++                y2 = 0;
++                z2 = 0;
++                mWakeLock = manager.newWakeLock(
++                        PowerManager.FULL_WAKE_LOCK
++                                | PowerManager.ACQUIRE_CAUSES_WAKEUP
++                                | PowerManager.ON_AFTER_RELEASE,
++                        "SimpleTimer");
++                mWakeLock.acquire(6000);
++                isScreenOff = false;
++            }
++        }else if (!isScreenOff&&arg0.values[2]<-9){
++            x1 = 0;
++            y1 = 0;
++            z1 = 0;
++            y2 = 0;
++            z2 = 0;
++            z3=0;x2=0;
++            manager.goToSleep(SystemClock.uptimeMillis());
++        }
++    }
++
++    @Override
++    public IBinder onBind(Intent arg0) {
++        // TODO Auto-generated method stub
++        return null;
++    }
++
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++        Log.d(TAG, "onDestroy: ");
++        mSensorManager.unregisterListener(WakeService.this);
++        unregisterReceiver(mReceiver);
++    }
++}

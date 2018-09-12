@@ -1,0 +1,97 @@
+Index: packages/apps/Settings/src/com/android/settings/SettingsActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1439)
++++ packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1440)
+@@ -82,6 +82,7 @@
+ import com.android.settings.deviceinfo.PrivateVolumeForget;
+ import com.android.settings.deviceinfo.PrivateVolumeSettings;
+ import com.android.settings.deviceinfo.PublicVolumeSettings;
++import android.telephony.TelephonyManager;
+ import com.android.settings.deviceinfo.SimStatus;
+ import com.android.settings.deviceinfo.Status;
+ import com.android.settings.deviceinfo.StorageSettings;
+@@ -239,7 +240,7 @@
+     private static final int REQUEST_SUGGESTION = 42;
+ 
+     private String mFragmentClass;
+-
++    private boolean mFromBootWizard;
+     private CharSequence mInitialTitle;
+     private int mInitialTitleResId;
+     private String mCurrentFragment;
+@@ -445,7 +446,7 @@
+ 
+     private ActionBar mActionBar;
+     private SwitchBar mSwitchBar;
+-
++    private static final String EXTRA_FROM_BOOTWIZARD = "wifi_from_boot_wizard";
+     private Button mNextButton;
+ 
+     private boolean mDisplayHomeAsUpEnabled;
+@@ -579,6 +580,7 @@
+         getMetaData();
+ 
+         final Intent intent = getIntent();
++        mFromBootWizard = intent.getBooleanExtra(EXTRA_FROM_BOOTWIZARD, false);
+         if (intent.hasExtra(EXTRA_UI_OPTIONS)) {
+             getWindow().setUiOptions(intent.getIntExtra(EXTRA_UI_OPTIONS, 0));
+         }
+@@ -717,6 +719,19 @@
+                 backButton.setOnClickListener(new OnClickListener() {
+                     public void onClick(View v) {
+                         setResult(RESULT_CANCELED, getResultIntentData());
++						if (mFromBootWizard) {
++                            if (isSIMCardReady()) {
++                                 ComponentName cn = new ComponentName("com.gome.bootwizard", "com.gome.bootwizard.activity.LanguageActivity");
++                                Intent intent = new Intent();
++                                intent.setComponent(cn);
++                                startActivity(intent);
++                            }else{
++                                 ComponentName cn = new ComponentName("com.gome.bootwizard", "com.gome.bootwizard.activity.SIMCardActivity");
++                                Intent intent = new Intent();
++                                intent.setComponent(cn);
++                                startActivity(intent);
++                            }
++						}
+                         finish();
+                     }
+                 });
+@@ -730,6 +745,12 @@
+                 mNextButton = (Button)findViewById(R.id.next_button);
+                 mNextButton.setOnClickListener(new OnClickListener() {
+                     public void onClick(View v) {
++						if (mFromBootWizard) {
++                            ComponentName cn = new ComponentName("com.gome.bootwizard", "com.gome.bootwizard.activity.FaceCodeActivity");
++                            Intent intent = new Intent();
++                            intent.setComponent(cn);
++                            startActivity(intent);
++                        }
+                         setResult(RESULT_OK, getResultIntentData());
+                         finish();
+                     }
+@@ -763,7 +784,24 @@
+         if (DEBUG_TIMING) Log.d(LOG_TAG, "onCreate took " + (System.currentTimeMillis() - startTime)
+                 + " ms");
+     }
+-
++    public boolean isSIMCardReady() {
++        TelephonyManager telManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++        if (telManager != null) {
++            final int simState = telManager.getSimState();
++            switch (simState) {
++                case TelephonyManager.SIM_STATE_READY:
++                    return true;
++                case TelephonyManager.SIM_STATE_UNKNOWN:
++                case TelephonyManager.SIM_STATE_ABSENT:
++                case TelephonyManager.SIM_STATE_PIN_REQUIRED:
++                case TelephonyManager.SIM_STATE_PUK_REQUIRED:
++                case TelephonyManager.SIM_STATE_NETWORK_LOCKED:
++                default:
++                    return false;
++            }
++        }
++        return false;
++    }
+     public void setDisplaySearchMenu(boolean displaySearch) {
+         if (displaySearch != mDisplaySearch) {
+             mDisplaySearch = displaySearch;

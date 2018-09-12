@@ -1,0 +1,290 @@
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1132)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1133)
+@@ -3250,6 +3250,7 @@
+     <string name="automatic_storage_manager_activation_warning" msgid="6353100011690933254">"您的存储空间目前是由存储空间管理器管理"</string>
+     <string name="regulartory_safety_title">"监管和安全"</string>
+ 	<string name="battery_percent_title">电池百分比显示</string>
++	<string name="battery_percent_title">电池百分比显示</string>
+ 	<string name="battery_info_status_label" msgid="8109155295509700309">"电池状态："</string>
+     <string name="battery_info_power_label" msgid="7465140230991349382">"是否已插电："</string>
+     <string name="battery_info_scale_label" msgid="3649763192389778437">"电池电量："</string>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1132)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1133)
+@@ -8000,4 +8000,5 @@
+ 	<string name="testing_battery_info">Battery information</string>
+     <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+     <string name="battery_percent_title">Show Battery percentage</string>
++    <string name="battery_percent_title">Show Battery percentage</string>
+ </resources>
+Index: packages/apps/Settings/src/com/mediatek/settings/fuelgauge/PowerUsageExts.java
+===================================================================
+--- packages/apps/Settings/src/com/mediatek/settings/fuelgauge/PowerUsageExts.java	(revision 1132)
++++ packages/apps/Settings/src/com/mediatek/settings/fuelgauge/PowerUsageExts.java	(revision 1133)
+@@ -23,6 +23,7 @@
+ import com.mediatek.perfservice.IPerfServiceWrapper;
+ import com.mediatek.perfservice.PerfServiceWrapper;
+ import com.mediatek.settings.FeatureOption;
++import android.content.Intent;
+ 
+ public class PowerUsageExts implements Preference.OnPreferenceChangeListener {
+ 
+@@ -49,7 +50,10 @@
+     private static int RESOLUTION_SWITCH_DISPLAY_ID = 2454;
+     private static final String SIZE_OVERRIDE = "ro.config.size_override";
+     // @}
+-
++	//add by wqq  start {
++	private SwitchPreference mBatteryPercent;
++	public static final String KEY_BATTERY_PERCENTAGE = "battery_percent";
++	//add by wqq end}
+     public PowerUsageExts(Context context, PreferenceScreen appListGroup) {
+         mContext = context;
+         mPowerUsageScreen = appListGroup;
+@@ -97,6 +101,16 @@
+             mResolutionSwitchEnabled.setChecked(isResulotionSwitchEnabled(mContext));
+             mPowerUsageScreen.addPreference(mResolutionSwitchEnabled);
+         }
++
++		//add by wqq start{
++		mBatteryPercent = new SwitchPreference(mContext);
++		mBatteryPercent.setKey(KEY_BATTERY_PERCENTAGE);
++		mBatteryPercent.setTitle(R.string.battery_percent_title);
++		mBatteryPercent.setOrder(PREFERENCE_ORDER_FIRST + 3);
++		mBatteryPercent.setChecked(Settings.System.getInt(mContext.getContentResolver(),
++			Settings.System.BATTERY_POWER_PERCENNTAGE_ENABLED, 1) != 0);
++		mPowerUsageScreen.addPreference(mBatteryPercent);
++		//add by wqq end}
+     }
+ 
+     // on click
+@@ -115,6 +129,22 @@
+             // If user click on PowerSaving preference just return here
+             return true;
+         }
++		//add by wqq start{
++		else if(KEY_BATTERY_PERCENTAGE.equals(preference.getKey())){
++			if (preference instanceof SwitchPreference) {
++				SwitchPreference pref = (SwitchPreference) preference;
++				int bgState = pref.isChecked() ? 1 : 0;
++				Settings.System.putInt(mContext.getContentResolver(),
++					Settings.System.BATTERY_POWER_PERCENNTAGE_ENABLED, bgState);
++				if (mBatteryPercent != null) {
++					mBatteryPercent.setChecked(pref.isChecked()); 
++					}
++				Intent intent = new Intent("battery_percentage_on_off"); 
++				mContext.sendBroadcast(intent);
++				}
++			return true;
++			}
++		//add by wqq end}
+         return false;
+     }
+ 
+Index: frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+===================================================================
+--- frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 1132)
++++ frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 1133)
+@@ -2422,7 +2422,10 @@
+ 
+             loadIntegerSetting(stmt, Settings.System.POINTER_SPEED,
+                     R.integer.def_pointer_speed);
+-
++			//add by wqq for battery percentage {
++			loadIntegerSetting(stmt, Settings.System.BATTERY_POWER_PERCENNTAGE_ENABLED,
++                    R.integer.battery_power_percentage_enable);
++			//add by wqq for battery percentage }
+             /// M: Load MTK added System providers before Android M.
+             mUtils.loadCustomSystemSettings(stmt);
+ 
+Index: frameworks/base/packages/SettingsProvider/res/values/defaults.xml
+===================================================================
+--- frameworks/base/packages/SettingsProvider/res/values/defaults.xml	(revision 1132)
++++ frameworks/base/packages/SettingsProvider/res/values/defaults.xml	(revision 1133)
+@@ -20,6 +20,8 @@
+     <bool name="def_dim_screen">true</bool>
+     <integer name="def_screen_off_timeout">60000</integer>
+     <integer name="def_sleep_timeout">-1</integer>
++    <!-- add  for battery percentage -->
++    <integer name="battery_power_percentage_enable">1</integer>
+     <bool name="def_airplane_mode_on">false</bool>
+     <bool name="def_theater_mode_on">false</bool>
+     <!-- Comma-separated list of bluetooth, wifi, and cell. -->
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardStatusBarView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardStatusBarView.java	(revision 1132)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardStatusBarView.java	(revision 1133)
+@@ -40,6 +40,8 @@
+ import com.android.systemui.statusbar.policy.UserSwitcherController;
+ 
+ import java.text.NumberFormat;
++//add by wqq
++import android.provider.Settings;
+ 
+ /**
+  * The header group on Keyguard.
+@@ -66,9 +68,11 @@
+     private int mSystemIconsSwitcherHiddenExpandedMargin;
+     private int mSystemIconsBaseMargin;
+     private View mSystemIconsContainer;
++	private Context mContext;
+ 
+     public KeyguardStatusBarView(Context context, AttributeSet attrs) {
+         super(context, attrs);
++		mContext=context;
+     }
+ 
+     @Override
+@@ -238,6 +242,11 @@
+         mBatteryLevel.setText(percentage);
+         boolean changed = mBatteryCharging != charging;
+         mBatteryCharging = charging;
++		//add by wqq for Battery percentage start{
++		int mState = Settings.System.getInt(mContext.getContentResolver(),
++                    Settings.System.BATTERY_POWER_PERCENNTAGE_ENABLED, 0);
++        mBatteryLevel.setVisibility(mState == 1 ? View.VISIBLE : View.GONE);
++		//add by wqq for Battery percentage end}
+         if (changed) {
+             updateVisibilities();
+         }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1132)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1133)
+@@ -237,7 +237,10 @@
+ /// M: BMW
+ import com.android.systemui.recents.misc.SystemServicesProxy;
+ import com.android.systemui.recents.Recents;
+-
++//add by wqq start{
++import android.provider.Settings;
++import java.text.NumberFormat;
++//add by wqq end}
+ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
+         DragDownHelper.DragDownCallback, ActivityStarter, OnUnlockMethodChangedListener,
+         HeadsUpManager.OnHeadsUpChangedListener {
+@@ -534,6 +537,8 @@
+     public static final Interpolator ALPHA_OUT = Interpolators.ALPHA_OUT;
+ 
+     private BackDropView mBackdrop;
++	//add by wqq
++ 	private TextView mBatteryLevel;
+     private ImageView mBackdropFront, mBackdropBack;
+     private PorterDuffXfermode mSrcXferMode = new PorterDuffXfermode(PorterDuff.Mode.SRC);
+     private PorterDuffXfermode mSrcOverXferMode = new PorterDuffXfermode(PorterDuff.Mode.SRC_OVER);
+@@ -904,6 +909,11 @@
+         mLocationController = new LocationControllerImpl(mContext,
+                 mHandlerThread.getLooper()); // will post a notification
+         mBatteryController = createBatteryController();
++		//add by wqq start{
++        mBatteryLevel = (TextView) mStatusBarView.findViewById(R.id.battery_level);
++        mBatteryLevel.setVisibility(Settings.System.getInt(context.getContentResolver(),
++        Settings.System.BATTERY_POWER_PERCENNTAGE_ENABLED, 0)==1 ? View.VISIBLE : View.GONE);
++		//add by wqq end}
+         mBatteryController.addStateChangedCallback(new BatteryStateChangeCallback() {
+             @Override
+             public void onPowerSaveChanged(boolean isPowerSave) {
+@@ -915,6 +925,10 @@
+             @Override
+             public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
+                 // noop
++                //add by wqq start{
++				String percentage = NumberFormat.getPercentInstance().format((double) level / 100.0);
++				mBatteryLevel.setText(percentage);
++				//add by wqq end}
+             }
+         });
+         mNetworkController = new NetworkControllerImpl(mContext, mHandlerThread.getLooper());
+@@ -3783,6 +3797,13 @@
+                 }
+             }
+             //ADD-E By Justin.Shen for Hide/Show navigation-bar
++			//add by wqq start{
++            else if(action.equals("battery_percentage_on_off")){
++            	int mState = Settings.System.getInt(context.getContentResolver(),
++                    Settings.System.BATTERY_POWER_PERCENNTAGE_ENABLED, 0);
++            	mBatteryLevel.setVisibility(mState == 1 ? View.VISIBLE : View.GONE);
++            }
++			//add by wqq end}
+         }
+     };
+ 
+Index: frameworks/base/packages/SystemUI/res/layout/status_bar.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/status_bar.xml	(revision 1132)
++++ frameworks/base/packages/SystemUI/res/layout/status_bar.xml	(revision 1133)
+@@ -63,6 +63,17 @@
+             >
+ 
+             <include layout="@layout/system_icons" />
++            <!-- add  by wqq for battery perenceage start -->	
++	    	<TextView android:id="@+id/battery_level"
++				android:layout_width="wrap_content"
++				android:layout_height="wrap_content"
++				android:layout_gravity="center_vertical"
++				android:layout_marginStart="@dimen/header_battery_margin_keyguard"
++				android:paddingEnd="@dimen/battery_level_padding_end"
++				android:textColor="#ffffff"
++				android:textSize="@dimen/battery_level_text_size"
++		 		android:importantForAccessibility="noHideDescendants"/>
++          <!--  add  by wqq for battery perenceage  end-->	
+ 
+             <com.android.systemui.statusbar.policy.Clock
+                 android:id="@+id/clock"
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1132)
++++ frameworks/base/api/test-current.txt	(revision 1133)
+@@ -32720,6 +32720,7 @@
+     field public static final deprecated java.lang.String ANIMATOR_DURATION_SCALE = "animator_duration_scale";
+     field public static final deprecated java.lang.String AUTO_TIME = "auto_time";
+     field public static final deprecated java.lang.String AUTO_TIME_ZONE = "auto_time_zone";
++    field public static final java.lang.String BATTERY_POWER_PERCENNTAGE_ENABLED = "battery_power_percentage_enable";
+     field public static final java.lang.String BLUETOOTH_DISCOVERABILITY = "bluetooth_discoverability";
+     field public static final java.lang.String BLUETOOTH_DISCOVERABILITY_TIMEOUT = "bluetooth_discoverability_timeout";
+     field public static final deprecated java.lang.String BLUETOOTH_ON = "bluetooth_on";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1132)
++++ frameworks/base/api/current.txt	(revision 1133)
+@@ -32640,6 +32640,7 @@
+     field public static final deprecated java.lang.String ANIMATOR_DURATION_SCALE = "animator_duration_scale";
+     field public static final deprecated java.lang.String AUTO_TIME = "auto_time";
+     field public static final deprecated java.lang.String AUTO_TIME_ZONE = "auto_time_zone";
++    field public static final java.lang.String BATTERY_POWER_PERCENNTAGE_ENABLED = "battery_power_percentage_enable";
+     field public static final java.lang.String BLUETOOTH_DISCOVERABILITY = "bluetooth_discoverability";
+     field public static final java.lang.String BLUETOOTH_DISCOVERABILITY_TIMEOUT = "bluetooth_discoverability_timeout";
+     field public static final deprecated java.lang.String BLUETOOTH_ON = "bluetooth_on";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1132)
++++ frameworks/base/api/system-current.txt	(revision 1133)
+@@ -35399,6 +35399,7 @@
+     field public static final deprecated java.lang.String ANIMATOR_DURATION_SCALE = "animator_duration_scale";
+     field public static final deprecated java.lang.String AUTO_TIME = "auto_time";
+     field public static final deprecated java.lang.String AUTO_TIME_ZONE = "auto_time_zone";
++    field public static final java.lang.String BATTERY_POWER_PERCENNTAGE_ENABLED = "battery_power_percentage_enable";
+     field public static final java.lang.String BLUETOOTH_DISCOVERABILITY = "bluetooth_discoverability";
+     field public static final java.lang.String BLUETOOTH_DISCOVERABILITY_TIMEOUT = "bluetooth_discoverability_timeout";
+     field public static final deprecated java.lang.String BLUETOOTH_ON = "bluetooth_on";
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 1132)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 1133)
+@@ -3866,6 +3866,13 @@
+          */
+         public static final String BG_POWER_SAVING_ENABLE = "background_power_saving_enable";
+ 
++	   /*
++		*
++		*add by wqq for battery of percentage 
++		*/
++		
++	   public static final String BATTERY_POWER_PERCENNTAGE_ENABLED = "battery_power_percentage_enable";
++
+ 		/*
+ 		*add for take photo/video by touch fingerprint sensor
+ 		*

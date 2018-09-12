@@ -1,0 +1,201 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/ZonePicker.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/ZonePicker.java	(revision 7333)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/ZonePicker.java	(revision 7334)
+@@ -213,7 +213,21 @@
+         // Ignore extra clicks
+         if (!isResumed()) return;
+         final Map<?, ?> map = (Map<?, ?>)listView.getItemAtPosition(position);
+-        final String tzId = (String) map.get(ZoneGetter.KEY_ID);
++        String tzId = (String) map.get(ZoneGetter.KEY_ID);
++		if(tzId.equals(ZoneGetter.EUROPE_KHABAROVSK))
++		 	tzId = ZoneGetter.ASIA_VLADIVOSTOK;
++		else if(tzId.equals(ZoneGetter.EUROPE_SEVERO_KURILSK))
++		 	tzId = ZoneGetter.ASIA_MAGADAN;
++		else if(tzId.equals(ZoneGetter.EUROPE_SAINT_PETERSBURG))
++		 	tzId = ZoneGetter.EUROPE_MOSCOW;
++		else if(tzId.equals(ZoneGetter.EUROPE_IZHEVSK))
++		 	tzId = ZoneGetter.EUROPE_SAMARA;
++		else if(tzId.equals(ZoneGetter.EUROPE_UFA))
++		 	tzId = ZoneGetter.ASIA_YEKATERINBURG;
++		else if(tzId.equals(ZoneGetter.EUROPE_CHELYABINSK))
++		 	tzId = ZoneGetter.ASIA_YEKATERINBURG;
++		else if(tzId.equals(ZoneGetter.EUROPE_ULAN_UDE))
++		 	tzId = ZoneGetter.ASIA_IRKUTSK;
+ 
+         // Update the system timezone value
+         final Activity activity = getActivity();
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/SettingsLib/src/com/android/settingslib/datetime/ZoneGetter.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/SettingsLib/src/com/android/settingslib/datetime/ZoneGetter.java	(revision 7333)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/SettingsLib/src/com/android/settingslib/datetime/ZoneGetter.java	(revision 7334)
+@@ -49,6 +49,30 @@
+     public static final String KEY_DISPLAYNAME = "name";  // value: String
+     public static final String KEY_GMT = "gmt";  // value: String
+     public static final String KEY_OFFSET = "offset";  // value: int (Integer)
++	
++	//Add timezone
++	public static final String EUROPE_KHABAROVSK = "Europe/Khabarovsk";
++	public static final String ASIA_VLADIVOSTOK = "Asia/Vladivostok";
++	public static final String EUROPE_SEVERO_KURILSK = "Europe/Severo-Kurilsk";
++	public static final String ASIA_MAGADAN = "Asia/Magadan";
++	public static final String EUROPE_SAINT_PETERSBURG="Europe/Saint-Petersburg";
++	public static final String EUROPE_MOSCOW = "Europe/Moscow";
++	public static final String EUROPE_IZHEVSK="Europe/Izhevsk";
++	public static final String EUROPE_SAMARA="Europe/Samara";
++	public static final String EUROPE_UFA="Europe/Ufa";
++	public static final String EUROPE_CHELYABINSK="Europe/Chelyabinsk";
++	public static final String ASIA_YEKATERINBURG="Asia/Yekaterinburg";
++	public static final String EUROPE_ULAN_UDE="Europe/Ulan-Ude";
++	public static final String ASIA_IRKUTSK="Asia/Irkutsk";
++	
++	/*public static final String KHABAROVSK = "Khabarovsk";
++	public static final String SEVERO_KURILSK = "Severo-Kurilsk";
++	public static final String SAINT_PETERSBURG = "Saint-Petersburg";
++	public static final String IZHEVSK = "Izhevsk";
++	public static final String UFA = "Ufa";
++	public static final String CHELYABINSK = "Chelyabinsk";
++	public static final String ULAN_UDE = "Ulan-Ude";*/
++	
+ 
+     private ZoneGetter() {}
+ 
+@@ -97,6 +121,20 @@
+             String olsonId = olsonIdsToDisplayList.get(i);
+             olsonIdsToDisplay[i] = olsonId;
+             TimeZone tz = TimeZone.getTimeZone(olsonId);
++			if(olsonId.equals(EUROPE_KHABAROVSK))
++					tz = TimeZone.getTimeZone(ASIA_VLADIVOSTOK);
++			else if(olsonId.equals(EUROPE_SEVERO_KURILSK))
++					tz = TimeZone.getTimeZone(ASIA_MAGADAN);
++			else if(olsonId.equals(EUROPE_SAINT_PETERSBURG))
++					tz = TimeZone.getTimeZone(EUROPE_MOSCOW);
++			else if(olsonId.equals(EUROPE_IZHEVSK))
++					tz = TimeZone.getTimeZone(EUROPE_SAMARA);
++			else if(olsonId.equals(EUROPE_UFA))
++					tz = TimeZone.getTimeZone(ASIA_YEKATERINBURG);
++			else if(olsonId.equals(EUROPE_CHELYABINSK))
++					tz = TimeZone.getTimeZone(ASIA_YEKATERINBURG);
++			else if(olsonId.equals(EUROPE_ULAN_UDE))
++					tz = TimeZone.getTimeZone(ASIA_IRKUTSK);
+             timeZones[i] = tz;
+             gmtOffsetStrings[i] = getGmtOffsetString(locale, tz, now);
+         }
+@@ -158,7 +196,7 @@
+ 			
+             int offsetMillis = tz.getOffset(now.getTime());
+             Map<String, Object> displayEntry =
+-                    createDisplayEntry(tz, gmtOffsetString, displayName, offsetMillis);
++                    createDisplayEntry(tz, gmtOffsetString, displayName, offsetMillis,olsonId,context);
+             zones.add(displayEntry);
+         }
+         return zones;
+@@ -165,12 +203,33 @@
+     }
+ 
+     private static Map<String, Object> createDisplayEntry(
+-            TimeZone tz, String gmtOffsetString, String displayName, int offsetMillis) {
++            TimeZone tz, String gmtOffsetString, String displayName, int offsetMillis,String olsonId,Context context) {
+         Map<String, Object> map = new HashMap<String, Object>();
+         map.put(KEY_ID, tz.getID());
+-        map.put(KEY_DISPLAYNAME, displayName);
+-        map.put(KEY_GMT, gmtOffsetString);
+-        map.put(KEY_OFFSET, offsetMillis);
++
++		if(displayName.equals("Kamchatka")){
++				displayName=context.getString(R.string.time_zone_Petropavlovsk_Kamchatsky_name);
++		}else if(displayName.equals("Sakhalin")){
++				displayName=context.getString(R.string.time_zone_Yuzhno_Sakhalinsk_name);
++		}
++		if(olsonId.equals(EUROPE_KHABAROVSK))
++				map.put(KEY_DISPLAYNAME,context.getString(R.string.time_zone_khabarovsk_name));
++		else if(olsonId.equals(EUROPE_SEVERO_KURILSK))
++				map.put(KEY_DISPLAYNAME,context.getString(R.string.time_zone_severo_kurilsk_name));
++		else if(olsonId.equals(EUROPE_SAINT_PETERSBURG))
++				map.put(KEY_DISPLAYNAME,context.getString(R.string.time_zone_Saint_Petersburg_name));
++		else if(olsonId.equals(EUROPE_IZHEVSK))
++				map.put(KEY_DISPLAYNAME,context.getString(R.string.time_zone_Izhevsk_name));
++		else if(olsonId.equals(EUROPE_UFA))
++				map.put(KEY_DISPLAYNAME,context.getString(R.string.time_zone_Ufa_name));
++		else if(olsonId.equals(EUROPE_CHELYABINSK))
++				map.put(KEY_DISPLAYNAME,context.getString(R.string.time_zone_Chelyabinsk_name));
++		else if(olsonId.equals(EUROPE_ULAN_UDE))
++				map.put(KEY_DISPLAYNAME,context.getString(R.string.time_zone_Ulan_Ude_name));
++		else
++			map.put(KEY_DISPLAYNAME, displayName);
++			map.put(KEY_GMT, gmtOffsetString);
++			map.put(KEY_OFFSET, offsetMillis);
+         return map;
+     }
+ 
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/SettingsLib/res/xml/timezones.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/SettingsLib/res/xml/timezones.xml	(revision 7333)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/SettingsLib/res/xml/timezones.xml	(revision 7334)
+@@ -35,9 +35,15 @@
+     <timezone id="Europe/Madrid"></timezone>
+     <timezone id="Europe/Sarajevo"></timezone>
+ 	<timezone id="Europe/Samara"></timezone>
+-	<timezone id="Europe/Saint-Petersburg"></timezone>
+ 	<timezone id="Europe/Volgograd"></timezone>
+     <timezone id="Europe/Kaliningrad"></timezone>
++	<timezone id="Europe/Saint-Petersburg"></timezone>
++	<timezone id="Europe/Khabarovsk"></timezone>
++	<timezone id="Europe/Severo-Kurilsk"></timezone>
++	<timezone id="Europe/Izhevsk"></timezone>
++	<timezone id="Europe/Ufa"></timezone>
++	<timezone id="Europe/Chelyabinsk"></timezone>
++	<timezone id="Europe/Ulan-Ude"></timezone>
+     <timezone id="Africa/Windhoek"></timezone>
+     <timezone id="Africa/Brazzaville"></timezone>
+     <timezone id="Asia/Amman"></timezone>
+Index: frameworks/base/packages/SettingsLib/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SettingsLib/res/values/strings.xml	(revision 7333)
++++ frameworks/base/packages/SettingsLib/res/values/strings.xml	(revision 7334)
+@@ -821,6 +821,18 @@
+     <string name="help_feedback_label">Help &amp; Feedback</string>
+ 
+     <!-- Content description for drawer menu button [CHAR_LIMIT=30]-->
+-    <string name="content_description_menu_button">Menu</string>
++    <string name="content_description_menu_button">Menu</string>
++	
++	<!--start:Add timezone -->
++	<string name="time_zone_Petropavlovsk_Kamchatsky_name">Petropavlovsk-Kamchatsky</string>
++	<string name="time_zone_Yuzhno_Sakhalinsk_name">Yuzhno-Sakhalinsk</string>
++	<string name="time_zone_khabarovsk_name">Khabarovsk</string>
++	<string name="time_zone_severo_kurilsk_name">Severo-Kurilsk</string>
++	<string name="time_zone_Saint_Petersburg_name">Saint-Petersburg</string>
++	<string name="time_zone_Izhevsk_name">Izhevsk</string>
++	<string name="time_zone_Ufa_name">Ufa</string>
++	<string name="time_zone_Chelyabinsk_name">Chelyabinsk</string>
++	<string name="time_zone_Ulan_Ude_name">Ulan-Ude</string>
++	<!--end:Add timezone -->
+ 
+ </resources>
+\ No newline at end of file
+Index: frameworks/base/packages/SettingsLib/res/values-ru-rRU/strings.xml
+===================================================================
+--- frameworks/base/packages/SettingsLib/res/values-ru-rRU/strings.xml	(revision 7333)
++++ frameworks/base/packages/SettingsLib/res/values-ru-rRU/strings.xml	(revision 7334)
+@@ -794,6 +794,18 @@
+     <string name="help_feedback_label">Помощь и Обратная связь</string>
+ 
+     <!-- Content description for drawer menu button [CHAR_LIMIT=30]-->
+-    <string name="content_description_menu_button">Меню</string>
++    <string name="content_description_menu_button">Меню</string>
++	
++	<!--start:Add timezone -->
++	<string name="time_zone_Petropavlovsk_Kamchatsky_name">Петропавловск-Камчатский</string>
++	<string name="time_zone_Yuzhno_Sakhalinsk_name">Южно-Сахалинск</string>
++	<string name="time_zone_khabarovsk_name">Хабаровск</string>
++	<string name="time_zone_severo_kurilsk_name">Северо-Курильск</string>
++	<string name="time_zone_Saint_Petersburg_name">Санкт-Петербург</string>
++	<string name="time_zone_Izhevsk_name">Ижевск</string>
++	<string name="time_zone_Ufa_name">Уфа</string>
++	<string name="time_zone_Chelyabinsk_name">Челябинск</string>
++	<string name="time_zone_Ulan_Ude_name">Улан-Удэ</string>
++	<!--end:Add timezone -->
+ 
+ </resources>
+\ No newline at end of file

@@ -1,0 +1,88 @@
+Index: vendor/branch/5058T_Claro_Honduras/vendor/mediatek/proprietary/packages/apps/Stk/src/com/android/stk/ProactiveSetTitleReceiver.java
+===================================================================
+--- vendor/branch/5058T_Claro_Honduras/vendor/mediatek/proprietary/packages/apps/Stk/src/com/android/stk/ProactiveSetTitleReceiver.java	(revision 0)
++++ vendor/branch/5058T_Claro_Honduras/vendor/mediatek/proprietary/packages/apps/Stk/src/com/android/stk/ProactiveSetTitleReceiver.java	(revision 16061)
+@@ -0,0 +1,69 @@
++/*
++ * Copyright (C) 2007 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.stk;
++
++import android.content.BroadcastReceiver;  
++import android.content.ComponentName;  
++import android.content.Context;  
++import android.content.Intent;  
++import android.content.pm.PackageManager;  
++import android.util.Log;  
++import android.os.SystemProperties;  
++import com.android.internal.telephony.TelephonyIntents;
++import android.telephony.TelephonyManager;
++
++public class ProactiveSetTitleReceiver extends BroadcastReceiver {
++    PackageManager pm;  
++    @Override  
++    public void onReceive(Context context, Intent intent) {
++		String action = intent.getAction();
++		String persoStkAppName = null;
++		TelephonyManager telMgr = (TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
++		pm = context.getPackageManager(); 
++		int simState = telMgr.getSimState();
++		if (action.equals("proactive_set_stkselection_app_title")) { 
++			int simId = intent.getIntExtra("simId", 0);  
++			persoStkAppName = SystemProperties.get("gsm.stk.perso.app_title");
++			Log.i("Stk", "insert persoStkAppName = " + persoStkAppName);
++			String defaultStkAppName = "";
++			try {
++				defaultStkAppName = pm.getApplicationLabel(pm.getApplicationInfo("com.android.stk",0)).toString();
++			} catch (PackageManager.NameNotFoundException e) {
++				e.printStackTrace();
++			}
++		}
++		if (action.equals(TelephonyIntents.ACTION_SIM_STATE_CHANGED)) {
++			if (TelephonyManager.SIM_STATE_ABSENT == simState) {
++				SystemProperties.set("gsm.stk.perso.app_title", context.getString(R.string.app_name));
++				Log.i("Stk", "persoStkAppName = " + persoStkAppName);
++			}
++		}
++        setAppState(false);
++        setAppState(true);
++    }
++
++    private void setAppState(boolean install) {
++        Log.i("Stk", "setAppState install = " + install);
++        ComponentName cName = new ComponentName("com.android.stk", "com.android.stk.StkMain");
++        int state = install ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED: PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
++        try {
++            pm.setComponentEnabledSetting(cName, state, PackageManager.DONT_KILL_APP);
++        } catch (Exception e) {
++            e.printStackTrace();
++        }
++    }
++}
+\ No newline at end of file
+Index: vendor/branch/5058T_Claro_Honduras/device/ausshine/aus6739_66_n1/system.prop
+===================================================================
+--- vendor/branch/5058T_Claro_Honduras/device/ausshine/aus6739_66_n1/system.prop	(revision 16060)
++++ vendor/branch/5058T_Claro_Honduras/device/ausshine/aus6739_66_n1/system.prop	(revision 16061)
+@@ -86,6 +86,8 @@
+ persist.sys.timezone = Pacific/Honolulu
+ persist.radio.fd.r8.legacy.off = 1
+ 
++ro.telcel.enabled = true
++
+ # add customer client id
+ ro.com.google.clientidbase=android-alcatel
+ ro.com.google.clientidbase.ms=android-alcatel

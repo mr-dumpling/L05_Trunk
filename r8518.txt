@@ -1,0 +1,42 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 8517)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 8518)
+@@ -2463,8 +2463,18 @@
+         final boolean allowedByDpm = (dpmFlags
+                 & DevicePolicyManager.KEYGUARD_DISABLE_SECURE_NOTIFICATIONS) == 0;
+ 
+-        setShowLockscreenNotifications(show && allowedByDpm);
++        //Begin added by zengjie for XR5793638 && XR5756554 on 1/13/18
++        boolean disableLockscreenNotifications = show && allowedByDpm;
+ 
++        if (disableLockscreenNotifications) {
++            setJoyLockscreenNotificationsEnable();
++        } else {
++            base.packages.SystemUI.src.com.android.systemui.statusbar.phone.JoyLscreenProxy.getLScreen().notifyLockScreenNotifiactionEnable(false);
++        }
++        //End added by zengjie for XR5793638 && XR5756554 on 1/13/18
++
++        setShowLockscreenNotifications(disableLockscreenNotifications);
++
+         if (ENABLE_LOCK_SCREEN_ALLOW_REMOTE_INPUT) {
+             final boolean remoteInput = Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                     Settings.Secure.LOCK_SCREEN_ALLOW_REMOTE_INPUT,
+@@ -2479,6 +2489,17 @@
+         }
+     }
+ 
++    //Begin added by zengjie for XR5793638 && XR5756554 on 1/13/18
++    public void setJoyLockscreenNotificationsEnable() {
++        ArrayList<Entry> activeNotifications = mNotificationData.getActiveNotifications();
++        final int N = activeNotifications.size();
++        base.packages.SystemUI.src.com.android.systemui.statusbar.phone.JoyLscreenProxy.getLScreen().notifyLockScreenNotifiactionEnable(true);
++        for (int i = 0;i <= N -1;i++) {
++            StatusBarNotification sbn = activeNotifications.get(i).notification;
++            base.packages.SystemUI.src.com.android.systemui.statusbar.phone.JoyLscreenProxy.getLScreen().onNotificationPosted(sbn);
++        }
++    }
++
+     protected abstract void setAreThereNotifications();
+     protected abstract void updateNotifications();
+     public abstract boolean shouldDisableNavbarGestures();

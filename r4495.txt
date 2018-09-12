@@ -1,0 +1,54 @@
+Index: packages/apps/Email/UnifiedEmail/src/com/mediatek/mail/vip/VipPreferences.java
+===================================================================
+--- packages/apps/Email/UnifiedEmail/src/com/mediatek/mail/vip/VipPreferences.java	(revision 4494)
++++ packages/apps/Email/UnifiedEmail/src/com/mediatek/mail/vip/VipPreferences.java	(revision 4495)
+@@ -74,7 +74,8 @@
+             File f = new File(path);
+             Log.d("xiawei", "f exist:" + f.exists());  
+             if (!f.exists()) {
+-    		    ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(mContext,RingtoneManager.TYPE_NOTIFICATION).toString();
++    		    RingtoneManager.getActualDefaultRingtoneUri(mContext,RingtoneManager.TYPE_NOTIFICATION).toString();
++				ringtoneUri = VIP_RINGTONE_DEFAULT;
+     		    mEditor.putString(VIP_RINGTONE, ringtoneUri).apply();
+             }
+             
+Index: packages/apps/Email/UnifiedEmail/src/com/android/mail/preferences/FolderPreferences.java
+===================================================================
+--- packages/apps/Email/UnifiedEmail/src/com/android/mail/preferences/FolderPreferences.java	(revision 4494)
++++ packages/apps/Email/UnifiedEmail/src/com/android/mail/preferences/FolderPreferences.java	(revision 4495)
+@@ -238,6 +238,7 @@
+             Log.d("xiawei", "f exist:" + f.exists());  
+             if (!f.exists()) {
+     		    ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(getContext(),RingtoneManager.TYPE_NOTIFICATION).toString();
++				ringtoneUri = Settings.System.DEFAULT_NOTIFICATION_URI.toString();
+     		    setNotificationRingtoneUri(ringtoneUri);
+             }
+             
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 4494)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 4495)
+@@ -1134,7 +1134,22 @@
+         transaction.commit();
+         fm.executePendingTransactions();
+     }
+-
++	
++	private void updateNotificationTitle(){
++		if(mInboxFolderPreferences == null) return;
++		final String ringtoneUri = mInboxFolderPreferences.getNotificationRingtoneUri();
++        if (!TextUtils.isEmpty(ringtoneUri)) {
++            mRingtone = RingtoneManager.getRingtone(getActivity(), Uri.parse(ringtoneUri));
++        }
++        setRingtoneSummary();
++	}
++	
++	
++	@Override
++    public void onResume() {
++       super.onResume();
++	   updateNotificationTitle();
++	}
+     /**
+      * M: Don't show feedback menu if no feedback Uri is set
+      */

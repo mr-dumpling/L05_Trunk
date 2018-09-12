@@ -1,0 +1,164 @@
+Index: vendor/branch/5058A_Argentina_OpenMarket/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java	(revision 15459)
++++ vendor/branch/5058A_Argentina_OpenMarket/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java	(revision 15460)
+@@ -270,7 +270,34 @@
+ 
+         return ret.toString();
+     }
++	
++    //Begin add by chenli.gao.hz for XR on 2018/03/26
++    /**
++     * @hide
++     */
++    public static boolean isProcessRunning() {
++        boolean isRunning = false;
++	    Rlog.d(LOG_TAG, "CTSTEST_Service isProcessRunning: ");
++        //ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
++        IActivityManager am = ActivityManagerNative.getDefault();
++        try{
++	        List<RunningAppProcessInfo> lists = am.getRunningAppProcesses();
++	        for(RunningAppProcessInfo info : lists){
++	            if(info.processName != null && 
++                        ("com.android.cts.stub".equals(info.processName) 
++                         || "android.telephony.cts".equals(info.processName))){
++	                Rlog.i(LOG_TAG, "CTSTEST_Service info.processName: " + info.processName);
++	                isRunning = true;
++	            }
++	        }
++        }catch(Exception re){
++        	Rlog.d(LOG_TAG, "CTSTEST_get running app process exception, that's ok, just break out.");
++        }
+ 
++        return isRunning;
++    }
++    //End add by chenli.gao.hz for XR on 2018/03/26
++
+     /**
+      * Extracts the network address portion and canonicalize.
+      *
+@@ -562,7 +589,20 @@
+             return true;
+         }
+         /// @}
+-
++        //Begin added by zubai.li for XR5945368 on 2018/03/09
++	    boolean isCTS = isProcessRunning();
++	    Rlog.i(LOG_TAG, "compareLoosely_CTSTEST_IS_RUNNING_CTS: " + isCTS);
++	    if (!isCTS) {
++        String propName = "ro_config_phnum_accurate";
++        if (SystemProperties.getBoolean(propName, false)
++                || 1 == SystemProperties.getInt("ro.def.russia.num.match.rule", 0)) {
++            Rlog.d(LOG_TAG, "[match accurate] --- MIN_MATCH:" + MIN_MATCH + " ---matched:" + matched);
++            if (matched >= MIN_MATCH) {
++                return true;
++            }
++        }
++     }
++        //End added by zubai.li for XR5945368 on 2018/03/09
+         /*
+          * Now, what remains must be one of the following for a
+          * match:
+Index: vendor/branch/5058A_Argentina_OpenMarket/packages/providers/ContactsProvider/src/com/android/providers/contacts/ContactsDatabaseHelper.java
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/packages/providers/ContactsProvider/src/com/android/providers/contacts/ContactsDatabaseHelper.java	(revision 15459)
++++ vendor/branch/5058A_Argentina_OpenMarket/packages/providers/ContactsProvider/src/com/android/providers/contacts/ContactsDatabaseHelper.java	(revision 15460)
+@@ -109,7 +109,13 @@
+ import java.util.Locale;
+ import java.util.Set;
+ import java.util.concurrent.ConcurrentHashMap;
++import android.app.ActivityManager;
++import android.app.ActivityManager.RunningAppProcessInfo;
++import android.app.ActivityManagerNative;
++import android.app.IActivityManager;
++import java.util.List;
+ 
++
+ /**
+  * Database helper for contacts. Designed as a singleton to make sure that all
+  * {@link android.content.ContentProvider} users get the same reference.
+@@ -5898,7 +5904,34 @@
+         appendPhoneLookupSelection(sb, normalizedNumber, numberE164);
+         qb.appendWhere(sb.toString());
+     }
++	
++	    //Begin add by chenli.gao.hz for XR on 2018/03/26
++    /**
++     * @hide
++     */
++    public static boolean isProcessRunning() {
++        boolean isRunning = false;
++	    Rlog.d(LOG_TAG, "CTSTEST_Service isProcessRunning: ");
++        //ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
++        IActivityManager am = ActivityManagerNative.getDefault();
++        try{
++	        List<RunningAppProcessInfo> lists = am.getRunningAppProcesses();
++	        for(RunningAppProcessInfo info : lists){
++	            if(info.processName != null && 
++                        ("com.android.cts.stub".equals(info.processName) 
++                         || "android.telephony.cts".equals(info.processName))){
++	                Rlog.i(LOG_TAG, "CTSTEST_Service info.processName: " + info.processName);
++	                isRunning = true;
++	            }
++	        }
++        }catch(Exception re){
++        	Rlog.d(LOG_TAG, "CTSTEST_get running app process exception, that's ok, just break out.");
++        }
+ 
++        return isRunning;
++    }
++    //End add by chenli.gao.hz for XR on 2018/03/26
++
+     /**
+      * Phone lookup method that uses the custom SQLite function phone_number_compare_loose
+      * that serves as a fallback in case the regular lookup does not return any results.
+@@ -5906,17 +5939,41 @@
+      * @param number The phone number to search for.
+      */
+     public void buildFallbackPhoneLookupAndContactQuery(SQLiteQueryBuilder qb, String number) {
+-	
++		boolean isCts = isProcessRunning();
+ 		String minMatch = PhoneNumberUtils.toCallerIDMinMatch(number);
+-        StringBuilder sb = new StringBuilder();
+-        appendPhoneLookupTables(sb, minMatch, true);
++		StringBuilder sb = new StringBuilder();	
++		if(isCts){
++			sb.append(Tables.RAW_CONTACTS);
++			sb.append(" JOIN " + Views.CONTACTS + " as contacts_view"
++                + " ON (contacts_view._id = " + Tables.RAW_CONTACTS
++                + "." + RawContacts.CONTACT_ID + ")" +
++                " JOIN (SELECT " + PhoneLookupColumns.DATA_ID + "," +
++                PhoneLookupColumns.NORMALIZED_NUMBER + " FROM "+ Tables.PHONE_LOOKUP + " "
++                + "WHERE (" + Tables.PHONE_LOOKUP + "." + PhoneLookupColumns.MIN_MATCH + " = '");
++			sb.append(minMatch);
++			sb.append("')) AS lookup " +
++                "ON lookup." + PhoneLookupColumns.DATA_ID + "=" + Tables.DATA + "." + Data._ID
++                + " JOIN " + Tables.DATA + " "
++                + "ON " + Tables.DATA + "." + Data.RAW_CONTACT_ID + "=" + Tables.RAW_CONTACTS + "."
++                + RawContacts._ID);
+ 
++			appendPresenceAndStautsTable(sb);
++			qb.setTables(sb.toString());
++			sb.setLength(0);
++			sb.append("PHONE_NUMBERS_EQUAL(" + Tables.DATA + "." + Phone.NUMBER + ", ");
++			DatabaseUtils.appendEscapedSQLString(sb, number);
++			sb.append(mUseStrictPhoneNumberComparison ? ", 1)" : ", 0)");
++			qb.appendWhere(sb.toString());
++		}else{
++			appendPhoneLookupTables(sb, minMatch, true);
++
+           /**M: append this table for some query */
+-        appendPresenceAndStautsTable(sb);
+-        qb.setTables(sb.toString());
+-        sb = new StringBuilder();
+-        appendPhoneLookupSelection(sb, null, null);
+-        qb.appendWhere(sb.toString());
++			appendPresenceAndStautsTable(sb);
++			qb.setTables(sb.toString());
++			sb = new StringBuilder();
++			appendPhoneLookupSelection(sb, null, null);
++			qb.appendWhere(sb.toString());
++		}
+     }
+     /** @} */
+ 

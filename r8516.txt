@@ -1,0 +1,113 @@
+Index: vendor/branch/5058A_Telcel/packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java	(revision 8515)
++++ vendor/branch/5058A_Telcel/packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java	(revision 8516)
+@@ -76,6 +76,7 @@
+ import java.util.Set;
+ /// M: add for Volte.
+ import java.util.concurrent.CopyOnWriteArraySet;
++import android.provider.Settings;
+ 
+ /**
+  * Class responsible for querying Contact Information for Call objects. Can perform asynchronous
+@@ -294,43 +295,45 @@
+             cacheEntry = buildEntry(mContext, callId, callerInfo, presentationMode, isIncoming);
+             mInfoMap.put(callId, cacheEntry);
+         }
+-        
+-         int mSubId = InCallUtils.getSubId(call);
+-        Uri mFdnUri = (mSubId != -1) ? Uri.parse(FDN_CONTENT_PATH_WITH_SUB_ID + mSubId): FDN_CONTENT_URI;
++        boolean isFDNAct = Settings.Global.getInt(mContext.getContentResolver(), "is_fdn_enable", 0) != 0;
++        if (isFDNAct) {      
++            int mSubId = InCallUtils.getSubId(call);
++            Uri mFdnUri = (mSubId != -1) ? Uri.parse(FDN_CONTENT_PATH_WITH_SUB_ID + mSubId): FDN_CONTENT_URI;
+ 
+-        if (didLocalLookup) {
+-           String name = null;
+-           Cursor locFdnContact;
+-           ContentResolver cr = mContext.getContentResolver();    
+-           locFdnContact = cr.query(mFdnUri,
+-             new String[] {"name","number","emails"},null,null, null);
++            if (didLocalLookup) {
++                String name = null;
++                Cursor locFdnContact;
++                ContentResolver cr = mContext.getContentResolver();    
++                locFdnContact = cr.query(mFdnUri,
++                    new String[] {"name","number","emails"},null,null, null);
+ 
+-           if(locFdnContact != null && cacheEntry.number!=null && cacheEntry.number.length() > 0){
+-              try {
+-                  if(locFdnContact.moveToFirst()) {
+-                     do {
+-                            int numColumnIndex = locFdnContact.getColumnIndex("number");
+-                            String tempNum = locFdnContact.getString(numColumnIndex);
+-                            Log.d(TAG, "cacheEntry.number: "+ cacheEntry.number+"; tempNum:"+tempNum);
++                if(locFdnContact != null && cacheEntry.number!=null && cacheEntry.number.length() > 0){
++                    try {
++                        if(locFdnContact.moveToFirst()) {
++                            do {
++                                int numColumnIndex = locFdnContact.getColumnIndex("number");
++                                String tempNum = locFdnContact.getString(numColumnIndex);
++                                Log.d(TAG, "cacheEntry.number: "+ cacheEntry.number+"; tempNum:"+tempNum);
+                             
+-                            String mintempNum = fetchMinNumber(tempNum);
+-                            String minNum = fetchMinNumber(cacheEntry.number);
+-                            Log.d(TAG, "minNum: "+ minNum+"; mintempNum:"+mintempNum);
+-                            if(TextUtils.equals(minNum, mintempNum)){
+-                               name = locFdnContact.getString(locFdnContact.getColumnIndex("name"));
+-                               Log.d(TAG, "name: "+ name);
+-                               cacheEntry.namePrimary = name;
+-                            }
++                                String mintempNum = fetchMinNumber(tempNum);
++                                String minNum = fetchMinNumber(cacheEntry.number);
++                                Log.d(TAG, "minNum: "+ minNum+"; mintempNum:"+mintempNum);
++                                if(TextUtils.equals(minNum, mintempNum)){
++                                    name = locFdnContact.getString(locFdnContact.getColumnIndex("name"));
++                                    Log.d(TAG, "name: "+ name);
++                                    cacheEntry.namePrimary = name;
++                                }
+ 
+-                        } while(locFdnContact.moveToNext());
++                            } while(locFdnContact.moveToNext());
++                        }
++                    } catch (Exception e) {
++                        Log.w(TAG, "locFdnContact error:" + e.getMessage());
++                    } finally {
++                        locFdnContact.close();
+                     }
+-                } catch (Exception e) {
+-                    Log.w(TAG, "locFdnContact error:" + e.getMessage());
+-                } finally {
+-                    locFdnContact.close();
+                 }
++                Log.d(TAG, "cacheEntry.namePrimary: "+ cacheEntry.namePrimary);
+             }
+-            Log.d(TAG, "cacheEntry.namePrimary: "+ cacheEntry.namePrimary);
+         }
+ 
+         sendInfoNotifications(callId, cacheEntry);
+Index: vendor/branch/5058A_Telcel/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnSetting.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnSetting.java	(revision 8515)
++++ vendor/branch/5058A_Telcel/packages/services/Telephony/src/com/android/phone/settings/fdn/FdnSetting.java	(revision 8516)
+@@ -47,6 +47,7 @@
+ 
+ import com.mediatek.settings.TelephonyUtils;
+ 
++import android.provider.Settings;
+ /**
+  * FDN settings UI for the Phone app.
+  * Rewritten to look and behave closer to the other preferences.
+@@ -496,10 +497,12 @@
+             mButtonEnableFDN.setTitle(R.string.enable_fdn_ok);
+             mButtonEnableFDN.setSummary(R.string.fdn_enabled);
+             mButtonEnableFDN.setDialogTitle(R.string.disable_fdn);
++            Settings.Global.putInt(mPhone.getContext().getContentResolver(), "is_fdn_enable", 0);
+         } else {
+             mButtonEnableFDN.setTitle(R.string.disable_fdn_ok);
+             mButtonEnableFDN.setSummary(R.string.fdn_disabled);
+             mButtonEnableFDN.setDialogTitle(R.string.enable_fdn);
++            Settings.Global.putInt(mPhone.getContext().getContentResolver(), "is_fdn_enable", 1);
+         }
+     }
+ 

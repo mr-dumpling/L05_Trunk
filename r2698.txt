@@ -1,0 +1,44 @@
+Index: packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 2697)
++++ packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 2698)
+@@ -30,9 +30,6 @@
+ import android.content.BroadcastReceiver;
+ import android.content.IntentFilter;
+ 
+-
+-
+-
+ public class NightModeTypeSettings extends SettingsPreferenceFragment implements Indexable {
+ 	private static final String TAG = "NightModeTypeSettings";
+ 	private static final String PREFERENCE_NAME = "com.android.settings";
+@@ -61,6 +58,8 @@
+ 
+ 	private final String NIGHT_MODE_ACTION_ON="android.intent.action.NIGHT_MODE_ACTION_ON";
+ 	private final String NIGHT_MODE_ACTION_OFF="android.intent.action.NIGHT_MODE_ACTION_OFF";
++	private final String OPEN_ACTION = "com.android.settings.nightmode.open";
++	private final String CLOSE_ACTION ="com.android.settings.nightmode.close";
+ 
+ 	 @Override
+     protected int getMetricsCategory() {
+@@ -154,6 +153,8 @@
+ 			initPreference();
+ 			IntentFilter filter = new IntentFilter(NIGHT_MODE_ACTION_ON);
+             filter.addAction(NIGHT_MODE_ACTION_OFF);
++			filter.addAction(OPEN_ACTION);
++			filter.addAction(CLOSE_ACTION);
+             activity.registerReceiver(manuallyNightReceiver,filter);
+ 	}
+       private BroadcastReceiver manuallyNightReceiver = new BroadcastReceiver(){
+@@ -160,9 +161,9 @@
+         @Override
+         public void onReceive(Context context, Intent intent) {
+             Log.d(TAG,"intent.getAction()="+intent.getAction());
+-            if(intent.getAction().equals(NIGHT_MODE_ACTION_ON)){
++            if(intent.getAction().equals(NIGHT_MODE_ACTION_ON) || intent.getAction().equals(OPEN_ACTION)){
+                 manuallyEnablePreference.setChecked(true);
+-            }else if(intent.getAction().equals(NIGHT_MODE_ACTION_OFF)){
++            }else if(intent.getAction().equals(NIGHT_MODE_ACTION_OFF) || intent.getAction().equals(CLOSE_ACTION)){
+                 manuallyEnablePreference.setChecked(false);
+             }
+         }

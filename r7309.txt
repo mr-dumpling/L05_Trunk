@@ -1,0 +1,159 @@
+Index: vendor/branch/5058I_ALAE1/diff_5058I.txt
+===================================================================
+--- vendor/branch/5058I_ALAE1/diff_5058I.txt	(revision 7308)
++++ vendor/branch/5058I_ALAE1/diff_5058I.txt	(revision 7309)
+@@ -1,11 +1,11 @@
+-vendor/branch/5058I_ALAE1/frameworks/base/packages/SettingsProvider/res/values/defaults.xml:
+->     <string name="def_location_providers_allowed" translatable="false">gps</string>
+-
+ vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/values/config.xml:
++>     <bool name="config_dreamsActivatedOnDockByDefault">true</bool>
++>     <bool name="config_dreamsActivatedOnSleepByDefault">false</bool>
+ >     <bool name="config_cellBroadcastAppLinks">false</bool>
+ >     <integer name="config_multiuserMaximumUsers">4</integer>
+ >     <bool name="config_camera_sound_forced">false</bool>
+ >     <bool name="config_supportAudioSourceUnprocessed">true</bool>
++>     <bool name="config_cameraDoubleTapPowerGestureEnabled">true</bool>
+ 
+ vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/values/locale_config.xml:
+ >     	<item>vi-VN</item> <!-- Vietnamese (Vietnam) -->
+@@ -26,8 +26,11 @@
+ > echo "ro.product.name=Alcatel 3X"
+ > echo "ro.product.device=A3A PLUS by Alcatel"
+ > echo "ro.product.manufacturer= TCL"
++>   echo "ro.product.locale=$PRODUCT_DEFAULT_LOCALE"
+ > echo "ro.build.fingerprint=$BUILD_FINGERPRINT"
+ 
++vendor/branch/5058I_ALAE1/vendor/customer/custom.mk:
++
+ vendor/branch/5058I_ALAE1/branchsetup.sh:
+ > echo $1. 5058I
+ 
+Index: vendor/branch/5058I_ALAE1/diff.txt
+===================================================================
+--- vendor/branch/5058I_ALAE1/diff.txt	(revision 7308)
++++ vendor/branch/5058I_ALAE1/diff.txt	(revision 7309)
+@@ -1,16 +1,17 @@
+-vendor/branch/5058I_ALAE1/frameworks/opt/telephony/src/java/android/telephony/SmsMessage.java:
+->     public static ArrayList<String> fragmentText(String text) {
+->     public static ArrayList<String> fragmentText(String text, int encodingType) {
+-
+-vendor/branch/5058I_ALAE1/frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java:
+-
+-vendor/branch/5058I_ALAE1/frameworks/base/packages/SettingsProvider/res/values/defaults.xml:
+-
+ vendor/branch/5058I_ALAE1/frameworks/base/core/java/android/text/StaticLayout.java:
+ 
+ vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/values/bools.xml:
+ >     <bool name="def_wheather_custom_lockscreen_wallpaper">false</bool>
+ 
++vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/values/project.xml:
++>     <bool name="PJ_5058I_ALAE">false</bool>
++
++vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/values/features.xml:
++> 	<bool name="FR_TIMEFORMAT">false</bool>
++> 	<bool name="FR_DATEFORMAT">false</bool>
++> 	<bool name="FR_SMS_ENCODING">false</bool> 
++> 	<bool name="FR_MUSIC_STOP_FM_DELETE_BUG">false</bool>
++
+ vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/values/config.xml:
+ >     <string name="config_mms_user_agent" translatable="false">Android-Mms/0.1</string>
+ >     <string name="config_mms_user_agent_profile_url" translatable="false">http://www.google.com/oha/rdf/ua-profile-kila.xml</string>
+@@ -65,6 +66,8 @@
+ > 	<item>vi-VN</item> <!-- Vietnamese (Vietnam) -->
+ > 
+ 
++vendor/branch/5058I_ALAE1/frameworks/base/core/res/res/drawable-nodpi/default_lock_wallpaper.png:
++
+ vendor/branch/5058I_ALAE1/device/ausshine/aus6739_66_n1/system.prop:
+ 
+ vendor/branch/5058I_ALAE1/build/tools/buildinfo.sh:
+@@ -76,77 +79,19 @@
+ > echo "ro.build.display.factoryid=Plat:5058A_LATAM_S15A_180115Outer:5058A_LATAM_V2.0_180111End"
+ > echo "ro.product.model=5058A"
+ > echo "ro.product.name=5058A"
++>   echo "ro.product.locale=$PRODUCT_DEFAULT_LOCALE"
+ > echo "ro.build.fingerprint=TCL/5058A/A3A_PLUS:7.1.1/N6F26Q/5058A_LATAM_V2.0_180110:user/release-keys"
+ 
+-vendor/branch/5058I_ALAE1/packages/apps/CellBroadcastReceiver/res/values/customer.xml:
+-> 	<bool name="project_5058i_alav_cb">false</bool>
+-
+-vendor/branch/5058I_ALAE1/packages/apps/Settings/src/com/android/settings/DateTimeSettings.java:
+->         mDatePref.setSummary(DateFormat.getLongDateFormat(context).format(now.getTime()));
+-
+ vendor/branch/5058I_ALAE1/packages/apps/Email/res/xml/providers.xml:
+ 
+-vendor/branch/5058I_ALAE1/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java:
+-> 
+->         params = SmsMessage.calculateLength(text, false, encodingType);
+->                         && TextUtils.isEmpty(mTextEditor.getText().toString().trim())
+->                 if ((mTextEditor.getText().toString().isEmpty())
+->                         || mSubCount == 0
+->             }else {
+->                 menu.add(0, MENU_ADD_SUBJECT, 0,
+->                         R.string.remove_subject).setIcon(R.drawable.ic_menu_edit);
+->                 if(isSubjectEditorVisible()){
+->                     mWorkingMessage.setSubject("", true);
+->                     showSubjectEditor(false);
+->                     break;
+->                 }else {
+->                     showSubjectEditor(true);
+->                     mWorkingMessage.setSubject("", true);
+->                     /// M: Code analyze 052, Show input keyboard.@{
+->                     mInputMethodManager.showSoftInput(
+->                             getCurrentFocus(), InputMethodManager.SHOW_IMPLICIT);
+->                     /// @}
+->                     updateSendButtonState();
+->                     mSubjectTextEditor.requestFocus();
+->                     break;
+->                 }
+->                 showAddAttachmentDialog(/*!mWorkingMessage.hasAttachedFiles()*/true);//lance modify for bug 117676
+->                     checkRecipientsCount();
+->                     mUiHandler.sendEmptyMessageDelayed(MSG_RESUME_SEND_BUTTON,
+->                             RESUME_BUTTON_INTERVAL);
+->             //lance modify for bug 117676 @{
+->             mode |= AttachmentTypeSelectorAdapter.MODE_WITH_FILE_ATTACHMENT; 
+->             /*if (mWorkingMessage.hasSlideshow()) {
+->             }*/
+->             // @}
++vendor/branch/5058I_ALAE1/vendor/customer/custom.mk:
++> PRODUCT_PACKAGES += ActivateLATAM \
++>                     ElabelOverlay \
++>                     ThemeCenter \
++>                     DisneyMagicKingdom_LATAM \
++>                     SpidermanUltimatePower_LATAM \
++>                     MotocrossTrialExtreme \
++>                     PuzzlePets \
++>                     ModernCombat4 \
++>                     Gboard
+ 
+-vendor/branch/5058I_ALAE1/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageUtils.java:
+->      //   intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+->             mSizeLimitTemp = sp.getString("pref_key_mms_size_limit", "300");
+->             mMmsSizeLimit = 300;
+-
+-vendor/branch/5058I_ALAE1/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java:
+-
+-vendor/branch/5058I_ALAE1/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/MmsPreferenceActivity.java:
+-
+-vendor/branch/5058I_ALAE1/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java:
+->                 smsCategory.removePreference(mSmsInputMode);
+->                                 mNumberText.setInputType(
+->                                         EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_CLASS_PHONE);
+->         if (preference == mSmsLocation && !(SimStateMonitor.getInstance().getSubCount() > 1)) {
+-
+-vendor/branch/5058I_ALAE1/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java:
+->         if ((channelId == 4356) || (channelId == 4355) || (channelId == 4352) || (channelId == 4353) 
+-> 				|| (channelId == 4354) || (channelId == 4370) || (channelId == 4371) || (channelId == 4372)
+-> 				|| (channelId == 4373) || (channelId == 4374) || (channelId == 4375) || (channelId == 4376)
+-> 				|| (channelId == 4377) || (channelId == 4378) || (channelId == 4379) || (channelId == 4383)
+-> 				|| (channelId == 4384) || (channelId == 4385) || (channelId == 4386) || (channelId == 4387)
+-> 				|| (channelId == 4388) || (channelId == 4389) || (channelId == 4390) || (channelId == 4391)
+-> 				|| (channelId == 4392) || (channelId == 919) || (channelId == 921) || (channelId == 4411)) {
+-
+-vendor/branch/5058I_ALAE1/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java:
+->         return encodingType;
+-
+-vendor/branch/5058I_ALAE1/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpSmsSingleRecipientSenderExt.java:
+->         return codingType;
+-

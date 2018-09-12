@@ -1,0 +1,122 @@
+Index: packages/providers/MediaProvider/src/com/android/providers/media/MtpService.java
+===================================================================
+--- packages/providers/MediaProvider/src/com/android/providers/media/MtpService.java	(revision 7495)
++++ packages/providers/MediaProvider/src/com/android/providers/media/MtpService.java	(revision 7496)
+@@ -17,6 +17,7 @@
+ package com.android.providers.media;
+ 
+ import android.app.ActivityManager;
++import android.app.KeyguardManager;
+ import android.app.Service;
+ import android.content.BroadcastReceiver;
+ import android.content.Context;
+@@ -27,6 +28,7 @@
+ import android.mtp.MtpServer;
+ import android.mtp.MtpStorage;
+ import android.os.Environment;
++import android.os.Handler;
+ import android.os.IBinder;
+ import android.os.UserHandle;
+ import android.os.storage.StorageEventListener;
+@@ -42,6 +44,9 @@
+ public class MtpService extends Service {
+     private static final String TAG = "MtpService";
+     private static final boolean LOGD = true;
++    private static final long DELAY_CHECK = 4000;
++    private static final String ADD_STORAGE_THREAD = "addStorageDevices";
++    private static final String REMOVE_STORAGE_THREAD = "removeStorage";
+ 
+     // We restrict PTP to these subdirectories
+     private static final String[] PTP_DIRECTORIES = new String[] {
+@@ -103,6 +108,10 @@
+     public void onCreate() {
+         // for storage update
+         registerReceiver(mLocaleChangedReceiver, new IntentFilter(Intent.ACTION_LOCALE_CHANGED));
++        IntentFilter intentFilter = new IntentFilter();
++        intentFilter.addAction(Intent.ACTION_USER_PRESENT);
++        intentFilter.addAction(Intent.ACTION_SCREEN_OFF);
++        registerReceiver(mReceiver, intentFilter);
+         mStorageManager = StorageManager.from(this);
+         synchronized (mBinder) {
+             updateDisabledStateLocked();
+@@ -168,9 +177,71 @@
+         return START_REDELIVER_INTENT;
+     }
+ 
++    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            final String action = intent.getAction();
++            if (Intent.ACTION_USER_PRESENT.equals(action)) {
++                // If the media scanner is running, it may currently be calling
++                // sendObjectAdded/Removed, which also synchronizes on mBinder
++                // (and in addition to that, all the native MtpServer methods
++                // lock the same Mutex). If it happens to be in an mtp device
++                // write(), it may block for some time, so process this broadcast
++                // in a thread.
++                new Thread(new Runnable() {
++                    @Override
++                    public void run() {
++                        synchronized (mBinder) {
++                            // Unhide the storage units when the user has unlocked the lockscreen
++                            if (mMtpDisabled) {
++                                addStorageDevicesLocked();
++                                mMtpDisabled = false;
++                            }
++                        }
++                    }
++                }, ADD_STORAGE_THREAD).start();
++            } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
++                new Thread(new Runnable() {
++                    @Override
++                    public void run() {
++                        synchronized (mBinder) {
++                            updateDisabledStateLocked();
++                            if (mMtpDisabled) {
++                                for (StorageVolume volume : mVolumeMap.values()) {
++                                    removeStorageLocked(volume);
++                                }
++                            }
++                        }
++                    }
++                }, REMOVE_STORAGE_THREAD).start();
++                Handler handler = new Handler();
++                handler.postDelayed(new Runnable() {
++                    @Override
++                    public void run() {
++                        Log.d(TAG, "begin delay");
++                        synchronized (mBinder) {
++                            updateDisabledStateLocked();
++                            if (mMtpDisabled) {
++                                for (StorageVolume volume : mVolumeMap.values()) {
++                                    removeStorageLocked(volume);
++                                }
++                            }
++                        }
++                    }
++                }, DELAY_CHECK);
++            }
++        }
++    };
++
+     private void updateDisabledStateLocked() {
+         final boolean isCurrentUser = UserHandle.myUserId() == ActivityManager.getCurrentUser();
+-        mMtpDisabled = !mUnlocked || !isCurrentUser;
++        final KeyguardManager keyguardManager = (KeyguardManager)
++                getSystemService(Context.KEYGUARD_SERVICE);
++        Log.d(TAG, "keyguardManager.isKeyguardLocked() = " + keyguardManager.isKeyguardLocked()
++            + " keyguardManager.isKeyguardSecure() = " + keyguardManager.isKeyguardSecure()
++            + " mUnlocked = " + mUnlocked + " isCurrentUser = " + isCurrentUser);
++        mMtpDisabled = (keyguardManager.isKeyguardLocked() && keyguardManager.isKeyguardSecure())
++                || !mUnlocked || !isCurrentUser;
+         if (LOGD) {
+             Log.d(TAG, "updating state; isCurrentUser=" + isCurrentUser + ", mMtpLocked="
+                     + mMtpDisabled);
+@@ -204,6 +275,7 @@
+     @Override
+     public void onDestroy() {
+         mStorageManager.unregisterListener(mStorageEventListener);
++        unregisterReceiver(mReceiver);
+         if (mDatabase != null) {
+             mDatabase.setServer(null);
+         }

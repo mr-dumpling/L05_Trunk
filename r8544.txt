@@ -1,0 +1,1156 @@
+Index: vendor/branch/5058A_Claro/packages/apps/Dialer/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058A_Claro/packages/apps/Dialer/AndroidManifest.xml	(revision 0)
++++ vendor/branch/5058A_Claro/packages/apps/Dialer/AndroidManifest.xml	(revision 8544)
+@@ -0,0 +1,532 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2006 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="com.android.dialer"
++	android:sharedUserId="android.uid.system"
++    coreApp="true"
++    android:versionCode="30000"
++    android:versionName="3.00.00">
++
++    <!-- M: upgrade target verison to 24 -->
++    <uses-sdk
++        android:minSdkVersion="23"
++        android:targetSdkVersion="24" />
++
++    <uses-permission android:name="android.permission.CALL_PHONE" />
++    <uses-permission android:name="android.permission.READ_CONTACTS" />
++    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
++    <uses-permission android:name="android.permission.READ_CALL_LOG" />
++    <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
++    <uses-permission android:name="android.permission.READ_PROFILE" />
++    <uses-permission android:name="android.permission.MANAGE_ACCOUNTS" />
++    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
++    <uses-permission android:name="android.permission.GET_ACCOUNTS_PRIVILEGED"/>
++    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
++    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
++    <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS"/>
++    <uses-permission android:name="android.permission.NFC" />
++    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
++    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
++    <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
++    <uses-permission android:name="android.permission.WAKE_LOCK" />
++    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
++    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
++    <uses-permission android:name="android.permission.USE_CREDENTIALS" />
++    <uses-permission android:name="android.permission.VIBRATE" />
++    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
++    <uses-permission android:name="android.permission.CONTROL_INCALL_EXPERIENCE" />
++    <uses-permission android:name="com.android.voicemail.permission.ADD_VOICEMAIL" />
++    <uses-permission android:name="com.android.voicemail.permission.WRITE_VOICEMAIL" />
++    <uses-permission android:name="com.android.voicemail.permission.READ_VOICEMAIL" />
++    <uses-permission android:name="android.permission.ALLOW_ANY_CODEC_FOR_PLAYBACK" />
++    <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
++    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
++    <uses-permission android:name="android.permission.BROADCAST_STICKY" />
++    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
++    <!-- This tells the activity manager to not delay any of our activity
++     start requests, even if they happen immediately after the user
++     presses home. -->
++    <uses-permission android:name="android.permission.STOP_APP_SWITCHES" />
++
++    <!-- M: for using query speeddial of OP01-->
++    <uses-permission android:name="android.permission.READ_SPEED_DIAL" />
++
++    <!-- M: [InCallUI] for RCSe. RCSe need CAMERA & NETWORK_STATE -->
++    <uses-permission android:name="android.permission.CAMERA" />
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++    <!-- M: [InCallUI] for DM Lock, for disabling the status bar -->
++    <uses-permission android:name="android.permission.STATUS_BAR" />
++    <!-- M: [C2K Solution2] for setDefaultSubIdForAll by TelephonyManagerEx -->
++    <uses-permission android:name="android.permission.WRITE_APN_SETTINGS"/>
++    <!-- M: for using query contacts of OP09-->
++    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
++    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
++    <uses-permission android:name="android.permission.MANAGE_USERS" />
++    <!-- M: [WFC] permission required by ImsManager -->
++    <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
++    <!-- M: [InCallUI] for phone recorder -->
++    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
++    <!-- M: add permission for meta reboot devices-->
++    <uses-permission android:name="android.permission.REBOOT" />
++   <!--for Conference call-->
++   <uses-permission android:name="com.mediatek.permission.CTA_CONFERENCE_CALL" />
++   
++   <permission android:name="android.permission.READ_SPEED_DIAL" />
++   <permission android:name="android.permission.WRITE_SPEED_DIAL" />    
++
++
++    <application
++        android:name="DialerApplication"
++        android:label="@string/applicationLabel"
++        android:icon="@mipmap/ic_launcher_phone"
++        android:hardwareAccelerated="true"
++        android:supportsRtl="true"
++        android:backupAgent='com.android.dialer.DialerBackupAgent'
++        android:usesCleartextTraffic="false">
++
++        <meta-data android:name="com.google.android.backup.api_key"
++            android:value="AEdPqrEAAAAIBXgtCEKQ6W0PXVnW-ZVia2KmlV2AxsTw3GjAeQ" />
++
++        <!-- The entrance point for Phone UI.
++             stateAlwaysHidden is set to suppress keyboard show up on
++             dialpad screen. -->
++        <activity android:name=".DialtactsActivity"
++            android:label="@string/launcherActivityLabel"
++            android:theme="@style/DialtactsActivityTheme"
++            android:launchMode="singleTask"
++            android:clearTaskOnLaunch="true"
++            android:icon="@mipmap/ic_launcher_phone"
++            android:windowSoftInputMode="stateAlwaysHidden|adjustNothing"
++            android:resizeableActivity="true"
++            android:directBootAware="true">
++            <intent-filter>
++                <action android:name="android.intent.action.DIAL" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++                <data android:mimeType="vnd.android.cursor.item/phone" />
++                <data android:mimeType="vnd.android.cursor.item/person" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.DIAL" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++                <data android:scheme="voicemail" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.DIAL" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.LAUNCHER" />
++                <category android:name="android.intent.category.BROWSABLE" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW" />
++                <action android:name="android.intent.action.DIAL" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++                <data android:scheme="tel" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++                <data android:mimeType="vnd.android.cursor.dir/calls" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.CALL_BUTTON" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++            </intent-filter>
++            <!-- This was never intended to be public, but is here for backward
++                 compatibility.  Use Intent.ACTION_DIAL instead. -->
++            <intent-filter>
++                <action android:name="com.android.phone.action.TOUCH_DIALER" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.TAB" />
++            </intent-filter>
++            <intent-filter android:label="@string/callHistoryIconLabel">
++                <action android:name="com.android.phone.action.RECENT_CALLS" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.TAB" />
++            </intent-filter>
++            <meta-data
++                android:name="com.android.keyguard.layout"
++                android:resource="@layout/keyguard_preview" />
++        </activity>
++
++        <activity android:name="com.android.dialer.settings.DialerSettingsActivity"
++              android:label="@string/dialer_settings_label"
++              android:parentActivityName="com.android.dialer.DialtactsActivity"
++              android:theme="@style/SettingsStyle"
++              android:exported="false">
++        </activity>
++
++        <activity android:name="com.android.dialer.filterednumber.BlockedNumbersSettingsActivity"
++            android:label="@string/manage_blocked_numbers_label"
++            android:parentActivityName="com.android.dialer.settings.DialerSettingsActivity"
++            android:theme="@style/ManageBlockedNumbersStyle"
++            android:exported="false">
++        </activity>
++
++        <activity android:name="com.android.dialer.voicemail.VoicemailArchiveActivity"
++            android:label="@string/voicemail_archive_activity_title"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay">
++        </activity>
++
++        <activity android:name="com.android.dialer.calllog.CallLogActivity"
++            android:label="@string/call_log_activity_title"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay"
++            android:icon="@mipmap/ic_launcher_phone">
++        </activity>
++
++        <activity android:name="com.android.dialer.CallDetailActivity"
++            android:label="@string/callDetailTitle"
++            android:theme="@style/CallDetailActivityTheme"
++            android:parentActivityName="com.android.dialer.calllog.CallLogActivity"
++            android:icon="@mipmap/ic_launcher_phone">
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW"/>
++                <category android:name="android.intent.category.DEFAULT"/>
++                <data android:mimeType="vnd.android.cursor.item/calls"/>
++            </intent-filter>
++        </activity>
++
++        <activity android:name="com.android.contacts.common.test.FragmentTestActivity">
++            <intent-filter>
++                <category android:name="android.intent.category.TEST"/>
++            </intent-filter>
++        </activity>
++
++        <activity android:name="com.android.contacts.common.dialog.CallSubjectDialog"
++                  android:theme="@style/Theme.CallSubjectDialogTheme"
++                  android:windowSoftInputMode="stateVisible|adjustResize">
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW"/>
++            </intent-filter>
++        </activity>
++
++        <!-- Backwards compatibility: "Phone" from Gingerbread and earlier -->
++        <activity-alias android:name="DialtactsActivity"
++            android:targetActivity=".DialtactsActivity"
++            android:exported="true"
++        />
++
++        <!-- Backwards compatibility: "Call log" from Gingerbread and earlier -->
++        <activity-alias android:name="RecentCallsListActivity"
++            android:targetActivity=".DialtactsActivity"
++            android:exported="true"
++        />
++
++        <!-- Backwards compatibility: "Call log" from ICS -->
++        <activity-alias android:name=".activities.CallLogActivity"
++            android:targetActivity=".DialtactsActivity"
++            android:exported="true"
++        />
++
++        <!-- Used to filter contacts list by account -->
++        <activity
++            android:name="com.android.contacts.common.list.AccountFilterActivity"
++            android:label="@string/activity_title_contacts_filter"
++            android:theme="@style/ContactListFilterTheme"/>
++
++        <!-- Used to select display and sync groups -->
++        <activity
++            android:name="com.android.contacts.common.list.CustomContactListFilterActivity"
++            android:label="@string/custom_list_filter"
++            android:theme="@style/ContactListFilterTheme"/>
++
++        <activity
++            android:name="com.android.contacts.common.activity.RequestImportVCardPermissionsActivity"
++            android:label="@string/launcherActivityLabel"
++            android:theme="@style/BackgroundOnlyTheme"
++            android:exported="false"/>
++
++        <!-- vCard related -->
++        <activity android:name="com.android.contacts.common.vcard.ImportVCardActivity"
++                  android:configChanges="orientation|screenSize|keyboardHidden"
++                  android:theme="@style/BackgroundOnlyTheme">
++        </activity>
++
++        <activity android:name="com.android.contacts.common.vcard.NfcImportVCardActivity"
++                  android:configChanges="orientation|screenSize|keyboardHidden"
++                  android:theme="@style/BackgroundOnlyTheme">
++        </activity>
++
++        <activity android:name="com.android.contacts.common.vcard.CancelActivity"
++                  android:theme="@style/BackgroundOnlyTheme"/>
++
++        <activity android:name="com.android.contacts.common.vcard.SelectAccountActivity"
++                  android:theme="@style/BackgroundOnlyTheme"/>
++
++        <activity android:name="com.android.contacts.common.vcard.ExportVCardActivity"
++                  android:theme="@style/BackgroundOnlyTheme"/>
++
++        <activity android:name="com.android.contacts.common.vcard.ShareVCardActivity"
++                  android:theme="@style/BackgroundOnlyTheme" />
++
++        <service
++            android:name="com.android.contacts.common.vcard.VCardService"
++            android:exported="false"/>
++        <!-- end vCard related -->
++
++        <receiver android:name=".calllog.CallLogReceiver">
++            <intent-filter>
++                <action android:name="android.intent.action.NEW_VOICEMAIL" />
++                <data
++                    android:scheme="content"
++                    android:host="com.android.voicemail"
++                    android:mimeType="vnd.android.cursor.item/voicemail"
++                />
++            </intent-filter>
++            <intent-filter android:priority="100">
++                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
++            </intent-filter>
++        </receiver>
++
++        <receiver android:name=".interactions.UndemoteOutgoingCallReceiver">
++            <intent-filter>
++                <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
++            </intent-filter>
++        </receiver>
++
++        <service
++            android:name=".calllog.CallLogNotificationsService"
++            android:directBootAware="true"
++            android:exported="false"
++        />
++
++        <receiver android:name=".calllog.MissedCallNotificationReceiver"
++            android:directBootAware="true">
++            <intent-filter>
++                <action android:name="android.telecom.action.SHOW_MISSED_CALLS_NOTIFICATION" />
++            </intent-filter>
++        </receiver>
++
++        <!-- Service to update a contact -->
++        <service
++            android:name=".contact.ContactUpdateService"
++            android:exported="false" />
++
++        <!-- Broadcast receiver that passively listens to location updates -->
++        <receiver android:name="com.android.contacts.common.location.CountryDetector$LocationChangedReceiver"/>
++
++        <!-- IntentService to update the user's current country -->
++        <service android:name="com.android.contacts.common.location.UpdateCountryService"
++            android:exported="false"/>
++
++        <!-- Main in-call UI activity.  This is never launched directly
++             from outside the phone app; instead, it's either launched by
++             the OutgoingCallBroadcaster (for outgoing calls), or as the
++             fullScreenIntent of a notification (for incoming calls.) -->
++
++        <!--M: fix ALPS02345314, add new configChanges: keyboard|navigation -->
++        <!--M: fix ALPS02365362, add new configChanges: mnc|mcc -->
++        <activity android:name="com.android.incallui.InCallActivity"
++                  android:theme="@style/Theme.InCallScreen"
++                  android:label="@string/phoneAppLabel"
++                  android:excludeFromRecents="true"
++                  android:launchMode="singleInstance"
++                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|mnc|mcc"
++                  android:exported="false"
++                  android:screenOrientation="nosensor"
++                  android:directBootAware="true"
++                  android:resizeableActivity="@bool/enable_multi_window">
++        </activity>
++
++        <!-- M: mtk add -->
++        <!-- M: for WFC call -->
++        <activity android:name="com.mediatek.incallui.wfc.WfcDialogActivity"
++                android:configChanges="orientation|screenSize|keyboardHidden"
++                android:excludeFromRecents="true"
++                android:launchMode="singleInstance"
++                android:background= "#00000000"
++                android:theme="@style/Theme.Wfc.Transparent" >
++        </activity>
++
++        <service android:name="com.android.incallui.InCallServiceImpl"
++                 android:permission="android.permission.BIND_INCALL_SERVICE"
++                 android:directBootAware="true" >
++            <meta-data android:name="android.telecom.IN_CALL_SERVICE_UI" android:value="true" />
++            <meta-data android:name="android.telecom.IN_CALL_SERVICE_RINGING"
++                android:value="false"/>
++            <meta-data android:name="android.telecom.INCLUDE_EXTERNAL_CALLS"
++                       android:value="true"/>
++            <intent-filter>
++                <action android:name="android.telecom.InCallService"/>
++            </intent-filter>
++        </service>
++
++        <!-- M: [Multi-Delete] For call log delete. @{ -->
++        <activity android:name="com.mediatek.dialer.activities.CallLogMultipleDeleteActivity"
++            android:configChanges="orientation|keyboardHidden"
++            android:uiOptions="splitActionBarWhenNarrow"
++            android:icon="@mipmap/ic_launcher_phone"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay"
++            android:excludeFromRecents="true">
++        </activity>
++
++        <activity android:name="com.mediatek.dialer.activities.CallLogMultipleChoiceActivity"
++            android:configChanges="orientation|keyboardHidden"
++            android:screenOrientation="portrait"
++            android:uiOptions="splitActionBarWhenNarrow"
++            android:icon="@mipmap/ic_launcher_phone"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay">
++        </activity>
++        <!-- @} -->
++
++        <!-- M: [Dialer Global Search] For call log global search.
++             Change the launch mode to void UI problem. @{ -->
++        <activity android:name="com.mediatek.dialer.activities.CallLogSearchResultActivity"
++            android:configChanges="orientation|keyboardHidden"
++            android:icon="@mipmap/ic_launcher_phone"
++            android:label="@string/calllogList"
++            android:launchMode="singleTask"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay" >
++             <intent-filter>
++                <action android:name="android.intent.action.SEARCH" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <meta-data android:name="android.app.searchable"
++                android:resource="@xml/mtk_calllog_searchable"
++            />
++        </activity>
++		<activity
++            android:name="com.mediatek.dialer.mmi.AccessCall"
++            android:label="@string/call_timer"
++			android:launchMode="singleTask"
++            android:screenOrientation="portrait" > 
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++            </intent-filter>
++        </activity>
++		<activity android:name="com.mediatek.dialer.speeddial.SpeedDialActivity"
++            android:label="@string/call_speed_dial"
++            android:configChanges="orientation|keyboardHidden|screenSize"
++            android:theme="@style/SettingsLight">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++		 <provider android:name="com.mediatek.dialer.speeddial.SpeedDialProvider" 
++            android:authorities="speed_dial"
++            android:exported="true"
++            android:multiprocess="true"
++            android:readPermission="android.permission.READ_SPEED_DIAL"
++            android:writePermission="android.permission.WRITE_SPEED_DIAL"/>
++		
++		<receiver
++            android:name="com.mediatek.dialer.mmi.AccessCallReceiver"
++            android:enabled="true"
++            android:exported="true"
++            android:label="AccessCallReceiver">
++            <intent-filter >
++                <action
++                    android:name="com.mediatek.dialer.mmi.action.SAVE_INCOM" />
++                <action
++                    android:name="com.mediatek.dialer.mmi.action.SAVE_OUTGO" />
++            </intent-filter>
++        </receiver>
++        <!-- @} -->
++
++        <!-- M: [InCallUI]for VoLTE Conference Call. Need a seperate Activity for
++        startActivityForResult(), because the InCallActivity is a SingleInstance. -->
++        <activity android:name="com.mediatek.incallui.volte.AddMemberScreen"
++                  android:theme="@*android:style/Theme.Holo.Light.Dialog.Alert"
++                  android:excludeFromRecents="true"
++                  android:taskAffinity="com.mediatek.incallui.volte" />
++
++        <!-- M: [InCallUI]for blind ECT feature. Need a seperate Activity for
++        startActivityForResult(), because the InCallActivity is a SingleInstance. -->
++        <activity android:name="com.mediatek.incallui.blindect.AddTransferNumberScreen"
++                  android:theme="@*android:style/Theme.Holo.Light.Dialog.Alert"
++                  android:excludeFromRecents="true"
++                  android:taskAffinity="com.mediatek.incallui.blindect" />
++
++        <!-- M: [InCallUI]BroadcastReceiver for receiving Intents from Telecom after
++         InCallService killed abnormally. -->
++        <receiver android:name="com.mediatek.incallui.InCallBroadcastReceiver"
++                  android:permission="android.permission.BIND_INCALL_SERVICE" >
++            <intent-filter android:priority="1000" >
++                <action android:name="com.android.incallui.ACTION_UPDATE_UI_FORCED" />
++            </intent-filter>
++        </receiver>
++
++        <!-- M: add for InCall Regression test case service-->
++        <service
++                android:name="com.mediatek.tatf.common.TatfBaseService"
++                android:enabled="true" >
++            <intent-filter>
++                <action android:name="com.mediatek.tatf.proxy.action.INCALLUI_SERVICE" />
++            </intent-filter>
++        </service>
++
++        <!-- M: add for receiving phone account changing information -->
++        <receiver android:name="com.mediatek.dialer.calllog.PhoneAccountChangedReceiver">
++            <intent-filter>
++                <action android:name="android.telecom.action.PHONE_ACCOUNT_CHANGED" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.AIRPLANE_MODE" />
++            </intent-filter>
++        </receiver>
++
++        <!-- BroadcastReceiver for receiving Intents from Notification mechanism. -->
++        <receiver android:name="com.android.incallui.NotificationBroadcastReceiver"
++            android:directBootAware="true"
++            android:exported="false" />
++
++        <provider
++            android:name=".database.FilteredNumberProvider"
++            android:authorities="com.android.dialer.database.filterednumberprovider"
++            android:exported="false"
++            android:multiprocess="false"
++            />
++
++        <provider
++            android:name="android.support.v4.content.FileProvider"
++            android:authorities="@string/contacts_file_provider_authority"
++            android:grantUriPermissions="true"
++            android:exported="false">
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/file_paths" />
++        </provider>
++
++        <provider
++            android:name=".database.VoicemailArchiveProvider"
++            android:authorities="com.android.dialer.database.voicemailarchiveprovider"
++            android:exported="false"
++            android:multiprocess="false"
++            />
++
++        <activity android:name="com.mediatek.dialer.activities.UnlockSettingActivity"
++                  android:label="@string/simmelock_name"
++                  android:configChanges = "orientation|mcc|mnc"
++                  android:process="com.android.phone"
++				  android:screenOrientation="portrait">
++            <intent-filter>
++                <action android:name="android.intent.action.UnlockSettingActivity" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++    </application>
++</manifest>
+Index: vendor/branch/5058A_Claro/packages/apps/Dialer/src/com/mediatek/dialer/calllog/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058A_Claro/packages/apps/Dialer/src/com/mediatek/dialer/calllog/AndroidManifest.xml	(revision 0)
++++ vendor/branch/5058A_Claro/packages/apps/Dialer/src/com/mediatek/dialer/calllog/AndroidManifest.xml	(revision 8544)
+@@ -0,0 +1,532 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2006 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="com.android.dialer"
++	android:sharedUserId="android.uid.system"
++    coreApp="true"
++    android:versionCode="30000"
++    android:versionName="3.00.00">
++
++    <!-- M: upgrade target verison to 24 -->
++    <uses-sdk
++        android:minSdkVersion="23"
++        android:targetSdkVersion="24" />
++
++    <uses-permission android:name="android.permission.CALL_PHONE" />
++    <uses-permission android:name="android.permission.READ_CONTACTS" />
++    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
++    <uses-permission android:name="android.permission.READ_CALL_LOG" />
++    <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
++    <uses-permission android:name="android.permission.READ_PROFILE" />
++    <uses-permission android:name="android.permission.MANAGE_ACCOUNTS" />
++    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
++    <uses-permission android:name="android.permission.GET_ACCOUNTS_PRIVILEGED"/>
++    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
++    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
++    <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS"/>
++    <uses-permission android:name="android.permission.NFC" />
++    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
++    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
++    <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
++    <uses-permission android:name="android.permission.WAKE_LOCK" />
++    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
++    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
++    <uses-permission android:name="android.permission.USE_CREDENTIALS" />
++    <uses-permission android:name="android.permission.VIBRATE" />
++    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
++    <uses-permission android:name="android.permission.CONTROL_INCALL_EXPERIENCE" />
++    <uses-permission android:name="com.android.voicemail.permission.ADD_VOICEMAIL" />
++    <uses-permission android:name="com.android.voicemail.permission.WRITE_VOICEMAIL" />
++    <uses-permission android:name="com.android.voicemail.permission.READ_VOICEMAIL" />
++    <uses-permission android:name="android.permission.ALLOW_ANY_CODEC_FOR_PLAYBACK" />
++    <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
++    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
++    <uses-permission android:name="android.permission.BROADCAST_STICKY" />
++    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
++    <!-- This tells the activity manager to not delay any of our activity
++     start requests, even if they happen immediately after the user
++     presses home. -->
++    <uses-permission android:name="android.permission.STOP_APP_SWITCHES" />
++
++    <!-- M: for using query speeddial of OP01-->
++    <uses-permission android:name="android.permission.READ_SPEED_DIAL" />
++
++    <!-- M: [InCallUI] for RCSe. RCSe need CAMERA & NETWORK_STATE -->
++    <uses-permission android:name="android.permission.CAMERA" />
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++    <!-- M: [InCallUI] for DM Lock, for disabling the status bar -->
++    <uses-permission android:name="android.permission.STATUS_BAR" />
++    <!-- M: [C2K Solution2] for setDefaultSubIdForAll by TelephonyManagerEx -->
++    <uses-permission android:name="android.permission.WRITE_APN_SETTINGS"/>
++    <!-- M: for using query contacts of OP09-->
++    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
++    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
++    <uses-permission android:name="android.permission.MANAGE_USERS" />
++    <!-- M: [WFC] permission required by ImsManager -->
++    <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
++    <!-- M: [InCallUI] for phone recorder -->
++    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
++    <!-- M: add permission for meta reboot devices-->
++    <uses-permission android:name="android.permission.REBOOT" />
++   <!--for Conference call-->
++   <uses-permission android:name="com.mediatek.permission.CTA_CONFERENCE_CALL" />
++   
++   <permission android:name="android.permission.READ_SPEED_DIAL" />
++   <permission android:name="android.permission.WRITE_SPEED_DIAL" />    
++
++
++    <application
++        android:name="DialerApplication"
++        android:label="@string/applicationLabel"
++        android:icon="@mipmap/ic_launcher_phone"
++        android:hardwareAccelerated="true"
++        android:supportsRtl="true"
++        android:backupAgent='com.android.dialer.DialerBackupAgent'
++        android:usesCleartextTraffic="false">
++
++        <meta-data android:name="com.google.android.backup.api_key"
++            android:value="AEdPqrEAAAAIBXgtCEKQ6W0PXVnW-ZVia2KmlV2AxsTw3GjAeQ" />
++
++        <!-- The entrance point for Phone UI.
++             stateAlwaysHidden is set to suppress keyboard show up on
++             dialpad screen. -->
++        <activity android:name=".DialtactsActivity"
++            android:label="@string/launcherActivityLabel"
++            android:theme="@style/DialtactsActivityTheme"
++            android:launchMode="singleTask"
++            android:clearTaskOnLaunch="true"
++            android:icon="@mipmap/ic_launcher_phone"
++            android:windowSoftInputMode="stateAlwaysHidden|adjustNothing"
++            android:resizeableActivity="true"
++            android:directBootAware="true">
++            <intent-filter>
++                <action android:name="android.intent.action.DIAL" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++                <data android:mimeType="vnd.android.cursor.item/phone" />
++                <data android:mimeType="vnd.android.cursor.item/person" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.DIAL" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++                <data android:scheme="voicemail" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.DIAL" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.LAUNCHER" />
++                <category android:name="android.intent.category.BROWSABLE" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW" />
++                <action android:name="android.intent.action.DIAL" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++                <data android:scheme="tel" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++                <data android:mimeType="vnd.android.cursor.dir/calls" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.CALL_BUTTON" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++            </intent-filter>
++            <!-- This was never intended to be public, but is here for backward
++                 compatibility.  Use Intent.ACTION_DIAL instead. -->
++            <intent-filter>
++                <action android:name="com.android.phone.action.TOUCH_DIALER" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.TAB" />
++            </intent-filter>
++            <intent-filter android:label="@string/callHistoryIconLabel">
++                <action android:name="com.android.phone.action.RECENT_CALLS" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.TAB" />
++            </intent-filter>
++            <meta-data
++                android:name="com.android.keyguard.layout"
++                android:resource="@layout/keyguard_preview" />
++        </activity>
++
++        <activity android:name="com.android.dialer.settings.DialerSettingsActivity"
++              android:label="@string/dialer_settings_label"
++              android:parentActivityName="com.android.dialer.DialtactsActivity"
++              android:theme="@style/SettingsStyle"
++              android:exported="false">
++        </activity>
++
++        <activity android:name="com.android.dialer.filterednumber.BlockedNumbersSettingsActivity"
++            android:label="@string/manage_blocked_numbers_label"
++            android:parentActivityName="com.android.dialer.settings.DialerSettingsActivity"
++            android:theme="@style/ManageBlockedNumbersStyle"
++            android:exported="false">
++        </activity>
++
++        <activity android:name="com.android.dialer.voicemail.VoicemailArchiveActivity"
++            android:label="@string/voicemail_archive_activity_title"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay">
++        </activity>
++
++        <activity android:name="com.android.dialer.calllog.CallLogActivity"
++            android:label="@string/call_log_activity_title"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay"
++            android:icon="@mipmap/ic_launcher_phone">
++        </activity>
++
++        <activity android:name="com.android.dialer.CallDetailActivity"
++            android:label="@string/callDetailTitle"
++            android:theme="@style/CallDetailActivityTheme"
++            android:parentActivityName="com.android.dialer.calllog.CallLogActivity"
++            android:icon="@mipmap/ic_launcher_phone">
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW"/>
++                <category android:name="android.intent.category.DEFAULT"/>
++                <data android:mimeType="vnd.android.cursor.item/calls"/>
++            </intent-filter>
++        </activity>
++
++        <activity android:name="com.android.contacts.common.test.FragmentTestActivity">
++            <intent-filter>
++                <category android:name="android.intent.category.TEST"/>
++            </intent-filter>
++        </activity>
++
++        <activity android:name="com.android.contacts.common.dialog.CallSubjectDialog"
++                  android:theme="@style/Theme.CallSubjectDialogTheme"
++                  android:windowSoftInputMode="stateVisible|adjustResize">
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW"/>
++            </intent-filter>
++        </activity>
++
++        <!-- Backwards compatibility: "Phone" from Gingerbread and earlier -->
++        <activity-alias android:name="DialtactsActivity"
++            android:targetActivity=".DialtactsActivity"
++            android:exported="true"
++        />
++
++        <!-- Backwards compatibility: "Call log" from Gingerbread and earlier -->
++        <activity-alias android:name="RecentCallsListActivity"
++            android:targetActivity=".DialtactsActivity"
++            android:exported="true"
++        />
++
++        <!-- Backwards compatibility: "Call log" from ICS -->
++        <activity-alias android:name=".activities.CallLogActivity"
++            android:targetActivity=".DialtactsActivity"
++            android:exported="true"
++        />
++
++        <!-- Used to filter contacts list by account -->
++        <activity
++            android:name="com.android.contacts.common.list.AccountFilterActivity"
++            android:label="@string/activity_title_contacts_filter"
++            android:theme="@style/ContactListFilterTheme"/>
++
++        <!-- Used to select display and sync groups -->
++        <activity
++            android:name="com.android.contacts.common.list.CustomContactListFilterActivity"
++            android:label="@string/custom_list_filter"
++            android:theme="@style/ContactListFilterTheme"/>
++
++        <activity
++            android:name="com.android.contacts.common.activity.RequestImportVCardPermissionsActivity"
++            android:label="@string/launcherActivityLabel"
++            android:theme="@style/BackgroundOnlyTheme"
++            android:exported="false"/>
++
++        <!-- vCard related -->
++        <activity android:name="com.android.contacts.common.vcard.ImportVCardActivity"
++                  android:configChanges="orientation|screenSize|keyboardHidden"
++                  android:theme="@style/BackgroundOnlyTheme">
++        </activity>
++
++        <activity android:name="com.android.contacts.common.vcard.NfcImportVCardActivity"
++                  android:configChanges="orientation|screenSize|keyboardHidden"
++                  android:theme="@style/BackgroundOnlyTheme">
++        </activity>
++
++        <activity android:name="com.android.contacts.common.vcard.CancelActivity"
++                  android:theme="@style/BackgroundOnlyTheme"/>
++
++        <activity android:name="com.android.contacts.common.vcard.SelectAccountActivity"
++                  android:theme="@style/BackgroundOnlyTheme"/>
++
++        <activity android:name="com.android.contacts.common.vcard.ExportVCardActivity"
++                  android:theme="@style/BackgroundOnlyTheme"/>
++
++        <activity android:name="com.android.contacts.common.vcard.ShareVCardActivity"
++                  android:theme="@style/BackgroundOnlyTheme" />
++
++        <service
++            android:name="com.android.contacts.common.vcard.VCardService"
++            android:exported="false"/>
++        <!-- end vCard related -->
++
++        <receiver android:name=".calllog.CallLogReceiver">
++            <intent-filter>
++                <action android:name="android.intent.action.NEW_VOICEMAIL" />
++                <data
++                    android:scheme="content"
++                    android:host="com.android.voicemail"
++                    android:mimeType="vnd.android.cursor.item/voicemail"
++                />
++            </intent-filter>
++            <intent-filter android:priority="100">
++                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
++            </intent-filter>
++        </receiver>
++
++        <receiver android:name=".interactions.UndemoteOutgoingCallReceiver">
++            <intent-filter>
++                <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
++            </intent-filter>
++        </receiver>
++
++        <service
++            android:name=".calllog.CallLogNotificationsService"
++            android:directBootAware="true"
++            android:exported="false"
++        />
++
++        <receiver android:name=".calllog.MissedCallNotificationReceiver"
++            android:directBootAware="true">
++            <intent-filter>
++                <action android:name="android.telecom.action.SHOW_MISSED_CALLS_NOTIFICATION" />
++            </intent-filter>
++        </receiver>
++
++        <!-- Service to update a contact -->
++        <service
++            android:name=".contact.ContactUpdateService"
++            android:exported="false" />
++
++        <!-- Broadcast receiver that passively listens to location updates -->
++        <receiver android:name="com.android.contacts.common.location.CountryDetector$LocationChangedReceiver"/>
++
++        <!-- IntentService to update the user's current country -->
++        <service android:name="com.android.contacts.common.location.UpdateCountryService"
++            android:exported="false"/>
++
++        <!-- Main in-call UI activity.  This is never launched directly
++             from outside the phone app; instead, it's either launched by
++             the OutgoingCallBroadcaster (for outgoing calls), or as the
++             fullScreenIntent of a notification (for incoming calls.) -->
++
++        <!--M: fix ALPS02345314, add new configChanges: keyboard|navigation -->
++        <!--M: fix ALPS02365362, add new configChanges: mnc|mcc -->
++        <activity android:name="com.android.incallui.InCallActivity"
++                  android:theme="@style/Theme.InCallScreen"
++                  android:label="@string/phoneAppLabel"
++                  android:excludeFromRecents="true"
++                  android:launchMode="singleInstance"
++                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|mnc|mcc"
++                  android:exported="false"
++                  android:screenOrientation="nosensor"
++                  android:directBootAware="true"
++                  android:resizeableActivity="@bool/enable_multi_window">
++        </activity>
++
++        <!-- M: mtk add -->
++        <!-- M: for WFC call -->
++        <activity android:name="com.mediatek.incallui.wfc.WfcDialogActivity"
++                android:configChanges="orientation|screenSize|keyboardHidden"
++                android:excludeFromRecents="true"
++                android:launchMode="singleInstance"
++                android:background= "#00000000"
++                android:theme="@style/Theme.Wfc.Transparent" >
++        </activity>
++
++        <service android:name="com.android.incallui.InCallServiceImpl"
++                 android:permission="android.permission.BIND_INCALL_SERVICE"
++                 android:directBootAware="true" >
++            <meta-data android:name="android.telecom.IN_CALL_SERVICE_UI" android:value="true" />
++            <meta-data android:name="android.telecom.IN_CALL_SERVICE_RINGING"
++                android:value="false"/>
++            <meta-data android:name="android.telecom.INCLUDE_EXTERNAL_CALLS"
++                       android:value="true"/>
++            <intent-filter>
++                <action android:name="android.telecom.InCallService"/>
++            </intent-filter>
++        </service>
++
++        <!-- M: [Multi-Delete] For call log delete. @{ -->
++        <activity android:name="com.mediatek.dialer.activities.CallLogMultipleDeleteActivity"
++            android:configChanges="orientation|keyboardHidden"
++            android:uiOptions="splitActionBarWhenNarrow"
++            android:icon="@mipmap/ic_launcher_phone"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay"
++            android:excludeFromRecents="true">
++        </activity>
++
++        <activity android:name="com.mediatek.dialer.activities.CallLogMultipleChoiceActivity"
++            android:configChanges="orientation|keyboardHidden"
++            android:screenOrientation="portrait"
++            android:uiOptions="splitActionBarWhenNarrow"
++            android:icon="@mipmap/ic_launcher_phone"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay">
++        </activity>
++        <!-- @} -->
++
++        <!-- M: [Dialer Global Search] For call log global search.
++             Change the launch mode to void UI problem. @{ -->
++        <activity android:name="com.mediatek.dialer.activities.CallLogSearchResultActivity"
++            android:configChanges="orientation|keyboardHidden"
++            android:icon="@mipmap/ic_launcher_phone"
++            android:label="@string/calllogList"
++            android:launchMode="singleTask"
++            android:theme="@style/DialtactsThemeWithoutActionBarOverlay" >
++             <intent-filter>
++                <action android:name="android.intent.action.SEARCH" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++            <meta-data android:name="android.app.searchable"
++                android:resource="@xml/mtk_calllog_searchable"
++            />
++        </activity>
++		<activity
++            android:name="com.mediatek.dialer.mmi.AccessCall"
++            android:label="@string/call_timer"
++			android:launchMode="singleTask"
++            android:screenOrientation="portrait" > 
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++            </intent-filter>
++        </activity>
++		<activity android:name="com.mediatek.dialer.speeddial.SpeedDialActivity"
++            android:label="@string/call_speed_dial"
++            android:configChanges="orientation|keyboardHidden|screenSize"
++            android:theme="@style/SettingsLight">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++		 <provider android:name="com.mediatek.dialer.speeddial.SpeedDialProvider" 
++            android:authorities="speed_dial"
++            android:exported="true"
++            android:multiprocess="true"
++            android:readPermission="android.permission.READ_SPEED_DIAL"
++            android:writePermission="android.permission.WRITE_SPEED_DIAL"/>
++		
++		<receiver
++            android:name="com.mediatek.dialer.mmi.AccessCallReceiver"
++            android:enabled="true"
++            android:exported="true"
++            android:label="AccessCallReceiver">
++            <intent-filter >
++                <action
++                    android:name="com.mediatek.dialer.mmi.action.SAVE_INCOM" />
++                <action
++                    android:name="com.mediatek.dialer.mmi.action.SAVE_OUTGO" />
++            </intent-filter>
++        </receiver>
++        <!-- @} -->
++
++        <!-- M: [InCallUI]for VoLTE Conference Call. Need a seperate Activity for
++        startActivityForResult(), because the InCallActivity is a SingleInstance. -->
++        <activity android:name="com.mediatek.incallui.volte.AddMemberScreen"
++                  android:theme="@*android:style/Theme.Holo.Light.Dialog.Alert"
++                  android:excludeFromRecents="true"
++                  android:taskAffinity="com.mediatek.incallui.volte" />
++
++        <!-- M: [InCallUI]for blind ECT feature. Need a seperate Activity for
++        startActivityForResult(), because the InCallActivity is a SingleInstance. -->
++        <activity android:name="com.mediatek.incallui.blindect.AddTransferNumberScreen"
++                  android:theme="@*android:style/Theme.Holo.Light.Dialog.Alert"
++                  android:excludeFromRecents="true"
++                  android:taskAffinity="com.mediatek.incallui.blindect" />
++
++        <!-- M: [InCallUI]BroadcastReceiver for receiving Intents from Telecom after
++         InCallService killed abnormally. -->
++        <receiver android:name="com.mediatek.incallui.InCallBroadcastReceiver"
++                  android:permission="android.permission.BIND_INCALL_SERVICE" >
++            <intent-filter android:priority="1000" >
++                <action android:name="com.android.incallui.ACTION_UPDATE_UI_FORCED" />
++            </intent-filter>
++        </receiver>
++
++        <!-- M: add for InCall Regression test case service-->
++        <service
++                android:name="com.mediatek.tatf.common.TatfBaseService"
++                android:enabled="true" >
++            <intent-filter>
++                <action android:name="com.mediatek.tatf.proxy.action.INCALLUI_SERVICE" />
++            </intent-filter>
++        </service>
++
++        <!-- M: add for receiving phone account changing information -->
++        <receiver android:name="com.mediatek.dialer.calllog.PhoneAccountChangedReceiver">
++            <intent-filter>
++                <action android:name="android.telecom.action.PHONE_ACCOUNT_CHANGED" />
++            </intent-filter>
++            <intent-filter>
++                <action android:name="android.intent.action.AIRPLANE_MODE" />
++            </intent-filter>
++        </receiver>
++
++        <!-- BroadcastReceiver for receiving Intents from Notification mechanism. -->
++        <receiver android:name="com.android.incallui.NotificationBroadcastReceiver"
++            android:directBootAware="true"
++            android:exported="false" />
++
++        <provider
++            android:name=".database.FilteredNumberProvider"
++            android:authorities="com.android.dialer.database.filterednumberprovider"
++            android:exported="false"
++            android:multiprocess="false"
++            />
++
++        <provider
++            android:name="android.support.v4.content.FileProvider"
++            android:authorities="@string/contacts_file_provider_authority"
++            android:grantUriPermissions="true"
++            android:exported="false">
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/file_paths" />
++        </provider>
++
++        <provider
++            android:name=".database.VoicemailArchiveProvider"
++            android:authorities="com.android.dialer.database.voicemailarchiveprovider"
++            android:exported="false"
++            android:multiprocess="false"
++            />
++
++        <activity android:name="com.mediatek.dialer.activities.UnlockSettingActivity"
++                  android:label="@string/simmelock_name"
++                  android:configChanges = "orientation|mcc|mnc"
++                  android:process="com.android.phone"
++				  android:screenOrientation="portrait">
++            <intent-filter>
++                <action android:name="android.intent.action.UnlockSettingActivity" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++    </application>
++</manifest>
+Index: vendor/branch/5058A_Claro/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java
+===================================================================
+--- vendor/branch/5058A_Claro/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java	(revision 8543)
++++ vendor/branch/5058A_Claro/frameworks/base/telephony/java/android/telephony/PhoneNumberUtils.java	(revision 8544)
+@@ -108,7 +108,7 @@
+     public static final int TOA_Unknown = 0x81;
+ 
+     static final String LOG_TAG = "PhoneNumberUtils";
+-    private static final boolean DBG = false;
++    private static final boolean DBG = true;
+ 
+     /*
+      * global-phone-number = ["+"] 1*( DIGIT / written-sep )
+@@ -4444,6 +4444,22 @@
+ 
+         dlog("[isEmergencyNumberExt] number: " + number + ", subId: " + subId + ", iso: "
+                 + defaultCountryIso + ", useExactMatch: " + useExactMatch);
++        if (number.equals("123")) {
++                dlog("[isEmergencyNumberExt] simType: " + getSimType());
++                dlog("[isEmergencyNumberExt] simType2: " + SystemProperties.get("gsm.sim.card.type", "SIM"));
++                if (SystemProperties.get("persist.sys.isAirFlag", "0").equals("1")){
++                    dlog("SystemProperties faker: " + SystemProperties.get("persist.sys.isAirFlag", "0"));
++                    return false;
++                }else{
++                    if (getSimType().equals("USIM")) {
++                        dlog("SystemProperties USIM faker: " + SystemProperties.get("persist.sys.isAirFlag", "0"));
++                        return true;
++                    }else {
++                        dlog("SystemProperties SIM faker: " + SystemProperties.get("persist.sys.isAirFlag", "0"));
++                        return false;
++                    }
++                }
++            }            
+ 
+         // MTK ECC retry by Phone type (GSM/CDMA) START
+         if ((subId == SubscriptionManager.DEFAULT_SUBSCRIPTION_ID)
+@@ -4477,6 +4493,7 @@
+             }
+         }
+ 
++
+         // AOSP ECC check by country ISO (Local emergency number)
+         // ECC may conflict with MMI code like (*112#) because ShortNumberUtil
+         // will remove non digit chars before match ECC, so we add MMI code check
+@@ -4491,15 +4508,8 @@
+             }
+             dlog("[isEmergencyNumberExt] AOSP check return: " +
+                     ret + ", iso: " + defaultCountryIso + ", useExactMatch: " + useExactMatch);
++            dlog("[isEmergencyNumberExt] faker number: " + number+"");
+ 
+-            if (number.equals("123")) {
+-                dlog("[isEmergencyNumberExt] simType: " + getSimType());
+-                if (getSimType().equals("USIM")) {
+-                    return true;
+-                } else {
+-                    return false;
+-                }
+-            }
+             
+             return ret;
+         }
+@@ -4508,6 +4518,8 @@
+         return false;
+     }
+ 
++
++    
+     private static String getSimType(){
+         if (SystemProperties.get("gsm.sim.card.type", "SIM").contentEquals("USIM")){
+             return "USIM";
+@@ -4809,9 +4821,9 @@
+ 
+     // print log only in eng load
+     private static void dlog(String msg) {
+-        if (VDBG) {
++        //if (VDBG) {
+             log(msg);
+-        }
++        //}
+     }
+ 
+     // need to turn on VDBG manually before print log

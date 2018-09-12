@@ -1,0 +1,108 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java	(revision 2159)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java	(revision 2160)
+@@ -150,7 +150,11 @@
+ 
+     private boolean mShowFullZen;
+     private TunerZenModePanel mZenPanel;
+-
++	
++	private int lastRingValue, lastNotificationValue;
++	private final String KEY_LAST_RING_VALUE = "lassRingValue";
++	private final String KEY_LAST_NOTIFICATION_VALUE = "lastNotificationValue";
++	
+     public VolumeDialog(Context context, int windowType, VolumeDialogController controller,
+             ZenModeController zenModeController, Callback callback) {
+         mContext = context;
+@@ -276,6 +280,7 @@
+             if (register) {
+                 final IntentFilter filter = new IntentFilter();
+                 filter.addAction(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION);
++				filter.addAction(Intent.ACTION_LOCALE_CHANGED);
+                 mContext.registerReceiver(this, filter);
+             } else {
+                 mContext.unregisterReceiver(this);
+@@ -287,8 +292,10 @@
+         public void onReceive(Context context, Intent intent) {
+             final String action = intent.getAction();
+             if (AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION.equals(action)) {
+-				updateSilentMode();
+-            }
++				updateSilentMode();	
++            }else if(Intent.ACTION_LOCALE_CHANGED.equals(action)){
++				initDialog();
++			}		
+         }
+     }
+ 
+@@ -304,12 +311,27 @@
+ 				if(event.getAction() != MotionEvent.ACTION_UP) 
+ 				    return true;
+ 				if(mAudioManager.getRingerModeInternal() != AudioManager.RINGER_MODE_SILENT){
++					Settings.System.putInt(mContext.getContentResolver(),"isBusyForSilent",1);					
++					lastRingValue = mAudioManager.getStreamVolume(AudioManager.STREAM_RING);
++					lastNotificationValue = mAudioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION);
++					Settings.System.putInt(mContext.getContentResolver(),KEY_LAST_RING_VALUE,lastRingValue);
++					Settings.System.putInt(mContext.getContentResolver(),KEY_LAST_NOTIFICATION_VALUE,lastNotificationValue);
++					
+ 					mAudioManager.setStreamVolume(AudioManager.STREAM_RING,0,0);
+ 					mAudioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION,0,0);
+                     mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_SILENT);
+ 					Settings.System.putInt(mContext.getContentResolver(), Settings.System.VIBRATE_IN_SILENT,  1 );
+-				}else {
+-					mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
++				}else {			
++					lastRingValue = Settings.System.getInt(mContext.getContentResolver(), KEY_LAST_RING_VALUE, lastRingValue);
++					if(lastRingValue == 0){
++						mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_VIBRATE);
++					}
++					else{
++						mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
++						lastNotificationValue = Settings.System.getInt(mContext.getContentResolver(), KEY_LAST_NOTIFICATION_VALUE, lastNotificationValue);
++						mAudioManager.setStreamVolume(AudioManager.STREAM_RING, lastRingValue, 0);
++						mAudioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, lastNotificationValue, 0);
++					}				
+ 					Settings.System.putInt(mContext.getContentResolver(), Settings.System.VIBRATE_IN_SILENT,  0 );
+ 				}
+ 				
+@@ -1051,7 +1073,7 @@
+                 initDialog();
+                 mDensity = density;
+             }
+-			initDialog();
++			
+             updateWindowWidthH();
+             mSpTexts.update();
+             mZenFooter.onConfigurationChanged();
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialogController.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialogController.java	(revision 2159)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/volume/VolumeDialogController.java	(revision 2160)
+@@ -65,7 +65,10 @@
+ 
+     private static final int DYNAMIC_STREAM_START_INDEX = 100;
+     private static final int VIBRATE_HINT_DURATION = 50;
+-
++	private int lastRingValue, lastNotificationValue;
++	private final String KEY_LAST_RING_VALUE = "lassRingValue";
++	private final String KEY_LAST_NOTIFICATION_VALUE = "lastNotificationValue";
++	
+     private static final int[] STREAMS = {
+         AudioSystem.STREAM_ALARM,
+         AudioSystem.STREAM_BLUETOOTH_SCO,
+@@ -789,6 +792,14 @@
+                         + Util.ringerModeToString(rm));
+                 changed = updateRingerModeExternalW(rm);
+             } else if (action.equals(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION)) {
++				if(mAudio.getRingerModeInternal() == mAudio.RINGER_MODE_VIBRATE && Settings.System.getInt(mContext.getContentResolver(),"isBusyForSilent",0) == 0){
++					lastRingValue = mAudio.getStreamVolume(AudioManager.STREAM_RING);
++					lastNotificationValue = mAudio.getStreamVolume(AudioManager.STREAM_NOTIFICATION);
++					Settings.System.putInt(context.getContentResolver(),KEY_LAST_RING_VALUE,lastRingValue);
++					Settings.System.putInt(context.getContentResolver(),KEY_LAST_NOTIFICATION_VALUE,lastNotificationValue);			
++				}else if(mAudio.getRingerModeInternal() == mAudio.RINGER_MODE_SILENT ){
++					Settings.System.putInt(mContext.getContentResolver(),"isBusyForSilent",0);
++				}
+                 final int rm = intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, -1);
+                 if (D.BUG) Log.d(TAG, "onReceive INTERNAL_RINGER_MODE_CHANGED_ACTION rm="
+                         + Util.ringerModeToString(rm));

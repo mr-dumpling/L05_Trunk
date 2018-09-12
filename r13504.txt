@@ -1,0 +1,2976 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/DialtactsActivity.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/DialtactsActivity.java	(revision 0)
++++ vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/DialtactsActivity.java	(revision 13504)
+@@ -0,0 +1,1695 @@
++/*
++ * Copyright (C) 2013 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.dialer;
++
++import android.app.Fragment;
++import android.app.FragmentTransaction;
++import android.content.ActivityNotFoundException;
++import android.content.Context;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.content.pm.ResolveInfo;
++import android.content.res.Configuration;
++import android.content.res.Resources;
++import android.database.ContentObserver;
++import android.net.Uri;
++import android.os.Build;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Trace;
++import android.provider.CallLog.Calls;
++import android.provider.ContactsContract;
++import android.speech.RecognizerIntent;
++import android.support.design.widget.CoordinatorLayout;
++import android.support.v4.view.ViewPager;
++import android.support.v7.app.ActionBar;
++import android.telecom.PhoneAccount;
++import android.text.BidiFormatter;
++import android.text.Editable;
++import android.text.TextDirectionHeuristics;
++import android.text.TextUtils;
++import android.text.TextWatcher;
++import android.util.Log;
++import android.view.DragEvent;
++import android.view.Gravity;
++import android.view.KeyEvent;
++import android.view.Menu;
++import android.view.MenuItem;
++import android.view.MotionEvent;
++import android.view.View;
++import android.view.View.OnDragListener;
++import android.view.ViewTreeObserver;
++import android.view.animation.Animation;
++import android.view.animation.AnimationUtils;
++import android.widget.AbsListView.OnScrollListener;
++import android.widget.EditText;
++import android.widget.ImageButton;
++import android.widget.PopupMenu;
++import android.widget.TextView;
++import android.widget.Toast;
++
++import com.android.contacts.common.dialog.ClearFrequentsDialog;
++import com.android.contacts.common.interactions.ImportExportDialogFragment;
++import com.android.contacts.common.interactions.TouchPointManager;
++import com.android.contacts.common.list.OnPhoneNumberPickerActionListener;
++import com.android.contacts.common.util.PermissionsUtil;
++import com.android.contacts.common.vcard.VCardCommonArguments;
++import com.android.contacts.common.widget.FloatingActionButtonController;
++import com.android.dialer.calllog.CallLogActivity;
++import com.android.dialer.calllog.CallLogFragment;
++import com.android.dialer.database.DialerDatabaseHelper;
++import com.android.dialer.dialpad.DialpadFragment;
++import com.android.dialer.dialpad.SmartDialNameMatcher;
++import com.android.dialer.dialpad.SmartDialPrefix;
++import com.android.dialer.interactions.PhoneNumberInteraction;
++import com.android.dialer.list.DragDropController;
++import com.android.dialer.list.ListsFragment;
++import com.android.dialer.list.OnDragDropListener;
++import com.android.dialer.list.OnListFragmentScrolledListener;
++import com.android.dialer.list.PhoneFavoriteSquareTileView;
++import com.android.dialer.list.RegularSearchFragment;
++import com.android.dialer.list.SearchFragment;
++import com.android.dialer.list.SmartDialSearchFragment;
++import com.android.dialer.list.SpeedDialFragment;
++import com.android.dialer.logging.Logger;
++import com.android.dialer.logging.ScreenEvent;
++import com.android.dialer.settings.DialerSettingsActivity;
++import com.android.dialer.util.Assert;
++import com.android.dialer.util.DialerUtils;
++import com.android.dialer.util.IntentUtil;
++import com.android.dialer.util.IntentUtil.CallIntentBuilder;
++import com.android.dialer.util.TelecomUtil;
++import com.android.dialer.voicemail.VoicemailArchiveActivity;
++import com.android.dialer.widget.ActionBarController;
++import com.android.dialer.widget.SearchEditTextLayout;
++import com.android.dialerbind.DatabaseHelperManager;
++import com.android.dialerbind.ObjectFactory;
++import com.android.ims.ImsManager;
++import com.android.phone.common.animation.AnimUtils;
++import com.android.phone.common.animation.AnimationListenerAdapter;
++import com.google.common.annotations.VisibleForTesting;
++
++import com.mediatek.contacts.util.ContactsIntent;
++import com.mediatek.dialer.activities.NeedTestActivity;
++import com.mediatek.dialer.compat.CompatChecker;
++import com.mediatek.dialer.database.DialerDatabaseHelperEx;
++import com.mediatek.dialer.ext.ExtensionManager;
++import com.mediatek.dialer.search.ThrottleContentObserver;
++import com.mediatek.dialer.util.DialerFeatureOptions;
++import com.mediatek.dialer.util.DialerVolteUtils;
++
++import java.util.ArrayList;
++import java.util.List;
++import android.view.IWindowManager;
++import android.view.WindowManagerGlobal;
++import android.os.RemoteException;
++import android.util.DisplayMetrics;
++import android.widget.LinearLayout;
++import android.widget.FrameLayout;
++import android.view.ViewGroup;
++import android.widget.ImageView;
++import android.util.TypedValue;
++
++
++/**
++ * M: Inherited from NeedTestActivity for easy mock testing
++ * The dialer tab's title is 'phone', a more common name (see strings.xml).
++ */
++public class DialtactsActivity extends NeedTestActivity implements View.OnClickListener,
++        DialpadFragment.OnDialpadQueryChangedListener,
++        OnListFragmentScrolledListener,
++        CallLogFragment.HostInterface,
++        DialpadFragment.HostInterface,
++        ListsFragment.HostInterface,
++        SpeedDialFragment.HostInterface,
++        SearchFragment.HostInterface,
++        OnDragDropListener,
++        OnPhoneNumberPickerActionListener,
++        PopupMenu.OnMenuItemClickListener,
++        ViewPager.OnPageChangeListener,
++        ActionBarController.ActivityUi {
++    private static final String TAG = "DialtactsActivity";
++
++    /// M: For the purpose of debugging in eng load
++    public static final boolean DEBUG = Build.TYPE.equals("eng");
++
++    public static final String SHARED_PREFS_NAME = "com.android.dialer_preferences";
++
++    private static final String KEY_IN_REGULAR_SEARCH_UI = "in_regular_search_ui";
++    private static final String KEY_IN_DIALPAD_SEARCH_UI = "in_dialpad_search_ui";
++    private static final String KEY_SEARCH_QUERY = "search_query";
++    private static final String KEY_FIRST_LAUNCH = "first_launch";
++    private static final String KEY_IS_DIALPAD_SHOWN = "is_dialpad_shown";
++    /// M: Save and restore the mPendingSearchViewQuery
++    private static final String KEY_PENDING_SEARCH_QUERY = "pending_search_query";
++
++    @VisibleForTesting
++    public static final String TAG_DIALPAD_FRAGMENT = "dialpad";
++    private static final String TAG_REGULAR_SEARCH_FRAGMENT = "search";
++    private static final String TAG_SMARTDIAL_SEARCH_FRAGMENT = "smartdial";
++    private static final String TAG_FAVORITES_FRAGMENT = "favorites";
++
++    /**
++     * Just for backward compatibility. Should behave as same as {@link Intent#ACTION_DIAL}.
++     */
++    private static final String ACTION_TOUCH_DIALER = "com.android.phone.action.TOUCH_DIALER";
++    public static final String EXTRA_SHOW_TAB = "EXTRA_SHOW_TAB";
++
++    private static final int ACTIVITY_REQUEST_CODE_VOICE_SEARCH = 1;
++    /// M: Add for import/export function
++    private static final int IMPORT_EXPORT_REQUEST_CODE = 2;
++
++    private static final int FAB_SCALE_IN_DELAY_MS = 300;
++
++    private CoordinatorLayout mParentLayout;
++
++    /**
++     * Fragment containing the dialpad that slides into view
++     */
++    protected DialpadFragment mDialpadFragment;
++
++    /**
++     * Fragment for searching phone numbers using the alphanumeric keyboard.
++     */
++    private RegularSearchFragment mRegularSearchFragment;
++
++    /**
++     * Fragment for searching phone numbers using the dialpad.
++     */
++    private SmartDialSearchFragment mSmartDialSearchFragment;
++
++    /**
++     * Animation that slides in.
++     */
++    private Animation mSlideIn;
++
++    /**
++     * Animation that slides out.
++     */
++    private Animation mSlideOut;
++
++    AnimationListenerAdapter mSlideInListener = new AnimationListenerAdapter() {
++        @Override
++        public void onAnimationEnd(Animation animation) {
++            maybeEnterSearchUi();
++        }
++    };
++
++    /**
++     * Listener for after slide out animation completes on dialer fragment.
++     */
++    AnimationListenerAdapter mSlideOutListener = new AnimationListenerAdapter() {
++        @Override
++        public void onAnimationEnd(Animation animation) {
++            commitDialpadFragmentHide();
++        }
++    };
++
++    /**
++     * Fragment containing the speed dial list, call history list, and all contacts list.
++     */
++    private ListsFragment mListsFragment;
++
++    /**
++     * Tracks whether onSaveInstanceState has been called. If true, no fragment transactions can
++     * be commited.
++     */
++    private boolean mStateSaved;
++    private boolean mIsRestarting;
++    private boolean mInDialpadSearch;
++    private boolean mInRegularSearch;
++    private boolean mClearSearchOnPause;
++    private boolean mIsDialpadShown;
++    private boolean mShowDialpadOnResume;
++
++    /**
++     * Whether or not the device is in landscape orientation.
++     */
++    private boolean mIsLandscape;
++
++    /**
++     * True if the dialpad is only temporarily showing due to being in call
++     */
++    private boolean mInCallDialpadUp;
++
++    /**
++     * True when this activity has been launched for the first time.
++     */
++    private boolean mFirstLaunch;
++
++    /**
++     * Search query to be applied to the SearchView in the ActionBar once
++     * onCreateOptionsMenu has been called.
++     */
++    private String mPendingSearchViewQuery;
++
++    private PopupMenu mOverflowMenu;
++    private EditText mSearchView;
++    private View mVoiceSearchButton;
++
++    private String mSearchQuery;
++    private String mDialpadQuery;
++    /* M: ALPS03361423 add for "+" is shown behind number */
++    private BidiFormatter mBidiFormatter = BidiFormatter.getInstance();
++    private DialerDatabaseHelper mDialerDatabaseHelper;
++    private DragDropController mDragDropController;
++    private ActionBarController mActionBarController;
++
++    private FloatingActionButtonController mFloatingActionButtonController;
++
++    private int mActionBarHeight;
++    private int mPreviouslySelectedTabIndex;
++
++    /**
++     * The text returned from a voice search query.  Set in {@link #onActivityResult} and used in
++     * {@link #onResume()} to populate the search box.
++     */
++    private String mVoiceSearchQuery;
++
++    /// M: [MTK Dialer Search] @{
++    /**Dialer search database helper.*/
++    private DialerDatabaseHelperEx mDialerDatabaseHelperEx;
++    private final Handler mHandler = new Handler();
++    private final ThrottleContentObserver mContactsObserver = new ThrottleContentObserver(mHandler,
++            this, new Runnable() {
++                @Override
++                public void run() {
++                    DialerDatabaseHelperEx dbHelper = DatabaseHelperManager
++                            .getDialerSearchDbHelper(getApplicationContext());
++                    dbHelper.startContactUpdateThread();
++                }
++            }, "ContactsObserver");
++    private final ThrottleContentObserver mCallLogObserver = new ThrottleContentObserver(mHandler,
++            this, new Runnable() {
++                @Override
++                public void run() {
++                    DialerDatabaseHelperEx dbHelper = DatabaseHelperManager
++                            .getDialerSearchDbHelper(getApplicationContext());
++                    dbHelper.startCallLogUpdateThread();
++                }
++            }, "CallLogObserver");
++    /// @}
++
++    protected class OptionsPopupMenu extends PopupMenu {
++        public OptionsPopupMenu(Context context, View anchor) {
++            super(context, anchor, Gravity.END);
++        }
++
++        @Override
++        public void show() {
++            final boolean hasContactsPermission =
++                    PermissionsUtil.hasContactsPermissions(DialtactsActivity.this);
++            final Menu menu = getMenu();
++            final MenuItem clearFrequents = menu.findItem(R.id.menu_clear_frequents);
++            clearFrequents.setVisible(mListsFragment != null &&
++                    mListsFragment.getSpeedDialFragment() != null &&
++                    mListsFragment.getSpeedDialFragment().hasFrequents() && hasContactsPermission);
++
++            menu.findItem(R.id.menu_import_export).setVisible(hasContactsPermission);
++            menu.findItem(R.id.menu_add_contact).setVisible(hasContactsPermission);
++
++            menu.findItem(R.id.menu_history).setVisible(
++                    PermissionsUtil.hasPhonePermissions(DialtactsActivity.this));
++            /// M: [VoLTE ConfCall] Show conference call menu for VoLTE @{
++            boolean visible = DialerVolteUtils
++                    .isVolteConfCallEnable(DialtactsActivity.this) && hasContactsPermission;
++            menu.findItem(R.id.menu_volte_conf_call).setVisible(visible);
++            /// @}
++            super.show();
++        }
++    }
++
++    /**
++     * Listener that listens to drag events and sends their x and y coordinates to a
++     * {@link DragDropController}.
++     */
++    private class LayoutOnDragListener implements OnDragListener {
++        @Override
++        public boolean onDrag(View v, DragEvent event) {
++            if (event.getAction() == DragEvent.ACTION_DRAG_LOCATION) {
++                mDragDropController.handleDragHovered(v, (int) event.getX(), (int) event.getY());
++            }
++            return true;
++        }
++    }
++
++    /**
++     * Listener used to send search queries to the phone search fragment.
++     */
++    private final TextWatcher mPhoneSearchQueryTextListener = new TextWatcher() {
++        @Override
++        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
++        }
++
++        @Override
++        public void onTextChanged(CharSequence s, int start, int before, int count) {
++            final String newText = s.toString();
++            if (newText.equals(mSearchQuery)) {
++                // If the query hasn't changed (perhaps due to activity being destroyed
++                // and restored, or user launching the same DIAL intent twice), then there is
++                // no need to do anything here.
++                return;
++            }
++            if (DEBUG) {
++                Log.d(TAG, "onTextChange for mSearchView called with new query: " + newText);
++                Log.d(TAG, "Previous Query: " + mSearchQuery);
++            }
++            mSearchQuery = newText;
++
++            // Show search fragment only when the query string is changed to non-empty text.
++            if (!TextUtils.isEmpty(newText)) {
++                // Call enterSearchUi only if we are switching search modes, or showing a search
++                // fragment for the first time.
++                final boolean sameSearchMode = (mIsDialpadShown && mInDialpadSearch) ||
++                        (!mIsDialpadShown && mInRegularSearch);
++                if (!sameSearchMode) {
++                    enterSearchUi(mIsDialpadShown, mSearchQuery, true /* animate */);
++                }
++            }
++
++            if (mSmartDialSearchFragment != null && mSmartDialSearchFragment.isVisible()) {
++                Log.d(TAG, "mSmartDialSearchFragment.setQueryString " + mSearchQuery);
++                mSmartDialSearchFragment.setQueryString(mSearchQuery, false /* delaySelection */);
++            } else if (mRegularSearchFragment != null && mRegularSearchFragment.isVisible()) {
++                Log.d(TAG, "mRegularSearchFragment.setQueryString " + mSearchQuery);
++                mRegularSearchFragment.setQueryString(mSearchQuery, false /* delaySelection */);
++            }
++        }
++
++        @Override
++        public void afterTextChanged(Editable s) {
++        }
++    };
++
++
++    /**
++     * Open the search UI when the user clicks on the search box.
++     */
++    private final View.OnClickListener mSearchViewOnClickListener = new View.OnClickListener() {
++        @Override
++        public void onClick(View v) {
++            if (!isInSearchUi()) {
++                mActionBarController.onSearchBoxTapped();
++                enterSearchUi(false /* smartDialSearch */, mSearchView.getText().toString(),
++                        true /* animate */);
++            }
++        }
++    };
++
++    /**
++     * Handles the user closing the soft keyboard.
++     */
++    private final View.OnKeyListener mSearchEditTextLayoutListener = new View.OnKeyListener() {
++        @Override
++        public boolean onKey(View v, int keyCode, KeyEvent event) {
++            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
++                if (TextUtils.isEmpty(mSearchView.getText().toString())) {
++                    // If the search term is empty, close the search UI.
++                    /// M: end the back key dispatch to avoid activity onBackPressed is called
++                    //  if in search UI.
++                    return maybeExitSearchUi();
++                } else {
++                    // If the search term is not empty, show the dialpad fab.
++                    showFabInSearchUi();
++                }
++            }
++            return false;
++        }
++    };
++
++    @Override
++    public boolean dispatchTouchEvent(MotionEvent ev) {
++        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
++            TouchPointManager.getInstance().setPoint((int) ev.getRawX(), (int) ev.getRawY());
++        }
++        return super.dispatchTouchEvent(ev);
++    }
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        Trace.beginSection(TAG + " onCreate");
++        super.onCreate(savedInstanceState);
++
++        mFirstLaunch = true;
++
++        final Resources resources = getResources();
++        mActionBarHeight = resources.getDimensionPixelSize(R.dimen.action_bar_height_large);
++
++        Trace.beginSection(TAG + " setContentView");
++        setContentView(R.layout.dialtacts_activity);
++        Trace.endSection();
++        getWindow().setBackgroundDrawable(null);
++
++        Trace.beginSection(TAG + " setup Views");
++        final ActionBar actionBar = getSupportActionBar();
++        actionBar.setCustomView(R.layout.search_edittext);
++        actionBar.setDisplayShowCustomEnabled(true);
++        actionBar.setBackgroundDrawable(null);
++
++        SearchEditTextLayout searchEditTextLayout = (SearchEditTextLayout) actionBar
++                .getCustomView().findViewById(R.id.search_view_container);
++        searchEditTextLayout.setPreImeKeyListener(mSearchEditTextLayoutListener);
++
++        mActionBarController = new ActionBarController(this, searchEditTextLayout);
++
++        mSearchView = (EditText) searchEditTextLayout.findViewById(R.id.search_view);
++        mSearchView.addTextChangedListener(mPhoneSearchQueryTextListener);
++        mVoiceSearchButton = searchEditTextLayout.findViewById(R.id.voice_search_button);
++        searchEditTextLayout.findViewById(R.id.search_magnifying_glass)
++                .setOnClickListener(mSearchViewOnClickListener);
++        searchEditTextLayout.findViewById(R.id.search_box_start_search)
++                .setOnClickListener(mSearchViewOnClickListener);
++        searchEditTextLayout.setOnClickListener(mSearchViewOnClickListener);
++        searchEditTextLayout.setCallback(new SearchEditTextLayout.Callback() {
++            @Override
++            public void onBackButtonClicked() {
++                onBackPressed();
++            }
++
++            @Override
++            public void onSearchViewClicked() {
++                // Hide FAB, as the keyboard is shown.
++                mFloatingActionButtonController.scaleOut();
++            }
++        });
++
++        mIsLandscape = getResources().getConfiguration().orientation
++                == Configuration.ORIENTATION_LANDSCAPE;
++        mPreviouslySelectedTabIndex = ListsFragment.TAB_INDEX_SPEED_DIAL;
++        final View floatingActionButtonContainer = findViewById(
++                R.id.floating_action_button_container);
++        ImageButton floatingActionButton = (ImageButton) findViewById(R.id.floating_action_button);
++        floatingActionButton.setOnClickListener(this);
++        mFloatingActionButtonController = new FloatingActionButtonController(this,
++                floatingActionButtonContainer, floatingActionButton);
++
++        ImageButton optionsMenuButton =
++                (ImageButton) searchEditTextLayout.findViewById(R.id.dialtacts_options_menu_button);
++        optionsMenuButton.setOnClickListener(this);
++        mOverflowMenu = buildOptionsMenu(searchEditTextLayout);
++        optionsMenuButton.setOnTouchListener(mOverflowMenu.getDragToOpenListener());
++
++        // Add the favorites fragment but only if savedInstanceState is null. Otherwise the
++        // fragment manager is responsible for recreating it.
++        if (savedInstanceState == null) {
++            getFragmentManager().beginTransaction()
++                    .add(R.id.dialtacts_frame, new ListsFragment(), TAG_FAVORITES_FRAGMENT)
++                    .commit();
++        } else {
++            mSearchQuery = savedInstanceState.getString(KEY_SEARCH_QUERY);
++            mInRegularSearch = savedInstanceState.getBoolean(KEY_IN_REGULAR_SEARCH_UI);
++            mInDialpadSearch = savedInstanceState.getBoolean(KEY_IN_DIALPAD_SEARCH_UI);
++            mFirstLaunch = savedInstanceState.getBoolean(KEY_FIRST_LAUNCH);
++            mShowDialpadOnResume = savedInstanceState.getBoolean(KEY_IS_DIALPAD_SHOWN);
++            /// M: Save and restore the mPendingSearchViewQuery
++            mPendingSearchViewQuery = savedInstanceState.getString(KEY_PENDING_SEARCH_QUERY);
++            mActionBarController.restoreInstanceState(savedInstanceState);
++        }
++
++        final boolean isLayoutRtl = DialerUtils.isRtl();
++        if (mIsLandscape) {
++            mSlideIn = AnimationUtils.loadAnimation(this,
++                    isLayoutRtl ? R.anim.dialpad_slide_in_left : R.anim.dialpad_slide_in_right);
++            mSlideOut = AnimationUtils.loadAnimation(this,
++                    isLayoutRtl ? R.anim.dialpad_slide_out_left : R.anim.dialpad_slide_out_right);
++        } else {
++            mSlideIn = AnimationUtils.loadAnimation(this, R.anim.dialpad_slide_in_bottom);
++            mSlideOut = AnimationUtils.loadAnimation(this, R.anim.dialpad_slide_out_bottom);
++        }
++
++        mSlideIn.setInterpolator(AnimUtils.EASE_IN);
++        mSlideOut.setInterpolator(AnimUtils.EASE_OUT);
++
++        mSlideIn.setAnimationListener(mSlideInListener);
++        mSlideOut.setAnimationListener(mSlideOutListener);
++
++        mParentLayout = (CoordinatorLayout) findViewById(R.id.dialtacts_mainlayout);
++        mParentLayout.setOnDragListener(new LayoutOnDragListener());
++        floatingActionButtonContainer.getViewTreeObserver().addOnGlobalLayoutListener(
++                new ViewTreeObserver.OnGlobalLayoutListener() {
++                    @Override
++                    public void onGlobalLayout() {
++                        final ViewTreeObserver observer =
++                                floatingActionButtonContainer.getViewTreeObserver();
++                        if (!observer.isAlive()) {
++                            return;
++                        }
++                        observer.removeOnGlobalLayoutListener(this);
++                        int screenWidth = mParentLayout.getWidth();
++                        mFloatingActionButtonController.setScreenWidth(screenWidth);
++                        mFloatingActionButtonController.align(
++                                getFabAlignment(), false /* animate */);
++                    }
++                });
++
++        Trace.endSection();
++
++        Trace.beginSection(TAG + " initialize smart dialing");
++
++        /// M: [MTK Dialer Search] @{
++        if (DialerFeatureOptions.isDialerSearchEnabled()) {
++            mDialerDatabaseHelperEx = DatabaseHelperManager.getDialerSearchDbHelper(this);
++            mDialerDatabaseHelperEx.startSmartDialUpdateThread();
++
++            // Monitor this so that we can update callLog info if dismiss an incoming call or
++            // hang up a call in dialer UI
++            mCallLogObserver.register(Calls.CONTENT_URI);
++            // Monitor this so that we can update contact info
++            // when importing a large number of contacts
++            mContactsObserver.register(ContactsContract.Contacts.CONTENT_URI);
++        } else {
++            mDialerDatabaseHelper = DatabaseHelperManager.getDatabaseHelper(this);
++            SmartDialPrefix.initializeNanpSettings(this);
++        }
++        /// @}
++        ///M:[portable]
++        CompatChecker.getInstance(this).startCheckerThread();
++
++        Trace.endSection();
++        Trace.endSection();
++    }
++
++    @Override
++    protected void onResume() {
++        Trace.beginSection(TAG + " onResume");
++        super.onResume();
++
++        mStateSaved = false;
++        if (mFirstLaunch) {
++            displayFragment(getIntent());
++        } else if (!phoneIsInUse() && mInCallDialpadUp) {
++            hideDialpadFragment(false, true);
++            mInCallDialpadUp = false;
++        } else if (mShowDialpadOnResume) {
++            showDialpadFragment(false);
++            mShowDialpadOnResume = false;
++        } else if (phoneIsInUse()) {
++            showDialpad();
++        }
++
++        // If there was a voice query result returned in the {@link #onActivityResult} callback, it
++        // will have been stashed in mVoiceSearchQuery since the search results fragment cannot be
++        // shown until onResume has completed.  Active the search UI and set the search term now.
++        if (!TextUtils.isEmpty(mVoiceSearchQuery)) {
++            mActionBarController.onSearchBoxTapped();
++            mSearchView.setText(mVoiceSearchQuery);
++            mVoiceSearchQuery = null;
++        }
++
++        mFirstLaunch = false;
++
++        if (mIsRestarting) {
++            // This is only called when the activity goes from resumed -> paused -> resumed, so it
++            // will not cause an extra view to be sent out on rotation
++            if (mIsDialpadShown) {
++                Logger.logScreenView(ScreenEvent.DIALPAD, this);
++            }
++            mIsRestarting = false;
++        }
++
++        prepareVoiceSearchButton();
++
++        /// M: [MTK Dialer Search] @{
++        if (!DialerFeatureOptions.isDialerSearchEnabled()) {
++            mDialerDatabaseHelper.startSmartDialUpdateThread();
++        }
++        /// @}
++
++        mFloatingActionButtonController.align(getFabAlignment(), false /* animate */);
++
++        if (Calls.CONTENT_TYPE.equals(getIntent().getType())) {
++            // Externally specified extras take precedence to EXTRA_SHOW_TAB, which is only
++            // used internally.
++            final Bundle extras = getIntent().getExtras();
++            if (extras != null
++                    && extras.getInt(Calls.EXTRA_CALL_TYPE_FILTER) == Calls.VOICEMAIL_TYPE) {
++                mListsFragment.showTab(ListsFragment.TAB_INDEX_VOICEMAIL);
++            } else {
++                mListsFragment.showTab(ListsFragment.TAB_INDEX_HISTORY);
++            }
++        } else if (getIntent().hasExtra(EXTRA_SHOW_TAB)) {
++            int index = getIntent().getIntExtra(EXTRA_SHOW_TAB, ListsFragment.TAB_INDEX_SPEED_DIAL);
++            if (index < mListsFragment.getTabCount()) {
++                mListsFragment.showTab(index);
++            }
++        }
++
++        setSearchBoxHint();
++
++		resetFontSize();
++        Trace.endSection();
++    }
++
++    @Override
++    protected void onRestart() {
++        super.onRestart();
++        mIsRestarting = true;
++    }
++
++    @Override
++    protected void onPause() {
++        // Only clear missed calls if the pause was not triggered by an orientation change
++        // (or any other confirguration change)
++        if (!isChangingConfigurations()) {
++            updateMissedCalls();
++        }
++        if (mClearSearchOnPause) {
++            hideDialpadAndSearchUi();
++            mClearSearchOnPause = false;
++        }
++        if (mSlideOut.hasStarted() && !mSlideOut.hasEnded()) {
++            commitDialpadFragmentHide();
++        }
++        /// @}
++        super.onPause();
++    }
++
++    @Override
++    protected void onDestroy() {
++        /// M: [MTK Dialer Search] @{
++        if (DialerFeatureOptions.isDialerSearchEnabled()) {
++            mCallLogObserver.unregister();
++            mContactsObserver.unregister();
++        }
++        super.onDestroy();
++        /// @}
++    }
++
++    @Override
++    protected void onSaveInstanceState(Bundle outState) {
++        super.onSaveInstanceState(outState);
++        outState.putString(KEY_SEARCH_QUERY, mSearchQuery);
++        outState.putBoolean(KEY_IN_REGULAR_SEARCH_UI, mInRegularSearch);
++        outState.putBoolean(KEY_IN_DIALPAD_SEARCH_UI, mInDialpadSearch);
++        outState.putBoolean(KEY_FIRST_LAUNCH, mFirstLaunch);
++        outState.putBoolean(KEY_IS_DIALPAD_SHOWN, mIsDialpadShown);
++        /// M: Save and restore the mPendingSearchViewQuery
++        outState.putString(KEY_PENDING_SEARCH_QUERY, mPendingSearchViewQuery);
++        mActionBarController.saveInstanceState(outState);
++        mStateSaved = true;
++    }
++	private void resetFontSize(){
++		final int[] mButtonIds = new int[] {R.id.zero, R.id.one, R.id.two, R.id.three,
++            R.id.four, R.id.five, R.id.six, R.id.seven, R.id.eight, R.id.nine, R.id.star,
++            R.id.pound};
++			
++		boolean bWin = this.isInMultiWindowMode();
++		if(bWin == true){
++			if(mDialpadFragment != null){
++				View parent = findViewById(R.id.dialpad_view);
++				View item = null;
++				TextView v1 = null;
++				TextView v2 = null;
++				int fs = 18;//getFontSize();
++				//Log.d(TAG, "javen resetFontSize parent = " + parent + ", fs = " + fs + ", bWin = " + bWin);
++				if(parent != null){
++					for (int i = 0; i < mButtonIds.length; i++) {
++						item = parent.findViewById(mButtonIds[i]);
++						v1 = ((TextView) item.findViewById(R.id.dialpad_key_number));
++						v1.setTextSize(TypedValue.COMPLEX_UNIT_SP, bWin ? fs : 30);
++						if(fs == 18){
++							LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) item.getLayoutParams();
++							//Log.d(TAG, "javen resetFontSize1 params = " + params + ", l=" + params.leftMargin + ",r=" + params.rightMargin + ",t=" +params.topMargin + ",b=" +params.bottomMargin + ", w = " + params.width + ", h = " + params.height);
++							if(params.leftMargin >= 0){
++								params.setMargins(-38, 0, 0, 0);
++							}
++						}
++						
++						v2 = ((TextView) item.findViewById(R.id.dialpad_key_letters));
++						if(v2 != null){
++							v2.setTextSize(TypedValue.COMPLEX_UNIT_SP, (fs == 18) ? 4 : 6);
++						}else{
++							ImageView i2 = ((ImageView) item.findViewById(R.id.dialpad_key_voicemail));
++							if(i2 != null){
++								i2.setImageResource(R.drawable.ic_dialpad_voicemail);
++							}
++						}
++					}
++					if(fs == 18){
++						View lv = parent.findViewById(R.id.dialpad);
++						
++						LinearLayout.LayoutParams params2 = (LinearLayout.LayoutParams) lv.getLayoutParams();
++						//Log.d(TAG, "javen resetFontSize2 params2 = " + params2 + ", l=" + params2.leftMargin + ",r=" + params2.rightMargin + ",t=" +params2.topMargin + ",b=" +params2.bottomMargin + ", w = " + params2.width + ", h = " + params2.height);
++						if(params2.leftMargin <=0){
++							params2.setMargins(23, 0, 0, 0);
++						}
++					}
++				}
++			}
++		}
++	}
++	
++    @Override
++    public void onAttachFragment(Fragment fragment) {
++		//Log.d(TAG, "javen onAttachFragment  resetFontSize");
++		resetFontSize();
++		
++        if (fragment instanceof DialpadFragment) {
++            mDialpadFragment = (DialpadFragment) fragment;
++            if (!mIsDialpadShown && !mShowDialpadOnResume) {
++                final FragmentTransaction transaction = getFragmentManager().beginTransaction();
++                transaction.hide(mDialpadFragment);
++                transaction.commit();
++            }
++        } else if (fragment instanceof SmartDialSearchFragment) {
++            mSmartDialSearchFragment = (SmartDialSearchFragment) fragment;
++            mSmartDialSearchFragment.setOnPhoneNumberPickerActionListener(this);
++            if (!TextUtils.isEmpty(mDialpadQuery)) {
++                mSmartDialSearchFragment.setAddToContactNumber(mDialpadQuery);
++            }
++        } else if (fragment instanceof SearchFragment) {
++            mRegularSearchFragment = (RegularSearchFragment) fragment;
++            mRegularSearchFragment.setOnPhoneNumberPickerActionListener(this);
++        } else if (fragment instanceof ListsFragment) {
++            mListsFragment = (ListsFragment) fragment;
++            mListsFragment.addOnPageChangeListener(this);
++        }
++        /// M: Show the FAB when the user touches the SearchFragment @{
++        if (fragment instanceof SearchFragment) {
++            ((SearchFragment)fragment).setOnTouchListener(new View.OnTouchListener() {
++                @Override
++                public boolean onTouch(View v, MotionEvent event) {
++                    // Show the FAB when the user touches the lists fragment and the soft
++                    // keyboard is hidden.
++                    if (!mFloatingActionButtonController.isVisible()) {
++                        hideDialpadFragment(true, false);
++                        showFabInSearchUi();
++                    }
++                    return false;
++                }
++            });
++        }
++        /// @}
++    }
++
++    protected void handleMenuSettings() {
++        final Intent intent = new Intent(this, DialerSettingsActivity.class);
++        startActivity(intent);
++    }
++
++    @Override
++    public void onClick(View view) {
++        int resId = view.getId();
++        if (resId == R.id.floating_action_button) {
++            /// M: To make sure that it can not add contact in any search mode(regular or smart)
++            if (mListsFragment.getCurrentTabIndex() == ListsFragment.TAB_INDEX_ALL_CONTACTS
++                    && !mInRegularSearch && !mInDialpadSearch) {
++                DialerUtils.startActivityWithErrorToast(
++                        this,
++                        IntentUtil.getNewContactIntent(),
++                        R.string.add_contact_not_available);
++            } else if (!mIsDialpadShown) {
++                mInCallDialpadUp = false;
++                showDialpadFragment(true);
++            }
++        } else if (resId == R.id.voice_search_button) {
++            try {
++                startActivityForResult(new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH),
++                        ACTIVITY_REQUEST_CODE_VOICE_SEARCH);
++            } catch (ActivityNotFoundException e) {
++                Toast.makeText(DialtactsActivity.this, R.string.voice_search_not_available,
++                        Toast.LENGTH_SHORT).show();
++            }
++        } else if (resId == R.id.dialtacts_options_menu_button) {
++            mOverflowMenu.show();
++        } else {
++            Log.wtf(TAG, "Unexpected onClick event from " + view);
++        }
++    }
++
++    @Override
++    public boolean onMenuItemClick(MenuItem item) {
++        if (!isSafeToCommitTransactions()) {
++            return true;
++        }
++
++        int resId = item.getItemId();
++        if (resId == R.id.menu_history) {// Use explicit CallLogActivity intent instead of ACTION_VIEW +
++            // CONTENT_TYPE, so that we always open our call log from our dialer
++            final Intent intent = new Intent(this, CallLogActivity.class);
++            startActivity(intent);
++        } else if (resId == R.id.menu_add_contact) {
++            DialerUtils.startActivityWithErrorToast(
++                    this,
++                    IntentUtil.getNewContactIntent(),
++                    R.string.add_contact_not_available);
++        } else if (resId == R.id.menu_import_export) {// We hard-code the "contactsAreAvailable" argument because doing it properly would
++            // involve querying a {@link ProviderStatusLoader}, which we don't want to do right
++            // now in Dialtacts for (potential) performance reasons. Compare with how it is
++            // done in {@link PeopleActivity}.
++            /**
++             * M: When it is A1 project,use Google import/export function or
++             * use MTK. @{
++             */
++            if (DialerFeatureOptions.isA1ProjectEnabled()) {
++                if (mListsFragment.getCurrentTabIndex() == ListsFragment.TAB_INDEX_SPEED_DIAL) {
++                    ImportExportDialogFragment.show(getFragmentManager(), true,
++                            DialtactsActivity.class, ImportExportDialogFragment.EXPORT_MODE_FAVORITES);
++                } else {
++                    ImportExportDialogFragment.show(getFragmentManager(), true,
++                            DialtactsActivity.class, ImportExportDialogFragment.EXPORT_MODE_DEFAULT);
++                }
++            } else {
++                final Intent importIntent = new Intent(
++                        ContactsIntent.LIST.ACTION_IMPORTEXPORT_CONTACTS);
++                importIntent.putExtra(VCardCommonArguments.ARG_CALLING_ACTIVITY,
++                        DialtactsActivity.class.getName());
++                try {
++                    startActivityForResult(importIntent, IMPORT_EXPORT_REQUEST_CODE);
++                } catch (ActivityNotFoundException ex) {
++                    if (mListsFragment.getCurrentTabIndex() == ListsFragment.TAB_INDEX_SPEED_DIAL) {
++                        ImportExportDialogFragment.show(getFragmentManager(), true,
++                                DialtactsActivity.class, ImportExportDialogFragment.EXPORT_MODE_FAVORITES);
++                    } else {
++                        ImportExportDialogFragment.show(getFragmentManager(), true,
++                                DialtactsActivity.class, ImportExportDialogFragment.EXPORT_MODE_DEFAULT);
++                    }
++                }
++            }
++            /** @} */
++            Logger.logScreenView(ScreenEvent.IMPORT_EXPORT_CONTACTS, this);
++            return true;
++        } else if (resId == R.id.menu_clear_frequents) {
++            ClearFrequentsDialog.show(getFragmentManager());
++            Logger.logScreenView(ScreenEvent.CLEAR_FREQUENTS, this);
++            return true;
++        } else if (resId == R.id.menu_call_settings) {
++            handleMenuSettings();
++            Logger.logScreenView(ScreenEvent.SETTINGS, this);
++            return true;
++        } else if (resId == R.id.menu_archive) {
++            final Intent intent = new Intent(this, VoicemailArchiveActivity.class);
++            startActivity(intent);
++            return true;
++        /** M: [VoLTE ConfCall] handle conference call menu. @{ */
++        } else if (resId == R.id.menu_volte_conf_call) {
++            DialerVolteUtils.handleMenuVolteConfCall(this);
++            return true;
++        /** @} */
++        }
++        return false;
++    }
++
++    @Override
++    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
++        if (requestCode == ACTIVITY_REQUEST_CODE_VOICE_SEARCH) {
++            if (resultCode == RESULT_OK) {
++                final ArrayList<String> matches = data.getStringArrayListExtra(
++                        RecognizerIntent.EXTRA_RESULTS);
++                if (matches.size() > 0) {
++                    final String match = matches.get(0);
++                    mVoiceSearchQuery = match;
++                } else {
++                    Log.e(TAG, "Voice search - nothing heard");
++                }
++            } else {
++                Log.e(TAG, "Voice search failed");
++            }
++        }
++        /** M: [VoLTE ConfCall] Handle the volte conference call. @{ */
++        else if (requestCode == DialerVolteUtils.ACTIVITY_REQUEST_CODE_PICK_PHONE_CONTACTS) {
++            if (resultCode == RESULT_OK) {
++                DialerVolteUtils.launchVolteConfCall(this, data);
++            } else {
++                Log.d(TAG, "No contacts picked, Volte conference call cancelled.");
++            }
++        }
++        /** @} */
++        /** M: [Import/Export] Handle the import/export activity result. @{ */
++        else if (requestCode == IMPORT_EXPORT_REQUEST_CODE) {
++            if (resultCode == RESULT_CANCELED) {
++                Log.d(TAG, "Import/Export activity create failed! ");
++            } else {
++                Log.d(TAG, "Import/Export activity create successfully! ");
++            }
++        }
++        /** @} */
++
++        super.onActivityResult(requestCode, resultCode, data);
++    }
++
++    /**
++     * Update the number of unread voicemails (potentially other tabs) displayed next to the tab
++     * icon.
++     */
++    public void updateTabUnreadCounts() {
++        mListsFragment.updateTabUnreadCounts();
++    }
++
++    /**
++     * Initiates a fragment transaction to show the dialpad fragment. Animations and other visual
++     * updates are handled by a callback which is invoked after the dialpad fragment is shown.
++     * @see #onDialpadShown
++     */
++    private void showDialpadFragment(boolean animate) {
++        if (mIsDialpadShown || mStateSaved) {
++            return;
++        }
++        mIsDialpadShown = true;
++
++        mListsFragment.setUserVisibleHint(false);
++
++        final FragmentTransaction ft = getFragmentManager().beginTransaction();
++        if (mDialpadFragment == null) {
++            mDialpadFragment = new DialpadFragment();
++            ft.add(R.id.dialtacts_container, mDialpadFragment, TAG_DIALPAD_FRAGMENT);
++        } else {
++            ft.show(mDialpadFragment);
++        }
++
++        mDialpadFragment.setAnimate(animate);
++        Logger.logScreenView(ScreenEvent.DIALPAD, this);
++        ft.commit();
++
++        if (animate) {
++            mFloatingActionButtonController.scaleOut();
++        } else {
++            mFloatingActionButtonController.setVisible(false);
++            maybeEnterSearchUi();
++        }
++        mActionBarController.onDialpadUp();
++
++        mListsFragment.getView().animate().alpha(0).withLayer();
++
++        //adjust the title, so the user will know where we're at when the activity start/resumes.
++        setTitle(R.string.launcherDialpadActivityLabel);
++    }
++
++    /**
++     * Callback from child DialpadFragment when the dialpad is shown.
++     */
++    public void onDialpadShown() {
++        Assert.assertNotNull(mDialpadFragment);
++        if (mDialpadFragment.getAnimate()) {
++            mDialpadFragment.getView().startAnimation(mSlideIn);
++        } else {
++            mDialpadFragment.setYFraction(0);
++        }
++
++        updateSearchFragmentPosition();
++    }
++
++    /**
++     * Initiates animations and other visual updates to hide the dialpad. The fragment is hidden in
++     * a callback after the hide animation ends.
++     * @see #commitDialpadFragmentHide
++     */
++    public void hideDialpadFragment(boolean animate, boolean clearDialpad) {
++        if (mDialpadFragment == null || mDialpadFragment.getView() == null) {
++            return;
++        }
++        if (clearDialpad) {
++            // Temporarily disable accessibility when we clear the dialpad, since it should be
++            // invisible and should not announce anything.
++            mDialpadFragment.getDigitsWidget().setImportantForAccessibility(
++                    View.IMPORTANT_FOR_ACCESSIBILITY_NO);
++            mDialpadFragment.clearDialpad();
++            mDialpadFragment.getDigitsWidget().setImportantForAccessibility(
++                    View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
++        }
++        if (!mIsDialpadShown) {
++            return;
++        }
++        mIsDialpadShown = false;
++        mDialpadFragment.setAnimate(animate);
++        mListsFragment.setUserVisibleHint(true);
++        mListsFragment.sendScreenViewForCurrentPosition();
++
++        updateSearchFragmentPosition();
++
++        mFloatingActionButtonController.align(getFabAlignment(), animate);
++        if (animate) {
++            mDialpadFragment.getView().startAnimation(mSlideOut);
++        } else {
++            commitDialpadFragmentHide();
++        }
++
++        mActionBarController.onDialpadDown();
++
++        if (isInSearchUi()) {
++            if (TextUtils.isEmpty(mSearchQuery)) {
++                exitSearchUi();
++            }
++        }
++
++        //reset the title to normal.
++        setTitle(R.string.launcherActivityLabel);
++    }
++
++    /**
++     * Finishes hiding the dialpad fragment after any animations are completed.
++     */
++    private void commitDialpadFragmentHide() {
++        if (!mStateSaved && mDialpadFragment != null && !mDialpadFragment.isHidden()) {
++            final FragmentTransaction ft = getFragmentManager().beginTransaction();
++            ft.hide(mDialpadFragment);
++            ft.commit();
++        }
++        mFloatingActionButtonController.scaleIn(AnimUtils.NO_DELAY);
++    }
++
++    private void updateSearchFragmentPosition() {
++        SearchFragment fragment = null;
++        /**
++         * M: update the space height after dialpad show when in smart search
++         * mode, even SmartDialerSearchFragment is not visible, in order to
++         * resize ListView Height right after rotation(can not get dialpad
++         * height before onHiddenChanged, that make ListView height wrong).
++         */
++        if (mSmartDialSearchFragment != null && mSmartDialSearchFragment.isAdded()) {
++            fragment = mSmartDialSearchFragment;
++        } else if (mRegularSearchFragment != null && mRegularSearchFragment.isAdded()) {
++            fragment = mRegularSearchFragment;
++        }
++        if (fragment != null /*&& fragment.isVisible()*/) {
++            fragment.updatePosition(true /* animate */);
++        }
++    }
++
++    @Override
++    public boolean isInSearchUi() {
++        return mInDialpadSearch || mInRegularSearch;
++    }
++
++    @Override
++    public boolean hasSearchQuery() {
++        return !TextUtils.isEmpty(mSearchQuery);
++    }
++
++    @Override
++    public boolean shouldShowActionBar() {
++        return mListsFragment.shouldShowActionBar();
++    }
++
++    private void setNotInSearchUi() {
++        mInDialpadSearch = false;
++        mInRegularSearch = false;
++    }
++
++    private void hideDialpadAndSearchUi() {
++        if (mIsDialpadShown) {
++            hideDialpadFragment(false, true);
++        } else {
++            exitSearchUi();
++        }
++    }
++
++    private void prepareVoiceSearchButton() {
++        final Intent voiceIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
++        /**
++         * M: [ALPS02227737] set value for view to record the voice search
++         * button status @{
++         */
++        boolean canBeHandled = canIntentBeHandled(voiceIntent);
++        SearchEditTextLayout searchBox = (SearchEditTextLayout) getSupportActionBar()
++                .getCustomView();
++        if (searchBox != null) {
++            searchBox.setCanHandleSpeech(canBeHandled);
++        }
++        /** @} */
++        if (canBeHandled) {
++            mVoiceSearchButton.setVisibility(View.VISIBLE);
++            mVoiceSearchButton.setOnClickListener(this);
++        } else {
++            mVoiceSearchButton.setVisibility(View.GONE);
++        }
++    }
++
++    public boolean isNearbyPlacesSearchEnabled() {
++        return false;
++    }
++
++    protected int getSearchBoxHint () {
++        return R.string.dialer_hint_find_contact;
++    }
++
++    /**
++     * Sets the hint text for the contacts search box
++     */
++    private void setSearchBoxHint() {
++        SearchEditTextLayout searchEditTextLayout = (SearchEditTextLayout) getSupportActionBar()
++                .getCustomView().findViewById(R.id.search_view_container);
++        ((TextView) searchEditTextLayout.findViewById(R.id.search_box_start_search))
++                .setHint(getSearchBoxHint());
++    }
++
++    protected OptionsPopupMenu buildOptionsMenu(View invoker) {
++        final OptionsPopupMenu popupMenu = new OptionsPopupMenu(this, invoker);
++        
++		/// M: add for plug-in. @{
++        final Menu menu = popupMenu.getMenu();
++        ExtensionManager.getInstance().getDialPadExtension().buildOptionsMenu(this, menu);
++        /// @}
++		
++		popupMenu.inflate(R.menu.dialtacts_options);
++        if (ObjectFactory.isVoicemailArchiveEnabled(this)) {
++            popupMenu.getMenu().findItem(R.id.menu_archive).setVisible(true);
++        }
++        popupMenu.setOnMenuItemClickListener(this);
++        return popupMenu;
++    }
++
++    @Override
++    public boolean onCreateOptionsMenu(Menu menu) {
++        /** M: Modify to set the pending search query only when dialpad is visible. @{ */
++        if (mPendingSearchViewQuery != null
++                && mDialpadFragment != null && mDialpadFragment.isVisible()) {
++            mSearchView.setText(mPendingSearchViewQuery);
++            mPendingSearchViewQuery = null;
++        }
++        /** @} */
++        if (mActionBarController != null) {
++            mActionBarController.restoreActionBarOffset();
++        }
++        return false;
++    }
++
++    /**
++     * Returns true if the intent is due to hitting the green send key (hardware call button:
++     * KEYCODE_CALL) while in a call.
++     *
++     * @param intent the intent that launched this activity
++     * @return true if the intent is due to hitting the green send key while in a call
++     */
++    private boolean isSendKeyWhileInCall(Intent intent) {
++        // If there is a call in progress and the user launched the dialer by hitting the call
++        // button, go straight to the in-call screen.
++        final boolean callKey = Intent.ACTION_CALL_BUTTON.equals(intent.getAction());
++
++        if (callKey) {
++            TelecomUtil.showInCallScreen(this, false);
++            return true;
++        }
++
++        return false;
++    }
++
++    /**
++     * Sets the current tab based on the intent's request type
++     *
++     * @param intent Intent that contains information about which tab should be selected
++     */
++    private void displayFragment(Intent intent) {
++        // If we got here by hitting send and we're in call forward along to the in-call activity
++        if (isSendKeyWhileInCall(intent)) {
++            finish();
++            return;
++        }
++
++        final boolean showDialpadChooser = phoneIsInUse() && !DialpadFragment.isAddCallMode(intent);
++        if (showDialpadChooser || (intent.getData() != null && isDialIntent(intent))) {
++            showDialpadFragment(false);
++            mDialpadFragment.setStartedFromNewIntent(true);
++            if (showDialpadChooser && !mDialpadFragment.isVisible()) {
++                mInCallDialpadUp = true;
++            } else {
++                /// M: Clear the mInCallDialpadUp if phone not in use
++                mInCallDialpadUp = false;
++            }
++        }
++    }
++
++    @Override
++    public void onNewIntent(Intent newIntent) {
++        setIntent(newIntent);
++
++        mStateSaved = false;
++        displayFragment(newIntent);
++
++        invalidateOptionsMenu();
++    }
++
++    /** Returns true if the given intent contains a phone number to populate the dialer with */
++    private boolean isDialIntent(Intent intent) {
++        final String action = intent.getAction();
++        if (Intent.ACTION_DIAL.equals(action) || ACTION_TOUCH_DIALER.equals(action)) {
++            return true;
++        }
++        if (Intent.ACTION_VIEW.equals(action)) {
++            final Uri data = intent.getData();
++            if (data != null && PhoneAccount.SCHEME_TEL.equals(data.getScheme())) {
++                return true;
++            }
++        }
++        return false;
++    }
++
++    /**
++     * Shows the search fragment
++     */
++    private void enterSearchUi(boolean smartDialSearch, String query, boolean animate) {
++        if (mStateSaved || getFragmentManager().isDestroyed()) {
++            // Weird race condition where fragment is doing work after the activity is destroyed
++            // due to talkback being on (b/10209937). Just return since we can't do any
++            // constructive here.
++            return;
++        }
++
++        if (DEBUG) {
++            Log.d(TAG, "Entering search UI - smart dial " + smartDialSearch);
++        }
++
++        final FragmentTransaction transaction = getFragmentManager().beginTransaction();
++        if (mInDialpadSearch && mSmartDialSearchFragment != null) {
++            transaction.remove(mSmartDialSearchFragment);
++        } else if (mInRegularSearch && mRegularSearchFragment != null) {
++            transaction.remove(mRegularSearchFragment);
++        }
++
++        final String tag;
++        if (smartDialSearch) {
++            tag = TAG_SMARTDIAL_SEARCH_FRAGMENT;
++        } else {
++            tag = TAG_REGULAR_SEARCH_FRAGMENT;
++        }
++        mInDialpadSearch = smartDialSearch;
++        mInRegularSearch = !smartDialSearch;
++
++        mFloatingActionButtonController.scaleOut();
++
++        SearchFragment fragment = (SearchFragment) getFragmentManager().findFragmentByTag(tag);
++        if (animate) {
++            transaction.setCustomAnimations(android.R.animator.fade_in, 0);
++        } else {
++            transaction.setTransition(FragmentTransaction.TRANSIT_NONE);
++        }
++
++        /// M: If switch to a new fragment, it need to set query string to this
++        // fragment, otherwise the query result would show nothing. @{
++        boolean needToSetQuery = false;
++        if (fragment == null) {
++            needToSetQuery = true;
++            if (smartDialSearch) {
++                fragment = new SmartDialSearchFragment();
++            } else {
++                fragment = ObjectFactory.newRegularSearchFragment();
++                /// M: Why only listening touch event for regular search?
++                /// Do it at onListFragmentScrollStateChange for all.
++//                fragment.setOnTouchListener(new View.OnTouchListener() {
++//                    @Override
++//                    public boolean onTouch(View v, MotionEvent event) {
++//                        // Show the FAB when the user touches the lists fragment and the soft
++//                        // keyboard is hidden.
++//                        hideDialpadFragment(true, false);
++//                        showFabInSearchUi();
++//                        return false;
++//                    }
++//                });
++            }
++            transaction.add(R.id.dialtacts_frame, fragment, tag);
++        } else {
++            transaction.show(fragment);
++        }
++        // DialtactsActivity will provide the options menu
++        fragment.setHasOptionsMenu(false);
++        fragment.setShowEmptyListForNullQuery(true);
++        if (!smartDialSearch || needToSetQuery) {
++            fragment.setQueryString(query, false /* delaySelection */);
++        }
++        // @}
++        transaction.commit();
++
++        if (animate) {
++            mListsFragment.getView().animate().alpha(0).withLayer();
++        }
++        mListsFragment.setUserVisibleHint(false);
++
++        if (smartDialSearch) {
++            Logger.logScreenView(ScreenEvent.SMART_DIAL_SEARCH, this);
++        } else {
++            Logger.logScreenView(ScreenEvent.REGULAR_SEARCH, this);
++        }
++    }
++
++    /**
++     * Hides the search fragment
++     */
++    private void exitSearchUi() {
++        // See related bug in enterSearchUI();
++        if (getFragmentManager().isDestroyed() || mStateSaved) {
++            return;
++        }
++
++        mSearchView.setText(null);
++
++        if (mDialpadFragment != null) {
++            mDialpadFragment.clearDialpad();
++        }
++
++        setNotInSearchUi();
++
++        // Restore the FAB for the lists fragment.
++        if (getFabAlignment() != FloatingActionButtonController.ALIGN_END) {
++            mFloatingActionButtonController.setVisible(false);
++        }
++        mFloatingActionButtonController.scaleIn(FAB_SCALE_IN_DELAY_MS);
++        onPageScrolled(mListsFragment.getCurrentTabIndex(), 0 /* offset */, 0 /* pixelOffset */);
++        onPageSelected(mListsFragment.getCurrentTabIndex());
++
++        final FragmentTransaction transaction = getFragmentManager().beginTransaction();
++        if (mSmartDialSearchFragment != null) {
++            transaction.remove(mSmartDialSearchFragment);
++        }
++        if (mRegularSearchFragment != null) {
++            transaction.remove(mRegularSearchFragment);
++        }
++        transaction.commit();
++
++        mListsFragment.getView().animate().alpha(1).withLayer();
++
++        if (mDialpadFragment == null || !mDialpadFragment.isVisible()) {
++            // If the dialpad fragment wasn't previously visible, then send a screen view because
++            // we are exiting regular search. Otherwise, the screen view will be sent by
++            // {@link #hideDialpadFragment}.
++            mListsFragment.sendScreenViewForCurrentPosition();
++            mListsFragment.setUserVisibleHint(true);
++        }
++
++        mActionBarController.onSearchUiExited();
++    }
++
++    @Override
++    public void onBackPressed() {
++        if (mStateSaved) {
++            return;
++        }
++        if (mIsDialpadShown) {
++            if (TextUtils.isEmpty(mSearchQuery) ||
++                    (mSmartDialSearchFragment != null && mSmartDialSearchFragment.isVisible()
++                            && mSmartDialSearchFragment.getAdapter().getCount() == 0)) {
++                exitSearchUi();
++            }
++            hideDialpadFragment(true, false);
++        } else if (isInSearchUi()) {
++            exitSearchUi();
++            DialerUtils.hideInputMethod(mParentLayout);
++        } else {
++            super.onBackPressed();
++        }
++    }
++
++    private void maybeEnterSearchUi() {
++        if (!isInSearchUi()) {
++            enterSearchUi(true /* isSmartDial */, mSearchQuery, false);
++        }
++    }
++
++    /**
++     * @return True if the search UI was exited, false otherwise
++     */
++    private boolean maybeExitSearchUi() {
++        if (isInSearchUi() && TextUtils.isEmpty(mSearchQuery)) {
++            exitSearchUi();
++            DialerUtils.hideInputMethod(mParentLayout);
++            return true;
++        }
++        return false;
++    }
++
++    private void showFabInSearchUi() {
++        mFloatingActionButtonController.changeIcon(
++                getResources().getDrawable(R.drawable.fab_ic_dial),
++                getResources().getString(R.string.action_menu_dialpad_button));
++        mFloatingActionButtonController.align(getFabAlignment(), false /* animate */);
++        mFloatingActionButtonController.scaleIn(FAB_SCALE_IN_DELAY_MS);
++    }
++
++    @Override
++    public void onDialpadQueryChanged(String query) {
++        mDialpadQuery = query;
++        if (mSmartDialSearchFragment != null) {
++            mSmartDialSearchFragment.setAddToContactNumber(query);
++        }
++        final String normalizedQuery = SmartDialNameMatcher.normalizeNumber(query,
++                /* M: [MTK Dialer Search] use mtk enhance dialpad map */
++                DialerFeatureOptions.isDialerSearchEnabled() ?
++                        SmartDialNameMatcher.SMART_DIALPAD_MAP
++                        : SmartDialNameMatcher.LATIN_SMART_DIAL_MAP);
++
++        if (!TextUtils.equals(mSearchView.getText(), normalizedQuery)) {
++            if (DEBUG) {
++                Log.d(TAG, "onDialpadQueryChanged - new query: " + query);
++            }
++            if (mDialpadFragment == null || !mDialpadFragment.isVisible()) {
++                // This callback can happen if the dialpad fragment is recreated because of
++                // activity destruction. In that case, don't update the search view because
++                // that would bring the user back to the search fragment regardless of the
++                // previous state of the application. Instead, just return here and let the
++                // fragment manager correctly figure out whatever fragment was last displayed.
++                if (!TextUtils.isEmpty(normalizedQuery)) {
++                    mPendingSearchViewQuery = normalizedQuery;
++                }
++                return;
++            }
++            /* M: ALPS03361423 add for "+" is shown behind number  */
++            // Fix ALPS03462585 , rollback to aosp follow
++            //mSearchView.setText(mBidiFormatter.unicodeWrap(normalizedQuery,
++            //               TextDirectionHeuristics.FIRSTSTRONG_LTR));
++            mSearchView.setText(normalizedQuery);
++        }
++
++        try {
++            if (mDialpadFragment != null && mDialpadFragment.isVisible()) {
++                mDialpadFragment.process_quote_emergency_unquote(normalizedQuery);
++            }
++        } catch (Exception ignored) {
++            // Skip any exceptions for this piece of code
++        }
++    }
++
++    @Override
++    public boolean onDialpadSpacerTouchWithEmptyQuery() {
++        if (mInDialpadSearch && mSmartDialSearchFragment != null
++                && !mSmartDialSearchFragment.isShowingPermissionRequest()) {
++            hideDialpadFragment(true /* animate */, true /* clearDialpad */);
++            return true;
++        }
++        return false;
++    }
++
++    @Override
++    public void onListFragmentScrollStateChange(int scrollState) {
++        if (scrollState == OnScrollListener.SCROLL_STATE_TOUCH_SCROLL) {
++            hideDialpadFragment(true, false);
++            DialerUtils.hideInputMethod(mParentLayout);
++        }
++    }
++
++    @Override
++    public void onListFragmentScroll(int firstVisibleItem, int visibleItemCount,
++                                     int totalItemCount) {
++        // TODO: No-op for now. This should eventually show/hide the actionBar based on
++        // interactions with the ListsFragments.
++    }
++
++    private boolean phoneIsInUse() {
++        return TelecomUtil.isInCall(this);
++    }
++
++    private boolean canIntentBeHandled(Intent intent) {
++        final PackageManager packageManager = getPackageManager();
++        final List<ResolveInfo> resolveInfo = packageManager.queryIntentActivities(intent,
++                PackageManager.MATCH_DEFAULT_ONLY);
++        return resolveInfo != null && resolveInfo.size() > 0;
++    }
++
++    /**
++     * Called when the user has long-pressed a contact tile to start a drag operation.
++     */
++    @Override
++    public void onDragStarted(int x, int y, PhoneFavoriteSquareTileView view) {
++        mListsFragment.showRemoveView(true);
++    }
++
++    @Override
++    public void onDragHovered(int x, int y, PhoneFavoriteSquareTileView view) {
++    }
++
++    /**
++     * Called when the user has released a contact tile after long-pressing it.
++     */
++    @Override
++    public void onDragFinished(int x, int y) {
++        mListsFragment.showRemoveView(false);
++    }
++
++    @Override
++    public void onDroppedOnRemove() {}
++
++    /**
++     * Allows the SpeedDialFragment to attach the drag controller to mRemoveViewContainer
++     * once it has been attached to the activity.
++     */
++    @Override
++    public void setDragDropController(DragDropController dragController) {
++        mDragDropController = dragController;
++        mListsFragment.getRemoveView().setDragDropController(dragController);
++    }
++
++    /**
++     * Implemented to satisfy {@link SpeedDialFragment.HostInterface}
++     */
++    @Override
++    public void showAllContactsTab() {
++        if (mListsFragment != null) {
++            mListsFragment.showTab(ListsFragment.TAB_INDEX_ALL_CONTACTS);
++        }
++    }
++
++    /**
++     * Implemented to satisfy {@link CallLogFragment.HostInterface}
++     */
++    @Override
++    public void showDialpad() {
++        showDialpadFragment(true);
++    }
++
++    @Override
++    public void onPickDataUri(Uri dataUri, boolean isVideoCall, int callInitiationType) {
++        mClearSearchOnPause = true;
++        PhoneNumberInteraction.startInteractionForPhoneCall(
++                DialtactsActivity.this, dataUri, isVideoCall, callInitiationType);
++    }
++
++    @Override
++    public void onPickPhoneNumber(String phoneNumber, boolean isVideoCall, int callInitiationType) {
++        if (phoneNumber == null) {
++            // Invalid phone number, but let the call go through so that InCallUI can show
++            // an error message.
++            phoneNumber = "";
++        }
++
++        final Intent intent = new CallIntentBuilder(phoneNumber)
++                .setIsVideoCall(isVideoCall)
++                .setCallInitiationType(callInitiationType)
++                .build();
++
++        DialerUtils.startActivityWithErrorToast(this, intent);
++        mClearSearchOnPause = true;
++    }
++
++    @Override
++    public void onShortcutIntentCreated(Intent intent) {
++        Log.w(TAG, "Unsupported intent has come (" + intent + "). Ignoring.");
++    }
++
++    @Override
++    public void onHomeInActionBarSelected() {
++        exitSearchUi();
++    }
++
++    @Override
++    public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
++        int tabIndex = mListsFragment.getCurrentTabIndex();
++
++        // Scroll the button from center to end when moving from the Speed Dial to Call History tab.
++        // In RTL, scroll when the current tab is Call History instead, since the order of the tabs
++        // is reversed and the ViewPager returns the left tab position during scroll.
++        boolean isRtl = DialerUtils.isRtl();
++        if (!isRtl && tabIndex == ListsFragment.TAB_INDEX_SPEED_DIAL && !mIsLandscape) {
++            Log.w(TAG, "onPageScrolled 1, positionOffset = " + positionOffset);
++            mFloatingActionButtonController.onPageScrolled(positionOffset);
++        } else if (isRtl && tabIndex == ListsFragment.TAB_INDEX_HISTORY && !mIsLandscape) {
++            Log.w(TAG, "onPageScrolled 2, positionOffset = " + positionOffset);
++            mFloatingActionButtonController.onPageScrolled(1 - positionOffset);
++        } else if (tabIndex != ListsFragment.TAB_INDEX_SPEED_DIAL) {
++            Log.w(TAG, "onPageScrolled 3, onPageScrolled(1) ");
++            mFloatingActionButtonController.onPageScrolled(1);
++        }
++    }
++
++    @Override
++    public void onPageSelected(int position) {
++        updateMissedCalls();
++        int tabIndex = mListsFragment.getCurrentTabIndex();
++        mPreviouslySelectedTabIndex = tabIndex;
++        /// M: if under search mode, don't change icon to add contact
++        if (tabIndex == ListsFragment.TAB_INDEX_ALL_CONTACTS && !isInSearchUi()) {
++            mFloatingActionButtonController.changeIcon(
++                    getResources().getDrawable(R.drawable.ic_person_add_24dp),
++                    getResources().getString(R.string.search_shortcut_create_new_contact));
++        } else {
++            mFloatingActionButtonController.changeIcon(
++                    getResources().getDrawable(R.drawable.fab_ic_dial),
++                    getResources().getString(R.string.action_menu_dialpad_button));
++        }
++    }
++
++    @Override
++    public void onPageScrollStateChanged(int state) {
++    }
++
++    @Override
++    public boolean isActionBarShowing() {
++        return mActionBarController.isActionBarShowing();
++    }
++
++    @Override
++    public ActionBarController getActionBarController() {
++        return mActionBarController;
++    }
++
++    @Override
++    public boolean isDialpadShown() {
++        return mIsDialpadShown;
++    }
++
++    @Override
++    public int getDialpadHeight() {
++        if (mDialpadFragment != null) {
++            return mDialpadFragment.getDialpadHeight();
++        }
++        return 0;
++    }
++
++    @Override
++    public int getActionBarHideOffset() {
++        return getSupportActionBar().getHideOffset();
++    }
++
++    @Override
++    public void setActionBarHideOffset(int offset) {
++        getSupportActionBar().setHideOffset(offset);
++    }
++
++    @Override
++    public int getActionBarHeight() {
++        return mActionBarHeight;
++    }
++
++    private int getFabAlignment() {
++        if (!mIsLandscape && !isInSearchUi() &&
++                mListsFragment.getCurrentTabIndex() == ListsFragment.TAB_INDEX_SPEED_DIAL) {
++            return FloatingActionButtonController.ALIGN_MIDDLE;
++        }
++        return FloatingActionButtonController.ALIGN_END;
++    }
++
++    private void updateMissedCalls() {
++        if (mPreviouslySelectedTabIndex == ListsFragment.TAB_INDEX_HISTORY) {
++            mListsFragment.markMissedCallsAsReadAndRemoveNotifications();
++        }
++    }
++
++    /**
++     * M: Set to clear dialpad and exit search ui while activity on pause
++     * @param clearSearch If true clear dialpad and exit search ui while activity on pause
++     */
++    public void setClearSearchOnPause(boolean clearSearch) {
++        mClearSearchOnPause = clearSearch;
++    }
++}
+Index: vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/settings/DialerSettingsActivity.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/settings/DialerSettingsActivity.java	(revision 0)
++++ vendor/branch/5058Y_ALGB/packages/apps/Dialer/src/com/android/dialer/settings/DialerSettingsActivity.java	(revision 13504)
+@@ -0,0 +1,234 @@
++/*
++ * Copyright (C) 2013 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package com.android.dialer.settings;
++
++import android.content.Context;
++import android.content.Intent;
++import android.content.SharedPreferences;
++import android.os.Bundle;
++import android.os.UserManager;
++import android.preference.PreferenceManager;
++import android.provider.Settings;
++import android.support.v4.os.BuildCompat;
++import android.telecom.TelecomManager;
++import android.telephony.TelephonyManager;
++/// M: For OP01 and CMCC OM VOLTE feature @{
++import android.util.Log;
++import android.os.SystemProperties;
++/// @}
++import android.view.MenuItem;
++import android.widget.Toast;
++
++import com.android.contacts.common.compat.CompatUtils;
++import com.android.contacts.common.compat.TelephonyManagerCompat;
++import com.android.dialer.R;
++import com.android.dialer.compat.FilteredNumberCompat;
++import com.android.dialer.compat.SettingsCompat;
++import com.android.dialer.compat.UserManagerCompat;
++
++import com.mediatek.dialer.ext.ExtensionManager;
++import com.mediatek.dialer.others.CallOthersSettingsFragment;
++
++import java.util.List;
++
++public class DialerSettingsActivity extends AppCompatPreferenceActivity {
++    protected SharedPreferences mPreferences;
++    private boolean migrationStatusOnBuildHeaders;
++    /// M: For OP01 and CMCC OM VOLTE feature @{
++    public static final String ACTION_SHOW_CALL_OTHERS_SETTINGS =
++            "android.telecom.action.SHOW_CALL_OTHERS_SETTINGS";
++    private static final String OPERATOR_OP01 = "OP01";
++    private static final String TAG = "DialerSettingsActivity";
++    /// @}
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        mPreferences = PreferenceManager.getDefaultSharedPreferences(this);
++    }
++
++    @Override
++    protected void onResume() {
++        super.onResume();
++        /*
++         * The headers need to be recreated if the migration status changed between when the headers
++         * were created and now.
++         */
++        if (migrationStatusOnBuildHeaders != FilteredNumberCompat.hasMigratedToNewBlocking()) {
++            invalidateHeaders();
++        }
++    }
++
++    @Override
++    public void onBuildHeaders(List<Header> target) {
++        if (showDisplayOptions()) {
++            Header displayOptionsHeader = new Header();
++            displayOptionsHeader.titleRes = R.string.display_options_title;
++            displayOptionsHeader.fragment = DisplayOptionsSettingsFragment.class.getName();
++            target.add(displayOptionsHeader);
++        }
++
++        Header soundSettingsHeader = new Header();
++        soundSettingsHeader.titleRes = R.string.sounds_and_vibration_title;
++        soundSettingsHeader.fragment = SoundSettingsFragment.class.getName();
++        soundSettingsHeader.id = R.id.settings_header_sounds_and_vibration;
++        target.add(soundSettingsHeader);
++
++        if (CompatUtils.isMarshmallowCompatible()) {
++            Header quickResponseSettingsHeader = new Header();
++            Intent quickResponseSettingsIntent =
++                    new Intent(TelecomManager.ACTION_SHOW_RESPOND_VIA_SMS_SETTINGS);
++            quickResponseSettingsHeader.titleRes = R.string.respond_via_sms_setting_title;
++            quickResponseSettingsHeader.intent = quickResponseSettingsIntent;
++            target.add(quickResponseSettingsHeader);
++        }
++
++        TelephonyManager telephonyManager =
++                (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++
++        // "Call Settings" (full settings) is shown if the current user is primary user and there
++        // is only one SIM. Before N, "Calling accounts" setting is shown if the current user is
++        // primary user and there are multiple SIMs. In N+, "Calling accounts" is shown whenever
++        // "Call Settings" is not shown.
++        boolean isPrimaryUser = isPrimaryUser();
++        if (isPrimaryUser
++                && TelephonyManagerCompat.getPhoneCount(telephonyManager) <= 1) {
++            Header callSettingsHeader = new Header();
++            Intent callSettingsIntent = new Intent(TelecomManager.ACTION_SHOW_CALL_SETTINGS);
++            callSettingsIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
++
++            callSettingsHeader.titleRes = R.string.call_settings_label;
++            callSettingsHeader.intent = callSettingsIntent;
++            target.add(callSettingsHeader);
++        } else if (BuildCompat.isAtLeastN() || isPrimaryUser) {
++            Header phoneAccountSettingsHeader = new Header();
++            Intent phoneAccountSettingsIntent =
++                    new Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS);
++            phoneAccountSettingsIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
++
++            phoneAccountSettingsHeader.titleRes = R.string.phone_account_settings_label;
++            phoneAccountSettingsHeader.intent = phoneAccountSettingsIntent;
++            target.add(phoneAccountSettingsHeader);
++        }
++        if (FilteredNumberCompat.canCurrentUserOpenBlockSettings(this) &&
++            /// M: For OP01, do not use BlockedNumberProvider @{
++            ExtensionManager.getInstance().getCallLogExtension()
++                .shouldUseBlockedNumberFeature()) {
++            /// @}
++            Header blockedCallsHeader = new Header();
++            blockedCallsHeader.titleRes = R.string.manage_blocked_numbers_label;
++            blockedCallsHeader.intent = FilteredNumberCompat.createManageBlockedNumbersIntent(this);
++            target.add(blockedCallsHeader);
++            migrationStatusOnBuildHeaders = FilteredNumberCompat.hasMigratedToNewBlocking();
++        }
++        if (isPrimaryUser
++                && (TelephonyManagerCompat.isTtyModeSupported(telephonyManager)
++                || TelephonyManagerCompat.isHearingAidCompatibilitySupported(telephonyManager))) {
++            Header accessibilitySettingsHeader = new Header();
++            Intent accessibilitySettingsIntent =
++                    new Intent(TelecomManager.ACTION_SHOW_CALL_ACCESSIBILITY_SETTINGS);
++            accessibilitySettingsHeader.titleRes = R.string.accessibility_settings_title;
++            accessibilitySettingsHeader.intent = accessibilitySettingsIntent;
++            target.add(accessibilitySettingsHeader);
++        }
++        /// M: For OP01 and CMCC OM VOLTE feature @{
++        Log.d(TAG, "Enter Others");
++        if (isEvsSettingSupport()) {
++            Log.d(TAG, "Add EVS");
++            Header othersHeader = new Header();
++            othersHeader.titleRes = R.string.others_settings_title;
++            othersHeader.fragment = CallOthersSettingsFragment.class.getName();
++            target.add(othersHeader);
++        }
++        /// @}
++    }
++
++    /**
++    * Returns {@code true} or {@code false} based on whether the display options setting should be
++    * shown. For languages such as Chinese, Japanese, or Korean, display options aren't useful
++    * since contacts are sorted and displayed family name first by default.
++    *
++    * @return {@code true} if the display options should be shown, {@code false} otherwise.
++    */
++    private boolean showDisplayOptions() {
++        return getResources().getBoolean(R.bool.config_display_order_user_changeable)
++                && getResources().getBoolean(R.bool.config_sort_order_user_changeable);
++    }
++
++    @Override
++    public void onHeaderClick(Header header, int position) {
++        if (header.id == R.id.settings_header_sounds_and_vibration) {
++            // If we don't have the permission to write to system settings, go to system sound
++            // settings instead. Otherwise, perform the super implementation (which launches our
++            // own preference fragment.
++            if (!SettingsCompat.System.canWrite(this)) {
++                Toast.makeText(
++                        this,
++                        getResources().getString(R.string.toast_cannot_write_system_settings),
++                        Toast.LENGTH_SHORT).show();
++                startActivity(new Intent(Settings.ACTION_SOUND_SETTINGS));
++                return;
++            }
++        }
++        super.onHeaderClick(header, position);
++    }
++
++    @Override
++    public boolean onOptionsItemSelected(MenuItem item) {
++        if (item.getItemId() == android.R.id.home) {
++            onBackPressed();
++            return true;
++        }
++        return false;
++    }
++
++    @Override
++    public void onBackPressed() {
++        if (!isSafeToCommitTransactions()) {
++            return;
++        }
++        super.onBackPressed();
++    }
++
++    @Override
++    protected boolean isValidFragment(String fragmentName) {
++        return true;
++    }
++
++    /**
++     * @return Whether the current user is the primary user.
++     */
++    private boolean isPrimaryUser() {
++        return UserManagerCompat.isSystemUser((UserManager) getSystemService(Context.USER_SERVICE));
++    }
++
++    /// M: For OP01 and CMCC OM VOLTE feature @{
++    private boolean isOP01Support() {
++        return OPERATOR_OP01.equals(SystemProperties.get("persist.operator.optr", ""));
++    }
++
++    private boolean isOP01OMSupport() {
++        return SystemProperties.get("ro.cmcc_light_cust_support").equals("1");
++    }
++    private boolean isEvsSettingSupport() {
++        if (SystemProperties.get("persist.mtk_ims_support").equals("1") &&
++             (isOP01Support() || isOP01OMSupport())) {
++             return true;
++        }
++        return false;
++    }
++    /// @}
++}
+Index: vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/SubscriptionInfoHelper.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/SubscriptionInfoHelper.java	(revision 0)
++++ vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/SubscriptionInfoHelper.java	(revision 13504)
+@@ -0,0 +1,164 @@
++/**
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License
++ */
++
++package com.android.phone;
++
++import android.app.ActionBar;
++import android.content.Context;
++import android.content.Intent;
++import android.content.res.Resources;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.text.TextUtils;
++import android.util.Log;
++
++import com.android.phone.PhoneGlobals;
++import com.android.internal.telephony.Phone;
++import com.android.internal.telephony.PhoneConstants;
++import com.android.internal.telephony.PhoneFactory;
++import com.mediatek.settings.TelephonyUtils;
++
++/**
++ * Helper for manipulating intents or components with subscription-related information.
++ *
++ * In settings, subscription ids and labels are passed along to indicate that settings
++ * are being changed for particular subscriptions. This helper provides functions for
++ * helping extract this info and perform common operations using this info.
++ */
++public class SubscriptionInfoHelper {
++    public static final int NO_SUB_ID = -1;
++
++    // Extra on intent containing the id of a subscription.
++    public static final String SUB_ID_EXTRA =
++            "com.android.phone.settings.SubscriptionInfoHelper.SubscriptionId";
++    // Extra on intent containing the label of a subscription.
++    private static final String SUB_LABEL_EXTRA =
++            "com.android.phone.settings.SubscriptionInfoHelper.SubscriptionLabel";
++
++    private static Context mContext;
++
++    private static int mSubId = NO_SUB_ID;
++    private static String mSubLabel;
++
++    /**
++     * Instantiates the helper, by extracting the subscription id and label from the intent.
++     */
++    public SubscriptionInfoHelper(Context context, Intent intent) {
++        mContext = context;
++        if (intent != null) {
++            mSubId = intent.getIntExtra(SUB_ID_EXTRA, NO_SUB_ID);
++            mSubLabel = intent.getStringExtra(SUB_LABEL_EXTRA);
++            /// M: Add for special case
++            initForOtherCase(intent);
++        }
++        log("SubscriptionInfoHelper: subid = " + mSubId
++                + "; mSubLabel = " + mSubLabel);
++    }
++
++    /**
++     * @param newActivityClass The class of the activity for the intent to start.
++     * @return Intent containing extras for the subscription id and label if they exist.
++     */
++    public Intent getIntent(Class newActivityClass) {
++        Intent intent = new Intent(mContext, newActivityClass);
++
++        if (hasSubId()) {
++            intent.putExtra(SUB_ID_EXTRA, mSubId);
++        }
++
++        if (!TextUtils.isEmpty(mSubLabel)) {
++            intent.putExtra(SUB_LABEL_EXTRA, mSubLabel);
++        }
++
++        return intent;
++    }
++
++    public static void addExtrasToIntent(Intent intent, SubscriptionInfo subscription) {
++        if (subscription == null) {
++            return;
++        }
++
++        intent.putExtra(SubscriptionInfoHelper.SUB_ID_EXTRA, subscription.getSubscriptionId());
++        ///M: Add for CallSettings inner activity pass subid to other activity. @{
++        intent.putExtra(PhoneConstants.SUBSCRIPTION_KEY, subscription.getSubscriptionId());
++        /// @}
++        intent.putExtra(
++                SubscriptionInfoHelper.SUB_LABEL_EXTRA, subscription.getDisplayName().toString());
++    }
++
++    /**
++     * @return Phone object. If a subscription id exists, it returns the phone for the id.
++     */
++    public Phone getPhone() {
++        return hasSubId()
++                ? PhoneFactory.getPhone(SubscriptionManager.getPhoneId(mSubId))
++                : PhoneGlobals.getPhone();
++    }
++
++    /**
++     * Sets the action bar title to the string specified by the given resource id, formatting
++     * it with the subscription label. This assumes the resource string is formattable with a
++     * string-type specifier.
++     *
++     * If the subscription label does not exists, leave the existing title.
++     */
++    public void setActionBarTitle(ActionBar actionBar, Resources res, int resId) {
++        if (actionBar == null || TextUtils.isEmpty(mSubLabel)) {
++            return;
++        }
++
++        if (!TelephonyManager.from(mContext).isMultiSimEnabled()) {
++            return;
++        }
++
++        String title = String.format(res.getString(resId), mSubLabel);
++        actionBar.setTitle(title);
++    }
++
++    public boolean hasSubId() {
++        return mSubId != NO_SUB_ID;
++    }
++
++    public int getSubId() {
++        return mSubId;
++    }
++
++    ///--------------------MTK---------------------
++    private String LOG_TAG = "SubscriptionInfoHelper";
++    private void log(String msg) {
++        Log.d(LOG_TAG, msg);
++    }
++
++    private void initForOtherCase(Intent intent) {
++        /// Add for other app call to launch setting inner activity. @{
++        if (mSubId == NO_SUB_ID) {
++            mSubId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY, NO_SUB_ID);
++        }
++        /// Add for Google define another EXTRA_SUB_ID.
++        if (mSubId == NO_SUB_ID) {
++            mSubId = intent.getIntExtra(GsmUmtsOptions.EXTRA_SUB_ID, NO_SUB_ID);
++        }
++        if (hasSubId() && TelephonyUtils.isGeminiProject()) {
++            try {
++                mSubLabel = PhoneUtils.getSubDisplayName(mSubId);
++            } catch (IllegalStateException e) {
++                Log.e(LOG_TAG, "Sub label not available");
++            }
++        }
++        /// @}
++    }
++}
+Index: vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/CallFeaturesSetting.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/CallFeaturesSetting.java	(revision 0)
++++ vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/CallFeaturesSetting.java	(revision 13504)
+@@ -0,0 +1,863 @@
++/*
++* Copyright (C) 2014 MediaTek Inc.
++* Modification based on code covered by the mentioned copyright
++* and/or permission notice(s).
++*/
++/*
++ * Copyright (C) 2008 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.phone;
++
++import android.app.ActionBar;
++import android.app.Activity;
++import android.app.ActivityOptions;
++import android.app.AlertDialog;
++import android.app.Dialog;
++import android.content.BroadcastReceiver;
++import android.content.ContentResolver;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.content.pm.PackageManager;
++import android.content.pm.ResolveInfo;
++import android.os.Bundle;
++import android.os.PersistableBundle;
++import android.os.UserHandle;
++import android.os.UserManager;
++import android.preference.CheckBoxPreference;
++import android.preference.ListPreference;
++import android.preference.Preference;
++import android.preference.PreferenceActivity;
++import android.preference.PreferenceScreen;
++import android.provider.Settings;
++import android.telecom.PhoneAccountHandle;
++import android.telecom.TelecomManager;
++import android.telephony.CarrierConfigManager;
++import android.telephony.PhoneStateListener;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.text.TextUtils;
++import android.util.Log;
++import android.view.MenuItem;
++import android.widget.Toast;
++
++import com.android.ims.ImsConfig;
++import com.android.ims.ImsException;
++import com.android.ims.ImsManager;
++import com.android.internal.telephony.CallForwardInfo;
++import com.android.internal.telephony.Phone;
++import com.android.internal.telephony.PhoneConstants;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.phone.PhoneGlobals.SubInfoUpdateListener;
++import com.android.phone.common.util.SettingsUtil;
++import com.android.phone.settings.AccountSelectionPreference;
++import com.android.phone.settings.PhoneAccountSettingsFragment;
++import com.android.phone.settings.VoicemailSettingsActivity;
++import com.android.phone.settings.fdn.FdnSetting;
++import com.android.services.telephony.sip.SipUtil;
++
++import com.mediatek.ims.config.ImsConfigContract;
++import com.mediatek.phone.ext.DefaultCallFeaturesSettingExt;
++import com.mediatek.phone.ext.ExtensionManager;
++import com.mediatek.phone.ext.ICallFeaturesSettingExt;
++import com.mediatek.settings.CallBarring;
++import com.mediatek.settings.IpPrefixPreference;
++import com.mediatek.settings.TelephonyUtils;
++import com.mediatek.settings.cdg.CdgCallSettings;
++import com.mediatek.settings.cdg.CdgUtils;
++import com.mediatek.settings.cdma.CdmaCallForwardOptions;
++import com.mediatek.settings.cdma.CdmaCallWaitOptions;
++import com.mediatek.settings.vtss.GsmUmtsVTCBOptions;
++import com.mediatek.settings.vtss.GsmUmtsVTCFOptions;
++import com.mediatek.settings.cdma.CdmaCallWaitingUtOptions;
++import com.mediatek.settings.cdma.TelephonyUtilsEx;
++
++import java.lang.String;
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * Top level "Call settings" UI; see res/xml/call_feature_setting.xml
++ *
++ * This preference screen is the root of the "Call settings" hierarchy available from the Phone
++ * app; the settings here let you control various features related to phone calls (including
++ * voicemail settings, the "Respond via SMS" feature, and others.)  It's used only on
++ * voice-capable phone devices.
++ *
++ * Note that this activity is part of the package com.android.phone, even
++ * though you reach it from the "Phone" app (i.e. DialtactsActivity) which
++ * is from the package com.android.contacts.
++ *
++ * For the "Mobile network settings" screen under the main Settings app,
++ * See {@link MobileNetworkSettings}.
++ *
++ * @see com.android.phone.MobileNetworkSettings
++ */
++public class CallFeaturesSetting extends PreferenceActivity
++        implements Preference.OnPreferenceChangeListener,
++                SubInfoUpdateListener {
++    private static final String LOG_TAG = "CallFeaturesSetting";
++    private static final boolean DBG = true;//(PhoneGlobals.DBG_LEVEL >= 2);
++
++    // String keys for preference lookup
++    // TODO: Naming these "BUTTON_*" is confusing since they're not actually buttons(!)
++    // TODO: Consider moving these strings to strings.xml, so that they are not duplicated here and
++    // in the layout files. These strings need to be treated carefully; if the setting is
++    // persistent, they are used as the key to store shared preferences and the name should not be
++    // changed unless the settings are also migrated.
++    private static final String VOICEMAIL_SETTING_SCREEN_PREF_KEY = "button_voicemail_category_key";
++    private static final String BUTTON_FDN_KEY   = "button_fdn_key";
++    private static final String BUTTON_RETRY_KEY       = "button_auto_retry_key";
++    private static final String BUTTON_GSM_UMTS_OPTIONS = "button_gsm_more_expand_key";
++    private static final String BUTTON_CDMA_OPTIONS = "button_cdma_more_expand_key";
++
++    /// M: add for call private voice feature @{
++    private static final String BUTTON_CP_KEY          = "button_voice_privacy_key";
++    /// @}
++
++    private static final String CALL_FORWARDING_KEY = "call_forwarding_key";
++    private static final String ADDITIONAL_GSM_SETTINGS_KEY = "additional_gsm_call_settings_key";
++    /// M: GSM type phone call settings item --> call barring
++    private static final String BUTTON_CB_EXPAND = "button_cb_expand_key";
++
++    /// M: CDMA type phone call settings item --> call forward & call wait
++    private static final String KEY_CALL_FORWARD = "button_cf_expand_key";
++    private static final String KEY_CALL_WAIT = "button_cw_key";
++    private static final String KEY_CALLER_ID = "button_caller_id";
++
++    private static final String IP_PREFIX_KEY = "button_ip_prefix_key";
++
++    private static final String PHONE_ACCOUNT_SETTINGS_KEY =
++            "phone_account_settings_preference_screen";
++
++    private static final String ENABLE_VIDEO_CALLING_KEY = "button_enable_video_calling";
++
++    private Phone mPhone;
++    private SubscriptionInfoHelper mSubscriptionInfoHelper;
++    private TelecomManager mTelecomManager;
++
++    private CheckBoxPreference mButtonAutoRetry;
++    private PreferenceScreen mVoicemailSettingsScreen;
++    private CheckBoxPreference mEnableVideoCalling;
++
++    /*
++     * Click Listeners, handle click based on objects attached to UI.
++     */
++
++    // Click listener for all toggle events
++    @Override
++    public boolean onPreferenceTreeClick(PreferenceScreen preferenceScreen, Preference preference) {
++        /// M: Add for our inner features @{
++        if (onPreferenceTreeClickMTK(preferenceScreen, preference)) {
++            return true;
++        }
++        /// @}
++        if (preference == mButtonAutoRetry) {
++            android.provider.Settings.Global.putInt(getApplicationContext().getContentResolver(),
++                    android.provider.Settings.Global.CALL_AUTO_RETRY,
++                    mButtonAutoRetry.isChecked() ? 1 : 0);
++            return true;
++        }
++        return false;
++    }
++
++    /**
++     * Implemented to support onPreferenceChangeListener to look for preference
++     * changes.
++     *
++     * @param preference is the preference to be changed
++     * @param objValue should be the value of the selection, NOT its localized
++     * display value.
++     */
++    @Override
++    public boolean onPreferenceChange(Preference preference, Object objValue) {
++        if (DBG) log("onPreferenceChange: \"" + preference + "\" changed to \"" + objValue + "\"");
++
++        if (preference == mEnableVideoCalling) {
++            int phoneId = TelephonyUtils.getMainCapabilityPhoneId(mPhone.getContext());
++            if (TelephonyUtils.isSupportMims()) {
++               phoneId = SubscriptionManager.getPhoneId(mPhone.getSubId());
++            }
++            int subId = SubscriptionManager.getSubIdUsingPhoneId(phoneId);
++            log("onPreferenceChange phoneId:" + phoneId + " subId:" + subId);
++            if (ImsManager.isEnhanced4gLteModeSettingEnabledByUser(mPhone.getContext(), phoneId)) {
++                PhoneGlobals.getInstance().phoneMgrEx.enableVideoCalling((boolean) objValue, subId);
++                ///M: For Plugin to get updated video Preference
++                ExtensionManager.getCallFeaturesSettingExt()
++                                .videoPreferenceChange((boolean) objValue);
++            } else {
++                AlertDialog.Builder builder = new AlertDialog.Builder(this);
++                DialogInterface.OnClickListener networkSettingsClickListener =
++                        new Dialog.OnClickListener() {
++                            @Override
++                            public void onClick(DialogInterface dialog, int which) {
++                                startActivity(new Intent(mPhone.getContext(),
++                                        com.android.phone.MobileNetworkSettings.class));
++                            }
++                        };
++                builder.setMessage(getResources().getString(
++                                R.string.enable_video_calling_dialog_msg))
++                        .setNeutralButton(getResources().getString(
++                                R.string.enable_video_calling_dialog_settings),
++                                networkSettingsClickListener)
++                        .setPositiveButton(android.R.string.ok, null)
++                        .show();
++                return false;
++            }
++        }
++
++        // Always let the preference setting proceed.
++        return true;
++    }
++
++    @Override
++    protected void onCreate(Bundle icicle) {
++        super.onCreate(icicle);
++        if (DBG) log("onCreate: Intent is " + getIntent());
++
++        // Make sure we are running as an admin user.
++        if (!UserManager.get(this).isAdminUser()) {
++            Toast.makeText(this, R.string.call_settings_admin_user_only,
++                    Toast.LENGTH_SHORT).show();
++            finish();
++            return;
++        }
++
++        mSubscriptionInfoHelper = new SubscriptionInfoHelper(this, getIntent());
++        mSubscriptionInfoHelper.setActionBarTitle(
++                getActionBar(), getResources(), R.string.call_settings_with_label);
++        mPhone = mSubscriptionInfoHelper.getPhone();
++        mTelecomManager = TelecomManager.from(this);
++        /// M: Register related listeners & events.
++        registerEventCallbacks();
++        /// M: Add for MTK hotswap
++        if (mPhone == null) {
++            log("onCreate: mPhone is null, finish!!!");
++            finish();
++            return;
++        }
++    }
++
++    @Override
++    protected void onPause() {
++        super.onPause();
++        TelephonyManager telephonyManager =
++                (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++        telephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
++    }
++
++    @Override
++    protected void onResume() {
++        super.onResume();
++
++        PreferenceScreen preferenceScreen = getPreferenceScreen();
++        if (preferenceScreen != null) {
++            preferenceScreen.removeAll();
++        }
++
++        addPreferencesFromResource(R.xml.call_feature_setting);
++
++        TelephonyManager telephonyManager =
++                (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++        telephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
++
++        Preference phoneAccountSettingsPreference = findPreference(PHONE_ACCOUNT_SETTINGS_KEY);
++        if (telephonyManager.isMultiSimEnabled() || !SipUtil.isVoipSupported(mPhone.getContext())) {
++            getPreferenceScreen().removePreference(phoneAccountSettingsPreference);
++        }
++
++        PreferenceScreen prefSet = getPreferenceScreen();
++        mVoicemailSettingsScreen =
++                (PreferenceScreen) findPreference(VOICEMAIL_SETTING_SCREEN_PREF_KEY);
++        Intent voiceMailIntent = new Intent(this, VoicemailSettingsActivity.class);
++        SubscriptionInfoHelper.addExtrasToIntent(voiceMailIntent, SubscriptionManager
++                                        .from(this).getSubscriptionInfo(mPhone.getSubId()));
++        mVoicemailSettingsScreen.setIntent(voiceMailIntent);
++
++        mButtonAutoRetry = (CheckBoxPreference) findPreference(BUTTON_RETRY_KEY);
++
++        mEnableVideoCalling = (CheckBoxPreference) findPreference(ENABLE_VIDEO_CALLING_KEY);
++
++        PersistableBundle carrierConfig =
++                PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
++
++        if (carrierConfig.getBoolean(CarrierConfigManager.KEY_AUTO_RETRY_ENABLED_BOOL)) {
++            mButtonAutoRetry.setOnPreferenceChangeListener(this);
++            int autoretry = Settings.Global.getInt(
++                    getContentResolver(), Settings.Global.CALL_AUTO_RETRY, 0);
++            mButtonAutoRetry.setChecked(autoretry != 0);
++        } else {
++            prefSet.removePreference(mButtonAutoRetry);
++            mButtonAutoRetry = null;
++        }
++        Intent fdnIntent = new Intent(this, FdnSetting.class);
++        SubscriptionInfoHelper.addExtrasToIntent(fdnIntent, SubscriptionManager
++                                        .from(this).getSubscriptionInfo(mPhone.getSubId()));
++        Preference cdmaOptions = prefSet.findPreference(BUTTON_CDMA_OPTIONS);
++        Preference gsmOptions = prefSet.findPreference(BUTTON_GSM_UMTS_OPTIONS);
++        if (carrierConfig.getBoolean(CarrierConfigManager.KEY_WORLD_PHONE_BOOL)) {
++            cdmaOptions.setIntent(mSubscriptionInfoHelper.getIntent(CdmaCallOptions.class));
++            gsmOptions.setIntent(mSubscriptionInfoHelper.getIntent(GsmUmtsCallOptions.class));
++        } else {
++            prefSet.removePreference(cdmaOptions);
++            prefSet.removePreference(gsmOptions);
++
++            int phoneType = mPhone.getPhoneType();
++            Preference fdnButton = prefSet.findPreference(BUTTON_FDN_KEY);
++            if (carrierConfig.getBoolean(
++                    CarrierConfigManager.KEY_HIDE_CARRIER_NETWORK_SETTINGS_BOOL)) {
++                prefSet.removePreference(fdnButton);
++            } else {
++                if (phoneType == PhoneConstants.PHONE_TYPE_CDMA
++                        /// M: [CT VOLTE]
++                        || (TelephonyUtilsEx.isCtVolteEnabled() && TelephonyUtilsEx
++                            .isCtSim(mPhone.getSubId())) || TelephonyUtilsEx
++                            .isSmartFren4gSim(mPhone.getContext(), mPhone.getSubId())) {
++
++                    /// Add for CDG OMH, show fdn when CDG OMH SIM card. @{
++                    if(CdgUtils.isCdgOmhSimCard(mPhone.getSubId())) {
++                        fdnButton.setIntent(fdnIntent);
++                    } else {
++                    /// @}
++                        prefSet.removePreference(fdnButton);
++                    }
++
++                    if (!carrierConfig.getBoolean(
++                            CarrierConfigManager.KEY_VOICE_PRIVACY_DISABLE_UI_BOOL)) {
++                        addPreferencesFromResource(R.xml.cdma_call_privacy);
++                        /// M: for ALPS02087723, get the right cdma phone instance @{
++                        CdmaVoicePrivacyCheckBoxPreference ccp =
++                                (CdmaVoicePrivacyCheckBoxPreference)findPreference(BUTTON_CP_KEY);
++                        if (ccp != null) {
++                            /// M: [CT VOLTE]
++                            if ((TelephonyUtilsEx.isCtVolteEnabled() && TelephonyUtilsEx
++                                .isCtSim(mPhone.getSubId())) || TelephonyUtilsEx
++                                .isSmartFren4gSim(mPhone.getContext(), mPhone.getSubId())) {
++                                log("Voice privacy option removed");
++                                prefSet.removePreference(ccp);
++                            } else {
++                               ccp.setPhone(mPhone);
++                            }
++                        }
++                        /// @}
++                    }
++                    /// M: For C2K project to group GSM and C2K Call Settings @{
++                    log("isCdmaSupport = " + TelephonyUtils.isCdmaSupport());
++                    if (TelephonyUtils.isCdmaSupport()) {
++                        addPreferencesFromResource(R.xml.mtk_cdma_call_options);
++                    if (!TelephonyUtilsEx
++                                   .isSmartFren4gSim(mPhone.getContext(), mPhone.getSubId())) {
++                             Preference callerIDPreference = prefSet.findPreference(KEY_CALLER_ID);
++                             log("No SmartFren SIM, so remove Caller ID pref for CDMA");
++                             prefSet.removePreference(callerIDPreference);
++                         }
++                    }
++                    /// @}
++                } else if (phoneType == PhoneConstants.PHONE_TYPE_GSM) {
++                    fdnButton.setIntent(fdnIntent);
++
++                    if (carrierConfig.getBoolean(
++                            CarrierConfigManager.KEY_ADDITIONAL_CALL_SETTING_BOOL)) {
++                        addPreferencesFromResource(R.xml.gsm_umts_call_options);
++                        GsmUmtsCallOptions.init(prefSet, mSubscriptionInfoHelper);
++                    }
++                } else {
++                    throw new IllegalStateException("Unexpected phone type: " + phoneType);
++                }
++            }
++        }
++
++        /// M: VILTE enable not dependent on data enable for some operators @{
++        boolean isNonDepOnData = carrierConfig.getBoolean(
++                        CarrierConfigManager.KEY_VILTE_ENABLE_NOT_DEPENDENT_ON_DATA_ENABLE_BOOL);
++        /// @}
++        int phoneId = TelephonyUtils.getMainCapabilityPhoneId(mPhone.getContext());
++        if (TelephonyUtils.isSupportMims()) {
++            phoneId = SubscriptionManager.getPhoneId(mPhone.getSubId());
++        }
++        int subId = SubscriptionManager.getSubIdUsingPhoneId(phoneId);
++        log("Get VT Setting for phoneId:" + phoneId + " subId:" + subId);
++        if (ImsManager.isVtEnabledByPlatform(mPhone.getContext(), phoneId) &&
++                ImsManager.isVtProvisionedOnDevice(mPhone.getContext()) &&
++                (mPhone.mDcTracker.isDataEnabled(true) || isNonDepOnData)) {
++            boolean currentValue =
++                    ImsManager.isEnhanced4gLteModeSettingEnabledByUser(mPhone.getContext(), phoneId)
++                    ? PhoneGlobals.getInstance().phoneMgrEx.isVideoCallingEnabled(
++                            getOpPackageName(), subId) : false;
++            mEnableVideoCalling.setChecked(currentValue);
++            mEnableVideoCalling.setOnPreferenceChangeListener(this);
++        } else {
++            prefSet.removePreference(mEnableVideoCalling);
++        }
++
++        if (ImsManager.isVolteEnabledByPlatform(this) &&
++                !carrierConfig.getBoolean(
++                        CarrierConfigManager.KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL)) {
++            TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++            /* tm.listen(mPhoneStateListener, PhoneStateListener.LISTEN_CALL_STATE); */
++        }
++        PersistableBundle carrierConfigBundle = PhoneGlobals.getInstance()
++                                                            .getCarrierConfigForSubId(subId);
++        boolean removeWfcPrefMode = carrierConfigBundle.getBoolean(
++                         CarrierConfigManager.KEY_WFC_REMOVE_PREFERENCE_MODE_BOOL);
++        Log.d(LOG_TAG, "removeWfcPrefMode:" + removeWfcPrefMode);
++        Preference wifiCallingSettings = findPreference(
++                getResources().getString(R.string.wifi_calling_settings_key));
++
++        final PhoneAccountHandle simCallManager = mTelecomManager.getSimCallManager();
++        if (simCallManager != null) {
++            Intent intent = PhoneAccountSettingsFragment.buildPhoneAccountConfigureIntent(
++                    this, simCallManager);
++            Log.d(LOG_TAG, "--- simCallManager is not null ---");
++            if (intent != null) {
++                PackageManager pm = mPhone.getContext().getPackageManager();
++                List<ResolveInfo> resolutions = pm.queryIntentActivities(intent, 0);
++                if (!resolutions.isEmpty()) {
++                    Log.d(LOG_TAG, "--- set wfc ---");
++                    wifiCallingSettings.setTitle(resolutions.get(0).loadLabel(pm));
++                    wifiCallingSettings.setSummary(null);
++                    wifiCallingSettings.setIntent(intent);
++                } else {
++                    Log.d(LOG_TAG, "Remove WFC Preference since resolutions is empty");
++                    prefSet.removePreference(wifiCallingSettings);
++                }
++            } else {
++                Log.d(LOG_TAG, "Remove WFC Preference since PhoneAccountConfigureIntent is null");
++                prefSet.removePreference(wifiCallingSettings);
++            }
++        } else if (!TelephonyUtils.isSupportMims() &&
++                   (!ImsManager.isWfcEnabledByPlatform(mPhone.getContext()) ||
++                    !ImsManager.isWfcProvisionedOnDevice(mPhone.getContext()))) {
++            Log.d(LOG_TAG, "--- remove wfc,platform support : "
++                    + ImsManager.isWfcEnabledByPlatform(mPhone.getContext()));
++            prefSet.removePreference(wifiCallingSettings);
++        } else {
++            if (TelephonyUtils.isSupportMims() || removeWfcPrefMode) {
++                wifiCallingSettings.setSummary("");
++                Log.d(LOG_TAG, "Multi IMS support so no wfc summary");
++            } else {
++            int resId = com.android.internal.R.string.wifi_calling_off_summary;
++                if (ImsManager.isWfcEnabledByUser(mPhone.getContext())) {
++                    int wfcMode = ImsManager.getWfcMode(mPhone.getContext());
++                    switch (wfcMode) {
++                        case ImsConfig.WfcModeFeatureValueConstants.WIFI_ONLY:
++                           resId = com.android.internal.R.string.wfc_mode_wifi_only_summary;
++                           break;
++                        case ImsConfig.WfcModeFeatureValueConstants.CELLULAR_PREFERRED:
++                           resId = com.android.internal.R.string
++                                               .wfc_mode_cellular_preferred_summary;
++                           break;
++                        case ImsConfig.WfcModeFeatureValueConstants.WIFI_PREFERRED:
++                           resId = com.android.internal.R.string.wfc_mode_wifi_preferred_summary;
++                           break;
++                        default:
++                           if (DBG) log("Unexpected WFC mode value: " + wfcMode);
++                    }
++                }
++                wifiCallingSettings.setSummary(resId);
++            }
++        }
++
++        ///M: [OMH]
++        updateOmhItems();
++
++        /// M: [IP-prefix]
++        setIpFunction();
++
++        /// M: update screen status
++        updateScreenStatus();
++
++        /// M: WFC @{
++        ExtensionManager.getCallFeaturesSettingExt().initOtherCallFeaturesSetting(this);
++        ExtensionManager.getCallFeaturesSettingExt()
++                .onCallFeatureSettingsEvent(DefaultCallFeaturesSettingExt.RESUME);
++        /// @}
++    }
++
++    @Override
++    protected void onNewIntent(Intent newIntent) {
++        setIntent(newIntent);
++
++        mSubscriptionInfoHelper = new SubscriptionInfoHelper(this, getIntent());
++        mSubscriptionInfoHelper.setActionBarTitle(
++                getActionBar(), getResources(), R.string.call_settings_with_label);
++        mPhone = mSubscriptionInfoHelper.getPhone();
++    }
++
++    private static void log(String msg) {
++        Log.d(LOG_TAG, msg);
++    }
++
++    @Override
++    public boolean onOptionsItemSelected(MenuItem item) {
++        final int itemId = item.getItemId();
++        if (itemId == android.R.id.home) {  // See ActionBar#setDisplayHomeAsUpEnabled()
++            onBackPressed();
++            return true;
++        }
++        return super.onOptionsItemSelected(item);
++    }
++
++    /**
++     * Finish current Activity and go up to the top level Settings ({@link CallFeaturesSetting}).
++     * This is useful for implementing "HomeAsUp" capability for second-level Settings.
++     */
++    public static void goUpToTopLevelSetting(
++            Activity activity, SubscriptionInfoHelper subscriptionInfoHelper) {
++        Intent intent = subscriptionInfoHelper.getIntent(CallFeaturesSetting.class);
++        intent.setAction(Intent.ACTION_MAIN);
++        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
++        activity.startActivity(intent);
++        activity.finish();
++    }
++
++    // -------------------- Mediatek ---------------------
++    /// M: Add for plug-in @{
++    private ICallFeaturesSettingExt mExt;
++    /// Add for CDG OMH
++    private CdgCallSettings mCdgCallSettings = null;
++    private static final String ACTION_OMH = "com.mediatek.internal.omh.cardcheck";
++
++
++    /**
++     * Add for IMS provisioning
++     */
++    private void updateVtOption() {
++        new Thread() {
++
++            // TODO: to check this API, should not be using another thread in UI code
++            @Override
++            public void run() {
++                try{
++                    ImsManager ims = ImsManager.getInstance(
++                            mPhone.getContext(), mPhone.getPhoneId());
++                    ImsConfig imsCfg = ims.getConfigInterface();
++                    /// getVtProvisioned api contains two cases:
++                    /// 1. Don't support provision, it will return true, so that
++                    ///    the provision value will not affect the decision(show/not)
++                    /// 2. Support provision, it will return the current status.
++                    int phoneId = TelephonyUtils.getMainCapabilityPhoneId(mPhone.getContext());
++                    if (TelephonyUtils.isSupportMims()) {
++                        phoneId = SubscriptionManager.getPhoneId(mPhone.getSubId());
++                    }
++                    boolean enableProvision = imsCfg.getVtProvisioned();
++                    boolean enablePlatform = ImsManager.isVtEnabledByPlatform(
++                            mPhone.getContext(), phoneId);
++                    log("updateVtOption enableProvision = " + enableProvision
++                            + "enablePlatform = " + enablePlatform);
++
++                    PreferenceScreen prefSet = getPreferenceScreen();
++                    if (enableProvision && enablePlatform) {
++                        if (prefSet != null && mEnableVideoCalling == null) {
++                            prefSet.addPreference(mEnableVideoCalling);
++                        }
++                    }
++                } catch (ImsException e) {
++                    e.printStackTrace();
++                }
++            }
++        }.start();
++    }
++    /// @}
++
++    private void updateOmhItems() {
++        if (CdgUtils.isCdgOmhSimCard(mSubscriptionInfoHelper.getSubId())) {
++            log("new CdgCallSettings.");
++            mCdgCallSettings = new CdgCallSettings(this, mSubscriptionInfoHelper);
++            Preference callForwardPreference = this.findPreference(KEY_CALL_FORWARD);
++            if (callForwardPreference != null) {
++                this.getPreferenceScreen().removePreference(callForwardPreference);
++            }
++
++            Preference callWaitPreference = this.findPreference(KEY_CALL_WAIT);
++            if (callWaitPreference != null) {
++                this.getPreferenceScreen().removePreference(callWaitPreference);
++            }
++        }
++    }
++
++    @Override
++    protected void onDestroy() {
++        if (UserManager.get(this).isAdminUser()) {
++            /// M: WFC @{
++            ExtensionManager.getCallFeaturesSettingExt()
++                    .onCallFeatureSettingsEvent(DefaultCallFeaturesSettingExt.DESTROY);
++            /// @}
++            unregisterEventCallbacks();
++        }
++        /// M: add for dual volte feature @{
++        TelephonyUtils.setParameters(null, null, null);
++        /// @}
++        super.onDestroy();
++    }
++
++    @Override
++    public void handleSubInfoUpdate() {
++        finish();
++    }
++
++    /**
++     * For internal features
++     * @param preferenceScreen
++     * @param preference
++     * @return
++     */
++    private boolean onPreferenceTreeClickMTK(
++            PreferenceScreen preferenceScreen, Preference preference) {
++
++        log("onPreferenceTreeClickMTK" + preference.getKey());
++        /// M: add for dual volte feature @{
++        TelephonyUtils.setParameters(preferenceScreen, preference, mSubscriptionInfoHelper);
++        /// @}
++        /// Add for [VoLTE_SS] @{
++        if (preference == preferenceScreen.findPreference(CALL_FORWARDING_KEY) ||
++            preference == preferenceScreen.findPreference(ADDITIONAL_GSM_SETTINGS_KEY) ||
++            preference == preferenceScreen.findPreference(BUTTON_CB_EXPAND)) {
++
++            if (TelephonyUtils.shouldShowOpenMobileDataDialog(
++                    this, mPhone.getSubId())) {
++                TelephonyUtils.showOpenMobileDataDialog(this, mPhone.getSubId());
++            } else {
++                Intent intent;
++                if (preference == preferenceScreen.findPreference(CALL_FORWARDING_KEY)) {
++                    if (ExtensionManager.getCallFeaturesSettingExt().openVtCf()) {
++                        intent = mSubscriptionInfoHelper.getIntent(GsmUmtsVTCFOptions.class);
++                    } else {
++                        intent = mSubscriptionInfoHelper.getIntent(GsmUmtsCallForwardOptions.class);
++                    }
++
++                } else if (preference == preferenceScreen.findPreference(BUTTON_CB_EXPAND)) {
++                    if (ExtensionManager.getCallFeaturesSettingExt().openVtCb()) {
++                        intent = mSubscriptionInfoHelper.getIntent(GsmUmtsVTCBOptions.class);
++                    } else {
++                        intent = mSubscriptionInfoHelper.getIntent(CallBarring.class);
++                    }
++                } else {
++                    intent = mSubscriptionInfoHelper.getIntent(GsmUmtsAdditionalCallOptions.class);
++                }
++                SubscriptionInfoHelper.addExtrasToIntent(intent, SubscriptionManager
++                                      .from(this).getSubscriptionInfo(mPhone.getSubId()));
++                startActivity(intent);
++            }
++            return true;
++        }
++        /// @}
++        /// M: CDMA type phone call setting item click handling
++        if (preference == preferenceScreen.findPreference(KEY_CALL_FORWARD) ||
++            preference == preferenceScreen.findPreference(KEY_CALL_WAIT) ||
++            preference == preferenceScreen.findPreference(KEY_CALLER_ID)) {
++            /// M: [CT VOLTE] @{
++            if (((TelephonyUtilsEx.isCtVolteEnabled() && TelephonyUtilsEx
++                        .isCt4gSim(mPhone.getSubId())) || TelephonyUtilsEx
++                        .isSmartFren4gSim(mPhone.getContext(), mPhone.getSubId()))
++                    && TelephonyUtils.shouldShowOpenMobileDataDialog(this, mPhone.getSubId())) {
++                TelephonyUtils.showOpenMobileDataDialog(this, mPhone.getSubId());
++            } else {
++            /// @}
++                if (preference == preferenceScreen.findPreference(KEY_CALL_FORWARD)) {
++                    Intent intent;
++                    /// M:[CT VOLTE] @{
++                    if ((TelephonyUtilsEx.isCtVolteEnabled() && TelephonyUtilsEx
++                            .isCt4gSim(mPhone.getSubId())) || TelephonyUtilsEx
++                            .isSmartFren4gSim(mPhone.getContext(), mPhone.getSubId())) {
++                        intent = mSubscriptionInfoHelper.getIntent(GsmUmtsCallForwardOptions.class);
++                    } else {
++                    /// @}
++                        intent = mSubscriptionInfoHelper.getIntent(CdmaCallForwardOptions.class);
++                    }
++                    SubscriptionInfoHelper.addExtrasToIntent(intent, SubscriptionManager
++                                          .from(this).getSubscriptionInfo(mPhone.getSubId()));
++                    startActivity(intent);
++                } else if (preference == preferenceScreen.findPreference(KEY_CALLER_ID)) {
++                    Intent intent
++                         = mSubscriptionInfoHelper.getIntent(GsmUmtsAdditionalCallOptions.class);
++                    SubscriptionInfoHelper.addExtrasToIntent(intent, SubscriptionManager
++                                          .from(this).getSubscriptionInfo(mPhone.getSubId()));
++                    startActivity(intent);
++                } else { // (preference ==
++                         // preferenceScreen.findPreference(KEY_CALL_WAIT))
++                    /// M: remove CNIR and move CW option to cdma call option.
++                    /// TODO: Check whether need mForeground
++                    boolean isImsOn = TelephonyUtils.isImsServiceAvailable(this, mPhone.getSubId());
++                    if ((TelephonyUtilsEx.isCtVolteEnabled() && TelephonyUtilsEx
++                            .isCt4gSim(mPhone.getSubId()) && isImsOn) || TelephonyUtilsEx
++                            .isSmartFren4gSim(mPhone.getContext(), mPhone.getSubId())) {
++                        Intent intent = mSubscriptionInfoHelper
++                                .getIntent(CdmaCallWaitingUtOptions.class);
++                        startActivity(intent);
++                    } else {
++                        showDialog(CdmaCallWaitOptions.CW_MODIFY_DIALOG);
++                    }
++                }
++            }
++            return true;
++        }
++        /// Add for CDG OMH @{
++        if (mCdgCallSettings != null && mCdgCallSettings.onPreferenceTreeClick(
++                preferenceScreen, preference)) {
++            log("onPreferenceTreeClickMTK, handled by CDG call settings.");
++            return true;
++        }
++        /// @}
++        return false;
++    }
++
++    private void updateScreenStatus() {
++        PreferenceScreen pres = getPreferenceScreen();
++
++        boolean isAirplaneModeEnabled = TelephonyUtils.isAirplaneModeOn(
++                PhoneGlobals.getInstance());
++        boolean hasSubId = SubscriptionManager.isValidSubscriptionId(mPhone.getSubId());
++        log("updateScreenStatus, hasSubId: " + hasSubId + " isAirplaneModeEnabled: " +
++                 isAirplaneModeEnabled);
++
++        for (int i = 0; i < pres.getPreferenceCount(); i++) {
++            Preference pref = pres.getPreference(i);
++            pref.setEnabled(!isAirplaneModeEnabled && hasSubId);
++        }
++
++        /// M: The CF UI will be disabled when air plane mode is on.
++        /// but SS should be still workable when IMS is registered,
++        /// So Enable the CF UI when IMS is registered. {@
++        if (hasSubId) {
++            boolean isImsOn = TelephonyUtils.isImsServiceAvailable(this, mPhone.getSubId());
++            Preference prefCf = getPreferenceScreen().findPreference(CALL_FORWARDING_KEY);
++            Preference prefCb = getPreferenceScreen().findPreference(BUTTON_CB_EXPAND);
++            Preference prefCw = getPreferenceScreen().findPreference(ADDITIONAL_GSM_SETTINGS_KEY);
++            if (prefCf != null) {
++                if (isImsOn) {
++                    log(" --- set SS item enabled when IMS is registered ---");
++                    prefCf.setEnabled(true);
++                    prefCb.setEnabled(true);
++                    prefCw.setEnabled(true);
++                }
++            }
++            if (TelephonyUtilsEx.isSmartFren4gSim(mPhone.getContext(), mPhone.getSubId())) {
++                Preference prefCdmaCf = getPreferenceScreen().findPreference(KEY_CALL_FORWARD);
++                Preference prefCdmaCw = getPreferenceScreen().findPreference(KEY_CALL_WAIT);
++                Preference prefCdmaCi = getPreferenceScreen().findPreference(KEY_CALLER_ID);
++                log(" -- set CDMA SS item enabled when IMS is registered for SmartFren only --");
++                if (prefCdmaCf != null) {
++                    prefCdmaCf.setEnabled(true);
++                }
++                if (prefCdmaCw != null) {
++                    prefCdmaCw.setEnabled(true);
++                }
++                if (prefCdmaCi != null) {
++                    prefCdmaCi.setEnabled(true);
++                }
++            }
++        }
++
++        updateVtEnableStatus();
++    }
++
++    private void setIpFunction() {
++        Preference prefIp = getPreferenceScreen().findPreference(IP_PREFIX_KEY);
++        Intent intent = new Intent(this, IpPrefixPreference.class);
++        SubscriptionInfoHelper.addExtrasToIntent(intent, SubscriptionManager
++                                        .from(this).getSubscriptionInfo(mPhone.getSubId()));
++        if (prefIp != null) {
++            prefIp.setIntent(intent);
++        }
++    }
++
++    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++            log("onReceive, action = " + action);
++            if (Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(action) ||
++                    ImsManager.ACTION_IMS_STATE_CHANGED.equals(action)) {
++                updateScreenStatus();
++            } else if (ACTION_OMH.equals(action)) {
++                log("update omh items");
++                updateOmhItems();
++            //  When IMS Configuration Provisioning value changed,
++            // remove/add mEnableVideoCalling item.@{
++            } else if (ImsConfigContract.ACTION_IMS_CONFIG_CHANGED == action) {
++                int actionId = intent.getIntExtra(ImsConfigContract.EXTRA_CHANGED_ITEM, -1);
++                log("EXTRA_CHANGED_ITEM actionId = " + actionId);
++                if (ImsConfig.ConfigConstants.LVC_SETTING_ENABLED == actionId) {
++                    updateVtOption();
++                }
++            }
++        }
++    };
++
++    // dialog creation method, called by showDialog()
++    @Override
++    protected Dialog onCreateDialog(int dialogId) {
++        /// M: remove CNIR and move CW option to cdma call option.
++        if (dialogId == CdmaCallWaitOptions.CW_MODIFY_DIALOG) {
++            return new CdmaCallWaitOptions(this, mPhone).createDialog();
++        }
++
++        /// Add for CDG OMH @{
++        if (mCdgCallSettings != null) {
++            return mCdgCallSettings.onCreateDialog(dialogId);
++        }
++        /// @}
++        return null;
++    }
++
++    /**
++     * Add call status listener, for VT items(should be disable during calling)
++     */
++    private final PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
++        @Override
++        public void onCallStateChanged(int state, String incomingNumber) {
++            boolean enabled = (state == TelephonyManager.CALL_STATE_IDLE);
++            log("[onCallStateChanged] enabled = " + enabled);
++            updateVtEnableStatus();
++        }
++    };
++
++    /**
++     * 1. Listen sim hot swap related change.
++     * 2. ACTION_AIRPLANE_MODE_CHANGED
++     * 3. ACTION_IMS_STATE_CHANGED
++     * 4. Call Status for VT item
++     */
++    private void registerEventCallbacks() {
++        PhoneGlobals.getInstance().addSubInfoUpdateListener(this);
++        /// register airplane mode
++        IntentFilter intentFilter = new IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED);
++        intentFilter.addAction(ImsManager.ACTION_IMS_STATE_CHANGED);
++        intentFilter.addAction(ACTION_OMH);
++        intentFilter.addAction(ImsConfigContract.ACTION_IMS_CONFIG_CHANGED);
++        registerReceiver(mReceiver, intentFilter);
++    }
++
++    private void unregisterEventCallbacks() {
++        PhoneGlobals.getInstance().removeSubInfoUpdateListener(this);
++        unregisterReceiver(mReceiver);
++    }
++
++    /**
++     * This is for VT option, when during call, disable it.
++     */
++    private void updateVtEnableStatus() {
++        boolean hasSubId = mPhone != null
++                && SubscriptionManager.isValidSubscriptionId(mPhone.getSubId());
++        log("[updateVtEnableStatus] isInCall = " + TelephonyUtils.isInCall(this) + ", hasSubId = "
++                + hasSubId);
++        if (mEnableVideoCalling != null) {
++            mEnableVideoCalling.setEnabled(hasSubId && !TelephonyUtils.isInCall(this));
++        }
++    }
++}

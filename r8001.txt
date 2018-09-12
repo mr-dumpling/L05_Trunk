@@ -1,0 +1,79 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 8000)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 8001)
+@@ -214,6 +214,9 @@
+     static final boolean ENABLE_DESK_DOCK_HOME_CAPTURE = false;
+ 
+     static final boolean ALTERNATE_CAR_MODE_NAV_SIZE = false;
++	private static final String SIM_PIN_KEYGUARD_START = "sim_pin_keyguard_start"; 
++	private static final String SIM_PIN_KEYGUARD_STOP = "sim_pin_keyguard_stop";
++	private static boolean isSimPinKeyguardStart = false;
+ 
+     static final int SHORT_PRESS_POWER_NOTHING = 0;
+     static final int SHORT_PRESS_POWER_GO_TO_SLEEP = 1;
+@@ -1817,6 +1820,11 @@
+ 		filter.addAction("intent.action.SendKey");
+ 		filter.addAction("android.intent.action.LAUNCHER_D_TAP");
+ 		context.registerReceiver(mKeyReceiver, filter);
++		 //register for simPin Keyguard broadcasts  
++		IntentFilter simPinKeyguardfilter = new IntentFilter();
++		simPinKeyguardfilter.addAction(SIM_PIN_KEYGUARD_START);
++		simPinKeyguardfilter.addAction(SIM_PIN_KEYGUARD_STOP);
++		context.registerReceiver(mSimPINKeyguardReceiver, simPinKeyguardfilter);
+ 		
+         // monitor for system gestures
+         mSystemGestures = new SystemGesturesPointerEventListener(context,
+@@ -6289,8 +6297,19 @@
+         return runningActivity;
+     }
+ 
+-    /** {@inheritDoc} */
+-    @Override
++    private BroadcastReceiver mSimPINKeyguardReceiver = new BroadcastReceiver() { 
++    	@Override        
++		public void onReceive(Context context, Intent intent) {
++			
++			if (SIM_PIN_KEYGUARD_START.equals(intent.getAction())) { 
++				isSimPinKeyguardStart = true;            
++			} else if (SIM_PIN_KEYGUARD_STOP.equals(intent.getAction()) && ActivityManager.getCurrentUser()==0) {
++				isSimPinKeyguardStart = false; 
++			}        
++		}    
++	};
++	/** {@inheritDoc} */
++	@Override
+     public int interceptKeyBeforeQueueing(KeyEvent event, int policyFlags) {
+         if (!mSystemBooted) {
+             // If we have not yet booted, don't let key events do anything.
+@@ -7214,7 +7233,8 @@
+         }
+ 	
+         Log.d(TAG, "startFaceVerify continue after no simsecure");
+-        //if (keyguardOn() /*&& !isSimPinKeyguardStart && !inCall() && !isSwitchingUser zxp*/) {
++		
++        if (keyguardOn() && !isSimPinKeyguardStart && !inCall()) {
+             String faceEnable = Settings.System.getStringForUser(mContext.getContentResolver(), Settings.System.FACE_STATE_ENABLED, 0);
+             int faceUnlockState = Settings.System.getInt(mContext.getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
+             if (faceEnable == null) {
+@@ -7227,10 +7247,17 @@
+                 }
+             }
+ 			Slog.d(TAG, "faceEnable = "+faceEnable);
+-        //} else {
+-         //    Slog.d(TAG, "--can't bind FaceService mFaceVerifyRun:");
+-        //}
++        } else {
++            Slog.d(TAG, "--can't bind FaceService mFaceVerifyRun:");
++        }
+     }
++	private boolean inCall() {
++		TelecomManager telecomManager = getTelecommService();
++		if (telecomManager != null) {
++			return telecomManager.isRinging() || telecomManager.isInCall(); 
++		}        
++			return false;
++		}
+     private void bindFaceService() {
+         Intent intent = new Intent();
+         intent.setClassName("com.android.systemui", "com.face.scanner.FaceService");

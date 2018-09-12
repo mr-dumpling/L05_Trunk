@@ -1,0 +1,69 @@
+Index: packages/apps/Dialer/src/com/android/dialer/calllog/CallLogListItemViewHolder.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/calllog/CallLogListItemViewHolder.java	(revision 1492)
++++ packages/apps/Dialer/src/com/android/dialer/calllog/CallLogListItemViewHolder.java	(revision 1493)
+@@ -118,6 +118,7 @@
+     /** @} */
+     public View callWithNoteButtonView;
+     public ImageView workIconView;
++	public TextView emergencyNumberView;
+ 
+     /**
+      * The row Id for the first call associated with the call log entry.  Used as a key for the
+@@ -252,6 +253,7 @@
+             CardView callLogEntryView,
+             TextView dayGroupHeader,
+             ImageView primaryActionButtonView,
++            TextView emergencyNumberView,
+             boolean isArchiveTab) {
+         super(rootView);
+ 
+@@ -271,6 +273,7 @@
+         this.dayGroupHeader = dayGroupHeader;
+         this.primaryActionButtonView = primaryActionButtonView;
+         this.workIconView = (ImageView) rootView.findViewById(R.id.work_profile_icon);
++		this.emergencyNumberView=(TextView)rootView.findViewById(R.id.emergency_call);
+         this.isArchiveTab = isArchiveTab;
+         Resources resources = mContext.getResources();
+         mPhotoSize = mContext.getResources().getDimensionPixelSize(R.dimen.contact_photo_size);
+@@ -318,6 +321,7 @@
+                 (CardView) view.findViewById(R.id.call_log_row),
+                 (TextView) view.findViewById(R.id.call_log_day_group_label),
+                 (ImageView) view.findViewById(R.id.primary_action_button),
++                (TextView)view.findViewById(R.id.emergency_call),
+                 isArchiveTab);
+     }
+ 
+@@ -870,11 +874,13 @@
+                 new CardView(context),
+                 new TextView(context),
+                 new ImageView(context),
++                new TextView(context),
+                 false);
+         viewHolder.detailsButtonView = new TextView(context);
+         viewHolder.actionsView = new View(context);
+         viewHolder.voicemailPlaybackView = new VoicemailPlaybackLayout(context);
+         viewHolder.workIconView = new ImageButton(context);
++		viewHolder.emergencyNumberView= new TextView(context);
+         return viewHolder;
+     }
+ }
+Index: packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java	(revision 1492)
++++ packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java	(revision 1493)
+@@ -664,7 +664,13 @@
+         } else {
+             views.showActions(false);
+         }
+-
++		
++		if(PhoneNumberUtils.isEmergencyNumber(number)){
++			views.emergencyNumberView.setVisibility(View.VISIBLE);
++		}else{
++			views.emergencyNumberView.setVisibility(View.GONE);
++		}
++		
+         views.updatePhoto();
+         /// M: why AOSP call it twice? delete it
+         //mCallLogListItemHelper.setPhoneCallDetails(views, details);

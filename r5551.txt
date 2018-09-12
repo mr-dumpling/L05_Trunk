@@ -1,0 +1,119 @@
+Index: frameworks/base/services/core/java/com/android/server/notification/ZenModeHelper.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/notification/ZenModeHelper.java	(revision 5550)
++++ frameworks/base/services/core/java/com/android/server/notification/ZenModeHelper.java	(revision 5551)
+@@ -952,7 +952,7 @@
+                     if (isChange && policy.doNotDisturbWhenSilent) {
+                         if (mZenMode != Global.ZEN_MODE_NO_INTERRUPTIONS
+                                 && mZenMode != Global.ZEN_MODE_ALARMS) {
+-                            newZen = Global.ZEN_MODE_ALARMS;
++                           // newZen = Global.ZEN_MODE_ALARMS;
+                         }
+                         setPreviousRingerModeSetting(ringerModeOld);
+                     }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/AudioProfileTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/AudioProfileTile.java	(revision 5550)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/AudioProfileTile.java	(revision 5551)
+@@ -17,6 +17,9 @@
+ import com.android.systemui.qs.QSTile;
+ import com.android.systemui.qs.QSTile.BooleanState;
+ import com.android.systemui.qs.QSTile.ResourceIcon;
++import android.provider.Settings.Global;
++import android.widget.Toast;
++import android.app.NotificationManager;
+ 
+ public class AudioProfileTile extends QSTile<QSTile.BooleanState> {
+     public static final int QS_AUDIOPROFILE = 512;
+@@ -23,12 +26,14 @@
+     private AudioManager mAudioManager;
+  
+     public static final String ACTION_AUDIO_PROFILE = "android.settings.SOUND_SETTINGS";
+-
+-
++	private static int mCount=0;
++	private NotificationManager mNotificationManager;
++	
+     public AudioProfileTile(Host host) {
+         super(host);
+         mAudioManager = (AudioManager) mContext
+                 .getSystemService(Context.AUDIO_SERVICE);
++		mNotificationManager =host.getContext().getSystemService(NotificationManager.class);
+         registerVolumeModeReceiver();
+     }
+ 
+@@ -113,10 +118,26 @@
+                 mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
+             }
+         } else if (AudioManager.RINGER_MODE_SILENT == ringerMode) {
+-            Settings.System.putInt(mResolver,
++			boolean isDndMode= Settings.System.getInt(mContext.getContentResolver(),Settings.System.VIBRATE_IN_SILENT, 0)==1;
++			int zenMode=mNotificationManager.getZenMode();
++			if(isDndMode && zenMode!= Settings.Global.ZEN_MODE_OFF && mCount==0){
++				mCount++;
++				Toast.makeText(mContext,mContext.getString(R.string.disturb_on_hint) ,Toast.LENGTH_LONG).show();
++				return;
++			}else if(isDndMode && zenMode!= Settings.Global.ZEN_MODE_OFF && mCount==1){
++				Settings.System.putInt(mContext.getContentResolver(),Settings.System.VIBRATE_IN_SILENT, 0);
++				mNotificationManager.setZenMode(Settings.Global.ZEN_MODE_OFF, null, TAG);
++				Toast.makeText(mContext,mContext.getString(R.string.disturb_turn_off_hint),Toast.LENGTH_LONG).show();
++				mCount=0;
++				return;
++			}else{
++				Settings.System.putInt(mResolver,
+                     Settings.System.SOUND_EFFECTS_ENABLED, 1);
+-            mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
+-                if (hasVibrator) {
++            	mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
++			}
++			
++				  
++		  if (hasVibrator) {
+                 mAudioManager.setVibrateSetting(
+                         AudioManager.VIBRATE_TYPE_RINGER,
+                         AudioManager.VIBRATE_SETTING_OFF);
+Index: frameworks/base/packages/SystemUI/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 5550)
++++ frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 5551)
+@@ -1678,4 +1678,6 @@
+          content. Since we don't know what the app is showing on top of the input target, we
+          can't verify user consent. [CHAR LIMIT=NONE] -->
+     <string name="touch_filtered_warning">Because an app is obscuring a permission request, Settings can\’t verify your response.</string>
++    <string name="disturb_on_hint">Do Not Disturb mode is on.\nTouch again to turn it off.</string>
++    <string name="disturb_turn_off_hint">Do Not Disturb mode off.</string>
+ </resources>
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml	(revision 5550)
++++ frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml	(revision 5551)
+@@ -687,4 +687,6 @@
+     <string name="Share_screen_shot">分享屏幕截图</string>
+     <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+     <string name="func_search_no_content_toast">没有结果</string>
++	<string name="disturb_on_hint">勿打扰模式已开启。\n再次触摸关闭它。</string>
++	<string name="disturb_turn_off_hint">勿打扰模式已关闭。</string>
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml	(revision 5550)
++++ frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml	(revision 5551)
+@@ -681,4 +681,6 @@
+     <string name="switch_screen_mode_toast">屏幕切換為18:9，正在重啓應用...</string>
+     <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+     <string name="func_search_no_content_toast">沒有結果</string>
++	<string name="disturb_on_hint">勿打擾模式已開啟。 \n再次觸摸關閉它。</string>
++	<string name="disturb_turn_off_hint">勿打擾模式已關閉。</string>
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml	(revision 5550)
++++ frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml	(revision 5551)
+@@ -683,4 +683,6 @@
+     <string name="switch_screen_mode_toast">屏幕切換為18:9，正在重啓應用...</string>
+     <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+     <string name="func_search_no_content_toast">沒有結果</string>
++	<string name="disturb_on_hint">勿打擾模式已開啟。 \n再次觸摸關閉它。</string>
++	<string name="disturb_turn_off_hint">勿打擾模式已關閉。</string>
+ </resources>

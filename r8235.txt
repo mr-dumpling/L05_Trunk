@@ -1,0 +1,68 @@
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 8234)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 8235)
+@@ -100,6 +100,7 @@
+     private static final int MVNO_MATCH_DATA_INDEX = 5;
+     /// M: check source type, some types are not editable
+     private static final int SOURCE_TYPE_INDEX = 6;
++    private static final int EDITED_INDEX = 7;
+ 
+     private static final int MENU_NEW = Menu.FIRST;
+     private static final int MENU_RESTORE = Menu.FIRST + 1;
+@@ -317,6 +318,9 @@
+         return null;
+     }
+ 
++    private static String ORANGE_KEY_STRING = "orange";
++    private static String ORANGE_APN_TETHERING = "orange.fr";
++
+     private void fillList() {
+         final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+         String mccmnc = mSubscriptionInfo == null ? ""
+@@ -370,7 +374,7 @@
+         Cursor cursor = getContentResolver().query(
+                 Telephony.Carriers.CONTENT_URI,
+                 new String[] { "_id", "name", "apn", "type", "mvno_type", "mvno_match_data",
+-                        "sourcetype" }, where, null, order);
++                        "sourcetype", "edited" }, where, null, order);
+         /// @}
+ 
+         if (cursor != null) {
+@@ -402,6 +406,8 @@
+                 String mvnoMatchData = cursor.getString(MVNO_MATCH_DATA_INDEX);
+                 /// M: check source type, some types are not editable
+                 int sourcetype = cursor.getInt(SOURCE_TYPE_INDEX);
++                int edited = cursor.getInt(EDITED_INDEX);
++                Log.d(TAG, ""+ apn + " edited:" + edited);
+ 
+                 /// M: skip specific APN type
+                 if(shouldSkipApn(type)) {
+@@ -421,7 +427,13 @@
+                 pref.setOnPreferenceChangeListener(this);
+ 
+                 /// M: for [Read Only APN]
+-                pref.setApnEditable(mApnExt.isAllowEditPresetApn(type, apn, mccmnc, sourcetype));
++                boolean editable = mApnExt.isAllowEditPresetApn(type, apn, mccmnc, sourcetype);
++                //Orange preset APNs not editable
++                if (apn.contains(ORANGE_KEY_STRING) && (edited == 0)) {
++                    Log.d(TAG, "orange editable: false");
++                    editable = false; 
++                }
++                pref.setApnEditable(editable);
+                 pref.setSubId(mSubscriptionInfo == null ? null : mSubscriptionInfo
+                         .getSubscriptionId());
+ 
+@@ -439,6 +451,12 @@
+ 				if(name.equals("Conexión compartida")){
+ 					pref.setSelectable(false);
+ 				}
++
++                // additional check for Orange APNs
++                if (apn.equalsIgnoreCase(ORANGE_APN_TETHERING) && (edited == 0)) {
++                    Log.d(TAG, name + " not selectable:" + apn);
++                    selectable = false;
++                }
+                 pref.setSelectable(selectable);
+                 Log.d(TAG, "mSelectedKey = " + mSelectedKey + " key = " + key + " name = " + name +
+                         " selectable=" + selectable);

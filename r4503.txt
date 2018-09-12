@@ -1,0 +1,120 @@
+Index: frameworks/base/packages/Keyguard/libs/lockscreen-m-1.0.4-release.jar
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 4502)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 4503)
+@@ -721,6 +721,16 @@
+         }                            }
+ 
+     };
++	
++	//Begin added by zengjie for XR5451355 on 11/27/17
++    protected void cancelNotificationsShown(String keys) {
++        try {
++            mNotificationListener.cancelNotification(keys);
++        } catch (RuntimeException e) {
++            Log.d(TAG, "failed cancelNotificationsShown: ", e);
++        }
++    }
++    //End added by zengjie for XR5451355 on 11/27/17
+ 
+     private void updateCurrentProfilesCache() {
+         synchronized (mCurrentProfiles) {
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java	(revision 4502)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java	(revision 4503)
+@@ -2572,6 +2572,31 @@
+         }
+ 
+     }
++
++    /**
++     *
++     * @param notify wallpaper change
++     */
++    @Override
++    public void onWallpaperChange(){
++        //To do
++        Log.d(TAG,"onWallpaperChange  ");
++        mStatusBar.updateMediaMetaData(false,false);
++    }
++
++    //Begin added by zengjie for XR5451355 on 11/27/17
++    /**
++     *
++     * @param removed notifications applies on system
++     */
++    @Override
++    public void cancelNotification(String notificationKey){
++        //To do
++        Log.d(TAG,"cancelNotification  ");
++        mStatusBar.cancelNotification(notificationKey);
++    }
++    //End added by zengjie for XR5451355 on 11/27/17
++
+     public View getJoyContainer(){
+         if (mJoyContainer != null){
+             return mJoyContainer;
+@@ -2601,8 +2626,11 @@
+ 
+         }
+     }
+-	public void onWallpaperChange() {
++	
++	public void setNotificationImportance(String packageName, int uid, int flag) {
+ 		
+ 	}
++	
++	public void onInitCompleted() {}
+ 	//end added by zengjie for joylockscreen task 5429900 on 10/19/17
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 4502)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 4503)
+@@ -1870,6 +1870,12 @@
+         mNotificationData.updateRanking(ranking);
+         updateNotifications();
+     }
++	
++	//Begin added by zengjie for XR5451355 on 11/27/17
++    public void cancelNotification(String notificationKey){
++        super.cancelNotificationsShown(notificationKey);
++    }
++    //End added by zengjie for XR5451355 on 11/27/17
+ 
+     @Override
+     public void removeNotification(String key, RankingMap ranking) {
+Index: frameworks/base/packages/SystemUI/assets/lscreen.version
+===================================================================
+--- frameworks/base/packages/SystemUI/assets/lscreen.version	(revision 4502)
++++ frameworks/base/packages/SystemUI/assets/lscreen.version	(revision 4503)
+@@ -1 +1 @@
+-1071
+\ No newline at end of file
++1075
+\ No newline at end of file
+Index: vendor/branch/5058I/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058Y/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058J/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058A/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/branch/5058T/frameworks/base/packages/SystemUI/assets/LScreen.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream

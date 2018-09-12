@@ -1,0 +1,31 @@
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 7615)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 7616)
+@@ -739,20 +739,19 @@
+         }
+         String accountSignature = defaultSignature;
+         */
++		boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
+         mAccountSignature = (EditTextPreference) findPreference(PREFERENCE_SIGNATURE);
+ 		if(accountSignature==null || TextUtils.isEmpty(accountSignature)){
+-			accountSignature=SystemProperties.get("ro.business.name");;
++			if(bFrBug119814){
++				accountSignature=mContext.getResources().getString(R.string.preferences_signature_content_default);
++			}else{
++				accountSignature=SystemProperties.get("ro.business.name");;
++			}
+ 		}
+         mAccountSignature.setText(accountSignature);
+         mAccountSignature.setOnPreferenceChangeListener(this);
+-		boolean bFrBug119814 = getResources().getBoolean(com.android.internal.R.bool.FR_EMAIL_SAME_SIGNATURE_BUG);
+-		if(bFrBug119814){
+-			SettingsUtils.updatePreferenceSummary(mAccountSignature, accountSignature,
+-                R.string.preferences_signature_content_default);
+-		}else{
+         SettingsUtils.updatePreferenceSummary(mAccountSignature, accountSignature,
+                 R.string.preferences_signature_summary_not_set);
+-		}
+         /** M: Insert oof preference to fragment when the account is EasAccount @{ */
+         boolean showOof = true;
+         showOof = protocol.equalsIgnoreCase("eas");

@@ -1,0 +1,782 @@
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmFavoriteActivity.java
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmFavoriteActivity.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmFavoriteActivity.java	(revision 10171)
+@@ -241,15 +241,15 @@
+     }
+ 
+     private Cursor getData() {
+-        boolean bFrPj_5085I_alae = mContext.getResources().getBoolean(com.android.internal.R.bool.PJ_5058I_ALAE);
+-		if(bFrPj_5085I_alae){
++        //boolean bFrPj_5085I_alae = mContext.getResources().getBoolean(com.android.internal.R.bool.PJ_5058I_ALAE);
++		//if(bFrPj_5085I_alae){
+ 			Cursor cursor = mContext.getContentResolver().query(Station.CONTENT_URI,
+                 FmStation.COLUMNS, null, null, FmStation.Station.IS_FAVORITE + " desc," + FmStation.Station.FREQUENCY); // lance modify for bug 114548
+ 			return cursor;
+-		}
+-        Cursor cursor = mContext.getContentResolver().query(Station.CONTENT_URI,
+-                FmStation.COLUMNS, null, null, FmStation.Station.FREQUENCY);
+-        return cursor;
++		//}
++        //Cursor cursor = mContext.getContentResolver().query(Station.CONTENT_URI,
++        //        FmStation.COLUMNS, null, null, FmStation.Station.FREQUENCY);
++        //return cursor;
+     }
+ 
+     class MyFavoriteAdapter extends BaseAdapter {
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java	(revision 10171)
+@@ -76,8 +76,8 @@
+ import android.preference.PreferenceManager;
+ 
+ import android.telephony.SmsMessage;
++import java.util.Locale;
+ 
+-
+ public class DefaultOpComposeExt extends ContextWrapper implements IOpComposeExt {
+     private static final String TAG = "Mms/MmsComposeImpl";
+ 
+@@ -367,31 +367,53 @@
+ 
+     @Override
+     public int getSmsEncodingType(int encodingType, Context context) {
+-    	int type = SmsMessage.ENCODING_UNKNOWN;
+-    	SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+-    	String encodingTypeStr = null;
+-    	encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Auto formate");
+-    	if ("Unicode".equals(encodingTypeStr)) {
+-            type = SmsMessage.ENCODING_16BIT;
+-    	} else if ("GSM alphabet".equals(encodingTypeStr)) {
+-            type = SmsMessage.ENCODING_7BIT;
+-    	}
+-    	return type;
+-        //return encodingType;
++		boolean bFrSmsEncoding = context.getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++		if(bFrSmsEncoding){
++			int type = SmsMessage.ENCODING_UNKNOWN;
++			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++			String encodingTypeStr = null;
++			encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++			if ("Unicode".equals(encodingTypeStr)) {
++				type = SmsMessage.ENCODING_16BIT;
++			} else if ("GSM alphabet".equals(encodingTypeStr)) {
++				//Arabic sms must use 16bit, reference : FAQ17998
++				String language = Locale.getDefault().getLanguage();
++				if(language.equals("ar")|| language.equals("fa")){
++					type = SmsMessage.ENCODING_16BIT;
++				}else{
++					type = SmsMessage.ENCODING_7BIT;
++				}
++				//Arabic sms end by javen 2018.03.02
++			}
++			return type;
++		}else{
++			return encodingType;
++		}
+     }
+     
+     public static int getSmsEncodingTypes(int encodingType, Context context) {
+-    	int type = SmsMessage.ENCODING_UNKNOWN;
+-    	SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+-    	String encodingTypeStr = null;
+-    	encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Auto formate");
+-    	if ("Unicode".equals(encodingTypeStr)) {
+-            type = SmsMessage.ENCODING_16BIT;
+-    	} else if ("GSM alphabet".equals(encodingTypeStr)) {
+-            type = SmsMessage.ENCODING_7BIT;
+-    	}
+-    	return type;
+-        //return encodingType;
++		boolean bFrSmsEncoding = context.getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++		if(bFrSmsEncoding){
++			int type = SmsMessage.ENCODING_UNKNOWN;
++			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++			String encodingTypeStr = null;
++			encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++			if ("Unicode".equals(encodingTypeStr)) {
++				type = SmsMessage.ENCODING_16BIT;
++			} else if ("GSM alphabet".equals(encodingTypeStr)) {
++				//Arabic sms must use 16bit, reference : FAQ17998
++				String language = Locale.getDefault().getLanguage();
++				if(language.equals("ar")|| language.equals("fa")){
++					type = SmsMessage.ENCODING_16BIT;
++				}else{
++					type = SmsMessage.ENCODING_7BIT;
++				}
++				//Arabic sms end by javen 2018.03.02
++			}
++			return type;
++		}else{
++			return encodingType;
++		}
+     }
+ 
+     @Override
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java	(revision 10171)
+@@ -268,8 +268,13 @@
+                     = (PreferenceCategory) findPreference("pref_key_sms_settings");
+             mSmsInputMode = (ListPreference) findPreference(SMS_INPUT_MODE);
+             if (mSmsInputMode != null) {
+-                //smsCategory.removePreference(mSmsInputMode);
+-                mSmsInputMode.setOnPreferenceChangeListener(this);
++				boolean bFrSmsEncoding = getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++				if(bFrSmsEncoding){
++					mSmsInputMode.setOnPreferenceChangeListener(this);
++				}else{
++					smsCategory.removePreference(mSmsInputMode);
++				}
++                
+             }
+         }
+     }
+@@ -564,7 +569,10 @@
+         MmsConfig.setInitQuickText(true);
+ 
+         mOpSmsPreferenceActivityExt.restoreDefaultPreferences(this, editor);
+-        editor.putString(SMS_INPUT_MODE, "Auto formate"); // Add this
++		boolean bFrSmsEncoding = getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++		if(bFrSmsEncoding){
++			editor.putString(SMS_INPUT_MODE, "Automatic"); // Add this
++		}
+         editor.apply();
+         setPreferenceScreen(null);
+         setMessagePreferences();
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java	(revision 10171)
+@@ -1128,7 +1128,7 @@
+             if (mSlideshow != null && mSlideshow.size() > 0) {
+                 /// M: Code analyze 034, For new feature ALPS00231349,  add vCard support. @{
+                 if (mOpWorkingMessageExt.removeAllAttachFiles()) {
+-                    mSlideshow.removeAllAttachFiles();
++                    //mSlideshow.removeAllAttachFiles();//lance modify for bug 117676
+                 }
+                 mSlideshow.clear();
+                 mSlideshow = null;
+@@ -1181,7 +1181,12 @@
+         }
+ 
+         // Remove any previous attachments.
+-        removeSlideAttachments(slide);
++        //lance modify for bug 117676 @{
++        //removeSlideAttachments(slide);
++        slide.removeImage();
++        slide.removeVideo();
++        slide.removeAudio();
++        // @}
+ 
+         slide.add(media);
+ 
+@@ -1254,7 +1259,7 @@
+         slide.add(media);
+ 
+         /// M: for vcard, since we append a media, remove vCard
+-        removeAllFileAttaches();
++        //removeAllFileAttaches(); //lance modify for bug 117676
+ 
+         // For video and audio, set the duration of the slide to
+         // that of the attachment.
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageUtils.java
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageUtils.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageUtils.java	(revision 10171)
+@@ -798,7 +798,7 @@
+ 
+     public static void capturePicture(Activity activity, int requestCode) {
+         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++     //   intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+         intent.putExtra(MediaStore.EXTRA_OUTPUT, TempFileProvider.SCRAP_CONTENT_URI);
+         activity.startActivityForResult(intent, requestCode);
+     }
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 10171)
+@@ -3727,6 +3727,10 @@
+                 invalidateOptionsMenu();
+             }
+         }
++
++        if (mWorkingMessage != null && mWorkingMessage.getConversation().hasDraft()) {
++            loadDraft();
++        }
+     }
+ 
+     @Override
+@@ -4897,6 +4901,9 @@
+             if (!isSubjectEditorVisible()) {
+                 menu.add(0, MENU_ADD_SUBJECT, 0,
+                         R.string.add_subject).setIcon(R.drawable.ic_menu_edit);
++            }else {
++                menu.add(0, MENU_ADD_SUBJECT, 0,
++                        R.string.remove_subject).setIcon(R.drawable.ic_menu_edit);
+             }
+ 
+             menu.add(0, MENU_ADD_ATTACHMENT, 0, R.string.add_attachment)
+@@ -4962,20 +4969,26 @@
+ 
+         switch (item.getItemId()) {
+             case MENU_ADD_SUBJECT:
+-                showSubjectEditor(true);
+-                mWorkingMessage.setSubject("", true);
+-                /// M: Code analyze 052, Show input keyboard.@{
+-                mInputMethodManager.showSoftInput(
+-                        getCurrentFocus(), InputMethodManager.SHOW_IMPLICIT);
+-                /// @}
+-                updateSendButtonState();
+-                mSubjectTextEditor.requestFocus();
+-                break;
++                if(isSubjectEditorVisible()){
++                    mWorkingMessage.setSubject("", true);
++                    showSubjectEditor(false);
++                    break;
++                }else {
++                    showSubjectEditor(true);
++                    mWorkingMessage.setSubject("", true);
++                    /// M: Code analyze 052, Show input keyboard.@{
++                    mInputMethodManager.showSoftInput(
++                            getCurrentFocus(), InputMethodManager.SHOW_IMPLICIT);
++                    /// @}
++                    updateSendButtonState();
++                    mSubjectTextEditor.requestFocus();
++                    break;
++                }
+             case MENU_ADD_ATTACHMENT:
+                 // Launch the add-attachment list dialog
+                 /// M: Code analyze 051, Hide input keyboard.@{
+                 hideInputMethod();
+-                showAddAttachmentDialog(!mWorkingMessage.hasAttachedFiles());
++                showAddAttachmentDialog(/*!mWorkingMessage.hasAttachedFiles()*/true);//lance modify for bug 117676
+                 MmsLog.d(TAG, "Attach: showAddAttachmentDialog(!hasAttachedFiles)");
+                 break;
+             /// M: Code analyze 014, Add quick text. @{
+@@ -10031,11 +10044,14 @@
+             // if (mAttachmentTypeSelectorAdapter == null) {
+             // add for vcard, if there is a real slideshow, hide vCard
+             int mode = AttachmentTypeSelectorAdapter.MODE_WITH_SLIDESHOW;
+-            if (mWorkingMessage.hasSlideshow()) {
++            //lance modify for bug 117676 @{
++            mode |= AttachmentTypeSelectorAdapter.MODE_WITH_FILE_ATTACHMENT; 
++            /*if (mWorkingMessage.hasSlideshow()) {
+                 mode |= AttachmentTypeSelectorAdapter.MODE_WITHOUT_FILE_ATTACHMENT;
+             } else {
+                 mode |= AttachmentTypeSelectorAdapter.MODE_WITH_FILE_ATTACHMENT;
+-            }
++            }*/
++            // @}
+             if (MessageUtils.isVCalendarAvailable(ComposeMessageActivity.this)) {
+                 mode |= AttachmentTypeSelectorAdapter.MODE_WITH_VCALENDAR;
+             }
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 10171)
+@@ -434,7 +434,7 @@
+      * Notes:for CMCC customization,whether to enable SL automatically lanuch.
+      * default set false
+      */
+-    private static boolean mSlAutoLanuchEnabled = false;
++    private static boolean mSlAutoLanuchEnabled = true;
+     public static boolean getSlAutoLanuchEnabled() {
+         return mSlAutoLanuchEnabled;
+     }
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml	(revision 10170)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/AndroidManifest.xml	(revision 10171)
+@@ -465,6 +465,7 @@
+         <activity android:name=".bluetooth.DevicePickerActivity"
+                 android:theme="@style/Theme.SubSettingsDialogWhenLarge"
+                 android:label="@string/device_picker"
++                android:configChanges="orientation|screenSize"
+                 android:clearTaskOnLaunch="true">
+             <intent-filter>
+                 <action android:name="android.bluetooth.devicepicker.action.LAUNCH" />
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/DateTimeSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/DateTimeSettings.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/DateTimeSettings.java	(revision 10171)
+@@ -223,8 +223,15 @@
+         // We use 13:00 so we can demonstrate the 12/24 hour options.
+         mDummyDate.set(now.get(Calendar.YEAR), 11, 31, 13, 0, 0);
+         Date dummyDate = mDummyDate.getTime();
+-        //mDatePref.setSummary(DateFormat.getLongDateFormat(context).format(now.getTime()));
+-        mDatePref.setSummary(dateToStrLong(now.getTime()));
++		//Add feature [FR_DATEFORMAT] for different date format type {
++		boolean bDateFr = getResources().getBoolean(com.android.internal.R.bool.FR_DATEFORMAT);
++		if(bDateFr){
++			mDatePref.setSummary(dateToStrLong(now.getTime()));
++		}else{
++			mDatePref.setSummary(DateFormat.getLongDateFormat(context).format(now.getTime()));
++		}
++		//End feature [FR_DATEFORMAT] by javen 2018.01.29
++        
+         mTimePref.setSummary(DateFormat.getTimeFormat(getActivity()).format(now.getTime()));
+         mTimeZone.setSummary(ZoneGetter.getTimeZoneOffsetAndName(now.getTimeZone(), now.getTime(),context));
+         mTime24Pref.setSummary(DateFormat.getTimeFormat(getActivity()).format(dummyDate));
+Index: vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/compose/ComposeActivity.java	(revision 10171)
+@@ -2251,6 +2251,15 @@
+     }
+ 
+     /**
++     * @return the authority of EmailAttachmentProvider for this app. should be overridden in
++     * concrete app implementations. can't be known here because this project doesn't know about
++     * that sort of thing.
++     */
++    protected String getEmailAttachmentProviderAuthority() {
++        throw new UnsupportedOperationException("unimplemented, EmailAttachmentProvider unknown");
++    }
++
++    /**
+      * Helper function to handle a list of uris to attach.
+      * @return the total size of all successfully attached files.
+      */
+@@ -2271,7 +2280,9 @@
+                             }
+                     } else if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
+                         // disallow attachments from our own EmailProvider (b/27308057)
+-                        if (getEmailProviderAuthority().equals(uri.getAuthority())) {
++                        if (getEmailProviderAuthority().equals(uri.getAuthority())
++                                || getEmailAttachmentProviderAuthority().equals(
++                                        uri.getAuthority()))  {
+                             showErrorToast(getString(R.string.attachment_permission_denied));
+                             Analytics.getInstance().sendEvent(ANALYTICS_CATEGORY_ERRORS,
+                                     "send_intent_attachment", "email_provider", 0);
+Index: vendor/branch/5058I_ALRU/build/core/version_defaults.mk
+===================================================================
+--- vendor/branch/5058I_ALRU/build/core/version_defaults.mk	(revision 10170)
++++ vendor/branch/5058I_ALRU/build/core/version_defaults.mk	(revision 10171)
+@@ -114,7 +114,7 @@
+     #  It must be of the form "YYYY-MM-DD" on production devices.
+     #  It must match one of the Android Security Patch Level strings of the Public Security Bulletins.
+     #  If there is no $PLATFORM_SECURITY_PATCH set, keep it empty.
+-    PLATFORM_SECURITY_PATCH := 2018-02-05
++    PLATFORM_SECURITY_PATCH := 2018-03-05
+ endif
+ 
+ ifeq "" "$(PLATFORM_BASE_OS)"
+Index: vendor/branch/5058I_ALRU/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058I_ALRU/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 10170)
++++ vendor/branch/5058I_ALRU/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 10171)
+@@ -276,7 +276,7 @@
+ MTK_CHKIMGSIZE_SUPPORT = yes
+ MTK_CIP_SUPPORT = no
+ MTK_CLEARMOTION_SUPPORT = no
+-MTK_CMAS_SUPPORT = no
++MTK_CMAS_SUPPORT = yes
+ MTK_CMCC_FT_PRECHECK_SUPPORT = no
+ MTK_CMCC_RCS_QRCODE_SUPPORT = no
+ MTK_COMBO_CHIP = CONSYS_6739
+@@ -355,7 +355,7 @@
+ MTK_EPDG_SUPPORT = yes
+ MTK_ESN_TRACK_APP = no
+ MTK_ETHERNET_SUPPORT = no
+-MTK_ETWS_SUPPORT = yes
++MTK_ETWS_SUPPORT = no
+ MTK_EXTERNAL_DONGLE_SUPPORT = no
+ MTK_EXTERNAL_LDO = no
+ MTK_EXTERNAL_MODEM_SLOT = 0
+@@ -723,4 +723,6 @@
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ TCL_LED_SUPPORT = no
+ OP01SOUNDRECORDER_APP = yes
++BOOT_DEFAULT_LOCALE_BY_SIM = yes
++TCT_DIAGNOSTIC = yes
+ CUSTOM_CONTACTS_PERMISSION = yes
+\ No newline at end of file
+Index: vendor/branch/5058I_ALRU/frameworks/opt/net/ims/src/java/com/android/ims/ImsManager.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/opt/net/ims/src/java/com/android/ims/ImsManager.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/frameworks/opt/net/ims/src/java/com/android/ims/ImsManager.java	(revision 10171)
+@@ -1227,6 +1227,14 @@
+             }
+         }
+ 
++        // Only need update main phone for single VoLTE.
++        if (SystemProperties.getInt(MULTI_IMS_SUPPORT, 1) == 1) {
++            if (phoneId != getMainCapabilityPhoneId(context)) {
++                log("updateImsServiceConfig: Not update subordinate SIM ims config:" + phoneId);
++                return;
++            }
++        }
++
+         final ImsManager imsManager = ImsManager.getInstance(context, phoneId);
+         if (imsManager != null && (!imsManager.mConfigUpdated || force)) {
+             log("updateImsServiceConfig() phoneId: " + phoneId + " force: " + force);
+@@ -2722,6 +2730,9 @@
+                             phoneId)) ?
+                             ImsConfig.FeatureValueConstants.OFF :
+                             ImsConfig.FeatureValueConstants.ON;
++            if (isSubOfDualCtSim(context, phoneId)) {
++                defaultValue = ImsConfig.FeatureValueConstants.ON;
++            }
+             setSettingValueByKey(context, VOLTE_SETTING,
+                     defaultValue, phoneId);
+ 
+@@ -2756,6 +2767,10 @@
+     }
+ 
+     private boolean isDataEnabled() {
++        if (SystemProperties.getInt(MULTI_IMS_SUPPORT, 1) == 1) {
++            int phoneId = getMainCapabilityPhoneId(mContext);
++            return SystemProperties.getBoolean(DATA_ENABLED_PROP[phoneId], true);
++        }
+         return SystemProperties.getBoolean(DATA_ENABLED_PROP[mPhoneId], true);
+     }
+ 
+@@ -3203,4 +3218,33 @@
+         return false;
+     }
+     /// @}
++
++    /// M: Add for CT+CT, if suboridante is CT 4G, its volte setting shall be on. @{
++    private static boolean isSubOfDualCtSim(Context context, int phoneId) {
++        if (SystemProperties.get("persist.mtk_ct_volte_support").equals("1")) {
++            int mainPhoneId = getMainCapabilityPhoneId(context);
++            // Only need check suboridante SIM
++            if (mainPhoneId != phoneId) {
++                String sim1IccId = SystemProperties.get("ril.iccid.sim1", "N/A");
++                String sim2IccId = SystemProperties.get("ril.iccid.sim2", "N/A");
++                if (isOp09SimCard(sim1IccId) && isOp09SimCard(sim2IccId)) {
++                    log("Two CT card case");
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
++    private static boolean isOp09SimCard(String iccId) {
++        boolean isOp09Card = false;
++        if (iccId.startsWith("898603")
++                || iccId.startsWith("898611")
++                || iccId.startsWith("8985302")
++                || iccId.startsWith("8985307")) {
++            isOp09Card = true;
++        }
++        return isOp09Card;
++    }
++    /// @}
+ }
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPasswordView.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPasswordView.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPasswordView.java	(revision 10171)
+@@ -18,6 +18,9 @@
+ 
+ import android.content.Context;
+ import android.graphics.Rect;
++import android.graphics.drawable.Drawable;
++import android.graphics.drawable.InsetDrawable;
++import android.provider.Settings;
+ import android.text.Editable;
+ import android.text.InputType;
+ import android.text.TextUtils;
+@@ -34,6 +37,8 @@
+ import android.view.inputmethod.InputMethodManager;
+ import android.view.inputmethod.InputMethodSubtype;
+ import android.widget.TextView;
++import android.widget.ImageView;
++
+ import android.widget.TextView.OnEditorActionListener;
+ 
+ import com.android.internal.widget.TextViewInputDisabler;
+@@ -64,6 +69,7 @@
+ 
+     private Interpolator mLinearOutSlowInInterpolator;
+     private Interpolator mFastOutLinearInInterpolator;
++	private ImageView mFaceUnlockView;
+ 
+     public KeyguardPasswordView(Context context) {
+         this(context, null);
+@@ -227,6 +233,23 @@
+                 updateSwitchImeButton();
+             }
+         }, DELAY_MILLIS_TO_REEVALUATE_IME_SWITCH_ICON);
++		mFaceUnlockView=(ImageView)findViewById(R.id.face_unlock);
++		int stateType=Settings.System.getInt(getContext().getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
++		Log.v("yujunjie", "KeyguardPatternView:onFinishInflate()...stateType =" + stateType);
++		if(stateType==1){
++			int iconHeight = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_height);
++            int iconWidth = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_width);
++			mFaceUnlockView.setVisibility(View.VISIBLE);
++			int iconRes=com.android.internal.R.drawable.ic_account_circle;
++			Drawable icon = getContext().getDrawable(iconRes);
++			icon = new IntrinsicSizeDrawable(icon, iconWidth, iconHeight);
++			mFaceUnlockView.setImageDrawable(icon);
++		}else{
++			mFaceUnlockView.setVisibility(View.GONE);
++			mFaceUnlockView.setImageDrawable(null);
++		}
+     }
+ 
+     @Override
+@@ -371,4 +394,25 @@
+         }
+         return false;
+     }
++	private static class IntrinsicSizeDrawable extends InsetDrawable {
++
++        private final int mIntrinsicWidth;
++        private final int mIntrinsicHeight;
++
++        public IntrinsicSizeDrawable(Drawable drawable, int intrinsicWidth, int intrinsicHeight) {
++            super(drawable, 0);
++            mIntrinsicWidth = intrinsicWidth;
++            mIntrinsicHeight = intrinsicHeight;
++        }
++
++        @Override
++        public int getIntrinsicWidth() {
++            return mIntrinsicWidth;
++        }
++
++        @Override
++        public int getIntrinsicHeight() {
++            return mIntrinsicHeight;
++        }
++    }
+ }
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/EmergencyButton.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/EmergencyButton.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/EmergencyButton.java	(revision 10171)
+@@ -171,7 +171,12 @@
+ 
+         /// M: Save secure query result here, when lockscreen is created, secure result should
+         /// stay unchanged @{
+-        mIsSecure = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser());
++        boolean bFrEmcOn = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_EMC_CALL_ALWAYS_ON_SECRITY);
++        if(bFrEmcOn){
++			mIsSecure = true;
++		}else{
++			mIsSecure = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser());
++		}
+         /// @}
+         setOnLongClickListener(new OnLongClickListener() {
+             @Override
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPINView.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPINView.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPINView.java	(revision 10171)
+@@ -22,7 +22,16 @@
+ import android.view.View;
+ import android.view.ViewGroup;
+ import android.view.animation.AnimationUtils;
++import android.graphics.drawable.Drawable;
++import android.graphics.drawable.InsetDrawable;
++import android.provider.Settings;
++import android.widget.ImageView;
++import android.view.animation.Interpolator;
++import com.android.settingslib.animation.AppearAnimationCreator;
++import android.util.Log;
+ 
++
++
+ import com.android.settingslib.animation.AppearAnimationUtils;
+ import com.android.settingslib.animation.DisappearAnimationUtils;
+ 
+@@ -43,6 +52,7 @@
+     private int mDisappearYTranslation;
+     private View[][] mViews;
+     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
++	private ImageView mFaceUnlockView;
+ 
+     public KeyguardPINView(Context context) {
+         this(context, null);
+@@ -120,8 +130,25 @@
+         mPasswordEntry.setOnTextChangedListener(new PasswordTextView.onTextChangedListener() {
+             public void onTextChanged() {
+                 verifyPasswordAndUnlockWithTextWatcher();
++				
+             }
+         });
++		mFaceUnlockView=(ImageView)findViewById(R.id.face_unlock);
++		int stateType=Settings.System.getInt(getContext().getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
++		if(stateType==1){
++			int iconHeight = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_height);
++            int iconWidth = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_width);
++			mFaceUnlockView.setVisibility(View.VISIBLE);
++			int iconRes=com.android.internal.R.drawable.ic_account_circle;
++			Drawable icon = getContext().getDrawable(iconRes);
++			icon = new IntrinsicSizeDrawable(icon, iconWidth, iconHeight);
++			mFaceUnlockView.setImageDrawable(icon);
++		}else{
++			mFaceUnlockView.setVisibility(View.GONE);
++			mFaceUnlockView.setImageDrawable(null);
++		}
+     }
+ 
+     @Override
+@@ -169,6 +196,8 @@
+                         }
+                     }
+                 });
++		 mAppearAnimationUtils.createAnimation(mFaceUnlockView, 0/* delay */, 280/* duration */, mDisappearYTranslation,
++                   false, mDisappearAnimationUtils.getInterpolator(), null);
+         return true;
+     }
+ 
+@@ -200,4 +229,25 @@
+             mSecurityMessageDisplay.setMessage(R.string.voice_unlock_media_playing, true);
+         }
+     }
++	private static class IntrinsicSizeDrawable extends InsetDrawable {
++
++        private final int mIntrinsicWidth;
++        private final int mIntrinsicHeight;
++
++        public IntrinsicSizeDrawable(Drawable drawable, int intrinsicWidth, int intrinsicHeight) {
++            super(drawable, 0);
++            mIntrinsicWidth = intrinsicWidth;
++            mIntrinsicHeight = intrinsicHeight;
++        }
++
++        @Override
++        public int getIntrinsicWidth() {
++            return mIntrinsicWidth;
++        }
++
++        @Override
++        public int getIntrinsicHeight() {
++            return mIntrinsicHeight;
++        }
++    }
+ }
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java	(revision 10171)
+@@ -304,7 +304,8 @@
+ 
+         // Recycle the bitmap data
+         if (image != null) {
+-            image.recycle();
++            //image.recycle();
++			image = null;
+         }
+ 
+         return null;
+@@ -573,6 +574,7 @@
+         }
+ 
+         // Take the screenshot
++		mScreenBitmap = null;
+         mScreenBitmap = SurfaceControl.screenshot((int) dims[0], (int) dims[1]);
+         if (mScreenBitmap == null) {
+             notifyScreenshotError(mContext, mNotificationManager,
+@@ -592,7 +594,8 @@
+             c.drawBitmap(mScreenBitmap, 0, 0, null);
+             c.setBitmap(null);
+             // Recycle the previous bitmap
+-            mScreenBitmap.recycle();
++            //mScreenBitmap.recycle();
++			mScreenBitmap = null;
+             mScreenBitmap = ss;
+         }
+ 
+@@ -599,7 +602,8 @@
+         if (width != mDisplayMetrics.widthPixels || height != mDisplayMetrics.heightPixels) {
+             // Crop the screenshot to selected region
+             Bitmap cropped = Bitmap.createBitmap(mScreenBitmap, x, y, width, height);
+-            mScreenBitmap.recycle();
++            //mScreenBitmap.recycle();
++			mScreenBitmap = null;
+             mScreenBitmap = cropped;
+         }
+ 
+@@ -696,6 +700,7 @@
+         }
+ 
+         mWindowManager.addView(mScreenshotLayout, mWindowLayoutParams);
++		saveScreenshotInWorkerThread(finisher);
+         ValueAnimator screenshotDropInAnim = createScreenshotDropInAnimation();
+         ValueAnimator screenshotDropBTAnim = createScreenshotDropBettenAnimation();
+         ValueAnimator screenshotFadeOutAnim = createScreenshotDropOutAnimation(w, h,
+@@ -706,11 +711,11 @@
+             @Override
+             public void onAnimationEnd(Animator animation) {
+                 // Save the screenshot once we have a bit of time now
+-                saveScreenshotInWorkerThread(finisher);
++                //saveScreenshotInWorkerThread(finisher);
+                 mWindowManager.removeView(mScreenshotLayout);
+ 
+                 // Clear any references to the bitmap
+-                mScreenBitmap = null;
++				//	mScreenBitmap = null;
+                 mScreenshotView.setImageBitmap(null);
+             }
+         });
+@@ -790,6 +795,7 @@
+ 
+     private ValueAnimator createScreenshotDropBettenAnimation() {
+         final ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f);
++        Resources r = mContext.getResources();
+         anim.setDuration(2500);
+         anim.addListener(new AnimatorListenerAdapter() {
+ 
+@@ -810,7 +816,7 @@
+                         Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                         shareIntent.setType("image/png");
+                         shareIntent.putExtra(Intent.EXTRA_STREAM, mScreenshotUri);
+-                        Intent chooser = Intent.createChooser(shareIntent, "Share screen shot");
++                            Intent chooser = Intent.createChooser(shareIntent, r.getString(R.string.Share_screen_shot));
+                         if (shareIntent.resolveActivity(mContext.getPackageManager()) != null) {
+                             anim.end();
+                             mContext.startActivity(chooser);
+@@ -821,7 +827,6 @@
+                 mScreenshotCrop.setOnClickListener(new View.OnClickListener() {
+                     @Override
+                     public void onClick(View view) {
+-                        //ͼ��򿪽ӿ�
+ 
+                         Intent intent = new Intent(Intent.ACTION_EDIT);
+                         intent.setDataAndType(mScreenshotUri, "image/*");
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 10171)
+@@ -2087,7 +2087,7 @@
+             boolean disablebyPolicy = !adminAllowsUnredactedNotifications(ent.notification.getUserId());
+             String notificationHiddenText = mContext.getString(R.string.notification_hidden_by_policy_text);
+             if(disablebyPolicy){
+-                if (ent.notification.getPackageName().equals("com.android.cts.verifier")){
++                if (ent.notification.getPackageName().equals("com.android.cts.verifier") && SystemProperties.getBoolean("ro.tcl.lscreen", false)){
+                     JoyLscreenProxy.getLScreen().onNotificationRemoved(ent.notification);
+                     JoyLscreenProxy.getLScreen().onNotificationUpdate(notificationHiddenText,ent.notification);
+                 }
+Index: vendor/branch/5058I_ALRU/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java	(revision 10170)
++++ vendor/branch/5058I_ALRU/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java	(revision 10171)
+@@ -445,7 +445,6 @@
+         } else if (action.equals(Intent.ACTION_AIRPLANE_MODE_CHANGED)) {
+             refreshLocale();
+             boolean airplaneMode = intent.getBooleanExtra("state", false);
+-            updateAirplaneMode(airplaneMode, false);
+ 			boolean bFrBug119376 = context.getResources().getBoolean(com.android.internal.R.bool.FR_GPS_AIRPLANE_OFF_BUG);
+ 			if(airplaneMode && bFrBug119376){
+ 				nGpsState = Settings.Secure.getInt(context.getContentResolver(), Settings.Secure.LOCATION_MODE, nGpsState);
+@@ -456,6 +455,7 @@
+ 					nGpsState = ERR_GPS_DO_NONE;
+ 				}
+ 			}
++			updateAirplaneMode(airplaneMode, false);
+         } else if (action.equals(TelephonyIntents.ACTION_DEFAULT_VOICE_SUBSCRIPTION_CHANGED)) {
+             // We are using different subs now, we might be able to make calls.
+             recalculateEmergency();

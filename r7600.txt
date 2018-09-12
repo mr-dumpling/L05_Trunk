@@ -1,0 +1,41 @@
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 7599)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 7600)
+@@ -2813,6 +2813,8 @@
+   <java-symbol type="bool" name="FR_SMS_ENCODING" />
+   <java-symbol type="bool" name="FR_MUSIC_STOP_FM_DELETE_BUG" />
+   <java-symbol type="bool" name="FR_EMAIL_SAME_SIGNATURE_BUG" />
++  <java-symbol type="bool" name="FR_GPS_AIRPLANE_OFF_BUG" />
++  <java-symbol type="bool" name="FR_EMC_CALL_ALWAYS_ON_SECRITY" />
+   <java-symbol type="bool" name="FR_OTHER_TEST" />
+   <!-- feature techain end -->
+ </resources>
+Index: frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- frameworks/base/core/res/res/values/features.xml	(revision 7599)
++++ frameworks/base/core/res/res/values/features.xml	(revision 7600)
+@@ -24,7 +24,7 @@
+ 	<bool name="FR_GPS_AIRPLANE_OFF_BUG">false</bool>
+ 	
+ 	<!-- feature for emc call button on even on screen on secrity -->
+-	<!--<bool name="FR_EMC_CALL_ALWAYS_ON_SECRITY">false</bool>-->
++	<bool name="FR_EMC_CALL_ALWAYS_ON_SECRITY">false</bool>
+ 	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">false</bool>
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java	(revision 7599)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java	(revision 7600)
+@@ -434,6 +434,10 @@
+             refreshLocale();
+             boolean airplaneMode = intent.getBooleanExtra("state", false);
+             updateAirplaneMode(airplaneMode, false);
++			boolean bFrBug119376 = context.getResources().getBoolean(com.android.internal.R.bool.FR_GPS_AIRPLANE_OFF_BUG);
++			if(airplaneMode && bFrBug119376){
++				Settings.Secure.putInt(context.getContentResolver(), Settings.Secure.LOCATION_MODE, android.provider.Settings.Secure.LOCATION_MODE_OFF);
++			}
+         } else if (action.equals(TelephonyIntents.ACTION_DEFAULT_VOICE_SUBSCRIPTION_CHANGED)) {
+             // We are using different subs now, we might be able to make calls.
+             recalculateEmergency();

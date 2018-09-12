@@ -1,0 +1,164 @@
+Index: AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/common/service/nvram/include/nvram_main.h
+===================================================================
+--- AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/common/service/nvram/include/nvram_main.h	(revision 11539)
++++ AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/common/service/nvram/include/nvram_main.h	(revision 11540)
+@@ -327,6 +327,8 @@
+      ****************************************************************************/
+ 
+     extern nvram_context_type *nvram_ptr;
++    extern kal_bool is_sml_lid_exist();
++    extern void check_sml_lid_exist();
+ 
+     extern void nvram_task_main(task_entry_struct *task_entry_ptr);
+     extern void nvram_write_imei_handler(ilm_struct *ilm_ptr);
+Index: AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/common/service/nvram/src/nvram_main.c
+===================================================================
+--- AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/common/service/nvram/src/nvram_main.c	(revision 11539)
++++ AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/common/service/nvram/src/nvram_main.c	(revision 11540)
+@@ -1087,8 +1087,11 @@
+                 kal_uint8 const *diskversion);
+ 
+ extern void MMICheckDiskDisplay(void);
++/**
++ * see if sml lid exist
++ */
++kal_bool isSmlLidExist = KAL_FALSE;
+ 
+-
+ extern void *kal_tmp_mem_alloc(kal_uint32 size);
+ extern void kal_tmp_mem_free(void *mem_ptr);
+ extern kal_char *release_verno(void);
+@@ -2912,9 +2915,62 @@
+ }
+ 
+ 
++/*****************************************************************************
++ * FUNCTION
++ *  is_sml_lid_exist
++ * DESCRIPTION
++ *  check the SIM Lock Lid whether exist
++ * PARAMETERS
++ *  void
++ * RETURNS
++ *  return true means exist
++ *****************************************************************************/
++kal_bool is_sml_lid_exist()
++{
++    return isSmlLidExist;
++}
+ 
+ /*****************************************************************************
+  * FUNCTION
++ *  check_sml_lid_exist
++ * DESCRIPTION
++ *  check the SIM Lock Lid NVRAM_EF_SML_LID, if exist, set isSmlLidExist as true
++ * PARAMETERS
++ *  void
++ * RETURNS
++ *  void
++ *****************************************************************************/
++void check_sml_lid_exist()
++{
++    /*----------------------------------------------------------------*/
++    /* Local Variables                                                */
++    /*----------------------------------------------------------------*/
++    nvram_ltable_entry_struct *ldi = NULL;
++    NVRAM_FILE_NAME filename_sml;
++    kal_wchar file_name[32];
++    nvram_folder_enum folder_index;
++    /*----------------------------------------------------------------*/
++    /* Code Body                                                      */
++    /*----------------------------------------------------------------*/
++    nvram_util_get_data_item(&ldi, NVRAM_EF_SML_LID);
++    folder_index = nvram_query_folder_index(ldi->category);
++    nvram_util_make_lid_filename(ldi, filename_sml, KAL_TRUE);
++    nvram_query_file_name(folder_index, filename_sml, file_name);
++
++    FS_HANDLE handle = FS_Open((const kal_wchar*) file_name,
++                        FS_READ_ONLY);
++    if (handle > FS_NO_ERROR) {
++        isSmlLidExist = KAL_TRUE;
++    }
++    FS_Close(handle);
++}
++
++
++
++
++
++/*****************************************************************************
++ * FUNCTION
+  *  nvram_init
+  * DESCRIPTION
+  *  This is init() function of NVRAM module.
+@@ -3016,6 +3072,7 @@
+     #if defined (__NVRAM_UT_TEST__)
+         nvram_boot_trace |= BOOT_TRACE_DRV_UNFORMATTED;
+     #endif
++        check_sml_lid_exist();
+         nvram_trace(TRACE_FUNC, FUNC_NVRAM_INIT, 1, 0);
+         nvram_ptr->sw_status |= NVRAM_SW_EMPTY_FAT;
+         nvram_drv_fat_init_start();
+Index: AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/common/service/nvram/src/nvram_io.c
+===================================================================
+--- AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/common/service/nvram/src/nvram_io.c	(revision 11539)
++++ AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/common/service/nvram/src/nvram_io.c	(revision 11540)
+@@ -1814,14 +1814,20 @@
+ 
+         nvram_trace(TRACE_FUNC, IO_READ_DATA_ITEM_RESULT, ldi->LID, status, __LINE__);
+     
+-        if(NVRAM_IS_ATTR_FAULT_ASSERT(ldi->attr))
++        //Begin added by zubin.chen.hz for simlock on 2017/10/19
++        if(NVRAM_IS_ATTR_FAULT_ASSERT(ldi->attr)
++          //#ifdef JRD_SML
++            && (NVRAM_EF_SML_LID != ldi->LID)
++          //#endif
++        )
+         {
+             kal_prompt_trace(MOD_NVRAM, "NVRAM ASSERT ERROR NVRAM_LOC_READ_IMPORTANT_DATA_FAIL:%d\n\r", DISPLAY_ERROR(status));
+             kal_prompt_trace(MOD_NVRAM, "LID:%d, total_records:%d, record_size:%d\n\r", ldi->LID, ldi->total_records, ldi->size);
+             kal_prompt_trace(MOD_NVRAM, "category:%x, attr:%x\n\r", ldi->category, ldi->attr);
+             kal_prompt_trace(MOD_NVRAM, "fileprefix:%s, fileverno:%s\n\r", ldi->fileprefix, ldi->fileverno);
+-            //NVRAM_EXT_ASSERT(KAL_FALSE, DISPLAY_ERROR(status), NVRAM_LOC_READ_IMPORTANT_DATA_FAIL, ldi->LID);
++            NVRAM_EXT_ASSERT(KAL_FALSE, DISPLAY_ERROR(status), NVRAM_LOC_READ_IMPORTANT_DATA_FAIL, ldi->LID);
+         }
++        //End added by zubin.chen.hz for simlock on 2017/10/19
+ 
+         if((status = nvram_reset_one_data_item(ldi, 1, ldi->total_records)) == NVRAM_IO_ERRNO_OK)    
+         {
+@@ -2612,9 +2618,14 @@
+             }
+         }
+ #endif
++        //Begin added by zubin.chen.hz for simlock on 2017/10/19
+ 
+         /* IMEI and SML */
+-        if (NVRAM_IS_ATTR_FAULT_ASSERT(ldi->attr))
++        if (NVRAM_IS_ATTR_FAULT_ASSERT(ldi->attr)
++          //#ifdef JRD_SML
++            && (NVRAM_EF_SML_LID != ldi->LID)
++          //#endif
++        )
+         {
+             kal_prompt_trace(MOD_NVRAM, "NVRAM ASSERT ERROR NVRAM_LOC_WRITE_IMPORTANT_DATA_FAIL:%d\n\r", DISPLAY_ERROR(status));
+             kal_prompt_trace(MOD_NVRAM, "LID:%d, total_records:%d, record_size:%d\n\r", ldi->LID, ldi->total_records, ldi->size);
+@@ -2623,6 +2634,7 @@
+             NVRAM_EXT_ASSERT (KAL_FALSE, DISPLAY_ERROR(status),NVRAM_LOC_WRITE_IMPORTANT_DATA_FAIL , ldi->LID);
+             return status;
+         }
++        //End added by zubin.chen.hz for simlock on 2017/10/19
+ 
+ 
+         nvram_trace(TRACE_FUNC, IO_WRITE_DATA_ITEM_RESULT, ldi->LID, status, __LINE__, is_init);
+@@ -3451,6 +3463,11 @@
+ 
+     do
+     {
++    	  //Begin added by cong.tao.hz for XR5847466 on 2018/01/13
++    	  if (excluded == 0 && is_sml_lid_exist() == KAL_TRUE && NVRAM_EF_SML_LID == ldi->LID) {
++    	      continue;
++    	  }
++    	  //End added by cong.tao.hz for XR5847466 on 2018/01/13
+         if (ldi->category & excluded)
+         {
+             continue;

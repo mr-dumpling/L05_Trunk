@@ -1,0 +1,71 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/settings/BrightnessController.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/settings/BrightnessController.java	(revision 4171)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/settings/BrightnessController.java	(revision 4172)
+@@ -301,11 +301,17 @@
+                    
+                 }
+                 updateIcon(automatic);
+-
++				
++				sendNotifyinfo(context);
+             }
+         });
+     }
+ 
++	private void sendNotifyinfo(Context context) {
++        Intent intent = new Intent("com.android.techainsh.automatic");
++        context.sendBroadcast(intent);
++    }
++	
+     public void setBackgroundLooper(Looper backgroundLooper) {
+         mBackgroundHandler = new Handler(backgroundLooper);
+     }
+Index: packages/apps/Settings/src/com/android/settings/DisplaySettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 4171)
++++ packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 4172)
+@@ -107,6 +107,9 @@
+ 	private final String OPEN_ACTION = "com.android.settings.nightmode.open";
+ 	private final String CLOSE_ACTION ="com.android.settings.nightmode.close";
+ 
++	private IntentFilter mIntentFilter = new IntentFilter();
++    private MyBroadcastReceiver mBroadcastReceiver = new MyBroadcastReceiver();
++	
+     private Preference mFontSizePref;
+     private Preference mCustomFontSizePref;
+ 
+@@ -299,8 +302,17 @@
+ 		filter.addAction(OPEN_ACTION);
+ 		filter.addAction(CLOSE_ACTION);
+         activity.registerReceiver(myReceiver,filter);
++		
++		mIntentFilter.addAction("com.android.techainsh.automatic");
+     }
+ 
++	private class MyBroadcastReceiver extends BroadcastReceiver {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            updateState();
++        }
++    }
++	
+     private static boolean allowAllRotations(Context context) {
+         return Resources.getSystem().getBoolean(
+                 com.android.internal.R.bool.config_allowAllRotations);
+@@ -398,6 +410,7 @@
+         }else{
+             mNightModePreference.setSummary(R.string.mode_off);
+         }
++		getActivity().registerReceiver(mBroadcastReceiver, mIntentFilter);
+     }
+ 
+     /// M: add MTK extended @{
+@@ -405,6 +418,7 @@
+     public void onPause() {
+         super.onPause();
+         mDisplaySettingsExt.onPause();
++		getActivity().unregisterReceiver(mBroadcastReceiver);
+     }
+     /// @}
+ 

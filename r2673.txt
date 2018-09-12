@@ -1,0 +1,103 @@
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmService.java	(revision 2672)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmService.java	(revision 2673)
+@@ -67,6 +67,7 @@
+ import java.util.HashMap;
+ import java.util.Iterator;
+ 
++import android.widget.Toast;// lance add for bug 114532
+ /**
+  * Background service to control FM or do background tasks.
+  */
+@@ -229,6 +230,30 @@
+     private Notification.Builder mNotificationBuilder = null;
+     private BigTextStyle mNotificationStyle = null;
+ 
++    // lance add for bug 114532 @{
++    public static final int MSG_EXIT_FM = 1234;
++    private Handler sHandler11 = new Handler() {
++        @Override
++        public void handleMessage(Message msg) {
++            Log.d(TAG, "sHandler11 =  " + msg.what);
++            switch (msg.what) {
++                case MSG_EXIT_FM:
++                    android.os.Process.killProcess(android.os.Process.myPid());
++                    break;
++            }
++        }
++    };
++    private Toast mToast = null;
++    private void showToast(CharSequence text) {
++        if (null == mToast) {
++            mToast = Toast.makeText(mContext, text, Toast.LENGTH_SHORT);
++        }
++        mToast.setText(text);
++        mToast.show();
++        Log.v(TAG, "FMRadioActivity.showToast: toast = " + text);
++    };
++    // @}
++
+     @Override
+     public IBinder onBind(Intent intent) {
+         return mBinder;
+@@ -331,7 +356,20 @@
+                     bundle.putBoolean(FmListener.KEY_IS_SPEAKER_MODE, false);
+                     notifyActivityStateChanged(bundle);
+                 }
++			// lance add for bug 114532 @{
++            } else if (Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(action)) {
++                    boolean isAirPlaneMode = intent.getBooleanExtra("state",false);
++                    if(isAirPlaneMode) {
++                        Log.d(TAG, ">>>ACTION_AIRPLANE_MODE_CHANGED");
++                        if (mPowerStatus == POWER_UP) {
++                            showToast(getString(R.string.toast_fm_enter_airplane_mode)); 
++                            sHandler11.sendMessageDelayed(sHandler11.obtainMessage(MSG_EXIT_FM, FmService.this),(long)1000); 
++                            mFmServiceHandler.removeCallbacksAndMessages(null); 
++                            focusChanged(AudioManager.AUDIOFOCUS_LOSS);
++                        }
++                    }  
+             }
++			// @}
+         }
+     }
+ 
+@@ -1926,6 +1964,7 @@
+         filter.addAction(Intent.ACTION_SCREEN_ON);
+         filter.addAction(Intent.ACTION_SCREEN_OFF);
+         filter.addAction(Intent.ACTION_HEADSET_PLUG);
++        filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);// lance add for bug 114532
+         mBroadcastReceiver = new FmServiceBroadcastReceiver();
+         registerReceiver(mBroadcastReceiver, filter);
+     }
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java	(revision 2672)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java	(revision 2673)
+@@ -64,6 +64,7 @@
+ import com.android.fmradio.views.FmScroller;
+ import com.android.fmradio.views.FmScroller.EventListener;
+ import com.android.fmradio.views.FmSnackBar;
++import android.provider.Settings;// lance add for bug 114532
+ 
+ 
+ /**
+@@ -728,8 +729,17 @@
+      */
+     @Override
+     public void onStart() {
+-            Log.d(TAG, "onStart");
++        Log.d(TAG, "onStart");
+         super.onStart();
++		// lance add for bug 114532 @{
++        boolean isAirplaneMode = Settings.System.getInt(mContext.getContentResolver(),
++                Settings.System.AIRPLANE_MODE_ON, 0) == 1;
++        if(isAirplaneMode) {
++            showToast(getString(R.string.not_available_airplanemode));
++            finish();
++            return;
++        }
++		// @}
+         // check layout onstart
+         if (isAntennaAvailable()) {
+             changeToMainLayout();

@@ -1,0 +1,111 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/FlashlightTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/FlashlightTile.java	(revision 10260)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/FlashlightTile.java	(revision 10261)
+@@ -77,20 +77,9 @@
+         return mFlashlightController.hasFlashlight();
+     }
+ 
+-	//lance add for bug 111617 @{
+-    public boolean isLowBattery() {
+-        return mFlashlightController.isLowBattery();
+-    }
+-	// @}
+ 
+     @Override
+     protected void handleClick() {
+-		//lance add for bug 111617 @{
+-        if (isLowBattery()) {
+-			//TODO can add toast if you want
+-            return;
+-        }
+-		// @}
+         if (ActivityManager.isUserAMonkey()) {
+             return;
+         }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightController.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightController.java	(revision 10260)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightController.java	(revision 10261)
+@@ -31,12 +31,6 @@
+ import java.io.PrintWriter;
+ import java.lang.ref.WeakReference;
+ import java.util.ArrayList;
+-//lance add for bug 111617 @{
+-import android.content.Intent;
+-import android.content.IntentFilter;
+-import android.content.BroadcastReceiver; 
+-import android.os.BatteryManager;
+-//@}
+ 
+ /**
+  * Manages the flashlight.
+@@ -64,15 +58,10 @@
+     private String mCameraId;
+     private boolean mTorchAvailable;
+ 	private boolean mState=false;
+-	//lance add for bug 111617 @{
+-    private int mBatteryLevel = 0;
+-    private int mBatteryState = BatteryManager.BATTERY_STATUS_UNKNOWN;
+-	//@}}
+ 
+     public FlashlightController(Context context) {
+         mContext = context;
+         mCameraManager = (CameraManager) mContext.getSystemService(Context.CAMERA_SERVICE);
+-        registerForBroadcasts(); //lance add for bug 111617
+         tryInitCamera();
+     }
+ 
+@@ -253,43 +242,7 @@
+             }
+         }
+     };
+-	
+-    //lance add for bug 111617 @{
+-    public synchronized boolean isLowBattery() {
+-        if (mBatteryState == BatteryManager.BATTERY_STATUS_CHARGING) {
+-            return false;
+-        }
+-        if (mBatteryLevel > 0 && mBatteryLevel <= 15) {
+-            return true;
+-        } else {
+-            return false;
+-        }
+-    }
+ 
+-    public void registerForBroadcasts() {
+-              IntentFilter intentFilter = new IntentFilter();
+-              intentFilter.addAction(Intent.ACTION_BATTERY_CHANGED);
+-              intentFilter.addAction("cn.colafans.enable");
+-              intentFilter.addAction("cn.colafans.disable");
+-              mContext.registerReceiver(mReceiver, intentFilter);
+-    }
+-
+-    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+-        @Override
+-        public void onReceive(Context context, Intent intent) {
+-            String action = intent.getAction();
+-            if (action.equals(Intent.ACTION_BATTERY_CHANGED)) {
+-                mBatteryLevel = intent.getIntExtra("level", 0);
+-                mBatteryState = intent.getIntExtra("status",BatteryManager.BATTERY_STATUS_UNKNOWN);
+-                int threshold = 15;
+-                if (mBatteryLevel == threshold) {
+-                    setFlashlight(false);
+-                }
+-            }
+-        }
+-    };
+-   //@}
+-
+     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+         pw.println("FlashlightController state:");
+ 
+Index: frameworks/base/packages/SystemUI
+===================================================================
+--- frameworks/base/packages/SystemUI	(revision 10260)
++++ frameworks/base/packages/SystemUI	(revision 10261)
+
+Property changes on: frameworks/base/packages/SystemUI
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/TA_Version/5058A_Telcel/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE/frameworks/base/packages/SystemUI:r10177-10216

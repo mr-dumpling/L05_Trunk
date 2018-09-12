@@ -1,0 +1,1625 @@
+Index: vendor/branch/5058Y_EMEA/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java
+===================================================================
+--- vendor/branch/5058Y_EMEA/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java	(revision 0)
++++ vendor/branch/5058Y_EMEA/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java	(revision 7331)
+@@ -0,0 +1,870 @@
++/*
++ * Copyright (C) 2015 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package com.android.systemui.statusbar.policy;
++
++import android.content.Context;
++import android.content.Intent;
++import android.net.NetworkCapabilities;
++import android.os.Looper;
++import android.os.SystemProperties;
++import android.telephony.PhoneStateListener;
++import android.telephony.ServiceState;
++import android.telephony.SignalStrength;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.text.TextUtils;
++import android.util.Log;
++import android.util.SparseArray;
++
++import com.android.ims.ImsManager;
++import com.android.ims.ImsConfig;
++import com.android.ims.ImsException;
++import com.android.internal.annotations.VisibleForTesting;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.internal.telephony.cdma.EriInfo;
++import com.android.systemui.R;
++import com.android.systemui.statusbar.policy.NetworkController.IconState;
++import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
++import com.android.systemui.statusbar.policy.NetworkControllerImpl.Config;
++import com.android.systemui.statusbar.policy.NetworkControllerImpl.SubscriptionDefaults;
++import com.mediatek.systemui.ext.IMobileIconExt;
++import com.mediatek.systemui.ext.ISystemUIStatusBarExt;
++import com.mediatek.systemui.PluginManager;
++import com.mediatek.systemui.statusbar.networktype.NetworkTypeUtils;
++
++import com.mediatek.telephony.TelephonyManagerEx;
++
++import java.io.PrintWriter;
++import java.util.BitSet;
++import java.util.Objects;
++
++
++public class MobileSignalController extends SignalController<
++        MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> {
++    private static final String TAG = "MobileSignalController";
++
++    private final TelephonyManager mPhone;
++    private final SubscriptionDefaults mDefaults;
++    private final String mNetworkNameDefault;
++    private final String mNetworkNameSeparator;
++    @VisibleForTesting
++    final PhoneStateListener mPhoneStateListener;
++    // Save entire info for logging, we only use the id.
++    /// M: Fix bug ALPS02416794
++    /*final*/ SubscriptionInfo mSubscriptionInfo;
++
++    // @VisibleForDemoMode
++    final SparseArray<MobileIconGroup> mNetworkToIconLookup;
++
++    // Since some pieces of the phone state are interdependent we store it locally,
++    // this could potentially become part of MobileState for simplification/complication
++    // of code.
++    private int mDataNetType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
++    private int mDataState = TelephonyManager.DATA_DISCONNECTED;
++    private ServiceState mServiceState;
++    private SignalStrength mSignalStrength;
++    private MobileIconGroup mDefaultIcons;
++    private Config mConfig;
++
++    /// M: Add for Plugin feature. @ {
++    private IMobileIconExt mMobileIconExt;
++    private ISystemUIStatusBarExt mStatusBarExt;
++    /// @ }
++
++    // TODO: Reduce number of vars passed in, if we have the NetworkController, probably don't
++    // need listener lists anymore.
++    public MobileSignalController(Context context, Config config, boolean hasMobileData,
++            TelephonyManager phone, CallbackHandler callbackHandler,
++            NetworkControllerImpl networkController, SubscriptionInfo info,
++            SubscriptionDefaults defaults, Looper receiverLooper) {
++        super("MobileSignalController(" + info.getSubscriptionId() + ")", context,
++                NetworkCapabilities.TRANSPORT_CELLULAR, callbackHandler,
++                networkController);
++        mNetworkToIconLookup = new SparseArray<>();
++        mConfig = config;
++        mPhone = phone;
++        mDefaults = defaults;
++        mSubscriptionInfo = info;
++        /// M: Init plugin @ {
++        mMobileIconExt = PluginManager.getMobileIconExt(context);
++        mStatusBarExt = PluginManager.getSystemUIStatusBarExt(context);
++        /// @ }
++        mPhoneStateListener = new MobilePhoneStateListener(info.getSubscriptionId(),
++                receiverLooper);
++        mNetworkNameSeparator = getStringIfExists(R.string.status_bar_network_name_separator);
++        mNetworkNameDefault = getStringIfExists(
++                com.android.internal.R.string.lockscreen_carrier_default);
++
++        mapIconSets();
++
++        String networkName = info.getCarrierName() != null ? info.getCarrierName().toString()
++                : mNetworkNameDefault;
++        mLastState.networkName = mCurrentState.networkName = networkName;
++        mLastState.networkNameData = mCurrentState.networkNameData = networkName;
++        mLastState.enabled = mCurrentState.enabled = hasMobileData;
++        mLastState.iconGroup = mCurrentState.iconGroup = mDefaultIcons;
++        /// M: Support volte icon
++        initImsRegisterState();
++        // Get initial data sim state.
++        updateDataSim();
++    }
++
++    /// M: Support volte icon @{
++    private void initImsRegisterState(){
++        int phoneId = SubscriptionManager.getPhoneId(mSubscriptionInfo.getSubscriptionId());
++        try {
++            boolean imsRegStatus = ImsManager
++                    .getInstance(mContext, phoneId).getImsRegInfo();
++            mCurrentState.imsRegState = imsRegStatus
++                    ? ServiceState.STATE_IN_SERVICE : ServiceState.STATE_OUT_OF_SERVICE;
++            Log.d(mTag, "init imsRegState:" + mCurrentState.imsRegState
++                    + ",phoneId:" + phoneId);
++        } catch (ImsException ex) {
++            Log.e(mTag, "Fail to get Ims Status");
++        }
++    }
++    /// @}
++    public void setConfiguration(Config config) {
++        mConfig = config;
++        mapIconSets();
++        updateTelephony();
++    }
++
++    public int getDataContentDescription() {
++        return getIcons().mDataContentDescription;
++    }
++
++    public void setAirplaneMode(boolean airplaneMode) {
++        mCurrentState.airplaneMode = airplaneMode;
++        notifyListenersIfNecessary();
++    }
++
++    public void setUserSetupComplete(boolean userSetup) {
++        mCurrentState.userSetup = userSetup;
++        notifyListenersIfNecessary();
++    }
++
++    @Override
++    public void updateConnectivity(BitSet connectedTransports, BitSet validatedTransports) {
++        boolean isValidated = validatedTransports.get(mTransportType);
++        mCurrentState.isDefault =
++                connectedTransports.get(mTransportType) &&
++                // M: Add one more condition to judge whether the cellular connection is this subid
++                mNetworkController.isCellularConnected(mSubscriptionInfo.getSubscriptionId());
++
++        // Only show this as not having connectivity if we are default.
++        mCurrentState.inetCondition = (isValidated || !mCurrentState.isDefault) ? 1 : 0;
++        Log.d(mTag,"mCurrentState.inetCondition = " + mCurrentState.inetCondition);
++        /// M: Disable inetCondition check as this condition is not sufficient in some cases.
++        /// So always set it is in net with value 1. @ {
++        mCurrentState.inetCondition =
++                mMobileIconExt.customizeMobileNetCondition(mCurrentState.inetCondition);
++        /// @}
++        notifyListenersIfNecessary();
++    }
++
++    public void setCarrierNetworkChangeMode(boolean carrierNetworkChangeMode) {
++        mCurrentState.carrierNetworkChangeMode = carrierNetworkChangeMode;
++        updateTelephony();
++    }
++
++    /**
++     * Start listening for phone state changes.
++     */
++    public void registerListener() {
++        mPhone.listen(mPhoneStateListener,
++                PhoneStateListener.LISTEN_SERVICE_STATE
++                        | PhoneStateListener.LISTEN_SIGNAL_STRENGTHS
++                        | PhoneStateListener.LISTEN_CALL_STATE
++                        | PhoneStateListener.LISTEN_DATA_CONNECTION_STATE
++                        | PhoneStateListener.LISTEN_DATA_ACTIVITY
++                        | PhoneStateListener.LISTEN_CARRIER_NETWORK_CHANGE);
++        mStatusBarExt.registerOpStateListener();
++    }
++
++    /**
++     * Stop listening for phone state changes.
++     */
++    public void unregisterListener() {
++        mPhone.listen(mPhoneStateListener, 0);
++    }
++
++    /**
++     * Produce a mapping of data network types to icon groups for simple and quick use in
++     * updateTelephony.
++     */
++    private void mapIconSets() {
++        mNetworkToIconLookup.clear();
++
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyIcons.THREE_G);
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EVDO_A, TelephonyIcons.THREE_G);
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EVDO_B, TelephonyIcons.THREE_G);
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EHRPD, TelephonyIcons.THREE_G);
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UMTS, TelephonyIcons.THREE_G);
++
++        if (!mConfig.showAtLeast3G) {
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UNKNOWN,
++                    TelephonyIcons.UNKNOWN);
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EDGE, TelephonyIcons.E);
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_CDMA, TelephonyIcons.ONE_X);
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_1xRTT, TelephonyIcons.ONE_X);
++
++            mDefaultIcons = TelephonyIcons.G;
++        } else {
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UNKNOWN,
++                    TelephonyIcons.THREE_G);
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EDGE,
++                    TelephonyIcons.THREE_G);
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_CDMA,
++                    TelephonyIcons.THREE_G);
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_1xRTT,
++                    TelephonyIcons.THREE_G);
++            mDefaultIcons = TelephonyIcons.THREE_G;
++        }
++
++        MobileIconGroup hGroup = TelephonyIcons.THREE_G;
++        if (mConfig.hspaDataDistinguishable) {
++            hGroup = TelephonyIcons.H;
++        }
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSDPA, hGroup);
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSUPA, hGroup);
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSPA, hGroup);
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSPAP, hGroup);
++
++        if (mConfig.show4gForLte) {
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE, TelephonyIcons.FOUR_G);
++            if (mConfig.hideLtePlus) {
++                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE_CA,
++                        TelephonyIcons.FOUR_G);
++            } else {
++                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE_CA,
++                        TelephonyIcons.FOUR_G_PLUS);
++            }
++        } else {
++            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE, TelephonyIcons.LTE);
++            if (mConfig.hideLtePlus) {
++                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE_CA,
++                        TelephonyIcons.LTE);
++            } else {
++                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE_CA,
++                        TelephonyIcons.LTE_PLUS);
++            }
++        }
++        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_IWLAN, TelephonyIcons.WFC);
++    }
++
++    @Override
++    public void notifyListeners(SignalCallback callback) {
++        MobileIconGroup icons = getIcons();
++
++        String contentDescription = getStringIfExists(getContentDescription());
++        String dataContentDescription = getStringIfExists(icons.mDataContentDescription);
++        final boolean dataDisabled = mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
++                && mCurrentState.userSetup;
++
++        /// M: Customize the signal strength icon id. @ {
++        int iconId = getCurrentIconId();
++        iconId = mStatusBarExt.getCustomizeSignalStrengthIcon(
++                    mSubscriptionInfo.getSubscriptionId(),
++                    iconId,
++                    mSignalStrength,
++                    mDataNetType,
++                    mServiceState);
++        /// @ }
++
++        // Show icon in QS when we are connected or need to show roaming or data is disabled.
++        boolean showDataIcon = mCurrentState.dataConnected
++                || mCurrentState.iconGroup == TelephonyIcons.ROAMING
++                || dataDisabled;
++        IconState statusIcon = new IconState(mCurrentState.enabled && !mCurrentState.airplaneMode,
++                iconId, contentDescription);
++
++        int qsTypeIcon = 0;
++        IconState qsIcon = null;
++        String description = null;
++        // Only send data sim callbacks to QS.
++        if (mCurrentState.dataSim) {
++            qsTypeIcon = showDataIcon ? icons.mQsDataType : 0;
++            qsIcon = new IconState(mCurrentState.enabled
++                    && !mCurrentState.isEmergency, getQsCurrentIconId(), contentDescription);
++            description = mCurrentState.isEmergency ? null : mCurrentState.networkName;
++        }
++        boolean activityIn = mCurrentState.dataConnected
++                        && !mCurrentState.carrierNetworkChangeMode
++                        && mCurrentState.activityIn;
++        boolean activityOut = mCurrentState.dataConnected
++                        && !mCurrentState.carrierNetworkChangeMode
++                        && mCurrentState.activityOut;
++        showDataIcon &= mCurrentState.isDefault
++                || mCurrentState.iconGroup == TelephonyIcons.ROAMING
++                || dataDisabled;
++        int typeIcon = showDataIcon ? icons.mDataType : 0;
++        /** M: Support [Network Type on StatusBar], change the implement methods.
++          * Get the network icon base on service state.
++          * Add one more parameter for network type.
++          * @ { **/
++        int networkIcon = mCurrentState.networkIcon;
++
++        /// M: Support volte icon.Bug fix when airplane mode is on go to hide volte icon
++        int volteIcon = mCurrentState.airplaneMode && !isWfcEnable()
++                ? 0 : mCurrentState.volteIcon;
++
++        /// M: when data disabled, common show data icon as x, but op do not need show it @ {
++        mStatusBarExt.isDataDisabled(mSubscriptionInfo.getSubscriptionId(), dataDisabled);
++        /// @ }
++
++        /// M: Customize the data type icon id. @ {
++        typeIcon = mStatusBarExt.getDataTypeIcon(
++                        mSubscriptionInfo.getSubscriptionId(),
++                        typeIcon,
++                        mDataNetType,
++                        mCurrentState.dataConnected ? TelephonyManager.DATA_CONNECTED :
++                            TelephonyManager.DATA_DISCONNECTED,
++                        mServiceState);
++        /// @ }
++        /// M: Customize the network type icon id. @ {
++        networkIcon = mStatusBarExt.getNetworkTypeIcon(
++                        mSubscriptionInfo.getSubscriptionId(),
++                        networkIcon,
++                        mDataNetType,
++                        mServiceState);
++        /// @ }
++
++        callback.setMobileDataIndicators(statusIcon, qsIcon, typeIcon, networkIcon, volteIcon,
++                qsTypeIcon, activityIn, activityOut, dataContentDescription, description,
++                icons.mIsWide, mSubscriptionInfo.getSubscriptionId());
++        /** @ }*/
++
++        /// M: update plmn label @{
++        mNetworkController.refreshPlmnCarrierLabel();
++        /// @}
++    }
++
++    @Override
++    protected MobileState cleanState() {
++        return new MobileState();
++    }
++
++    private boolean hasService() {
++        if (mServiceState != null) {
++            // Consider the device to be in service if either voice or data
++            // service is available. Some SIM cards are marketed as data-only
++            // and do not support voice service, and on these SIM cards, we
++            // want to show signal bars for data service as well as the "no
++            // service" or "emergency calls only" text that indicates that voice
++            // is not available.
++            switch (mServiceState.getVoiceRegState()) {
++                case ServiceState.STATE_POWER_OFF:
++                    return false;
++                case ServiceState.STATE_OUT_OF_SERVICE:
++                case ServiceState.STATE_EMERGENCY_ONLY:
++                    return mServiceState.getDataRegState() == ServiceState.STATE_IN_SERVICE;
++                default:
++                    return true;
++            }
++        } else {
++            return false;
++        }
++    }
++
++    private boolean isCdma() {
++        return (mSignalStrength != null) && !mSignalStrength.isGsm();
++    }
++
++    public boolean isEmergencyOnly() {
++        return (mServiceState != null && mServiceState.isEmergencyOnly());
++    }
++
++    private boolean isRoaming() {
++        if (isCdma()) {
++            /// M: fix ALPS02742814
++            if (mServiceState == null) {
++                return false;
++            }
++            final int iconMode = mServiceState.getCdmaEriIconMode();
++            return mServiceState != null
++                    && mServiceState.getCdmaEriIconIndex() != EriInfo.ROAMING_INDICATOR_OFF
++                    && (iconMode == EriInfo.ROAMING_ICON_MODE_NORMAL
++                        || iconMode == EriInfo.ROAMING_ICON_MODE_FLASH);
++        } else {
++            boolean isInRoaming =  mServiceState != null && mServiceState.getRoaming();
++            return mStatusBarExt.needShowRoamingIcons(isInRoaming);
++        }
++    }
++
++    /// M: Support VoLte @{
++    public boolean isLteNetWork() {
++        return (mDataNetType == TelephonyManager.NETWORK_TYPE_LTE
++            || mDataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA);
++    }
++    /// M: @}
++
++    private boolean isCarrierNetworkChangeActive() {
++        return mCurrentState.carrierNetworkChangeMode;
++    }
++
++    public void handleBroadcast(Intent intent) {
++        String action = intent.getAction();
++        if (action.equals(TelephonyIntents.SPN_STRINGS_UPDATED_ACTION)) {
++            updateNetworkName(intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_SPN, false),
++                    intent.getStringExtra(TelephonyIntents.EXTRA_SPN),
++                    intent.getStringExtra(TelephonyIntents.EXTRA_DATA_SPN),
++                    intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_PLMN, false),
++                    intent.getStringExtra(TelephonyIntents.EXTRA_PLMN));
++            notifyListenersIfNecessary();
++        } else if (action.equals(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED)) {
++            updateDataSim();
++            notifyListenersIfNecessary();
++        } else if (action.equals(ImsManager.ACTION_IMS_STATE_CHANGED)) {
++          /// M: support dual Ims. @{
++            handleImsAction(intent);
++            notifyListenersIfNecessary();
++            /// @}
++        }
++    }
++
++    /// M: Add for volte @{
++    private void handleImsAction(Intent intent){
++        mCurrentState.imsRegState = intent.getIntExtra(ImsManager.EXTRA_IMS_REG_STATE_KEY,
++                ServiceState.STATE_OUT_OF_SERVICE);
++        mCurrentState.imsCap = getImsEnableCap(intent);
++        mCurrentState.volteIcon = getVolteIcon();
++        /// M: add for disconnected volte feature. @{
++        mStatusBarExt.setImsRegInfo(mSubscriptionInfo.getSubscriptionId(),
++                mCurrentState.imsRegState, isImsOverWfc());
++        /// @}
++        Log.d(mTag, "handleImsAction imsRegstate=" + mCurrentState.imsRegState + ",imsCap = " +
++                mCurrentState.imsCap + ",volteIconId=" + mCurrentState.volteIcon);
++    }
++    private int getVolteIcon() {
++        int icon = 0;
++        if (isImsOverWfc()) {
++            boolean isNonSsProject
++                = !(SystemProperties.get("persist.radio.multisim.config", "ss").equals("ss"));
++            if (isNonSsProject) {
++                icon = NetworkTypeUtils.WFC_ICON;
++            }
++        } else if (isImsOverVoice() && isLteNetWork() &&
++            mCurrentState.imsRegState == ServiceState.STATE_IN_SERVICE) {
++            icon = NetworkTypeUtils.VOLTE_ICON;
++        }
++        return icon;
++    }
++    private int getImsEnableCap(Intent intent) {
++        int cap = ImsConfig.FeatureConstants.FEATURE_TYPE_UNKNOWN;
++        boolean[] enabledFeatures =
++                intent.getBooleanArrayExtra(ImsManager.EXTRA_IMS_ENABLE_CAP_KEY);
++        if (enabledFeatures != null) {
++            if (enabledFeatures[ImsConfig.FeatureConstants.FEATURE_TYPE_VOICE_OVER_WIFI]) {
++                cap = ImsConfig.FeatureConstants.FEATURE_TYPE_VOICE_OVER_WIFI;
++            } else if (enabledFeatures[ImsConfig.FeatureConstants.FEATURE_TYPE_VOICE_OVER_LTE]) {
++                cap = ImsConfig.FeatureConstants.FEATURE_TYPE_VOICE_OVER_LTE;
++            }
++        }
++        return cap;
++    }
++    public boolean isImsOverWfc() {
++        return mCurrentState.imsCap == ImsConfig.FeatureConstants.FEATURE_TYPE_VOICE_OVER_WIFI;
++    }
++    private boolean isImsOverVoice() {
++        return mCurrentState.imsCap == ImsConfig.FeatureConstants.FEATURE_TYPE_VOICE_OVER_LTE;
++    }
++
++    public boolean isWfcEnable() {
++        boolean isWfcEnabled = TelephonyManagerEx.getDefault().isWifiCallingEnabled(
++            mSubscriptionInfo.getSubscriptionId());
++        return isWfcEnabled;
++    }
++    /// @}
++
++    private void updateDataSim() {
++        int defaultDataSub = mDefaults.getDefaultDataSubId();
++        if (SubscriptionManager.isValidSubscriptionId(defaultDataSub)) {
++            mCurrentState.dataSim = defaultDataSub == mSubscriptionInfo.getSubscriptionId();
++        } else {
++            // There doesn't seem to be a data sim selected, however if
++            // there isn't a MobileSignalController with dataSim set, then
++            // QS won't get any callbacks and will be blank.  Instead
++            // lets just assume we are the data sim (which will basically
++            // show one at random) in QS until one is selected.  The user
++            // should pick one soon after, so we shouldn't be in this state
++            // for long.
++            mCurrentState.dataSim = true;
++        }
++    }
++
++    /**
++     * Updates the network's name based on incoming spn and plmn.
++     */
++    void updateNetworkName(boolean showSpn, String spn, String dataSpn,
++            boolean showPlmn, String plmn) {
++        if (CHATTY) {
++            Log.d("CarrierLabel", "updateNetworkName showSpn=" + showSpn
++                    + " spn=" + spn + " dataSpn=" + dataSpn
++                    + " showPlmn=" + showPlmn + " plmn=" + plmn);
++        }
++        StringBuilder str = new StringBuilder();
++        StringBuilder strData = new StringBuilder();
++        if (showPlmn && plmn != null) {
++            str.append(plmn);
++            strData.append(plmn);
++        }
++        if (showSpn && spn != null) {
++            if (str.length() != 0) {
++                str.append(mNetworkNameSeparator);
++            }
++            str.append(spn);
++        }
++        if (str.length() != 0) {
++            mCurrentState.networkName = str.toString();
++        } else {
++            mCurrentState.networkName = mNetworkNameDefault;
++        }
++        if (showSpn && dataSpn != null) {
++            if (strData.length() != 0) {
++                strData.append(mNetworkNameSeparator);
++            }
++            strData.append(dataSpn);
++        }
++
++        // M: ALPS02744648 for C2K, there isn't dataspn parameter, when no plmn
++        // and no dataspn, show spn instead "no service" here @{
++        if (strData.length() == 0 && showSpn && spn != null) {
++            Log.d("CarrierLabel", "show spn instead 'no service' here: " + spn);
++            strData.append(spn);
++        }
++        // @}
++
++        if (strData.length() != 0) {
++            mCurrentState.networkNameData = strData.toString();
++        } else {
++            mCurrentState.networkNameData = mNetworkNameDefault;
++        }
++    }
++
++    /**
++     * Updates the current state based on mServiceState, mSignalStrength, mDataNetType,
++     * mDataState, and mSimState.  It should be called any time one of these is updated.
++     * This will call listeners if necessary.
++     */
++    private final void updateTelephony() {
++        if (DEBUG) {
++            Log.d(mTag, "updateTelephonySignalStrength: hasService=" + hasService()
++                    + " ss=" + mSignalStrength);
++        }
++        mCurrentState.connected = hasService() && mSignalStrength != null;
++        handleIWLANNetwork();
++        if (mCurrentState.connected) {
++            if (!mSignalStrength.isGsm() && mConfig.alwaysShowCdmaRssi) {
++                mCurrentState.level = mSignalStrength.getCdmaLevel();
++            } else {
++                mCurrentState.level = mSignalStrength.getLevel();
++            }
++            /// M: Customize the signal strength level. @ {
++            mCurrentState.level = mStatusBarExt.getCustomizeSignalStrengthLevel(
++                    mCurrentState.level, mSignalStrength, mServiceState);
++            /// @ }
++        }
++        if (mNetworkToIconLookup.indexOfKey(mDataNetType) >= 0) {
++            mCurrentState.iconGroup = mNetworkToIconLookup.get(mDataNetType);
++        } else {
++            mCurrentState.iconGroup = mDefaultIcons;
++        }
++        /// M: Add for data network type.
++        mCurrentState.dataNetType = mDataNetType;
++        mCurrentState.dataConnected = mCurrentState.connected
++                && mDataState == TelephonyManager.DATA_CONNECTED;
++        /// M: Add for op network tower type.
++        mCurrentState.customizedState = mStatusBarExt.getCustomizeCsState(mServiceState,
++                mCurrentState.customizedState);
++        /// M: Add for op signal strength tower icon.
++        mCurrentState.customizedSignalStrengthIcon = mStatusBarExt.getCustomizeSignalStrengthIcon(
++                mSubscriptionInfo.getSubscriptionId(),
++                mCurrentState.customizedSignalStrengthIcon,
++                mSignalStrength,
++                mDataNetType,
++                mServiceState);
++
++        if (isCarrierNetworkChangeActive()) {
++            mCurrentState.iconGroup = TelephonyIcons.CARRIER_NETWORK_CHANGE;
++        } else if (isRoaming()) {
++            mCurrentState.iconGroup = TelephonyIcons.ROAMING;
++        } else if (isDataDisabled()) {
++            mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
++        }
++        if (isEmergencyOnly() != mCurrentState.isEmergency) {
++            mCurrentState.isEmergency = isEmergencyOnly();
++            mNetworkController.recalculateEmergency();
++        }
++        // Fill in the network name if we think we have it.
++        if (mCurrentState.networkName == mNetworkNameDefault && mServiceState != null
++                && !TextUtils.isEmpty(mServiceState.getOperatorAlphaShort())) {
++            mCurrentState.networkName = mServiceState.getOperatorAlphaShort();
++        }
++        /// M: For network type big icon.
++        mCurrentState.networkIcon =
++            NetworkTypeUtils.getNetworkTypeIcon(mServiceState, mConfig, hasService());
++        /// M: For volte type icon.
++        mCurrentState.volteIcon = getVolteIcon();
++
++        notifyListenersIfNecessary();
++    }
++
++    private boolean isDataDisabled() {
++        return !mPhone.getDataEnabled(mSubscriptionInfo.getSubscriptionId());
++    }
++
++    /// M: bug fix for ALPS02603527.
++    /** IWLAN is special case in which the transmission via WIFI, no need cellular network, then
++    whenever PS type is IWLAN, cellular network is not connected. However, in special case, CS may
++    still connect under IWLAN with valid network type.
++    **/
++     private void handleIWLANNetwork() {
++        /// M: fix ALPS02742814
++        if (mCurrentState.connected && mServiceState != null &&
++            mServiceState.getDataNetworkType() == TelephonyManager.NETWORK_TYPE_IWLAN &&
++            mServiceState.getVoiceNetworkType() == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
++            Log.d(mTag,"Current is IWLAN network only, no cellular network available");
++            mCurrentState.connected = false;
++        }
++        /// M: Add for plugin wifi-only mode.
++        mCurrentState.connected = mStatusBarExt.updateSignalStrengthWifiOnlyMode(
++            mServiceState, mCurrentState.connected);
++    }
++
++    @VisibleForTesting
++    void setActivity(int activity) {
++        mCurrentState.activityIn = activity == TelephonyManager.DATA_ACTIVITY_INOUT
++                || activity == TelephonyManager.DATA_ACTIVITY_IN;
++        mCurrentState.activityOut = activity == TelephonyManager.DATA_ACTIVITY_INOUT
++                || activity == TelephonyManager.DATA_ACTIVITY_OUT;
++        notifyListenersIfNecessary();
++    }
++
++    @Override
++    public void dump(PrintWriter pw) {
++        super.dump(pw);
++        pw.println("  mSubscription=" + mSubscriptionInfo + ",");
++        pw.println("  mServiceState=" + mServiceState + ",");
++        pw.println("  mSignalStrength=" + mSignalStrength + ",");
++        pw.println("  mDataState=" + mDataState + ",");
++        pw.println("  mDataNetType=" + mDataNetType + ",");
++    }
++
++    class MobilePhoneStateListener extends PhoneStateListener {
++        public MobilePhoneStateListener(int subId, Looper looper) {
++            super(subId, looper);
++        }
++
++        @Override
++        public void onSignalStrengthsChanged(SignalStrength signalStrength) {
++            if (DEBUG) {
++                Log.d(mTag, "onSignalStrengthsChanged signalStrength=" + signalStrength +
++                        ((signalStrength == null) ? "" : (" level=" + signalStrength.getLevel())));
++            }
++            mSignalStrength = signalStrength;
++            updateTelephony();
++        }
++
++        @Override
++        public void onServiceStateChanged(ServiceState state) {
++            if (DEBUG) {
++                Log.d(mTag, "onServiceStateChanged voiceState=" + state.getVoiceRegState()
++                        + " dataState=" + state.getDataRegState());
++            }
++            mServiceState = state;
++            mDataNetType = state.getDataNetworkType();
++            //TODO:: Double check with FWK
++            if (mDataNetType == TelephonyManager.NETWORK_TYPE_LTE && mServiceState != null &&
++                    mServiceState.isUsingCarrierAggregation()) {
++                mDataNetType = TelephonyManager.NETWORK_TYPE_LTE_CA;
++            }
++            updateTelephony();
++        }
++
++        @Override
++        public void onDataConnectionStateChanged(int state, int networkType) {
++            if (DEBUG) {
++                Log.d(mTag, "onDataConnectionStateChanged: state=" + state
++                        + " type=" + networkType);
++            }
++            mDataState = state;
++            mDataNetType = networkType;
++            //TODO:: Double check with FWK
++            if (mDataNetType == TelephonyManager.NETWORK_TYPE_LTE && mServiceState != null &&
++                    mServiceState.isUsingCarrierAggregation()) {
++                mDataNetType = TelephonyManager.NETWORK_TYPE_LTE_CA;
++            }
++            updateTelephony();
++        }
++
++        @Override
++        public void onDataActivity(int direction) {
++            if (DEBUG) {
++                Log.d(mTag, "onDataActivity: direction=" + direction);
++            }
++            setActivity(direction);
++        }
++
++        @Override
++        public void onCarrierNetworkChange(boolean active) {
++            if (DEBUG) {
++                Log.d(mTag, "onCarrierNetworkChange: active=" + active);
++            }
++            mCurrentState.carrierNetworkChangeMode = active;
++
++            updateTelephony();
++        }
++    };
++
++    static class MobileIconGroup extends SignalController.IconGroup {
++        final int mDataContentDescription; // mContentDescriptionDataType
++        final int mDataType;
++        final boolean mIsWide;
++        final int mQsDataType;
++
++        public MobileIconGroup(String name, int[][] sbIcons, int[][] qsIcons, int[] contentDesc,
++                int sbNullState, int qsNullState, int sbDiscState, int qsDiscState,
++                int discContentDesc, int dataContentDesc, int dataType, boolean isWide,
++                int qsDataType) {
++            super(name, sbIcons, qsIcons, contentDesc, sbNullState, qsNullState, sbDiscState,
++                    qsDiscState, discContentDesc);
++            mDataContentDescription = dataContentDesc;
++            mDataType = dataType;
++            mIsWide = isWide;
++            mQsDataType = qsDataType;
++        }
++    }
++
++    static class MobileState extends SignalController.State {
++        String networkName;
++        String networkNameData;
++        boolean dataSim;
++        boolean dataConnected;
++        boolean isEmergency;
++        boolean airplaneMode;
++        boolean carrierNetworkChangeMode;
++        boolean isDefault;
++        boolean userSetup;
++
++        /// M: For network type big icon.
++        int networkIcon;
++        /// M: Add for data network type.
++        int dataNetType;
++        /// M: Add for op network tower type.
++        int customizedState;
++        /// M: Add for op signal strength tower icon.
++        int customizedSignalStrengthIcon;
++        /// M: Add for volte @{
++        int imsRegState = ServiceState.STATE_POWER_OFF;
++        int imsCap;
++        int volteIcon;
++        /// @}
++        @Override
++        public void copyFrom(State s) {
++            super.copyFrom(s);
++            MobileState state = (MobileState) s;
++            dataSim = state.dataSim;
++            networkName = state.networkName;
++            networkNameData = state.networkNameData;
++            dataConnected = state.dataConnected;
++            isDefault = state.isDefault;
++            isEmergency = state.isEmergency;
++            airplaneMode = state.airplaneMode;
++            carrierNetworkChangeMode = state.carrierNetworkChangeMode;
++            userSetup = state.userSetup;
++
++            /// M: For network type big icon.
++            networkIcon = state.networkIcon;
++            /// M: Add for data network type.
++            dataNetType = state.dataNetType;
++            /// M: Add for op network tower type.
++            customizedState = state.customizedState;
++            /// M: Add for op signal strength tower icon.
++            customizedSignalStrengthIcon = state.customizedSignalStrengthIcon;
++            /// M: Add for volte
++            imsRegState = state.imsRegState;
++            imsCap = state.imsCap;
++            volteIcon = state.volteIcon;
++        }
++
++        @Override
++        protected void toString(StringBuilder builder) {
++            super.toString(builder);
++            builder.append(',');
++            builder.append("dataSim=").append(dataSim).append(',');
++            builder.append("networkName=").append(networkName).append(',');
++            builder.append("networkNameData=").append(networkNameData).append(',');
++            builder.append("dataConnected=").append(dataConnected).append(',');
++            builder.append("isDefault=").append(isDefault).append(',');
++            builder.append("isEmergency=").append(isEmergency).append(',');
++            builder.append("airplaneMode=").append(airplaneMode).append(',');
++            builder.append("carrierNetworkChangeMode=").append(carrierNetworkChangeMode)
++                    .append(',');
++            builder.append("userSetup=").append(userSetup);
++
++            /// M: For network type big icon.
++            builder.append("networkIcon").append(networkIcon).append(',');
++            /// M: Add for data network type.
++            builder.append("dataNetType").append(dataNetType).append(',');
++            /// M: Add for op network tower type.
++            builder.append("customizedState").append(customizedState).append(',');
++            /// M: Add for op signal strength tower icon.
++            builder.append("customizedSignalStrengthIcon").append(customizedSignalStrengthIcon)
++                    .append(',');
++            /// M: Add for volte.
++            builder.append("imsRegState=").append(imsRegState).append(',');
++            builder.append("imsCap=").append(imsCap).append(',');
++            builder.append("volteIconId=").append(volteIcon).append(',');
++            builder.append("carrierNetworkChangeMode=").append(carrierNetworkChangeMode);
++        }
++
++        @Override
++        public boolean equals(Object o) {
++            return super.equals(o)
++                    && Objects.equals(((MobileState) o).networkName, networkName)
++                    && Objects.equals(((MobileState) o).networkNameData, networkNameData)
++                    && ((MobileState) o).dataSim == dataSim
++                    && ((MobileState) o).dataConnected == dataConnected
++                    && ((MobileState) o).isEmergency == isEmergency
++                    && ((MobileState) o).airplaneMode == airplaneMode
++                    && ((MobileState) o).carrierNetworkChangeMode == carrierNetworkChangeMode
++                    /// M: For network type big icon.
++                    && ((MobileState) o).networkIcon == networkIcon
++                    && ((MobileState) o).volteIcon == volteIcon
++                    /// M: Add for data network type.
++                    && ((MobileState) o).dataNetType == dataNetType
++                    /// M: Add for op network tower type.
++                    && ((MobileState) o).customizedState == customizedState
++                    /// M: Add for op signal strength tower icon.
++                    && ((MobileState) o).customizedSignalStrengthIcon ==
++                                             customizedSignalStrengthIcon
++                    && ((MobileState) o).userSetup == userSetup
++                    && ((MobileState) o).isDefault == isDefault;
++        }
++    }
++
++    /// M: Support for PLMN. @{
++    public SubscriptionInfo getControllerSubInfo() {
++        return mSubscriptionInfo;
++    }
++
++    public boolean getControllserHasService() {
++        return hasService();
++    }
++    /// M: Support for PLMN. @}
++}
+Index: vendor/branch/5058Y_EMEA/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java
+===================================================================
+--- vendor/branch/5058Y_EMEA/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java	(revision 0)
++++ vendor/branch/5058Y_EMEA/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/TelephonyIcons.java	(revision 7331)
+@@ -0,0 +1,443 @@
++/*
++ * Copyright (C) 2008 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.systemui.statusbar.policy;
++
++import com.android.systemui.R;
++import com.android.systemui.statusbar.policy.MobileSignalController.MobileIconGroup;
++
++class TelephonyIcons {
++    //***** Signal strength icons
++
++    static final int TELEPHONY_NUM_LEVELS = 5;
++
++    //GSM/UMTS
++    static final int TELEPHONY_NO_NETWORK = R.drawable.stat_sys_signal_null;
++
++    static final int[][] TELEPHONY_SIGNAL_STRENGTH = {
++        { R.drawable.stat_sys_signal_0,
++          R.drawable.stat_sys_signal_1,
++          R.drawable.stat_sys_signal_2,
++          R.drawable.stat_sys_signal_3,
++          R.drawable.stat_sys_signal_4 },
++        { R.drawable.stat_sys_signal_0_fully,
++          R.drawable.stat_sys_signal_1_fully,
++          R.drawable.stat_sys_signal_2_fully,
++          R.drawable.stat_sys_signal_3_fully,
++          R.drawable.stat_sys_signal_4_fully }
++    };
++
++    static final int QS_TELEPHONY_NO_NETWORK = R.drawable.ic_qs_signal_no_signal;
++
++    static final int[][] QS_TELEPHONY_SIGNAL_STRENGTH = {
++        { R.drawable.ic_qs_signal_0,
++          R.drawable.ic_qs_signal_1,
++          R.drawable.ic_qs_signal_2,
++          R.drawable.ic_qs_signal_3,
++          R.drawable.ic_qs_signal_4 },
++        { R.drawable.ic_qs_signal_full_0,
++          R.drawable.ic_qs_signal_full_1,
++          R.drawable.ic_qs_signal_full_2,
++          R.drawable.ic_qs_signal_full_3,
++          R.drawable.ic_qs_signal_full_4 }
++    };
++
++    static final int[][] TELEPHONY_SIGNAL_STRENGTH_ROAMING = {
++        { R.drawable.stat_sys_signal_0,
++          R.drawable.stat_sys_signal_1,
++          R.drawable.stat_sys_signal_2,
++          R.drawable.stat_sys_signal_3,
++          R.drawable.stat_sys_signal_4 },
++        { R.drawable.stat_sys_signal_0_fully,
++          R.drawable.stat_sys_signal_1_fully,
++          R.drawable.stat_sys_signal_2_fully,
++          R.drawable.stat_sys_signal_3_fully,
++          R.drawable.stat_sys_signal_4_fully }
++    };
++
++    //CarrierNetworkChange
++    static final int[][] TELEPHONY_CARRIER_NETWORK_CHANGE = {
++            { R.drawable.stat_sys_signal_carrier_network_change_animation,
++              R.drawable.stat_sys_signal_carrier_network_change_animation,
++              R.drawable.stat_sys_signal_carrier_network_change_animation,
++              R.drawable.stat_sys_signal_carrier_network_change_animation,
++              R.drawable.stat_sys_signal_carrier_network_change_animation },
++            { R.drawable.stat_sys_signal_carrier_network_change_animation,
++              R.drawable.stat_sys_signal_carrier_network_change_animation,
++              R.drawable.stat_sys_signal_carrier_network_change_animation,
++              R.drawable.stat_sys_signal_carrier_network_change_animation,
++              R.drawable.stat_sys_signal_carrier_network_change_animation }
++        };
++
++    static final int[][] QS_TELEPHONY_CARRIER_NETWORK_CHANGE = {
++        { R.drawable.ic_qs_signal_carrier_network_change_animation,
++          R.drawable.ic_qs_signal_carrier_network_change_animation,
++          R.drawable.ic_qs_signal_carrier_network_change_animation,
++          R.drawable.ic_qs_signal_carrier_network_change_animation,
++          R.drawable.ic_qs_signal_carrier_network_change_animation },
++        { R.drawable.ic_qs_signal_carrier_network_change_animation,
++          R.drawable.ic_qs_signal_carrier_network_change_animation,
++          R.drawable.ic_qs_signal_carrier_network_change_animation,
++          R.drawable.ic_qs_signal_carrier_network_change_animation,
++          R.drawable.ic_qs_signal_carrier_network_change_animation }
++    };
++
++    static final int QS_DATA_R = R.drawable.ic_qs_signal_r;
++
++    //***** Data connection icons
++
++    //GSM/UMTS
++    static final int[][] DATA_G = {
++            { R.drawable.stat_sys_data_fully_connected_g,
++              R.drawable.stat_sys_data_fully_connected_g,
++              R.drawable.stat_sys_data_fully_connected_g,
++              R.drawable.stat_sys_data_fully_connected_g },
++            { R.drawable.stat_sys_data_fully_connected_g,
++              R.drawable.stat_sys_data_fully_connected_g,
++              R.drawable.stat_sys_data_fully_connected_g,
++              R.drawable.stat_sys_data_fully_connected_g }
++        };
++
++    static final int QS_DATA_G = R.drawable.ic_qs_signal_g;
++
++    static final int[][] DATA_3G = {
++            { R.drawable.stat_sys_data_fully_connected_3g,
++              R.drawable.stat_sys_data_fully_connected_3g,
++              R.drawable.stat_sys_data_fully_connected_3g,
++              R.drawable.stat_sys_data_fully_connected_3g },
++            { R.drawable.stat_sys_data_fully_connected_3g,
++              R.drawable.stat_sys_data_fully_connected_3g,
++              R.drawable.stat_sys_data_fully_connected_3g,
++              R.drawable.stat_sys_data_fully_connected_3g }
++        };
++
++    static final int QS_DATA_3G = R.drawable.ic_qs_signal_3g;
++
++    static final int[][] DATA_E = {
++            { R.drawable.stat_sys_data_fully_connected_e,
++              R.drawable.stat_sys_data_fully_connected_e,
++              R.drawable.stat_sys_data_fully_connected_e,
++              R.drawable.stat_sys_data_fully_connected_e },
++            { R.drawable.stat_sys_data_fully_connected_e,
++              R.drawable.stat_sys_data_fully_connected_e,
++              R.drawable.stat_sys_data_fully_connected_e,
++              R.drawable.stat_sys_data_fully_connected_e }
++        };
++
++    static final int QS_DATA_E = R.drawable.ic_qs_signal_e;
++
++    //3.5G
++    static final int[][] DATA_H = {
++            { R.drawable.stat_sys_data_fully_connected_h,
++              R.drawable.stat_sys_data_fully_connected_h,
++              R.drawable.stat_sys_data_fully_connected_h,
++              R.drawable.stat_sys_data_fully_connected_h },
++            { R.drawable.stat_sys_data_fully_connected_h,
++              R.drawable.stat_sys_data_fully_connected_h,
++              R.drawable.stat_sys_data_fully_connected_h,
++              R.drawable.stat_sys_data_fully_connected_h }
++    };
++
++    static final int QS_DATA_H = R.drawable.ic_qs_signal_h;
++
++    //CDMA
++    // Use 3G icons for EVDO data and 1x icons for 1XRTT data
++    static final int[][] DATA_1X = {
++            { R.drawable.stat_sys_data_fully_connected_1x,
++              R.drawable.stat_sys_data_fully_connected_1x,
++              R.drawable.stat_sys_data_fully_connected_1x,
++              R.drawable.stat_sys_data_fully_connected_1x },
++            { R.drawable.stat_sys_data_fully_connected_1x,
++              R.drawable.stat_sys_data_fully_connected_1x,
++              R.drawable.stat_sys_data_fully_connected_1x,
++              R.drawable.stat_sys_data_fully_connected_1x }
++            };
++
++    static final int QS_DATA_1X = R.drawable.ic_qs_signal_1x;
++
++    // LTE and eHRPD
++    static final int[][] DATA_4G = {
++            { R.drawable.stat_sys_data_fully_connected_4g,
++              R.drawable.stat_sys_data_fully_connected_4g,
++              R.drawable.stat_sys_data_fully_connected_4g,
++              R.drawable.stat_sys_data_fully_connected_4g },
++            { R.drawable.stat_sys_data_fully_connected_4g,
++              R.drawable.stat_sys_data_fully_connected_4g,
++              R.drawable.stat_sys_data_fully_connected_4g,
++              R.drawable.stat_sys_data_fully_connected_4g }
++        };
++
++    static final int QS_DATA_4G = R.drawable.ic_qs_signal_4g;
++
++    static final int[][] DATA_4G_PLUS = {
++            { R.drawable.stat_sys_data_fully_connected_4g_plus,
++              R.drawable.stat_sys_data_fully_connected_4g_plus,
++              R.drawable.stat_sys_data_fully_connected_4g_plus,
++              R.drawable.stat_sys_data_fully_connected_4g_plus },
++            { R.drawable.stat_sys_data_fully_connected_4g_plus,
++              R.drawable.stat_sys_data_fully_connected_4g_plus,
++              R.drawable.stat_sys_data_fully_connected_4g_plus,
++              R.drawable.stat_sys_data_fully_connected_4g_plus }
++    };
++
++    static final int QS_DATA_4G_PLUS = R.drawable.ic_qs_signal_4g_plus;
++
++    // LTE branded "LTE"
++    static final int[][] DATA_LTE = {
++            { R.drawable.stat_sys_data_fully_connected_lte,
++                    R.drawable.stat_sys_data_fully_connected_lte,
++                    R.drawable.stat_sys_data_fully_connected_lte,
++                    R.drawable.stat_sys_data_fully_connected_lte },
++            { R.drawable.stat_sys_data_fully_connected_lte,
++                    R.drawable.stat_sys_data_fully_connected_lte,
++                    R.drawable.stat_sys_data_fully_connected_lte,
++                    R.drawable.stat_sys_data_fully_connected_lte }
++    };
++
++    static final int QS_DATA_LTE = R.drawable.ic_qs_signal_lte;
++    static final int QS_DATA_LTE_PLUS = R.drawable.ic_qs_signal_lte_plus;
++
++    static final int FLIGHT_MODE_ICON = R.drawable.stat_sys_airplane_mode;
++    static final int ROAMING_ICON = R.drawable.stat_sys_data_fully_connected_roam;
++    static final int ICON_LTE = R.drawable.stat_sys_data_fully_connected_lte;
++
++    static final int ICON_LTE_PLUS = R.drawable.stat_sys_data_fully_connected_lte_plus;
++
++    static final int ICON_G = R.drawable.stat_sys_data_fully_connected_g;
++    static final int ICON_E = R.drawable.stat_sys_data_fully_connected_e;
++    static final int ICON_H = R.drawable.stat_sys_data_fully_connected_h;
++    static final int ICON_3G = R.drawable.stat_sys_data_fully_connected_3g;
++    static final int ICON_4G = R.drawable.stat_sys_data_fully_connected_4g;
++    static final int ICON_4G_PLUS = R.drawable.stat_sys_data_fully_connected_4g_plus;
++    static final int ICON_1X = R.drawable.stat_sys_data_fully_connected_1x;
++    static final int ICON_CARRIER_NETWORK_CHANGE =
++            R.drawable.stat_sys_signal_carrier_network_change_animation;
++
++    static final int ICON_DATA_DISABLED = R.drawable.stat_sys_data_disabled;
++
++    static final int QS_ICON_LTE = R.drawable.ic_qs_signal_lte;
++    static final int QS_ICON_3G = R.drawable.ic_qs_signal_3g;
++    static final int QS_ICON_4G = R.drawable.ic_qs_signal_4g;
++    static final int QS_ICON_4G_PLUS = R.drawable.ic_qs_signal_4g_plus;
++    static final int QS_ICON_1X = R.drawable.ic_qs_signal_1x;
++    static final int QS_ICON_CARRIER_NETWORK_CHANGE =
++            R.drawable.ic_qs_signal_carrier_network_change_animation;
++
++    static final int QS_ICON_DATA_DISABLED = R.drawable.ic_qs_data_disabled;
++
++    static final MobileIconGroup CARRIER_NETWORK_CHANGE = new MobileIconGroup(
++            "CARRIER_NETWORK_CHANGE",
++            TelephonyIcons.TELEPHONY_CARRIER_NETWORK_CHANGE,
++            TelephonyIcons.QS_TELEPHONY_CARRIER_NETWORK_CHANGE,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.ICON_CARRIER_NETWORK_CHANGE,
++            TelephonyIcons.QS_ICON_CARRIER_NETWORK_CHANGE,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_carrier_network_change_mode,
++            0,
++            false,
++            0
++            );
++
++    static final MobileIconGroup THREE_G = new MobileIconGroup(
++            "3G",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_3g,
++            TelephonyIcons.ICON_3G,
++            true,
++            TelephonyIcons.QS_DATA_3G
++            );
++
++    static final MobileIconGroup WFC = new MobileIconGroup(
++            "WFC",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            0, 0, false, 0
++            );
++
++    static final MobileIconGroup UNKNOWN = new MobileIconGroup(
++            "Unknown",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            0, 0, false, 0
++            );
++
++    static final MobileIconGroup E = new MobileIconGroup(
++            "E",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_edge,
++            TelephonyIcons.ICON_E,
++            false,
++            TelephonyIcons.QS_DATA_E
++            );
++
++    static final MobileIconGroup ONE_X = new MobileIconGroup(
++            "1X",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_cdma,
++            TelephonyIcons.ICON_1X,
++            true,
++            TelephonyIcons.QS_DATA_1X
++            );
++
++    static final MobileIconGroup G = new MobileIconGroup(
++            "G",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_gprs,
++            TelephonyIcons.ICON_G,
++            false,
++            TelephonyIcons.QS_DATA_G
++            );
++
++    static final MobileIconGroup H = new MobileIconGroup(
++            "H",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_3_5g,
++            TelephonyIcons.ICON_H,
++            false,
++            TelephonyIcons.QS_DATA_H
++            );
++
++    static final MobileIconGroup FOUR_G = new MobileIconGroup(
++            "4G",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_4g,
++            TelephonyIcons.ICON_4G,
++            true,
++            TelephonyIcons.QS_DATA_4G
++            );
++
++    static final MobileIconGroup FOUR_G_PLUS = new MobileIconGroup(
++            "4G+",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0,0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_4g_plus,
++            TelephonyIcons.ICON_4G_PLUS,
++            true,
++            TelephonyIcons.QS_DATA_4G_PLUS
++            );
++
++    static final MobileIconGroup LTE = new MobileIconGroup(
++            "LTE",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_lte,
++            TelephonyIcons.ICON_LTE,
++            true,
++            TelephonyIcons.QS_DATA_LTE
++            );
++    static final MobileIconGroup LTE_PLUS = new MobileIconGroup(
++            "LTE+",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_lte_plus,
++            TelephonyIcons.ICON_LTE_PLUS,
++            true,
++            TelephonyIcons.QS_DATA_LTE_PLUS
++            );
++    static final MobileIconGroup ROAMING = new MobileIconGroup(
++            "Roaming",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH_ROAMING,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_data_connection_roaming,
++            TelephonyIcons.ROAMING_ICON,
++            false,
++            TelephonyIcons.QS_DATA_R
++            );
++
++    static final MobileIconGroup DATA_DISABLED = new MobileIconGroup(
++            "DataDisabled",
++            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
++            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
++            0, 0,
++            TelephonyIcons.TELEPHONY_NO_NETWORK,
++            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
++            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
++            R.string.accessibility_cell_data_off,
++            TelephonyIcons.ICON_DATA_DISABLED,
++            false,
++            TelephonyIcons.QS_ICON_DATA_DISABLED
++            );
++}
++
+Index: vendor/branch/5058Y_EMEA/frameworks/base/packages/SystemUI/res/values/config.xml
+===================================================================
+--- vendor/branch/5058Y_EMEA/frameworks/base/packages/SystemUI/res/values/config.xml	(revision 0)
++++ vendor/branch/5058Y_EMEA/frameworks/base/packages/SystemUI/res/values/config.xml	(revision 7331)
+@@ -0,0 +1,297 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++/*
++** Copyright 2009, The Android Open Source Project
++**
++** Licensed under the Apache License, Version 2.0 (the "License");
++** you may not use this file except in compliance with the License.
++** You may obtain a copy of the License at
++**
++**     http://www.apache.org/licenses/LICENSE-2.0
++**
++** Unless required by applicable law or agreed to in writing, software
++** distributed under the License is distributed on an "AS IS" BASIS,
++** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++** See the License for the specific language governing permissions and
++** limitations under the License.
++*/
++-->
++
++<!-- These resources are around just to allow their values to be customized
++     for different hardware and product builds. -->
++<resources>
++    <!-- Whether recents should use hardware layers for its taskviews. This flag can be enabled
++    for devices where the java drawing of round rects may be slow -->
++    <bool name="config_recents_use_hardware_layers">false</bool>
++
++    <!-- The number of app thumbnails we keep in memory -->
++    <integer name="config_recents_max_thumbnail_count">10</integer>
++
++    <!-- The number of app icons we keep in memory -->
++    <integer name="config_recents_max_icon_count">20</integer>
++
++    <!-- Whether to use cheap, less good looking shadows for recents -->
++    <bool name="config_recents_fake_shadows">false</bool>
++
++    <!-- Whether to clip notification contents with a rounded rectangle. Might be expensive on
++         certain GPU's and thus can be turned off with only minimal visual impact. -->
++    <bool name="config_notifications_round_rect_clipping">true</bool>
++
++    <!-- Control whether status bar should distinguish HSPA data icon form UMTS
++    data icon on devices -->
++    <bool name="config_hspa_data_distinguishable">false</bool>
++
++    <!-- Component to be used as the status bar service.  Must implement the IStatusBar
++     interface.  This name is in the ComponentName flattened format (package/class)  -->
++    <string name="config_statusBarComponent" translatable="false">com.android.systemui.statusbar.phone.PhoneStatusBar</string>
++
++    <!-- Whether or not we show the number in the bar. -->
++    <bool name="config_statusBarShowNumber">false</bool>
++
++    <!-- How many icons may be shown at once in the system bar. Includes any
++         slots that may be reused for things like IME control. -->
++    <integer name="config_maxNotificationIcons">5</integer>
++
++    <!-- Show phone (voice) signal strength instead of data in mobile RSSI. -->
++    <bool name="config_showPhoneRSSIForData">false</bool>
++
++    <!-- When true, show 1/2G networks as 3G. -->
++    <bool name="config_showMin3G">false</bool>
++
++    <!-- Show rotation lock toggle in System UI-->
++    <bool name="config_showRotationLock">true</bool>
++
++    <!-- Vibration duration for GlowPadView used in SearchPanelView -->
++    <integer translatable="false" name="config_vibration_duration">0</integer>
++
++    <!-- Vibration duration for GlowPadView used in SearchPanelView -->
++    <integer translatable="false" name="config_search_panel_view_vibration_duration">20</integer>
++
++    <!-- Show camera affordance on Keyguard -->
++    <bool name="config_keyguardShowCameraAffordance">true</bool>
++
++    <!-- Whether we should use SRC drawing mode when drawing the scrim behind. If this flag is set,
++         we change the canvas opacity so libhwui doesn't call glClear on our surface, and then we
++         draw the scrim with SRC to overwrite the whole buffer, which saves us a layer of overdraw.
++         However, SRC performs poorly on some devices, where it is more efficient to
++         glClear + SRC_OVER, in which case this flag should be disabled. -->
++    <bool name="config_status_bar_scrim_behind_use_src">true</bool>
++
++    <!-- The length of the vibration when the notification pops open. -->
++    <integer name="one_finger_pop_duration_ms">10</integer>
++
++    <!-- decay duration (from size_max -> size), in ms -->
++    <integer name="navigation_bar_deadzone_hold">333</integer>
++    <integer name="navigation_bar_deadzone_decay">333</integer>
++
++    <bool name="config_dead_zone_flash">false</bool>
++
++    <!-- Whether QuickSettings is in a phone landscape -->
++    <bool name="quick_settings_wide">false</bool>
++
++    <!-- The number of columns in the QuickSettings -->
++    <integer name="quick_settings_num_columns">3</integer>
++
++    <!-- The number of rows in the QuickSettings -->
++    <integer name="quick_settings_num_rows">1</integer>
++
++    <!-- The number of columns that the top level tiles span in the QuickSettings -->
++    <integer name="quick_settings_user_time_settings_tile_span">1</integer>
++
++    <!-- The default tiles to display in QuickSettings -->
++    <!-- M: add hotknot tile -->
++
++
++    
++	<string name="quick_settings_tiles_default" translatable="false">
++        wifi,bt,cell,audioprofile,airplane,rotation,battery,location,flashlight,hotspot,night
++    </string>
++
++    <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
++    <string name="quick_settings_tiles_stock" translatable="false">
++        wifi,bt,cell,audioprofile,airplane,rotation,battery,location,flashlight,hotspot,dnd,hotknot,inversion,saver,work,night
++    </string>
++
++    <!-- The tiles to display in QuickSettings -->
++    <string name="quick_settings_tiles" translatable="false">default</string>
++
++    <!-- The tiles to display in QuickSettings in retail mode -->
++    <string name="quick_settings_tiles_retail_mode" translatable="false">
++        cell,battery,dnd,flashlight,rotation,location
++    </string>
++
++    <!-- Whether or not the RSSI tile is capitalized or not. -->
++    <bool name="quick_settings_rssi_tile_capitalization">true</bool>
++
++    <!-- Timeouts for brightness dialog to disappear -->
++    <integer name="quick_settings_brightness_dialog_short_timeout">2000</integer>
++    <integer name="quick_settings_brightness_dialog_long_timeout">4000</integer>
++
++    <!-- Should "4G" be shown instead of "LTE" when the network is NETWORK_TYPE_LTE? -->
++    <bool name="config_show4GForLTE">true</bool>
++
++    <!-- Should "LTE"/"4G" be shown instead of "LTE+"/"4G+" when on NETWORK_TYPE_LTE_CA? -->
++    <bool name="config_hideLtePlus">false</bool>
++
++    <!-- milliseconds before the heads up notification auto-dismisses. -->
++    <integer name="heads_up_notification_decay">5000</integer>
++
++    <!-- milliseconds after a heads up notification is pushed back
++     before the app can interrupt again. -->
++    <integer name="heads_up_default_snooze_length_ms">60000</integer>
++
++    <!-- Minimum display time for a heads up notification, in milliseconds. -->
++    <integer name="heads_up_notification_minimum_time">2000</integer>
++
++    <!-- milliseconds before the heads up notification accepts touches. -->
++    <integer name="touch_acceptance_delay">700</integer>
++
++    <!-- The duration in seconds to wait before the dismiss buttons are shown. -->
++    <integer name="recents_task_bar_dismiss_delay_seconds">1000</integer>
++
++    <!-- The duration for animating the task decorations in after transitioning from an app. -->
++    <integer name="recents_task_enter_from_app_duration">200</integer>
++
++    <!-- The duration for animating the task decorations in after transitioning from an app. -->
++    <integer name="recents_task_enter_from_affiliated_app_duration">125</integer>
++
++    <!-- The duration for animating the task decorations out before transitioning to an app. -->
++    <integer name="recents_task_exit_to_app_duration">125</integer>
++
++    <!-- The min animation duration for animating the nav bar scrim in. -->
++    <integer name="recents_nav_bar_scrim_enter_duration">400</integer>
++
++    <!-- The animation duration for scrolling the stack to a particular item. -->
++    <integer name="recents_animate_task_stack_scroll_duration">200</integer>
++
++    <!-- The animation duration for scrolling the stack to a particular item. -->
++    <integer name="recents_auto_advance_duration">750</integer>
++
++    <!-- The animation duration for subsequent scrolling the stack to a particular item. -->
++    <integer name="recents_subsequent_auto_advance_duration">1000</integer>
++
++    <!-- The delay to enforce between each alt-tab key press. -->
++    <integer name="recents_alt_tab_key_delay">200</integer>
++
++    <!-- Svelte specific logic, see RecentsConfiguration.SVELTE_* constants. -->
++    <integer name="recents_svelte_level">0</integer>
++
++    <!-- In multi-window, determines whether the stack where recents lives should grow from
++         the smallest position when being launched. -->
++    <bool name="recents_grow_in_multiwindow">true</bool>
++
++    <!-- Animation duration when using long press on recents to dock -->
++    <integer name="long_press_dock_anim_duration">250</integer>
++
++    <!-- Recents: The relative range of visible tasks from the current scroll position
++         while the stack is focused. -->
++    <item name="recents_layout_focused_range_min" format="float" type="integer">-3</item>
++    <item name="recents_layout_focused_range_max" format="float" type="integer">2</item>
++
++    <!-- Recents: The relative range of visible tasks from the current scroll position
++         while the stack is not focused. -->
++    <item name="recents_layout_unfocused_range_min" format="float" type="integer">-2</item>
++    <item name="recents_layout_unfocused_range_max" format="float" type="integer">2.5</item>
++
++    <!-- Whether to enable KeyguardService or not -->
++    <bool name="config_enableKeyguardService">true</bool>
++
++    <!-- The maximum count of notifications on Keyguard. The rest will be collapsed in an overflow
++     card. -->
++    <integer name="keyguard_max_notification_count">3</integer>
++
++    <!-- Defines the implementation of the velocity tracker to be used for the panel expansion. Can
++         be 'platform' or 'noisy' (i.e. for noisy touch screens). -->
++    <string name="velocity_tracker_impl" translatable="false">platform</string>
++
++    <!-- Set to true to enable the user switcher on the keyguard. -->
++    <bool name="config_keyguardUserSwitcher">false</bool>
++
++    <!-- Doze: does this device support STATE_DOZE and STATE_DOZE_SUSPEND?  -->
++    <bool name="doze_display_state_supported">false</bool>
++
++    <!-- Doze: should the significant motion sensor be used as a pulse signal? -->
++    <bool name="doze_pulse_on_significant_motion">false</bool>
++
++    <!-- Doze: check proximity sensor before pulsing? -->
++    <bool name="doze_proximity_check_before_pulse">true</bool>
++
++    <!-- Doze: should notifications be used as a pulse signal? -->
++    <bool name="doze_pulse_on_notifications">true</bool>
++
++    <!-- Doze: duration to avoid false pickup gestures triggered by notification vibrations -->
++    <integer name="doze_pickup_vibration_threshold">2000</integer>
++
++    <!-- Doze: can we assume the pickup sensor includes a proximity check?
++         This is ignored if doze_pickup_subtype_performs_proximity_check is not empty.
++         @deprecated: use doze_pickup_subtype_performs_proximity_check instead.-->
++    <bool name="doze_pickup_performs_proximity_check">false</bool>
++
++    <!-- Doze: a list of pickup sensor subtypes that perform a proximity check before they trigger.
++               If not empty, either * or !* must appear to specify the default.
++               If empty, falls back to doze_pickup_performs_proximity_check.
++
++               Examples: 1,2,3,!* -> subtypes 1,2 and 3 perform the check, all others don't.
++                         !1,!2,*  -> subtypes 1 and 2 don't perform the check, all others do.
++                         !8,*     -> subtype 8 does not perform the check, all others do
++                         1,1,*    -> illegal, every item may only appear once
++                         1,!1,*   -> illegal, no contradictions allowed
++                         1,2      -> illegal, need either * or !*
++                         1,,4a3   -> illegal, no empty or non-numeric terms allowed
++    -->
++    <string name="doze_pickup_subtype_performs_proximity_check"></string>
++
++    <!-- Doze: pulse parameter - how long does it take to fade in? -->
++    <integer name="doze_pulse_duration_in">900</integer>
++
++    <!-- Doze: pulse parameter - how long does it take to fade in after a pickup? -->
++    <integer name="doze_pulse_duration_in_pickup">130</integer>
++
++    <!-- Doze: pulse parameter - once faded in, how long does it stay visible? -->
++    <integer name="doze_pulse_duration_visible">6000</integer>
++
++    <!-- Doze: pulse parameter - how long does it take to fade out? -->
++    <integer name="doze_pulse_duration_out">600</integer>
++
++    <!-- Doze: alpha to apply to small icons when dozing -->
++    <integer name="doze_small_icon_alpha">222</integer><!-- 87% of 0xff -->
++
++    <!-- Hotspot tile: number of days to show after feature is used. -->
++    <integer name="days_to_show_hotspot_tile">30</integer>
++
++    <!-- Color inversion tile: number of days to show after feature is used. -->
++    <integer name="days_to_show_color_inversion_tile">7</integer>
++
++    <!-- Number of times to show the strong alarm warning text in the volume dialog -->
++    <integer name="zen_mode_alarm_warning_threshold">5</integer>
++
++    <!-- Maximum number of total conditions to display in the zen mode selection panel -->
++    <integer name="zen_mode_max_conditions">5</integer>
++
++    <!-- Enable the default volume dialog -->
++    <bool name="enable_volume_ui">true</bool>
++
++    <!-- Duration of the full carrier network change icon animation. -->
++    <integer name="carrier_network_change_anim_time">3000</integer>
++
++    <!-- Duration of the expansion animation in the volume dialog -->
++    <item name="volume_expand_animation_duration" type="integer">300</item>
++
++    <!-- Whether to show the full screen user switcher. -->
++    <bool name="config_enableFullscreenUserSwitcher">false</bool>
++
++    <!-- SystemUIFactory component -->
++    <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIFactory</string>
++
++    <!-- Nav bar button default ordering/layout -->
++    <!-- CHG-S By Justin.Shen for Hide/Show navigation-bar -->
++    <!--
++    <string name="config_navBarLayout" translatable="false">space,back;home;recent,menu_ime</string>
++    -->
++    <string name="config_navBarLayout" translatable="false">nail,back;home;recent,menu_ime</string>
++    <string name="config_navBarLayout_1" translatable="false">nail,recent;home;back,menu_ime</string>
++    <!-- CHG-E By Justin.Shen for Hide/Show navigation-bar -->
++
++    <bool name="quick_settings_show_full_alarm">false</bool>
++
++</resources>

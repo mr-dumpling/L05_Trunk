@@ -1,0 +1,52 @@
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnPreference.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnPreference.java	(revision 7612)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnPreference.java	(revision 7613)
+@@ -51,6 +51,8 @@
+     private static CompoundButton mCurrentChecked = null;
+     private boolean mProtectFromCheckedChange = false;
+     private boolean mSelectable = true;
++    //modified for 5909554:Some APN should not nbe selected by end-user
++    private boolean mEnable = true;
+ 
+     @Override
+     public void onBindViewHolder(PreferenceViewHolder view) {
+@@ -61,7 +63,8 @@
+             RadioButton rb = (RadioButton) widget;
+             if (mSelectable) {
+                 rb.setOnCheckedChangeListener(this);
+-
++		//modified for 5909554:Some APN should not nbe selected by end-user
++                rb.setEnabled(mEnable);
+                 boolean isChecked = getKey().equals(mSelectedKey);
+                 if (isChecked) {
+                     mCurrentChecked = rb;
+@@ -131,6 +134,11 @@
+         mSelectable = selectable;
+     }
+ 
++    //modified for 5909554:Some APN should not nbe selected by end-user
++    public void setEnabled(boolean setenabled) {
++        mEnable = setenabled;
++    }
++	
+     public boolean getSelectable() {
+         return mSelectable;
+     }
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 7612)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 7613)
+@@ -430,6 +430,12 @@
+                         && !type.equals("ia") && !type.equals("ims")&& !type.equals("emergency")))
+                         /// M: for plug-in
+                         && mApnExt.isSelectable(type);
++                //modified for 5909554:Some APN should not nbe selected by end-user
++                if(name.equals("SFR option modem")) {
++                    pref.setEnabled(false);
++                } else{
++                     pref.setEnabled(true);
++                }
+                 pref.setSelectable(selectable);
+                 Log.d(TAG, "mSelectedKey = " + mSelectedKey + " key = " + key + " name = " + name +
+                         " selectable=" + selectable);

@@ -1,0 +1,59 @@
+Index: packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 3659)
++++ packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 3660)
+@@ -153,8 +153,6 @@
+ 			initPreference();
+ 			IntentFilter filter = new IntentFilter(NIGHT_MODE_ACTION_ON);
+             filter.addAction(NIGHT_MODE_ACTION_OFF);
+-			filter.addAction(OPEN_ACTION);
+-			filter.addAction(CLOSE_ACTION);
+             activity.registerReceiver(manuallyNightReceiver,filter);
+ 	}
+       private BroadcastReceiver manuallyNightReceiver = new BroadcastReceiver(){
+@@ -161,9 +159,9 @@
+         @Override
+         public void onReceive(Context context, Intent intent) {
+             Log.d(TAG,"intent.getAction()="+intent.getAction());
+-            if(intent.getAction().equals(NIGHT_MODE_ACTION_ON) || intent.getAction().equals(OPEN_ACTION)){
++            if(intent.getAction().equals(NIGHT_MODE_ACTION_ON)){
+                 manuallyEnablePreference.setChecked(true);
+-            }else if(intent.getAction().equals(NIGHT_MODE_ACTION_OFF) || intent.getAction().equals(CLOSE_ACTION)){
++            }else if(intent.getAction().equals(NIGHT_MODE_ACTION_OFF)){
+                 manuallyEnablePreference.setChecked(false);
+             }
+         }
+Index: packages/apps/Settings/src/com/android/settings/DisplaySettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 3659)
++++ packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 3660)
+@@ -104,6 +104,8 @@
+     private static final String KEY_VR_DISPLAY_PREF = "vr_display_pref";
+ 	private final String NIGHT_MODE_ACTION_ON="android.intent.action.NIGHT_MODE_ACTION_ON";
+ 	private final String NIGHT_MODE_ACTION_OFF="android.intent.action.NIGHT_MODE_ACTION_OFF";
++	private final String OPEN_ACTION = "com.android.settings.nightmode.open";
++	private final String CLOSE_ACTION ="com.android.settings.nightmode.close";
+ 
+     private Preference mFontSizePref;
+     private Preference mCustomFontSizePref;
+@@ -294,6 +296,8 @@
+         }*/
+         IntentFilter filter = new IntentFilter(NIGHT_MODE_ACTION_ON);
+         filter.addAction(NIGHT_MODE_ACTION_OFF);
++		filter.addAction(OPEN_ACTION);
++		filter.addAction(CLOSE_ACTION);
+         activity.registerReceiver(myReceiver,filter);
+     }
+ 
+@@ -408,9 +412,9 @@
+         @Override  
+         public void onReceive(Context context, Intent intent) {  
+             Log.d(TAG,"intent.getAction()="+intent.getAction());
+-            if(intent.getAction().equals(NIGHT_MODE_ACTION_ON)){
++            if(intent.getAction().equals(NIGHT_MODE_ACTION_ON) || intent.getAction().equals(OPEN_ACTION)){
+                 mNightModePreference.setSummary(R.string.mode_on);
+-            }else if(intent.getAction().equals(NIGHT_MODE_ACTION_OFF)){
++            }else if(intent.getAction().equals(NIGHT_MODE_ACTION_OFF) || intent.getAction().equals(CLOSE_ACTION)){
+                 mNightModePreference.setSummary(R.string.mode_off);
+             }
+         }  

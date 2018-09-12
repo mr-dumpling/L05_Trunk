@@ -1,0 +1,59 @@
+Index: vendor/branch/5058Y_ALGB/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java	(revision 14918)
++++ vendor/branch/5058Y_ALGB/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java	(revision 14919)
+@@ -91,11 +91,14 @@
+             mHost.startActivityDismissingKeyguard(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));
+             return;
+         }
+-        showDetail(true);
++        //showDetail(true);
+         if (!mState.value) {
+             mState.value = true;
+             mController.setBluetoothEnabled(true);
+-        }
++        } else {
++			mState.value = false;
++            mController.setBluetoothEnabled(false);
++		}
+     }
+ 
+     @Override
+Index: vendor/branch/5058Y_ALGB/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/WifiTile.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/WifiTile.java	(revision 14918)
++++ vendor/branch/5058Y_ALGB/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/WifiTile.java	(revision 14919)
+@@ -113,11 +113,14 @@
+             mHost.startActivityDismissingKeyguard(new Intent(Settings.ACTION_WIFI_SETTINGS));
+             return;
+         }
+-        showDetail(true);
++        //showDetail(true);
+         if (!mState.value) {
+             mController.setWifiEnabled(true);
+             mState.value = true;
+-        }
++        } else {
++			mController.setWifiEnabled(false);
++            mState.value = false;
++		}
+     }
+ 
+     @Override
+Index: vendor/branch/5058Y_ALGB/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java	(revision 14918)
++++ vendor/branch/5058Y_ALGB/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java	(revision 14919)
+@@ -124,7 +124,11 @@
+         MetricsLogger.action(mContext, getMetricsCategory());
+         // M: Start setting activity when default SIM isn't set
+         if (mDataController.isMobileDataSupported() && isDefaultDataSimExist()) {
+-            showDetail(true);
++            //showDetail(true);
++			boolean dataEnabled = mDataController.isMobileDataSupported()
++                    && mDataController.isMobileDataEnabled();
++            MetricsLogger.action(mContext, MetricsEvent.QS_CELLULAR_TOGGLE, !dataEnabled);
++            mDataController.setMobileDataEnabled(!dataEnabled);
+         } else {
+             mHost.startActivityDismissingKeyguard(CELLULAR_SETTINGS);
+         }

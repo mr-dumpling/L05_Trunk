@@ -1,0 +1,87 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/SlideshowActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/SlideshowActivity.java	(revision 3462)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/SlideshowActivity.java	(revision 3463)
+@@ -51,7 +51,7 @@
+ import com.android.mms.R;
+ import com.android.mms.util.MmsLog;
+ import com.google.android.mms.MmsException;
+-
++import android.content.Context;
+ import com.mediatek.mms.ext.IOpSlideshowActivityExt;
+ import com.mediatek.mms.ext.IOpSlideshowActivityExt.Direction;
+ import com.mediatek.mms.util.PermissionCheckUtil;
+@@ -67,7 +67,7 @@
+ import org.w3c.dom.smil.SMILElement;
+ 
+ import java.io.ByteArrayOutputStream;
+-
++import android.os.PowerManager;
+ /**
+  * Plays the given slideshow in full-screen mode with a common controller.
+  */
+@@ -88,7 +88,7 @@
+     /// M: Code analyze 002, fix bug ALPS00111374, whether need resume @{
+     private static boolean bNeedResume = false;
+     /// @}
+-
++    private PowerManager.WakeLock mWakeLock;
+     /// M: Code analyze 003, fix bug ALPS00119632, present slide return
+     /// (mActivityRunning=false) when SlideshowActivity stop @{
+     private SmilPlayerController mSmilPlayerController;
+@@ -187,6 +187,9 @@
+         if (PermissionCheckUtil.requestRequiredPermissions(this)) {
+             return;
+         }
++        PowerManager pm = (PowerManager)getSystemService(Context.POWER_SERVICE);
++        mWakeLock = pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, TAG);
++        mWakeLock.acquire();
+         mHandler = new Handler();
+         /// @}
+         // Play slide-show in full-screen mode.
+@@ -385,6 +388,9 @@
+          */
+         //finish();
+         /// @}
++        if (mWakeLock != null && mWakeLock.isHeld()){
++			mWakeLock.release();
++		}
+         if ((null != mSmilPlayer)) {
+             if (isFinishing()) {
+                 mSmilPlayer.stop();
+@@ -440,6 +446,9 @@
+                         || mSmilPlayer.isPlayingState()
+                         || mSmilPlayer.isPlayedState())) {
+                     mSmilPlayer.stop();
++                    if (mWakeLock != null && mWakeLock.isHeld()){
++					    mWakeLock.release();
++					}
+                 }
+                 break;
+             default:
+@@ -493,6 +502,9 @@
+ 
+         public void pause() {
+             mPlayer.pause();
++            if (mWakeLock != null && mWakeLock.isHeld()){
++			    mWakeLock.release();
++			}
+             mCachedIsPlaying = false;
+         }
+ 
+@@ -502,6 +514,7 @@
+ 
+         public void start() {
+             mPlayer.start();
++            mWakeLock.acquire();
+             mCachedIsPlaying = true;
+         }
+ 
+@@ -577,6 +590,7 @@
+                         mSmilPlayer.setStateStart();
+                     } else {
+                         mSmilPlayer.start();
++                        mWakeLock.acquire();
+                     }
+                 }
+             }

@@ -1,0 +1,104 @@
+Index: vendor/branch/5058A_Bitel_Peru/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 14764)
++++ vendor/branch/5058A_Bitel_Peru/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 14765)
+@@ -527,10 +527,14 @@
+             List<String> deviceIds = new ArrayList<String>();
+             try {
+ 				String svnver ="SVN: ";
+-				String version=SystemProperties.get("ro.def.software.version");
++				String version=SystemProperties.get("ro.def.svn.version");
+ 				if(!TextUtils.isEmpty(version)&& version!=null){
+ 					svnver = svnver + version; 
++				}else{
++					svnver = svnver + "00000";
+ 				}
++				int len=version.length();
++    			String vers=version.substring(len-2, len);
+                 if (TelephonyManagerCompat.getPhoneCount(telephonyManager) > 1 &&
+                     CompatUtils.isMethodAvailable(TelephonyManagerCompat.TELEPHONY_MANAGER_CLASS,
+                             "getDeviceId", Integer.TYPE)) {
+@@ -540,32 +544,32 @@
+ 							deviceId="IMEI"+(slot+1)+":"+deviceId;
+                             deviceIds.add(deviceId);
+                         }
+-                        String imeisv = telephonyManager.getDeviceSoftwareVersion(slot);
+-                        if (!TextUtils.isEmpty(imeisv)) {
+-                        	imeisv = "IMEISV" + (slot + 1) + ":" + imeisv;
+-                        	deviceIds.add(imeisv);
+-                        }
+                     }
++					for(int slot = 0; slot < telephonyManager.getPhoneCount(); slot++){
++						if (!TextUtils.isEmpty(vers)) {
++					 	 	String vers1="IMEISV"+(slot+1)+":"+vers;
++                         	deviceIds.add(vers1);
++                     	}
++					}
+                 } else {
+                    String deviceId = telephonyManager.getDeviceId(0);
+ 					/// M: Avoid null object be added
+ 					if(!TextUtils.isEmpty(deviceId)&& deviceId!=null){
+-						deviceId="IMEI:"+deviceId;
+ 						deviceIds.add(deviceId);
++					}else{
++						deviceIds.add("00000000000");
+ 					}
+-					String imeisv = telephonyManager.getDeviceSoftwareVersion();
+-					if (!TextUtils.isEmpty(imeisv)) {
+-					 	imeisv = "IMEISV:" + imeisv;
+-                        deviceIds.add(imeisv);
++					if (!TextUtils.isEmpty(vers)) {
++					 	vers="IMEISV: "+vers;
++                        deviceIds.add(vers);
+                     }
+                 }
+ 				deviceIds.add(svnver); 
+-				/*
++
+                 /// M: Add single IMEI plugin. @{
+                 deviceIds = ExtensionManager.getInstance().getDialPadExtension().getSingleIMEI(
+                         deviceIds);
+                 /// @}
+-				*/
+ 
+                 /// M: Add single IMEI and MEID handle for OP01 OM project. @{
+                 if (DialerFeatureOptions.isOpLightCustSupport()) {
+@@ -665,21 +669,23 @@
+ 		return false;	   
+ 	}  
+ 	static boolean handleCustomerExternalVersion(Context context, String input) {	 
+-		if (input.equals(CUSTOMER_VER_EXTERNAL)) {			
+-			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.business.name");	
+-			String sw_ver = "SVN:\n"+ SystemProperties.get("ro.def.software.version");		
+-			String release_ver = commercial_name + "\n"+ sw_ver;		   
+-			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("Version Info")								
+-				.setMessage(release_ver)							   
+-				.setPositiveButton(android.R.string.ok, null)							  
+-				.setCancelable(false)								
+-				.create();					
+-			alert.show();	   
+-			return true;			   
+-		}				 
+-		return false;	   
+-	}  
++		if (input.equals(CUSTOMER_VER_EXTERNAL)) {
++			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.business.name");
++			String sw_ver = "SW Version:\n" + SystemProperties.get("ro.def.software.version");
++			String hw_ver = "HW Version:\n" + SystemProperties.get("ro.def.hardware.version");
++			String release_ver = commercial_name + "\n"+ sw_ver + "\n" + hw_ver;
++			AlertDialog alert = new AlertDialog.Builder(context)
++				.setTitle("Version Info")
++				.setMessage(release_ver)
++				.setPositiveButton(android.R.string.ok, null)
++				.setCancelable(false)
++				.create();
++			alert.show();
++			return true;
++		}
++		return false;
++	}
++	
+ 	static boolean handleCustomerInternalVersion(Context context, String input) {	 
+ 		if (input.equals(CUSTOMER_VERSION_INTERNAL)) {			
+ 			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.business.name");

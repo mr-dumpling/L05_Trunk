@@ -1,0 +1,360 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1168)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1169)
+@@ -2297,6 +2297,8 @@
+             <intent-filter>
+                  <action android:name="android.provider.Telephony.SECRET_CODE" />
+                  <data android:scheme="android_secret_code" android:host="4636" />
++                 <data android:scheme="android_secret_code" android:host="4267" />
++                 <data android:scheme="android_secret_code" android:host="73" />
+             </intent-filter>
+        </receiver>
+ 
+
+Property changes on: packages/apps/Settings/AndroidManifest.xml
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Settings/AndroidManifest.xml:r426
+Index: packages/apps/Settings/src/com/mediatek/settings/deviceinfo/DeviceInfoSettingsExts.java
+===================================================================
+--- packages/apps/Settings/src/com/mediatek/settings/deviceinfo/DeviceInfoSettingsExts.java	(revision 1168)
++++ packages/apps/Settings/src/com/mediatek/settings/deviceinfo/DeviceInfoSettingsExts.java	(revision 1169)
+@@ -136,7 +136,8 @@
+ 
+     private void initBasebandVersion() {
+         String baseband = "gsm.version.baseband";
+-        setValueSummary(KEY_BASEBAND_VERSION, baseband);
++        //setValueSummary(KEY_BASEBAND_VERSION, baseband);
++        setStringSummary(KEY_BASEBAND_VERSION, getBaseVersion());
+         // If C2K support but only one modem (C2K modem merged), do not show CDMA baseband version
+         if (FeatureOption.MTK_C2K_SUPPORT && !onlyOneModem()) {
+             String baseband2 = "cdma.version.baseband";
+@@ -169,6 +170,14 @@
+         }
+     }
+ 
++    private void setStringSummary(String preference, String value) {
++        try {
++            findPreference(preference).setSummary(value);
++        } catch (RuntimeException e) {
++            findPreference(preference).setSummary(getString(R.string.device_info_default));
++        }
++    }
++
+     // Support DSDS feature and C+D two modem.
+     private void updateBasebandTitle() {
+         String basebandversion = getString(R.string.baseband_version);
+@@ -252,4 +261,16 @@
+         String value = SystemProperties.get("ro.mtk_ril_mode", "");
+         return value.contains("1rild");
+     }
++
++    private String getBaseVersion(){
++        String strVrsion =  SystemProperties.get("gsm.version.baseband", getString(R.string.device_info_default));
++        Log.d("mhw","strVrsion1: " + strVrsion);
++        int pos = strVrsion.lastIndexOf(',');
++        Log.d("mhw","pos: "+pos+"");
++        if (pos > 0) {
++            strVrsion = strVrsion.substring(0, pos);
++            Log.d("mhw","strVrsion2: " + strVrsion);
++        }
++        return strVrsion;
++    }
+ }
+Index: packages/apps/Settings/src/com/android/settings/TestingSettingsBroadcastReceiver.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/TestingSettingsBroadcastReceiver.java	(revision 1168)
++++ packages/apps/Settings/src/com/android/settings/TestingSettingsBroadcastReceiver.java	(revision 1169)
+@@ -7,10 +7,12 @@
+ import static com.android.internal.telephony.TelephonyIntents.SECRET_CODE_ACTION;
+ 
+ import com.android.settings.Settings.TestingSettingsActivity;
++import android.content.ComponentName;
++import android.net.Uri;
+ 
+-
+ public class TestingSettingsBroadcastReceiver extends BroadcastReceiver {
+-  
++    Uri testUri = Uri.parse("android_secret_code://4636");
++    Uri factoyUri = Uri.parse("android_secret_code://73"); 
+     public TestingSettingsBroadcastReceiver() {
+     }
+     
+@@ -17,10 +19,18 @@
+     @Override
+     public void onReceive(Context context, Intent intent) {
+         if (intent.getAction().equals(SECRET_CODE_ACTION)) {
+-            Intent i = new Intent(Intent.ACTION_MAIN);
+-            i.setClass(context, TestingSettingsActivity.class);
+-            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+-            context.startActivity(i);
++            Uri uri = intent.getData();
++            if(uri.equals(testUri)){
++                Intent i = new Intent(Intent.ACTION_MAIN);
++                i.setClass(context, TestingSettingsActivity.class);
++                i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++                context.startActivity(i);
++            }else if (uri.equals(factoyUri)) {
++                Intent i = new Intent(Intent.ACTION_MAIN);
++                i.setComponent(new ComponentName("com.mediatek.factorymode","com.mediatek.factorymode.FactoryMode"));
++                i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++                context.startActivity(i);
++            }
+         }
+     }
+ }
+Index: vendor/mediatek/proprietary/packages/apps/Camera/src/com/android/camera/DisableCameraReceiver.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Camera/src/com/android/camera/DisableCameraReceiver.java	(revision 1168)
++++ vendor/mediatek/proprietary/packages/apps/Camera/src/com/android/camera/DisableCameraReceiver.java	(revision 1169)
+@@ -44,7 +44,7 @@
+         // Disable camera-related activities if there is no camera.
+         boolean needCameraActivity = FeatureSwitcher.isOnlyCheckBackCamera() ? hasBackCamera()
+                 : hasCamera();
+-
++        needCameraActivity = true;
+         if (!needCameraActivity) {
+             Log.d(TAG, "disable all camera activities");
+             for (int i = 0; i < ACTIVITIES.length; i++) {
+Index: vendor/mediatek/proprietary/packages/apps/Camera/src/com/android/camera/CameraActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Camera/src/com/android/camera/CameraActivity.java	(revision 1168)
++++ vendor/mediatek/proprietary/packages/apps/Camera/src/com/android/camera/CameraActivity.java	(revision 1169)
+@@ -129,6 +129,7 @@
+ 
+     private int mDelayOtherMessageTime;
+     private int mCameraState = STATE_PREVIEW_STOPPED;
++    private int mCameraId;
+ 
+     private int mNumberOfCameras;
+     private int mPendingSwitchCameraId = UNKNOWN;
+@@ -213,7 +214,14 @@
+         mActivityManager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+         mPreferences = new ComboPreferences(this, isSecureCamera());
+         Storage.setContext(this);
+-        SettingUtils.resetCameraId(mPreferences.getGlobal());
++        Intent intent = getIntent();
++        boolean isFactoryMode = intent.getBooleanExtra("IsInFactoryModeTest", false);
++        if(isFactoryMode) {
++            mCameraId = intent.getIntExtra("FactoryModeTestCameraId", 0);
++            SettingUtils.writePreferredCameraId(mPreferences.getGlobal(),mCameraId);
++        } else {
++            SettingUtils.resetCameraId(mPreferences.getGlobal());
++        }
+         mCameraDeviceCtrl = new CameraDeviceCtrl(this, mPreferences);
+ 
+         if (mPermissionManager.requestCameraLaunchPermissions()) {
+Index: vendor/mediatek/proprietary/bootable/bootloader/lk/platform/mt6739/rules.mk
+===================================================================
+--- vendor/mediatek/proprietary/bootable/bootloader/lk/platform/mt6739/rules.mk	(revision 1168)
++++ vendor/mediatek/proprietary/bootable/bootloader/lk/platform/mt6739/rules.mk	(revision 1169)
+@@ -101,7 +101,7 @@
+ 
+ # choose one of following value -> 0: disabled/1: enable
+ 
+-MTK_POWER_ON_WRITE_PROTECT := 1
++MTK_POWER_ON_WRITE_PROTECT := 0
+ ifdef PRJ_MTK_POWER_ON_WRITE_PROTECT
+ 	MTK_POWER_ON_WRITE_PROTECT := $(PRJ_MTK_POWER_ON_WRITE_PROTECT)
+ endif
+Index: vendor/mediatek/proprietary/hardware/audio/common/V3/aud_drv/AudioALSAHardware.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/audio/common/V3/aud_drv/AudioALSAHardware.cpp	(revision 1168)
++++ vendor/mediatek/proprietary/hardware/audio/common/V3/aud_drv/AudioALSAHardware.cpp	(revision 1169)
+@@ -159,6 +159,7 @@
+ static String8 keyDUALMIC_SET_DL_GAIN = String8("DUAL_MIC_SET_DL_GAIN");
+ static String8 keyDUALMIC_SET_HSDL_GAIN = String8("DUAL_MIC_SET_HSDL_GAIN");
+ static String8 keyDUALMIC_SET_UL_GAIN_HF = String8("DUAL_MIC_SET_UL_GAIN_HF");
++static String8 keySET_MIC_CHOOSE= String8("SET_MIC_CHOOSE");
+ #endif
+ static String8 keyBesRecordParams_Update = String8("UpdateBesRecordParameters");
+ static String8 keyMagiConParams_Update = String8("UpdateMagiConParameters");
+@@ -1265,6 +1266,17 @@
+         param.remove(keyDualMicParams_Update);
+         mStreamManager->UpdateDualMicParams();
+     }
++    if (param.getInt(keySET_MIC_CHOOSE, value) == NO_ERROR) { 
++        param.remove(keySET_MIC_CHOOSE); 
++        ALOGD("+%s(): %s", __FUNCTION__, "setBuiltInMicSpecificType");
++        if (value==2) {
++           AudioALSAHardwareResourceManager::getInstance()->setBuiltInMicSpecificType(BUILTIN_MIC_MIC2_ONLY); 
++        } else if (value==1) {
++           AudioALSAHardwareResourceManager::getInstance()->setBuiltInMicSpecificType(BUILTIN_MIC_MIC1_ONLY); 
++        } else {
++           AudioALSAHardwareResourceManager::getInstance()->setBuiltInMicSpecificType(BUILTIN_MIC_DEFAULT); 
++        }
++    }
+ #endif
+ 
+ #if defined(MTK_MAGICONFERENCE_SUPPORT) && defined(MTK_DUAL_MIC_SUPPORT)
+Index: vendor/mediatek/proprietary/hardware/meta/common/src/FtModule.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/meta/common/src/FtModule.cpp	(revision 1168)
++++ vendor/mediatek/proprietary/hardware/meta/common/src/FtModule.cpp	(revision 1169)
+@@ -764,7 +764,7 @@
+ #define RELEASE_CHIP_TOKEN          "ro.mediatek.chip_ver"
+ #define RELEASE_PRODUCT_TOKEN       "ro.product.name"
+ #define RELEASE_BUILD_TIME_TOKEN    "ro.build.date"
+-#define RELEASE_BUILD_DISP_ID_TOKEN "ro.build.display.id"
++#define RELEASE_BUILD_DISP_ID_TOKEN "ro.build.version.incremental"
+ 
+ FtModVersionInfo::FtModVersionInfo(void)
+ 	:CmdTarget(FT_VER_INFO_REQ_ID)
+Index: frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 1168)
++++ frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 1169)
+@@ -3767,7 +3767,7 @@
+         // Don't flash while we are in a call or screen is on
+         // if (mLedNotification == null || mInCall || mScreenOn) {
+         /// M: Add DM/PPL lock related.
+-        if (ledNotification == null || mInCall || mScreenOn || mDmLock || mPplLock) {
++        if (ledNotification == null || mInCall /*|| mScreenOn */ || mDmLock || mPplLock) {
+             mNotificationLight.turnOff();
+             if (mStatusBar != null) {
+                 mStatusBar.notificationLightOff();
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1168)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1169)
+@@ -5934,6 +5934,35 @@
+                 return iReturn;
+             }
+         }
++        int iReturn = 0;
++        if (keyCode == 0 && down) {
++            final int scanCode = event.getScanCode();
++            String activityName = getRunningActivityName();
++            Log.d(TAG, "yuxingmin 00 keyCode=" + keyCode + " scanCode=" + scanCode);
++            if ((scanCode == 134 || scanCode == 206) && (activityName != null) && (activityName.indexOf("mediatek.factorymode") >= 0)) {
++                Intent intent = new Intent();
++                intent.setAction("intent.action.HALL_FACTORY_MODE_TEST");
++                mContext.sendBroadcast(intent);	
++                Log.d(TAG, "yuxingmin 0000  factory mode");
++            }
++            else {
++                if (scanCode == 206) {
++                    iReturn &= ~ACTION_PASS_TO_USER;
++                    cancelPendingScreenshotChordAction();
++                    mPowerManager.goToSleep(event.getEventTime(),PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON, 0);
++                    isWakeKey = false;
++                }
++                else if(scanCode == 134) {
++                    iReturn = ACTION_PASS_TO_USER;
++                    mPowerManager.wakeUp(event.getEventTime());
++                    Intent intent = new Intent();
++                    intent.setAction("intent.action.HALL_OPEN_TO_UNLOCK");
++                    mContext.sendBroadcast(intent);	
++                }
++                return iReturn;
++            }
++        }
++
+         // Handle special keys.
+         switch (keyCode) {
+             case KeyEvent.KEYCODE_BACK: {
+Index: frameworks/base/services/core/java/com/android/server/BatteryService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/BatteryService.java	(revision 1168)
++++ frameworks/base/services/core/java/com/android/server/BatteryService.java	(revision 1169)
+@@ -218,6 +218,8 @@
+         } catch (RemoteException e) {
+             // Should never happen.
+         }
++        Slog.d(TAG, "onStart");
++        Slog.d(TAG, "SystemProperties"+(SystemProperties.get("ro.mtk_ipo_support").equals("1")));
+         if (SystemProperties.get("ro.mtk_ipo_support").equals("1")) {
+             IntentFilter filter = new IntentFilter();
+             filter.addAction(IPO_POWER_ON);
+@@ -225,6 +227,7 @@
+             mContext.registerReceiver(new BroadcastReceiver() {
+                 @Override
+                 public void onReceive(Context context, Intent intent) {
++                    Slog.d(TAG, intent.getAction());
+                     if (IPO_POWER_ON.equals(intent.getAction())) {
+                         mIPOShutdown = false;
+                         mIPOBoot = true;
+@@ -238,7 +241,23 @@
+                 }
+             }, filter);
+         }
+-
++        IntentFilter filter_led = new IntentFilter();
++        filter_led.addAction("com.mediatek.factorymode.led.action_red");
++        filter_led.addAction("com.mediatek.factorymode.led.action_blue");
++        filter_led.addAction("com.mediatek.factorymode.led.action_off");
++        mContext.registerReceiver(new BroadcastReceiver() {
++            @Override
++            public void onReceive(Context context, Intent intent) {
++                Slog.d(TAG, intent.getAction());
++                if("com.mediatek.factorymode.led.action_red".equals(intent.getAction())) {
++                    mLed.getLedStatus(1);
++                }else if("com.mediatek.factorymode.led.action_blue".equals(intent.getAction())) {
++                    mLed.getLedStatus(2);
++                }else if("com.mediatek.factorymode.led.action_off".equals(intent.getAction())) {
++                    mLed.getLedStatus(3);
++                }
++            }
++        }, filter_led);
+         mBinderService = new BinderService();
+         publishBinderService("battery", mBinderService);
+         publishLocalService(BatteryManagerInternal.class, new LocalService());
+@@ -1056,6 +1075,16 @@
+             }
+         }
+ 
++        private void getLedStatus(int i) {
++            if(i==1) {
++                mBatteryLight.setColor(mBatteryLowARGB);
++            }else if(i==2) {
++                mBatteryLight.setColor(mBatteryFullARGB);
++            }else if(i==3) {
++                mBatteryLight.turnOff();
++            }
++        }
++
+         private void updateLedStatus() {
+             // if LowBatteryWarning happened, we refresh the led state no matter ipo_led is on or off.
+             if ((ipo_led_off && mIPOBoot) || (LowLevelFlag && mIPOBoot)) {
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1168)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1169)
+@@ -1459,7 +1459,14 @@
+         @Override
+         public void onClick(View v) {
+             awakenDreams();
+-            toggleRecentApps();
++            ActivityManager activityManager = (ActivityManager)mContext.getSystemService(Context.ACTIVITY_SERVICE);
++            ComponentName topActivity = activityManager.getRunningTasks(1).get(0).topActivity;
++            if (topActivity.getPackageName().equals("com.mediatek.factorymode")){
++                Intent intent = new Intent("techain.intent.action.KCTB");
++                mContext.sendBroadcast(intent);
++            }else{
++                toggleRecentApps();
++            }
+         }
+     };
+ 
+Index: frameworks/base/packages/SettingsLib/src/com/android/settingslib/DeviceInfoUtils.java
+===================================================================
+--- frameworks/base/packages/SettingsLib/src/com/android/settingslib/DeviceInfoUtils.java	(revision 1168)
++++ frameworks/base/packages/SettingsLib/src/com/android/settingslib/DeviceInfoUtils.java	(revision 1169)
+@@ -97,9 +97,14 @@
+                     + " groups");
+             return "Unavailable";
+         }
+-        return m.group(1) + "\n" +                 // 3.0.31-g6fb96c9
++		String kernelString = m.group(1);
++        if (kernelString.endsWith("+")) {
++            kernelString = kernelString.substring(0, kernelString.length() - 2);
++        }
++        return kernelString;
++/*         return m.group(1) + "\n" +                 // 3.0.31-g6fb96c9
+                 m.group(2) + " " + m.group(3) + "\n" + // x@y.com #1
+-                m.group(4);                            // Thu Jun 28 11:02:39 PDT 2012
++                m.group(4);                            // Thu Jun 28 11:02:39 PDT 2012 */
+     }
+ 
+     /**

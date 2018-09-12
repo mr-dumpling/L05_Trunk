@@ -1,0 +1,58 @@
+Index: device/ausshine/aus6739_66_n1/device.mk
+===================================================================
+--- device/ausshine/aus6739_66_n1/device.mk	(revision 5791)
++++ device/ausshine/aus6739_66_n1/device.mk	(revision 5792)
+@@ -209,4 +209,8 @@
+   PRODUCT_PROPERTY_OVERRIDES += ro.telephony.dualsim = false
+ else 
+   PRODUCT_PROPERTY_OVERRIDES += ro.telephony.dualsim = true
++endif
++
++ifeq (yes,$(strip $(BOOT_DEFAULT_LOCALE_BY_SIM)))
++  PRODUCT_PROPERTY_OVERRIDES += ro.bootlocale.bysim = true
+ endif
+\ No newline at end of file
+Index: vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 5791)
++++ vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 5792)
+@@ -722,4 +722,5 @@
+ TCL_LSCREEN_SUPPORT = yes
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ TCL_LED_SUPPORT = no
+-OP01SOUNDRECORDER_APP = yes
+\ No newline at end of file
++OP01SOUNDRECORDER_APP = yes
++BOOT_DEFAULT_LOCALE_BY_SIM = yes
+\ No newline at end of file
+Index: vendor/branch/5058I_ALRU/device/ausshine/aus6739_66_n1/device.mk
+===================================================================
+--- vendor/branch/5058I_ALRU/device/ausshine/aus6739_66_n1/device.mk	(revision 5791)
++++ vendor/branch/5058I_ALRU/device/ausshine/aus6739_66_n1/device.mk	(revision 5792)
+@@ -209,4 +209,8 @@
+   PRODUCT_PROPERTY_OVERRIDES += ro.telephony.dualsim = false
+ else 
+   PRODUCT_PROPERTY_OVERRIDES += ro.telephony.dualsim = true
++endif
++
++ifeq (yes,$(strip $(BOOT_DEFAULT_LOCALE_BY_SIM)))
++  PRODUCT_PROPERTY_OVERRIDES += ro.bootlocale.bysim = true
+ endif
+\ No newline at end of file
+Index: frameworks/opt/telephony/src/java/com/android/internal/telephony/MccTable.java
+===================================================================
+--- frameworks/opt/telephony/src/java/com/android/internal/telephony/MccTable.java	(revision 5791)
++++ frameworks/opt/telephony/src/java/com/android/internal/telephony/MccTable.java	(revision 5792)
+@@ -258,7 +258,11 @@
+     }
+ 	
+ 	private static boolean canUpdateLocale(Context context) {
+-	    return !(userHasPersistedLocale() /*|| isDeviceProvisioned(context)*/);
++		if (SystemProperties.getBoolean("ro.bootlocale.bysim", false)){
++			return !(userHasPersistedLocale() && isDeviceProvisioned(context));
++		} else {
++			return !(userHasPersistedLocale() /*|| isDeviceProvisioned(context)*/);
++		}
+ 	}
+ 	
+ 	private static boolean userHasPersistedLocale() {

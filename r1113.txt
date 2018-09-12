@@ -1,0 +1,257 @@
+Index: frameworks/base/services/core/java/com/android/server/audio/AudioService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/audio/AudioService.java	(revision 1112)
++++ frameworks/base/services/core/java/com/android/server/audio/AudioService.java	(revision 1113)
+@@ -615,6 +615,10 @@
+             }
+         }
+     }
++	
++	//add by dongdongli 20170905 start {
++	private boolean bIsFirstBoot;
++	//add end }
+ 
+     ///////////////////////////////////////////////////////////////////////////
+     // Construction
+@@ -624,7 +628,12 @@
+     public AudioService(Context context) {
+         mContext = context;
+         mContentResolver = context.getContentResolver();
+-        mAppOps = (AppOpsManager)context.getSystemService(Context.APP_OPS_SERVICE);
++		
++		//add by dongdongli 20170905 start {
++		bIsFirstBoot = true;
++		//add end }
++        
++		mAppOps = (AppOpsManager)context.getSystemService(Context.APP_OPS_SERVICE);
+ 
+         mPlatformType = AudioSystem.getPlatformType(context);
+ 
+@@ -3415,6 +3424,11 @@
+                         if (mMusicActiveMs > UNSAFE_VOLUME_MUSIC_ACTIVE_MS_MAX) {
+                             setSafeMediaVolumeEnabled(true, caller);
+                             mMusicActiveMs = 0;
++							//add by dongdongli 20170905 start {
++							// system will force to set the music volume to the safe mode , and show the new dialog 
++							SafetyVolumeWarningDialog dialog = new SafetyVolumeWarningDialog(mContext);
++							dialog.show();
++							//add end }
+                         }
+                         saveMusicActiveMs();
+                     }
+@@ -5954,6 +5968,14 @@
+ 
+     private boolean checkSafeMediaVolume(int streamType, int index, int device) {
+         synchronized (mSafeMediaVolumeState) {
++			//add by dongdongli 20170905 start {
++			// dialog will show when you reboot the mobile and increase the volume
++			if(bIsFirstBoot){
++				mSafeMediaVolumeState = SAFE_MEDIA_VOLUME_ACTIVE;
++				bIsFirstBoot = false;
++			}
++			//add end }
++			
+             if ((mSafeMediaVolumeState == SAFE_MEDIA_VOLUME_ACTIVE) &&
+                     (mStreamVolumeAlias[streamType] == AudioSystem.STREAM_MUSIC) &&
+                     ((device & mSafeMediaVolumeDevices) != 0) &&
+Index: frameworks/base/services/core/java/com/android/server/audio/SystemUIDialog.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/audio/SystemUIDialog.java	(revision 0)
++++ frameworks/base/services/core/java/com/android/server/audio/SystemUIDialog.java	(revision 1113)
+@@ -0,0 +1,75 @@
++/*
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License
++ */
++
++package com.android.server.audio;
++
++import android.app.AlertDialog;
++import android.content.Context;
++import android.view.WindowManager;
++
++/**
++ * Base class for dialogs that should appear over panels and keyguard.
++ */
++public class SystemUIDialog extends AlertDialog {
++
++    private final Context mContext;
++
++    public SystemUIDialog(Context context) {
++        this(context, com.android.internal.R.style.Theme_SystemUI_Dialog);
++    }
++
++    public SystemUIDialog(Context context, int theme) {
++        super(context, theme);
++        mContext = context;
++
++        applyFlags(this);
++        WindowManager.LayoutParams attrs = getWindow().getAttributes();
++        attrs.setTitle(getClass().getSimpleName());
++        getWindow().setAttributes(attrs);
++    }
++
++    public void setShowForAllUsers(boolean show) {
++        setShowForAllUsers(this, show);
++    }
++
++    public void setMessage(int resId) {
++        setMessage(mContext.getString(resId));
++    }
++
++    public void setPositiveButton(int resId, OnClickListener onClick) {
++        setButton(BUTTON_POSITIVE, mContext.getString(resId), onClick);
++    }
++
++    public void setNegativeButton(int resId, OnClickListener onClick) {
++        setButton(BUTTON_NEGATIVE, mContext.getString(resId), onClick);
++    }
++
++    public static void setShowForAllUsers(AlertDialog dialog, boolean show) {
++        if (show) {
++            dialog.getWindow().getAttributes().privateFlags |=
++                    WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
++        } else {
++            dialog.getWindow().getAttributes().privateFlags &=
++                    ~WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
++        }
++    }
++
++    public static void applyFlags(AlertDialog dialog) {
++        dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL);
++        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
++                | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
++    }
++}
+Index: frameworks/base/services/core/java/com/android/server/audio/SafetyVolumeWarningDialog.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/audio/SafetyVolumeWarningDialog.java	(revision 0)
++++ frameworks/base/services/core/java/com/android/server/audio/SafetyVolumeWarningDialog.java	(revision 1113)
+@@ -0,0 +1,47 @@
++/*
++ * Copyright (C) 2015 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.server.audio;
++
++import android.content.Context;
++import android.content.DialogInterface;
++import android.util.Log;
++import android.view.WindowManager;
++
++public class SafetyVolumeWarningDialog extends SystemUIDialog implements DialogInterface.OnClickListener {
++	private static final String TAG = "SafetyWarningDialog";
++
++    private static final int KEY_CONFIRM_ALLOWED_AFTER = 1000; // milliseconds
++
++    private final Context mContext;
++
++    public SafetyVolumeWarningDialog(Context context) {
++        super(context);
++        mContext = context;
++
++        getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ERROR);
++        setShowForAllUsers(true);
++        setMessage(mContext.getString(com.android.internal.R.string.safe_media_volume_warning));
++        setButton(DialogInterface.BUTTON_POSITIVE,
++                mContext.getString(com.android.internal.R.string.immersive_cling_positive), (OnClickListener) null);
++
++    }
++
++    @Override
++    public void onClick(DialogInterface dialog, int which) {
++        cancel();
++    }
++}
+\ No newline at end of file
+Index: frameworks/base/services
+===================================================================
+--- frameworks/base/services	(revision 1112)
++++ frameworks/base/services	(revision 1113)
+
+Property changes on: frameworks/base/services
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/services:r472
+Index: frameworks/base/core/res/res/values/styles.xml
+===================================================================
+--- frameworks/base/core/res/res/values/styles.xml	(revision 1112)
++++ frameworks/base/core/res/res/values/styles.xml	(revision 1113)
+@@ -1461,5 +1461,12 @@
+         <item name="minHeight">72dp</item>
+         <item name="padding">16dp</item>
+     </style>
++	
++    <!-- add by dongdongli 20170905 start {-->
++    <style name="Theme.SystemUI.Dialog" parent="@android:style/Theme.DeviceDefault.Light.Dialog">
++    	<item name="android:colorPrimary">@color/system_primary_color</item>
++    	<item name="android:colorControlActivated">@color/system_accent_color</item>
++    </style>
++    <!-- add end }-->
+ 
+ </resources>
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 1112)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 1113)
+@@ -2730,4 +2730,4 @@
+   <java-symbol type="string" name="free_memory_ignore_btn" />
+   <java-symbol type="string" name="free_memory_free_up_space_btn" />
+ 
+->>>>>>> .theirs</resources>
++</resources>
+Index: frameworks/base/core/res/res/values/colors.xml
+===================================================================
+--- frameworks/base/core/res/res/values/colors.xml	(revision 1112)
++++ frameworks/base/core/res/res/values/colors.xml	(revision 1113)
+@@ -186,4 +186,9 @@
+ 
+     <color name="resize_shadow_start_color">#2a000000</color>
+     <color name="resize_shadow_end_color">#00000000</color>
++	
++    <!-- add by dongdongli 20170905 start -->
++    <color name="system_primary_color">#ff263238</color><!-- blue grey 900 -->
++    <color name="system_accent_color">#ff80CBC4</color><!-- deep teal 200 -->
++    <!-- add end }-->
+ </resources>
+Index: frameworks/base/core
+===================================================================
+--- frameworks/base/core	(revision 1112)
++++ frameworks/base/core	(revision 1113)
+
+Property changes on: frameworks/base/core
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/core:r472
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1112)
++++ frameworks/base	(revision 1113)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r472

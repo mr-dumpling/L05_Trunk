@@ -1,0 +1,157 @@
+Index: diff_svn_modify.sh
+===================================================================
+--- diff_svn_modify.sh	(revision 0)
++++ diff_svn_modify.sh	(revision 7256)
+@@ -0,0 +1,144 @@
++#!/usr/bin/perl 
++# ##########################################################
++# Author : javen
++# Date : 2018.1.30
++# ##########################################################
++#
++
++if(@ARGV < 1){
++	print "-" x 50;print "\n";
++	print "Diff svn modify file list\n";
++	print "Useage: 
++	diff_svn_modify.pl [branch] [-cmp other_br] [-dir subdir] [-same]
++	-- branch is branch name which must input
++	-- -cmp other_br option for add other_br to branch
++	-- -dir subdir option for sub directory from root
++	-- -same show same file list
++	\n";
++	print "-" x 50;print "\n";
++	#print "Command: diff_branch.pl [branch_name] [-ov -add -no_modem] [save_file]\n";
++	exit;
++}
++#for -print
++$idx_no_print = getCmdParam("-no_print");
++
++if($idx_no_print <0){
++	print "##################### BEGIN ######################\n";
++}
++# variable define---
++$BRANCH = "vendor/branch/".$ARGV[0];
++$CMP_DIR = "";
++$MODIFY_FLAG = "M       ";
++$idx_sub = getCmdParam("-dir");
++$subdir = "";
++if($idx_sub > 0){
++	$subdir = $ARGV[$idx_sub];
++}else{
++	print "-- Please Input search path, ENTER for all:\n";
++	$subdir = <STDIN>;	
++	chomp($subdir);
++}
++print "-- Search Path = [$subdir] --\n";
++
++my @same_list;
++my @modify_list;
++## code
++my @flist = `svn st -q $subdir`;
++if($idx_no_print <0){
++	print "-" x 50;print "\n";
++}
++
++
++#for -cmp of sub branch
++$idx_cmp = getCmdParam("-cmp");
++if($idx_cmp > 0){
++	$CMP_DIR = "vendor/branch/".$ARGV[$idx_cmp]."/";
++	#print "CMP_DIR $idx_cmp: $CMP_DIR\n";
++}
++
++#print @flist;
++foreach $file (@flist){
++	if($file =~ /$MODIFY_FLAG/){
++		chomp($file);
++		$file =~ s/$MODIFY_FLAG//g;
++		
++		if($file =~ /kernel-4.4/){
++			next;
++		}
++		if($file =~ /mcu\/pcore\/custom\/modem/){
++			next;
++		}
++		if($file =~ /security\/cert_config/){
++			next;
++		}
++		#print $file;
++		if(!(-e $file)){
++			print "FILE NOT EXISIT: $file\n";
++			next;
++		}
++		$brFile = $BRANCH."/".$file;
++		$brCmpFile = $CMP_DIR.$file;
++		$d1 = "";
++		if(-e $brFile){
++			$d1 = "DIFF $file $brFile";
++			$ret_d1 = `$d1`;
++			if("" eq $ret_d1){
++				push @same_list, "$BRANCH,$file";
++			}else{
++				push @modify_list, $file;
++			}
++			next;
++			
++		}
++		if($CMP_DIR ne "" && -e $brCmpFile){
++			$d1 = "DIFF $file $brCmpFile";
++			$ret_d1 = `$d1`;
++			if("" eq $ret_d1){
++				push @same_list, "$CMP_DIR,$file";
++			}else{
++				push @modify_list, $file;
++			}
++			next;
++		}
++		push @modify_list, $file;
++	}
++}
++if(getCmdParam("-same")> 0){
++	print "SAME #:\n";
++	foreach $ln_same (@same_list){
++		@ar_it = split(",", $ln_same);
++		print "-- ".$ar_it[1]."  [@".$ar_it[0]." ]\n";
++	}
++	print "\n";
++}
++print "Modify #:\n";
++foreach $ln_modify (@modify_list){
++	print "-- $ln_modify\n";
++}
++
++if($idx_no_print <0){
++	print "-" x 50;print "\n";
++	print "##################### END ########################\n";
++}
++exit;
++#######################################end###################		
++#no input param
++sub getCmdParam {  
++	my ($my_pa) = @_;
++	
++	$av_str = "";
++	foreach $my_b(@ARGV){
++		$av_str = $av_str.$my_b.",";
++	}
++	
++	my @my_av = split(",", $av_str);
++	my $mycount = 0;
++
++	foreach $my_la(@my_av){
++		$mycount++;
++		if($my_pa eq $my_la){
++			return $mycount;
++		}
++	}
++	return -1;
++} 
+\ No newline at end of file
+
+Property changes on: diff_svn_modify.sh
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

@@ -1,0 +1,29 @@
+Index: vendor/branch/5058Y_ALGB/frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 15386)
++++ vendor/branch/5058Y_ALGB/frameworks/base/services/core/java/com/android/server/notification/NotificationManagerService.java	(revision 15387)
+@@ -3926,7 +3926,23 @@
+         TelephonyManager.from(getContext()).listen(new PhoneStateListener() {
+             @Override
+             public void onCallStateChanged(int state, String incomingNumber) {
+-                if (mCallState == state) return;
++                // Add begin
++				Log.d(TAG,"listenForCallState() state = " + state);
++				long identity = Binder.clearCallingIdentity();
++				if (state == AudioSystem.PHONE_STATE_RINGING) {
++					try {
++						final IRingtonePlayer player = mAudioManager.getRingtonePlayer();
++						if (player != null) {
++							Log.e(TAG, "listenForCallState() player.stopAsync()");
++							player.stopAsync();
++							}
++						} catch (RemoteException e) {
++						} finally {
++							Binder.restoreCallingIdentity(identity);
++						}
++				}
++				 // add end
++				if (mCallState == state) return;
+                 if (DBG) Slog.d(TAG, "Call state changed: " + callStateToString(state));
+                 mCallState = state;
+             }

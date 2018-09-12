@@ -1,0 +1,683 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 14147)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 14148)
+@@ -94,6 +94,8 @@
+     public static final String SUB_ID = "sub_id";
+     public static final String MVNO_TYPE = "mvno_type";
+     public static final String MVNO_MATCH_DATA = "mvno_match_data";
++	//sort by id not name!
++	public static final String DEFAULT_SORT_ORDER = "_id ASC";
+ 
+     private static final int ID_INDEX = 0;
+     private static final int NAME_INDEX = 1;
+@@ -374,7 +376,7 @@
+         Cursor cursor = getContentResolver().query(
+                 Telephony.Carriers.CONTENT_URI,
+                 new String[] { "_id", "name", "apn", "type", "mvno_type", "mvno_match_data",
+-                        "sourcetype" }, where, null, order);
++                        "sourcetype" }, where, null, DEFAULT_SORT_ORDER/* order */);
+         /// @}
+ 
+         if (cursor != null) {
+@@ -399,6 +401,7 @@
+ 
+             while (!cursor.isAfterLast()) {
+                 String name = cursor.getString(NAME_INDEX);
++				Log.d(TAG,"name="+name);
+                 String apn = cursor.getString(APN_INDEX);
+                 String key = cursor.getString(ID_INDEX);
+                 String type = cursor.getString(TYPES_INDEX);
+@@ -613,7 +616,7 @@
+                 */
+         int subId = mSubscriptionInfo.getSubscriptionId();
+         Cursor cursor = getContentResolver().query(getPreferApnUri(subId), new String[] { "_id" },
+-                null, null, Telephony.Carriers.DEFAULT_SORT_ORDER);
++                null, null, DEFAULT_SORT_ORDER/* Telephony.Carriers.DEFAULT_SORT_ORDER */);
+         /// @}
+         if (cursor.getCount() > 0) {
+             cursor.moveToFirst();
+Index: vendor/branch/5058Y_ALGB/device/mediatek/common/apns-conf.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/device/mediatek/common/apns-conf.xml	(revision 14147)
++++ vendor/branch/5058Y_ALGB/device/mediatek/common/apns-conf.xml	(revision 14148)
+@@ -22,7 +22,7 @@
+         spn=""
+         type="default,mms,supl"
+         user="" /> -->
+-
++		
+     <apn
+         apn="orange"
+         authtype="1"
+@@ -68,7 +68,7 @@
+         type="default"
+         user="" /> -->
+ 
+-    <apn
++    <!-- <apn
+         apn="event.proximus.be"
+         authtype="1"
+         bearer_bitmask=""
+@@ -89,9 +89,9 @@
+         server=""
+         spn=""
+         type="mms"
+-        user="mms" />
++        user="mms" /> -->
+ 
+-    <apn
++    <!-- <apn
+         apn="internet.proximus.be"
+         authtype="1"
+         bearer_bitmask=""
+@@ -112,7 +112,7 @@
+         server=""
+         spn=""
+         type="default,supl"
+-        user="" />
++        user="" /> -->
+ 
+     <!-- <apn
+         apn="goto.virginmobile.uk"
+@@ -162,6 +162,7 @@
+ 
+     <apn
+         apn="mms.mobile.sky"
++		authtype="0"
+         bearer_bitmask=""
+         carrier="SKY MMS"
+         csdnum="0"
+@@ -184,6 +185,7 @@
+ 
+     <apn
+         apn="mobile.sky"
++		authtype="0"
+         bearer_bitmask=""
+         carrier="SKY"
+         csdnum="0"
+@@ -229,6 +231,7 @@
+ 
+     <apn
+         apn="mobile.sky"
++		authtype="0"
+         bearer_bitmask=""
+         carrier="SKY"
+         csdnum="0"
+@@ -272,28 +275,28 @@
+         type="default,supl,mms"
+         user="" />
+ 
+-    <apn
+-        apn="mobiledata"
+-		authtype="1"
++	<apn
++        apn="mobile.o2.co.uk"
++        authtype="1"
+         bearer_bitmask=""
+-        carrier="Jump"
++        carrier="O2 Pay Monthly"
+         csdnum="0"
+         mcc="234"
+-        mmsc=""
++        mmsc="http://mmsc.mms.o2.co.uk:8002"
+         mmsport=""
+         mmsproxy=""
+         mnc="10"
+         mvno_match_data=""
+         mvno_type=""
+-        password=""
++        password="p"
+         port=""
+-        protocol="IP"
++        protocol="IPV4V6"
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="Jump"
++        spn=""
+         type="default,supl,mms"
+-        user="" />
++        user="o2" />    
+ 
+     <apn
+         apn="goto.virginmobile.uk"
+@@ -320,6 +323,7 @@
+ 
+     <apn
+         apn="goto.virginmobile.uk"
++		authtype="0"
+         bearer_bitmask=""
+         carrier="Virgin"
+         csdnum="0"
+@@ -2917,6 +2921,29 @@
+         type="mms"
+         user="eesecure" />
+ 
++	<apn
++        apn="everywhere"
++        authtype="1"
++        bearer_bitmask=""
++        carrier="Internet"
++        csdnum="0"
++        mcc="234"
++        mmsc=""
++        mmsport=""
++        mmsproxy=""
++        mnc="30"
++        mvno_match_data=""
++        mvno_type=""
++        password="secure"
++        port=""
++        protocol="IPV4V6"
++        proxy=""
++        roaming_protocol="IP"
++        server=""
++        spn="EE"
++        type="default,supl"
++        user="eesecure" />
++		
+     <apn
+         apn="goto.virginmobile.uk"
+         authtype="1"
+@@ -3051,32 +3078,9 @@
+         server=""
+         spn=""
+         type="mms"
+-        user="" />
++        user="" />    
+ 
+     <apn
+-        apn="payg.mobilebysainsburys.co.uk"
+-        authtype="1"
+-        bearer_bitmask=""
+-        carrier="Sainsbury&apos;s PAYG"
+-        csdnum="0"
+-        mcc="234"
+-        mmsc=""
+-        mmsport=""
+-        mmsproxy=""
+-        mnc="15"
+-        mvno_match_data=""
+-        mvno_type=""
+-        password=""
+-        port=""
+-        protocol="IP"
+-        proxy=""
+-        roaming_protocol="IP"
+-        server=""
+-        spn="Sainsbury&apos;s"
+-        type="default,supl"
+-        user="" />
+-
+-    <apn
+         apn="webapn.at"
+         bearer_bitmask=""
+         carrier="Ge org!"
+@@ -3635,7 +3639,7 @@
+         type="default,mms,supl"
+         user="" />
+ 
+-    <apn
++    <!-- <apn
+         apn="tescomobile.liffeytelecom.com"
+         authtype="1"
+         bearer_bitmask=""
+@@ -3656,7 +3660,7 @@
+         server=""
+         spn=""
+         type="default,mms"
+-        user="" />
++        user="" /> -->
+ 
+     <apn
+         apn="internet.movistar.com.co"
+@@ -4558,10 +4562,10 @@
+         user="orange" />
+ 
+     <apn
+-        apn="everywhere"
++        apn="btmobile.bt.com"
+         authtype="1"
+         bearer_bitmask=""
+-        carrier="Asda Internet"
++        carrier="BT Internet"
+         csdnum="0"
+         mcc="234"
+         mmsc=""
+@@ -4570,15 +4574,15 @@
+         mnc="30"
+         mvno_match_data=""
+         mvno_type=""
+-        password="secure"
++        password="bt"
+         port=""
+         protocol="IP"
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="BT"
+         type="default,supl"
+-        user="eesecure" />
++        user="bt" />
+ 
+     <apn
+         apn="internet.btonephone.com"
+@@ -4601,13 +4605,13 @@
+         server=""
+         spn="BT OnePhone UK"
+         type="default,supl"
+-        user="" />
+-
+-    <apn
+-        apn="btmobile.bt.com"
++        user="" />    
++	
++	<apn
++        apn="everywhere"
+         authtype="1"
+         bearer_bitmask=""
+-        carrier="BT Internet"
++        carrier="Asda Internet"
+         csdnum="0"
+         mcc="234"
+         mmsc=""
+@@ -4616,16 +4620,16 @@
+         mnc="30"
+         mvno_match_data=""
+         mvno_type=""
+-        password="bt"
++        password="secure"
+         port=""
+         protocol="IP"
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="BT"
++        spn=""
+         type="default,supl"
+-        user="bt" />
+-
++        user="eesecure" />
++	
+     <apn
+         apn="mms.btonephone.com"
+         authtype="0"
+@@ -6750,7 +6754,7 @@
+         type="default, mms"
+         user="web" />
+ 
+-    <apn
++    <!-- <apn
+         apn="airtelprotect.com"
+         bearer_bitmask=""
+         carrier="Airtel Protect"
+@@ -6770,9 +6774,9 @@
+         server=""
+         spn=""
+         type="supl"
+-        user="" />
++        user="" /> -->
+ 
+-    <apn
++    <!-- <apn
+         apn="airtelgprs.com"
+         bearer_bitmask=""
+         carrier="Airtel Int Roaming"
+@@ -6792,9 +6796,9 @@
+         server=""
+         spn=""
+         type="supl"
+-        user="" />
++        user="" /> -->
+ 
+-    <apn
++    <!-- <apn
+         apn="airtel-ci-wap.com"
+         bearer_bitmask=""
+         carrier="Airtel WAP"
+@@ -6814,7 +6818,7 @@
+         server=""
+         spn=""
+         type="wap"
+-        user="" />
++        user="" /> -->
+ 
+     <apn
+         apn="mms.gprs.is"
+@@ -11810,7 +11814,7 @@
+         server=""
+         spn="EE"
+         type="mms"
+-        user="eesecure" />
++        user="eesecure" />    
+ 
+     <apn
+         apn="everywhere"
+@@ -11822,29 +11826,6 @@
+         mmsc=""
+         mmsport=""
+         mmsproxy=""
+-        mnc="30"
+-        mvno_match_data=""
+-        mvno_type=""
+-        password="secure"
+-        port=""
+-        protocol="IPV4V6"
+-        proxy=""
+-        roaming_protocol="IP"
+-        server=""
+-        spn="EE"
+-        type="default,supl"
+-        user="eesecure" />
+-
+-    <apn
+-        apn="everywhere"
+-        authtype="1"
+-        bearer_bitmask=""
+-        carrier="Internet"
+-        csdnum="0"
+-        mcc="234"
+-        mmsc=""
+-        mmsport=""
+-        mmsproxy=""
+         mnc="33"
+         mvno_match_data=""
+         mvno_type=""
+@@ -20697,30 +20678,8 @@
+         spn=""
+         type="default,supl,hipri,mms,dun"
+         user="" />
++    
+ 
+-    <apn
+-        apn="mobile.o2.co.uk"
+-        authtype="1"
+-        bearer_bitmask=""
+-        carrier="O2 Pay Monthly"
+-        csdnum="0"
+-        mcc="234"
+-        mmsc="http://mmsc.mms.o2.co.uk:8002"
+-        mmsport=""
+-        mmsproxy=""
+-        mnc="10"
+-        mvno_match_data=""
+-        mvno_type=""
+-        password="p"
+-        port=""
+-        protocol="IPV4V6"
+-        proxy=""
+-        roaming_protocol="IP"
+-        server=""
+-        spn=""
+-        type="default,supl,mms"
+-        user="o2" />
+-
+     <!-- <apn
+         apn="ims"
+         bearer_bitmask="1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19"
+@@ -35781,55 +35740,9 @@
+         server=""
+         spn=""
+         type=""
+-        user="" />
++        user="" />    
+ 
+     <apn
+-        apn="uk.lebara.mobi"
+-        authtype="1"
+-        bearer_bitmask=""
+-        carrier="Lebara"
+-        csdnum="0"
+-        mcc="234"
+-        mmsc="http://mms.lebara.co.uk/servlets/mms"
+-        mmsport="8799"
+-        mmsproxy="212.183.137.012"
+-        mnc="15"
+-        mvno_match_data=""
+-        mvno_type=""
+-        password="wap"
+-        port=""
+-        protocol="IP"
+-        proxy=""
+-        roaming_protocol="IP"
+-        server=""
+-        spn=""
+-        type="default,supl,mms"
+-        user="wap" />
+-
+-    <apn
+-        apn="mobile.talktalk.co.uk"
+-        authtype="1"
+-        bearer_bitmask=""
+-        carrier="TalkTalk"
+-        csdnum="0"
+-        mcc="234"
+-        mmsc="http://mms.talktalk.co.uk/servlets/mms"
+-        mmsport="8799"
+-        mmsproxy="212.183.137.12"
+-        mnc="15"
+-        mvno_match_data=""
+-        mvno_type=""
+-        password=""
+-        port=""
+-        protocol="IP"
+-        proxy=""
+-        roaming_protocol="IP"
+-        server=""
+-        spn=""
+-        type="default,supl,mms"
+-        user="" />
+-
+-    <apn
+         apn="talkmobile.co.uk"
+         authtype="1"
+         bearer_bitmask=""
+@@ -38288,7 +38201,7 @@
+         type="default"
+         user="gprs" />
+ 
+-    <apn
++    <!-- <apn
+         apn="event.proximus.be"
+         authtype="1"
+         bearer_bitmask=""
+@@ -38309,9 +38222,9 @@
+         server=""
+         spn="EI Telecom"
+         type="mms"
+-        user="mms" />
++        user="mms" /> -->
+ 
+-    <apn
++    <!-- <apn
+         apn="internet.proximus.be"
+         authtype="1"
+         bearer_bitmask=""
+@@ -38332,7 +38245,7 @@
+         server=""
+         spn="EI Telecom"
+         type="default,supl"
+-        user="" />
++        user="" /> -->
+ 
+     <apn
+         apn="mms"
+@@ -47167,32 +47080,9 @@
+         server=""
+         spn="YES OPTUS"
+         type="supl"
+-        user="" />
++        user="" />    
+ 
+     <apn
+-        apn="giffgaff.com"
+-        authtype="1"
+-        bearer_bitmask=""
+-        carrier="giffgaff"
+-        csdnum="0"
+-        mcc="234"
+-        mmsc="http://mmsc.mediamessaging.co.uk:8002"
+-        mmsport="8080"
+-        mmsproxy="82.132.254.1"
+-        mnc="10"
+-        mvno_match_data=""
+-        mvno_type=""
+-        password=""
+-        port=""
+-        protocol="IP"
+-        proxy=""
+-        roaming_protocol="IP"
+-        server=""
+-        spn="giffgaff"
+-        type="default,supl,mms"
+-        user="giffgaff" />
+-
+-    <apn
+         apn="ltedata.apn"
+         authtype="0"
+         bearer_bitmask=""
+@@ -48880,8 +48770,77 @@
+         spn="Sainsbury&apos;s"
+         type="default,supl"
+         user="" />
+-		
++	
+ 	<apn
++        apn="payg.mobilebysainsburys.co.uk"
++        authtype="1"
++        bearer_bitmask=""
++        carrier="Sainsbury&apos;s PAYG"
++        csdnum="0"
++        mcc="234"
++        mmsc=""
++        mmsport=""
++        mmsproxy=""
++        mnc="15"
++        mvno_match_data=""
++        mvno_type=""
++        password=""
++        port=""
++        protocol="IP"
++        proxy=""
++        roaming_protocol="IP"
++        server=""
++        spn="Sainsbury&apos;s"
++        type="default,supl"
++        user="" />
++	
++	<apn
++        apn="uk.lebara.mobi"
++        authtype="1"
++        bearer_bitmask=""
++        carrier="Lebara"
++        csdnum="0"
++        mcc="234"
++        mmsc="http://mms.lebara.co.uk/servlets/mms"
++        mmsport="8799"
++        mmsproxy="212.183.137.012"
++        mnc="15"
++        mvno_match_data=""
++        mvno_type=""
++        password="wap"
++        port=""
++        protocol="IP"
++        proxy=""
++        roaming_protocol="IP"
++        server=""
++        spn=""
++        type="default,supl,mms"
++        user="wap" />
++
++    <apn
++        apn="mobile.talktalk.co.uk"
++        authtype="1"
++        bearer_bitmask=""
++        carrier="TalkTalk"
++        csdnum="0"
++        mcc="234"
++        mmsc="http://mms.talktalk.co.uk/servlets/mms"
++        mmsport="8799"
++        mmsproxy="212.183.137.12"
++        mnc="15"
++        mvno_match_data=""
++        mvno_type=""
++        password=""
++        port=""
++        protocol="IP"
++        proxy=""
++        roaming_protocol="IP"
++        server=""
++        spn=""
++        type="default,supl,mms"
++        user="" />
++	
++	<apn
+ 		carrier="Sainsbury&apos;s Contract MMS" 
+ 		mcc="234" 
+ 		mnc="15" 
+@@ -50533,7 +50492,30 @@
+         spn=""
+         type="default,supl,mms"
+         user="" />
+-
++	
++	<apn
++        apn="giffgaff.com"
++        authtype="1"
++        bearer_bitmask=""
++        carrier="giffgaff"
++        csdnum="0"
++        mcc="234"
++        mmsc="http://mmsc.mediamessaging.co.uk:8002"
++        mmsport="8080"
++        mmsproxy="82.132.254.1"
++        mnc="10"
++        mvno_match_data=""
++        mvno_type=""
++        password=""
++        port=""
++        protocol="IP"
++        proxy=""
++        roaming_protocol="IP"
++        server=""
++        spn="giffgaff"
++        type="default,supl,mms"
++        user="giffgaff" />
++	
+     <apn
+         apn="mms"
+         bearer_bitmask=""
+@@ -50754,7 +50736,30 @@
+         spn="TalkTalk"
+         type="default,supl,mms"
+         user="" />
+-
++	
++	<apn
++        apn="mobiledata"
++		authtype="1"
++        bearer_bitmask=""
++        carrier="Jump"
++        csdnum="0"
++        mcc="234"
++        mmsc=""
++        mmsport=""
++        mmsproxy=""
++        mnc="10"
++        mvno_match_data=""
++        mvno_type=""
++        password=""
++        port=""
++        protocol="IP"
++        proxy=""
++        roaming_protocol="IP"
++        server=""
++        spn="Jump"
++        type="default,supl,mms"
++        user="" />
++		
+     <apn
+         apn="jionet"
+         bearer_bitmask=""

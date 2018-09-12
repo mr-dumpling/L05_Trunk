@@ -1,0 +1,1311 @@
+Index: vendor/branch/5058Y/AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/pcore/custom/modem/common/ps/custom_ssds.c
+===================================================================
+--- vendor/branch/5058Y/AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/pcore/custom/modem/common/ps/custom_ssds.c	(revision 0)
++++ vendor/branch/5058Y/AUS6739_66_N1_MOLY.LR12A.R2.MP.V1/mcu/pcore/custom/modem/common/ps/custom_ssds.c	(revision 12484)
+@@ -0,0 +1,1306 @@
++/*****************************************************************************
++*  Copyright Statement:
++*  --------------------
++*  This software is protected by Copyright and the information contained
++*  herein is confidential. The software may not be copied and the information
++*  contained herein may not be used or disclosed except with the written
++*  permission of MediaTek Inc. (C) 2005
++*
++*  BY OPENING THIS FILE, BUYER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
++*  THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
++*  RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO BUYER ON
++*  AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
++*  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
++*  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
++*  NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
++*  SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
++*  SUPPLIED WITH THE MEDIATEK SOFTWARE, AND BUYER AGREES TO LOOK ONLY TO SUCH
++*  THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. MEDIATEK SHALL ALSO
++*  NOT BE RESPONSIBLE FOR ANY MEDIATEK SOFTWARE RELEASES MADE TO BUYER'S
++*  SPECIFICATION OR TO CONFORM TO A PARTICULAR STANDARD OR OPEN FORUM.
++*
++*  BUYER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND CUMULATIVE
++*  LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
++*  AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
++*  OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY BUYER TO
++*  MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
++*
++*  THE TRANSACTION CONTEMPLATED HEREUNDER SHALL BE CONSTRUED IN ACCORDANCE
++*  WITH THE LAWS OF THE STATE OF CALIFORNIA, USA, EXCLUDING ITS CONFLICT OF
++*  LAWS PRINCIPLES.  ANY DISPUTES, CONTROVERSIES OR CLAIMS ARISING THEREOF AND
++*  RELATED THERETO SHALL BE SETTLED BY ARBITRATION IN SAN FRANCISCO, CA, UNDER
++*  THE RULES OF THE INTERNATIONAL CHAMBER OF COMMERCE (ICC).
++*
++*****************************************************************************/
++
++/*****************************************************************************
++ *
++ * Filename:
++ * ---------
++ * custom_ssds.c
++ *
++ * Project:
++ * --------
++ *
++ *
++ * Description:
++ * ------------
++ *
++ *
++ * Author:
++ * -------
++ *
++ *
++ ****************************************************************************/
++
++#include <string.h>
++#include "kal_trace.h"
++#include "kal_general_types.h"
++#include "kal_public_api.h"
++#include "custom_ssds.h"
++#include "custom_ssds_config.h"
++
++/* SIM */
++#include "sim_common_enums.h" /* for is_test_sim */
++
++extern kal_bool ssds_path_is_pct_icccard(module_type dst_module);
++
++
++kal_bool  _custom_ssds_is_ocb(custom_ssds_atcmd_info *atcmd_info)
++{
++    kal_char action_activate[] = "*";
++    kal_char action_deactivate[] = "#";
++    kal_char action_query[]  = "*#";
++    kal_char action_rigester[]  = "**";
++    kal_char action_erasure[] = "##";
++    kal_uint32  index = 0;
++    kal_bool    is_ocb = KAL_FALSE;
++
++    /*find '=' */
++    while ((atcmd_info->atcmd_buff[index] != '=') && (index < atcmd_info->atcmd_len))
++    {
++        index++;
++    }
++
++    index += 6; /*skip: "*/
++
++    /*skip the action*/
++    if ( (0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, action_query, 2)) ||
++         (0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, action_rigester, 2)) ||
++         (0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, action_erasure, 2)) )
++    {
++        index += 2;
++    }
++    else if ( (0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, action_activate, 1)) ||
++              (0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, action_deactivate, 1)) )
++    {
++        index += 1;
++    }
++
++    /*parse the OCB information*/
++    if (0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, "330", 3))
++    {
++        is_ocb = KAL_FALSE;
++    }
++    else if ((0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, "33", 2)) ||
++        (0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, "331", 3)) ||
++        (0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, "332", 3)) ||
++        (0 == kal_mem_cmp(atcmd_info->atcmd_buff+index, "333", 3)) )
++    {
++        is_ocb = KAL_TRUE;
++    }
++
++    return  is_ocb;
++
++}
++/*ps only check:
++*/
++kal_bool  _custom_ssds_ps_only_path_variable(	kal_uint32	op_id,
++													        kal_char	*mccmnc )
++{
++
++	kal_uint32 atcmd_request_ps_only_table[] = {01, 02, 03, 05, 06, 07, 9, 15, 18, 50, 107, 120, 148, 154};
++	kal_uint32 index;
++	kal_bool   ret_value = KAL_FALSE;
++	
++     /*Special case : support XCAP only or 2/3/4G*/
++    for (index=0; index<sizeof(atcmd_request_ps_only_table)/sizeof(atcmd_request_ps_only_table[0]); index++)
++    {
++        if (op_id == atcmd_request_ps_only_table[index])
++        {
++            ret_value = KAL_TRUE;
++        }
++    }
++    
++    /*Special case for H3G-Sweden/H3G-Denmark : support XCAP only or 2/3/4G*/
++    if((0 == (kal_mem_cmp(mccmnc, "24002", 5))) || (0 == (kal_mem_cmp(mccmnc, "23806", 5))))
++    {
++        ret_value = KAL_TRUE;
++    }	
++	
++	//add  for Bar All Incoming Calls when Roaming start
++	if (0 == kal_mem_cmp(mccmnc, "46001", 5))/*For 46001 use xcap in 2/3/4G*/
++
++	{
++
++		ret_value = KAL_TRUE;
++
++		kal_prompt_trace(MOD_SSDS, "Use XCAP in 2/3/4G for idea/vodafone");
++
++	}
++	
++	if (0 == kal_mem_cmp(mccmnc, "46000", 5))/*For 46000 use xcap in 2/3/4G*/
++
++	{
++
++		ret_value = KAL_TRUE;
++
++		kal_prompt_trace(MOD_SSDS, "Use XCAP in 2/3/4G for idea/vodafone");
++
++	}
++	
++	if (0 == kal_mem_cmp(mccmnc, "26202", 5))/*For 26202 use xcap in 2/3/4G*/
++
++	{
++
++		ret_value = KAL_TRUE;
++
++		kal_prompt_trace(MOD_SSDS, "Use XCAP in 2/3/4G for idea/vodafone");
++
++	}
++	//add for Bar All Incoming Calls when Roaming end
++	
++	return  ret_value;
++
++}
++
++/*cs only check:
++*/
++kal_bool  _custom_ssds_cs_only_path_variable(	kal_uint32	op_id,
++													        kal_char	*mccmnc)
++{
++	kal_uint32 atcmd_request_cs_only_table[] = { 12,  20, 100, 101, 102, 104, 106, 108, 110, 111, 
++		                                         125, 127, 131, 135, 143, 147, 151, 155, 176, 188};
++	kal_uint32    index;
++	kal_bool      ret_value = KAL_FALSE;
++    
++	/*Special case: support CS only*/
++    for (index=0; index<sizeof(atcmd_request_cs_only_table)/sizeof(atcmd_request_cs_only_table[0]); index++)
++	{
++	   if (op_id == atcmd_request_cs_only_table[index])
++	   {
++	       ret_value = KAL_TRUE;
++	   }
++    }
++	
++    /*Specail case: support CS only*/
++    if ((0 == (kal_mem_cmp(mccmnc, "26003", 5))) || (0 == (kal_mem_cmp(mccmnc, "23003", 5))) ||
++        (0 == (kal_mem_cmp(mccmnc, "23099", 5))) || (0 == (kal_mem_cmp(mccmnc, "28602", 5))) ||
++        (0 == (kal_mem_cmp(mccmnc, "22603", 5))) || (0 == (kal_mem_cmp(mccmnc, "22610", 5))) ||
++        (0 == (kal_mem_cmp(mccmnc, "28405", 5))) || (0 == (kal_mem_cmp(mccmnc, "26605", 5))) ||
++        (0 == (kal_mem_cmp(mccmnc, "20610", 5))))
++    {
++        ret_value = KAL_TRUE;
++    }	
++
++    return  ret_value;
++
++}
++
++
++
++kal_bool  _custom_ssds_get_clir_path_variable(  kal_uint32  op_id,
++                                                kal_char	*mccmnc,
++                                                kal_bool    is_ims_registered,
++                                                custom_ssds_ims_domain_type   ims_domain,
++                                                custom_ssds_roaming_type     roaming_status,
++                                                custom_ssds_atcmd_info *atcmd_info,
++                                                custom_ssds_path_type *atcmd_req_type
++                                             )
++{
++    if ((0 == (kal_mem_cmp(mccmnc, "23415", 5))) || (0 == (kal_mem_cmp(mccmnc, "23591", 5))) ||
++        (0 == (kal_mem_cmp(mccmnc, "25001", 5))) || (0 == (kal_mem_cmp(mccmnc, "25002", 5))) ||
++        (0 == (kal_mem_cmp(mccmnc, "26202", 5))) || (0 == (kal_mem_cmp(mccmnc, "26204", 5))) ||
++        (0 == (kal_mem_cmp(mccmnc, "26209", 5))) || (0 == (kal_mem_cmp(mccmnc, "24405", 5))))
++    {
++        if (CUSTOM_SSDS_ATCMD_TYPE_SET_CLIR == atcmd_info->atcmd_type)
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY_ALWAYS;
++        }
++        else
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_832;
++        }
++        return  KAL_TRUE;
++    }	
++
++    if ((op_id == 3) || (op_id == 5) || (op_id == 7) ||
++        (op_id == 8) || (op_id == 16) || (op_id == 18) || (op_id == 50) || (op_id == 107) || (op_id == 111) ||
++        (op_id == 117) || (op_id == 124) || (op_id == 127) || (op_id == 128) || (op_id == 134) ||
++        (op_id == 135) || (op_id == 147) || (op_id == 150) || (op_id == 152) || (op_id == 161) || (op_id == 103) ||
++        (op_id == 154) || (op_id == 186) || (0 == (kal_mem_cmp(mccmnc, "24201", 5))))
++    {
++        if (CUSTOM_SSDS_ATCMD_TYPE_SET_CLIR == atcmd_info->atcmd_type)
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY_ALWAYS;
++        }
++        else
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_832;
++        }
++        return  KAL_TRUE;
++    }
++    else if ((op_id == 1) || (op_id == 2))
++    {
++        if (is_ims_registered != KAL_TRUE)
++        {
++           *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY;
++        }
++        else
++        {
++           *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_409;
++        }
++        return  KAL_TRUE;
++    }
++    else if (op_id == 9)
++    {
++        *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_409;
++        return  KAL_TRUE;
++    }
++    else if ((op_id == 109) || (op_id == 153) || (op_id == 113) || 
++    	  (0 == (kal_mem_cmp(mccmnc, "22201", 5))) || (0 == (kal_mem_cmp(mccmnc, "22210", 5))) ||
++    	  (0 == (kal_mem_cmp(mccmnc, "24002", 5))) || (0 == (kal_mem_cmp(mccmnc, "23806", 5))) ||
++    	  (0 == (kal_mem_cmp(mccmnc, "23802", 5))) || (0 == (kal_mem_cmp(mccmnc, "23877", 5))) ||
++          (0 == (kal_mem_cmp(mccmnc, "20610", 5))))
++    {
++        if (is_ims_registered != KAL_TRUE)
++        {
++           *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY;
++        }
++        else
++        {/* special for CHT and VHA and TIM/Italy and Denmark/Telenor:CLIR terminal based */
++            if (CUSTOM_SSDS_ATCMD_TYPE_SET_CLIR == atcmd_info->atcmd_type)
++            {
++                *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY_ALWAYS;
++            }
++            else
++            {
++                *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_832;
++            }
++        }
++        return  KAL_TRUE;
++    }
++
++    return  KAL_FALSE;
++
++}
++
++kal_bool  _custom_ssds_get_clip_path_variable(  kal_uint32  op_id,
++                                                kal_bool    is_ims_registered,
++                                                custom_ssds_ims_domain_type   ims_domain,
++                                                custom_ssds_roaming_type     roaming_status,
++                                                custom_ssds_atcmd_info *atcmd_info,
++                                                custom_ssds_path_type *atcmd_req_type
++                                             )
++{
++    if ((op_id == 1) || (op_id == 2))
++    {
++        if (is_ims_registered != KAL_TRUE)
++        {
++           *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY;
++        }
++        else
++        {
++           *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_409;
++        }
++
++        return  KAL_TRUE;
++    }
++
++    return  KAL_FALSE;
++
++}
++
++kal_bool  _custom_ssds_get_colp_path_variable(  kal_uint32  op_id,
++                                                kal_bool    is_ims_registered,
++                                                custom_ssds_ims_domain_type   ims_domain,
++                                                custom_ssds_roaming_type     roaming_status,
++                                                custom_ssds_atcmd_info *atcmd_info,
++                                                custom_ssds_path_type *atcmd_req_type
++                                             )
++{
++    if ((op_id == 1) || (op_id == 2))
++    {
++        if (is_ims_registered != KAL_TRUE)
++        {
++           *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY;
++        }
++        else
++        {
++           *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_409;
++        }
++
++        return  KAL_TRUE;
++    }
++
++    return  KAL_FALSE;
++
++}
++
++kal_bool  _custom_ssds_get_colr_path_variable(  kal_uint32  op_id,
++                                                kal_bool    is_ims_registered,
++                                                custom_ssds_ims_domain_type   ims_domain,
++                                                custom_ssds_roaming_type     roaming_status,
++                                                custom_ssds_atcmd_info *atcmd_info,
++                                                custom_ssds_path_type *atcmd_req_type
++                                             )
++{
++    if ((op_id == 1) || (op_id == 2))
++    {
++        if (is_ims_registered != KAL_TRUE)
++        {
++           *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY;
++        }
++        else
++        {
++           *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_409;
++        }
++
++        return  KAL_TRUE;
++    }
++
++    return  KAL_FALSE;
++
++}
++kal_bool  _custom_ssds_get_cb_path_variable(    kal_uint32  op_id,
++                                                kal_bool    is_ims_registered,
++                                                custom_ssds_ims_domain_type   ims_domain,
++                                                custom_ssds_roaming_type     roaming_status,
++                                                custom_ssds_atcmd_info *atcmd_info,
++                                                custom_ssds_path_type *atcmd_req_type
++                                           )
++{
++    kal_bool    is_ocb;
++
++    if (op_id == 01)
++    {
++        is_ocb = _custom_ssds_is_ocb(atcmd_info);
++
++        if (KAL_TRUE == is_ocb)
++        {
++            if (is_ims_registered != KAL_TRUE)
++            {
++               *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY;
++            }
++            else
++            {
++               *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_409;
++            }
++
++            return  KAL_TRUE;
++
++        }
++
++    }
++
++    return  KAL_FALSE;
++
++}
++
++kal_bool  _custom_ssds_get_cw_path_variable(    kal_uint32  op_id,
++	                                            kal_char	*mccmnc,
++                                                kal_bool    is_ims_registered,
++                                                custom_ssds_ims_domain_type   ims_domain,
++                                                custom_ssds_roaming_type     roaming_status,
++                                                custom_ssds_atcmd_info *atcmd_info,
++                                                custom_ssds_path_type *atcmd_req_type
++                                           )
++{
++    //*atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY;
++
++    if (is_ims_registered == KAL_TRUE)
++    {   
++        if ((op_id == 7) || (op_id == 50) || (op_id == 137) || (op_id == 183) || (op_id == 103) || (op_id == 113)||
++           (0 == (kal_mem_cmp(mccmnc, "72406", 5))) || (0 == (kal_mem_cmp(mccmnc, "72410", 5)))||
++           (0 == (kal_mem_cmp(mccmnc, "72411", 5))) || (0 == (kal_mem_cmp(mccmnc, "72423", 5)))||
++           (0 == (kal_mem_cmp(mccmnc, "24201", 5))))
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY;
++        }
++        else if((0 == (kal_mem_cmp(mccmnc, "23802", 5))) || (0 == (kal_mem_cmp(mccmnc, "23877", 5))))
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY;
++        }
++        else if((KAL_FALSE == _custom_ssds_cs_only_path_variable(op_id, mccmnc))|| 
++            (op_id == 176) || (op_id == 151) || (op_id == 188)||
++            (0 == (kal_mem_cmp(mccmnc, "28405", 5))) || (0 == (kal_mem_cmp(mccmnc, "20610", 5))))
++        {/* terminal based when ims registered for non CS only operator and
++          * OP176/OP151/Telenor BG/A1 Austria/Orange Belgium */
++            if (CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_WAITING == atcmd_info->atcmd_type)
++            {
++                *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_832;
++            }
++            else
++            {
++                *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_CCWA;
++            }
++        }
++        else
++        {/* for other CS only operator */ 
++			*atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY;
++        }
++    }
++    else
++    {/* cs only default if ims not registered  */
++        *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY;
++
++        if ((op_id == 1) || (op_id == 2) || (op_id == 9))
++        {
++            if (CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_WAITING == atcmd_info->atcmd_type)
++            {
++                *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY_CW_SET_TO_QUERY;
++            }
++            else
++            {
++                *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY;
++            }
++        }
++        else if ((op_id == 7) || (op_id == 50))
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY;
++        }
++        else if ((op_id == 3) || (op_id == 5) || (op_id == 6) || (op_id == 15) || (op_id == 18) || (op_id == 107) || (op_id == 151) ||
++        	(0 == (kal_mem_cmp(mccmnc, "25002", 5))))
++        {
++            if (CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_WAITING == atcmd_info->atcmd_type)
++            {
++                *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_832;
++            }
++            else
++            {
++                *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_CCWA;
++            }
++        }
++		else if (op_id == 117 )/*Special case for SmartFren (op_id=117)*/
++		{
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_100;
++		}
++    }
++
++	if (op_id == 104)
++	{
++        if (CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_WAITING == atcmd_info->atcmd_type)
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_832;
++        }
++        else
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_CCWA;
++        }		
++	}
++
++    return  KAL_TRUE;
++}
++
++kal_bool  _custom_ssds_get_path_variable (    kal_uint32  in_op_id,
++											  kal_char	  *mccmnc,
++                                              kal_bool    is_ims_registered,
++                                              custom_ssds_ims_domain_type   ims_domain,
++                                              custom_ssds_roaming_type     roaming_status,
++                                              kal_bool             is_mobile_data_setting_enabled,
++                                              custom_ssds_atcmd_info *atcmd_info,
++                                              custom_ssds_path_type *atcmd_req_type
++                                         )
++{
++    kal_bool    ret_value = KAL_FALSE;
++    kal_uint32  op_id = in_op_id;
++
++    if (ims_domain == CUSTOM_SSDS_IMS_DOMAIN_TYPE_WFC)
++    {
++        if ((op_id == 11) || ((op_id == 15) && (0 != (kal_mem_cmp(mccmnc, "26207", 5))) && (0 != (kal_mem_cmp(mccmnc, "26208", 5)))))
++        {/* O2/Ge(OP15) would select PS domain */
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY;
++            return  KAL_TRUE;
++        }
++    }
++
++    /*Special case: CT only support call farwarding and call waiting*/
++    if (op_id == 9)
++    {
++        if ((atcmd_info->atcmd_type != CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_WAITING) &&
++            (atcmd_info->atcmd_type != CUSTOM_SSDS_ATCMD_TYPE_GET_CALL_WAITING) &&
++            (atcmd_info->atcmd_type != CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_FORWARDING) &&
++            (atcmd_info->atcmd_type != CUSTOM_SSDS_ATCMD_TYPE_GET_CALL_FORWARDING))
++        {
++            *atcmd_req_type = CUSTOM_SSDS_PATH_TYPE_NOT_SUPPORT_409;
++            return  KAL_TRUE;
++        }
++
++        /*International roaming, treat it as CMCC*/
++        if (CUSTOM_SSDS_ROAMING_TYPE_INTERNATIONAL == roaming_status)
++        {
++            op_id = 1;
++        }
++    }
++
++    switch (atcmd_info->atcmd_type)
++    {
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_CLIR:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_CLIR:
++            ret_value = _custom_ssds_get_clir_path_variable(op_id, mccmnc, is_ims_registered, ims_domain, roaming_status,
++                                                            atcmd_info, atcmd_req_type);
++            break;
++
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_CLIP:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_CLIP:
++            ret_value = _custom_ssds_get_clip_path_variable(op_id, is_ims_registered, ims_domain, roaming_status,
++                                                            atcmd_info, atcmd_req_type);
++            break;
++
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_COLR:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_COLR:
++            ret_value = _custom_ssds_get_colr_path_variable(op_id, is_ims_registered, ims_domain, roaming_status,
++                                                            atcmd_info, atcmd_req_type);
++            break;
++
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_COLP:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_COLP:
++            ret_value = _custom_ssds_get_colp_path_variable(op_id, is_ims_registered, ims_domain, roaming_status,
++                                                            atcmd_info, atcmd_req_type);
++            break;
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_WAITING:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_CALL_WAITING:
++            ret_value = _custom_ssds_get_cw_path_variable(op_id, mccmnc,is_ims_registered, ims_domain, roaming_status,
++                                                            atcmd_info, atcmd_req_type);
++            break;
++
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_BARRING:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_CALL_BARRING:
++            ret_value = _custom_ssds_get_cb_path_variable(op_id, is_ims_registered, ims_domain, roaming_status,
++                                                            atcmd_info, atcmd_req_type);
++            break;
++
++        default:
++            ret_value = KAL_FALSE;
++            break;
++
++    }
++
++    return  ret_value;
++}
++
++void _custom_ssds_get_cw_rsp_path_variable(kal_uint32                   op_id,
++                                           kal_bool                     is_ims_registered,
++                                           custom_ssds_roaming_type     roaming_status,
++                                           custom_ssds_atcmd_info       *atcmd_info,
++                                           kal_uint32                   rsp_id,
++                                           custom_ssds_csfb_type        *csfb_type)
++{
++    /*check if terminal based call waiting*/
++    if (KAL_FALSE == is_ims_registered)
++    {
++        if ((op_id == 1) || (op_id == 2) || (op_id == 9))
++        {
++            if (403 == rsp_id)
++            {
++                if ((op_id == 9) && (roaming_status != CUSTOM_SSDS_ROAMING_TYPE_INTERNATIONAL))
++                {
++                    *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO_403;
++                }
++                else
++                {
++                    *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ALWAYS;
++                }
++            }
++            else if (831 == rsp_id)
++            {
++                if ((op_id == 9) && (roaming_status != CUSTOM_SSDS_ROAMING_TYPE_INTERNATIONAL))
++                {
++                    *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO_31;
++                }
++                else
++                {
++                    *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ONCE;
++                }
++            }
++            else
++            {
++                if (atcmd_info->atcmd_type == CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_WAITING)
++                {
++                    *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO_832;
++                }
++                else if (atcmd_info->atcmd_type == CUSTOM_SSDS_ATCMD_TYPE_GET_CALL_WAITING)
++                {
++                    *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO_CCWA;
++                }
++            }
++        }
++    }
++}
++
++void _custom_ssds_get_cb_rsp_path_variable(kal_uint32                   op_id,
++                                           kal_bool                     is_ims_registered,
++                                           custom_ssds_roaming_type     roaming_status,
++                                           custom_ssds_atcmd_info       *atcmd_info,
++                                           kal_uint32                   rsp_id,
++                                           custom_ssds_csfb_type        *csfb_type)
++{
++    kal_bool    is_ocb;
++
++    if (op_id == 01)
++    {
++        is_ocb = _custom_ssds_is_ocb(atcmd_info);
++
++        if ((KAL_TRUE == is_ocb) &&
++             (KAL_FALSE == is_ims_registered))
++        {
++            if (403 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ALWAYS;
++            }
++            else if (831 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ONCE;
++            }
++            else
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO_409;
++            }
++
++            return;
++
++        }
++
++    }
++
++    return;
++
++}
++
++void _custom_ssds_get_clir_rsp_path_variable(  kal_uint32                   op_id,
++                                               kal_bool                     is_ims_registered,
++                                               custom_ssds_roaming_type     roaming_status,
++                                               custom_ssds_atcmd_info       *atcmd_info,
++                                               kal_uint32                   rsp_id,
++                                               custom_ssds_csfb_type        *csfb_type)
++{
++    if (KAL_FALSE == is_ims_registered)
++    {
++        if ((op_id == 1) || (op_id == 2))
++        {
++            if (403 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ALWAYS;
++            }
++            else if (831 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ONCE;
++            }
++            else
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO_409;
++            }
++        }
++    }
++}
++
++void _custom_ssds_get_colr_rsp_path_variable(kal_uint32                 op_id,
++                                           kal_bool                     is_ims_registered,
++                                           custom_ssds_roaming_type     roaming_status,
++                                           custom_ssds_atcmd_info       *atcmd_info,
++                                           kal_uint32                   rsp_id,
++                                           custom_ssds_csfb_type        *csfb_type)
++{
++    if (KAL_FALSE == is_ims_registered)
++    {
++        if ((op_id == 1) || (op_id == 2))
++        {
++            if (403 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ALWAYS;
++            }
++            else if (831 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ONCE;
++            }
++            else
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO_409;
++            }
++        }
++    }
++}
++
++void _custom_ssds_get_colp_rsp_path_variable(kal_uint32                 op_id,
++                                           kal_bool                     is_ims_registered,
++                                           custom_ssds_roaming_type     roaming_status,
++                                           custom_ssds_atcmd_info       *atcmd_info,
++                                           kal_uint32                   rsp_id,
++                                           custom_ssds_csfb_type        *csfb_type)
++{
++    if (KAL_FALSE == is_ims_registered)
++    {
++        if ((op_id == 1) || (op_id == 2))
++        {
++            if (403 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ALWAYS;
++            }
++            else if (831 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ONCE;
++            }
++            else
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO_409;
++            }
++        }
++    }
++}
++
++void _custom_ssds_get_clip_rsp_path_variable(kal_uint32                 op_id,
++                                           kal_bool                     is_ims_registered,
++                                           custom_ssds_roaming_type     roaming_status,
++                                           custom_ssds_atcmd_info       *atcmd_info,
++                                           kal_uint32                   rsp_id,
++                                           custom_ssds_csfb_type        *csfb_type)
++{
++    if (KAL_FALSE == is_ims_registered)
++    {
++        if ((op_id == 1) || (op_id == 2))
++        {
++            if (403 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ALWAYS;
++            }
++            else if (831 == rsp_id)
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ONCE;
++            }
++            else
++            {
++                *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO_409;
++            }
++        }
++    }
++}
++
++#if 1
++/*
++*   Decide the path after receiving the ATCMD request from AP with below case:
++*   1. current ims status
++*   2. current wfc status
++*   3. volte setting
++*   3. atcmd type and atcmd raw data
++*/
++custom_ssds_path_type  _custom_ssds_get_req_path_variable (   custom_ssds_info_struct  *req_info,
++															                                kal_uint32  op_id,                                                              
++                                                              kal_bool    is_ims_registered,
++                                                              custom_ssds_ims_domain_type   ims_domain,
++                                                              custom_ssds_roaming_type     roaming_status,
++                                                              kal_bool             is_mobile_data_setting_enabled,
++                                                              custom_ssds_atcmd_info *atcmd_info
++                                                         )
++{
++    custom_ssds_path_type   atcmd_path_type;
++    custom_ssds_path_type   special_atcmd_req_type;
++    kal_bool                ret_value;
++
++    /*Set the default value*/
++    if (KAL_TRUE == is_ims_registered)
++        atcmd_path_type = CUSTOM_SSDS_PATH_TYPE_PS_PREFER;
++    else
++        atcmd_path_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY;
++
++   if(KAL_TRUE == _custom_ssds_ps_only_path_variable(op_id, req_info->mccmnc))
++   {
++	   atcmd_path_type = CUSTOM_SSDS_PATH_TYPE_PS_ONLY;
++   }
++
++    /*Special case: support CS only*/
++	
++	if(KAL_TRUE == _custom_ssds_cs_only_path_variable(op_id, req_info->mccmnc))
++	{
++	  atcmd_path_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY; 
++	}
++
++    /*Special case: any exception???*/
++    ret_value = _custom_ssds_get_path_variable(op_id, req_info->mccmnc, is_ims_registered, ims_domain, roaming_status, is_mobile_data_setting_enabled,atcmd_info, &special_atcmd_req_type);
++    if (KAL_TRUE == ret_value)
++    {
++	   atcmd_path_type = special_atcmd_req_type;
++    }
++
++    /*special case for data off*/
++    if(!is_mobile_data_setting_enabled)
++	{
++	  /*Personal Argentina , Movistar Argentina will chose CS when data off*/
++	  if(op_id == 132 || op_id == 183)
++	  {
++         atcmd_path_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY;
++	  }
++    }
++	/*special case for roaming*/
++	if(CUSTOM_SSDS_ROAMING_TYPE_NO != roaming_status) 
++	{
++	   /*1.Personal Argentina;2.CT roaming to HK*/
++       if((op_id == 183)||((KAL_TRUE == req_info->is_ct_card) && (0 == (kal_mem_cmp(req_info->mccmnc, "20404", 5)))))
++       {
++          atcmd_path_type = CUSTOM_SSDS_PATH_TYPE_CS_ONLY;
++	   }
++	}
++
++    return  atcmd_path_type;
++}
++
++void  _custom_ssds_get_req_path_nvram_variable (    		      custom_ssds_info_struct  *req_info,
++															                                kal_uint32  op_id,                                                              
++                                                              kal_bool    is_ims_registered,
++                                                              custom_ssds_ims_domain_type   ims_domain,
++                                                              custom_ssds_roaming_type     roaming_status,
++                                                              kal_bool             is_mobile_data_setting_enabled,
++                                                              custom_ssds_atcmd_info *atcmd_info,
++                                                              custom_ssds_path_type	 *req_path_type
++                                                         )
++{
++#if 1
++	nvram_ef_ssds_request_profile_value_struct	request_info;
++	nvram_ef_ssds_request_profile_action_struct	request_action;
++
++	kal_mem_set(&request_info, 0x0, sizeof(nvram_ef_ssds_request_profile_value_struct));
++	request_info.op_id = op_id;
++	kal_mem_cpy(&(request_info.mccmnc[0]), &(req_info->mccmnc[0]), 6);
++	
++	request_info.ims_domain = ims_domain;
++	request_info.ims_registered = is_ims_registered;
++	request_info.atcmd_type = atcmd_info->atcmd_type;
++	request_info.roaming_type = roaming_status;
++	request_info.sim_type = req_info->sim_type;
++
++	if (KAL_TRUE == (custom_ssds_config_get_request_path(req_info->sim_id, &request_info, &request_action)))
++	{
++		*req_path_type = request_action.req_path;
++    	kal_prompt_trace(MOD_SSDS, "Use NVRAM reqeust result");
++	}
++#endif
++}
++
++void  _custom_ssds_get_req_path_post_variable (    			  custom_ssds_info_struct  *req_info,
++															  kal_uint32  op_id,                                                              
++                                                              kal_bool    is_ims_registered,
++                                                              custom_ssds_ims_domain_type   ims_domain,
++                                                              custom_ssds_roaming_type     roaming_status,
++                                                              kal_bool             is_mobile_data_setting_enabled,
++                                                              custom_ssds_atcmd_info *atcmd_info,
++                                                              custom_ssds_path_type	 *req_path_type
++                                                         )
++{
++}
++
++custom_ssds_path_type  custom_ssds_get_req_path_variable (    custom_ssds_info_struct  *req_info,
++															  kal_uint32  op_id,                                                              
++                                                              kal_bool    is_ims_registered,
++                                                              custom_ssds_ims_domain_type   ims_domain,
++                                                              custom_ssds_roaming_type     roaming_status,
++                                                              kal_bool             is_mobile_data_setting_enabled,
++                                                              custom_ssds_atcmd_info *atcmd_info
++                                                         )
++{
++	custom_ssds_path_type	req_path_type;
++	
++	req_path_type = _custom_ssds_get_req_path_variable(req_info, op_id, is_ims_registered, ims_domain, roaming_status, is_mobile_data_setting_enabled, atcmd_info);
++
++	_custom_ssds_get_req_path_nvram_variable(req_info, op_id, is_ims_registered, ims_domain, roaming_status, is_mobile_data_setting_enabled, atcmd_info, &req_path_type);
++
++	_custom_ssds_get_req_path_post_variable(req_info, op_id, is_ims_registered, ims_domain, roaming_status,is_mobile_data_setting_enabled, atcmd_info, &req_path_type);
++
++	return	req_path_type;
++}
++#endif
++
++#if 1
++/*
++*   Decide the CSFB after receiving the ATCMD response from XCAP with below case:
++*   1. current ims status
++*   2. atcmd type
++*   3. response from XCAP
++*/
++void _custom_ssds_get_rsp_path_variable(    custom_ssds_info_struct  	*req_info,
++										   kal_uint32                   in_op_id,
++                                           kal_bool                     is_ims_registered,
++                                           custom_ssds_roaming_type     roaming_status,
++                                           custom_ssds_atcmd_info       *atcmd_info,
++                                           kal_uint32                   in_rsp_id,
++                                           custom_ssds_csfb_type        *csfb_type)
++{
++    kal_uint32 op_id = in_op_id;
++    kal_uint32 rsp_id = in_rsp_id;
++
++	/*Work round for CU: rsp=400*/
++    if (op_id == 2)
++	{
++		if (400 == rsp_id)
++		{
++			rsp_id = 403;
++		}
++	}
++
++
++    /*set the default value*/
++    switch (rsp_id)
++    {
++        case 200:
++        case 404:
++        case 409:
++            *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO;
++            break;
++
++        case 403:
++            *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ALWAYS;
++            break;
++
++        case 831:
++            *csfb_type = CUSTOM_SSDS_CSFB_TYPE_ONCE;
++            break;
++
++        default:
++            *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO;
++            break;
++    }
++
++    /*Special case: CT*/
++    if (op_id == 9)
++    {
++        /*International roaming, treat it as CMCC*/
++        if (CUSTOM_SSDS_ROAMING_TYPE_INTERNATIONAL == roaming_status)
++        {
++            op_id = 1;
++        }
++        else
++        {
++            *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO;
++            if ((atcmd_info->atcmd_type == CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_WAITING) ||
++                (atcmd_info->atcmd_type == CUSTOM_SSDS_ATCMD_TYPE_GET_CALL_WAITING))
++            {
++                _custom_ssds_get_cw_rsp_path_variable(op_id, is_ims_registered, roaming_status, atcmd_info, rsp_id, csfb_type);
++            }
++
++            return;
++        }
++    }
++
++    /*check any special requirement*/
++    switch (atcmd_info->atcmd_type)
++    {
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_CLIR:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_CLIR:
++            _custom_ssds_get_clir_rsp_path_variable(op_id, is_ims_registered, roaming_status, atcmd_info, rsp_id, csfb_type);
++            break;
++
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_CLIP:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_CLIP:
++            _custom_ssds_get_clip_rsp_path_variable(op_id, is_ims_registered, roaming_status, atcmd_info, rsp_id, csfb_type);
++            break;
++
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_COLR:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_COLR:
++            _custom_ssds_get_colr_rsp_path_variable(op_id, is_ims_registered, roaming_status, atcmd_info, rsp_id, csfb_type);
++            break;
++
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_COLP:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_COLP:
++            _custom_ssds_get_colp_rsp_path_variable(op_id, is_ims_registered, roaming_status, atcmd_info, rsp_id, csfb_type);
++            break;
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_BARRING:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_CALL_BARRING:
++            _custom_ssds_get_cb_rsp_path_variable(op_id, is_ims_registered, roaming_status, atcmd_info, rsp_id, csfb_type);
++            break;
++
++        case CUSTOM_SSDS_ATCMD_TYPE_SET_CALL_WAITING:
++        case CUSTOM_SSDS_ATCMD_TYPE_GET_CALL_WAITING:
++            _custom_ssds_get_cw_rsp_path_variable(op_id, is_ims_registered, roaming_status, atcmd_info, rsp_id, csfb_type);
++            break;
++
++        default:
++            break;
++    }
++
++    /* Special case for SmartFren(CDMA solution) and RJIL(4G only solution) and Seatel(4G only solution) */
++    if (117 == op_id || 18 == op_id || 148 == op_id)
++    {
++        *csfb_type = CUSTOM_SSDS_CSFB_TYPE_NO;
++    }
++
++}
++
++void _custom_ssds_get_rsp_path_nvram_variable(    custom_ssds_info_struct  	*req_info,
++										   kal_uint32                   in_op_id,
++                                           kal_bool                     is_ims_registered,
++                                           custom_ssds_roaming_type     roaming_status,
++                                           custom_ssds_atcmd_info       *atcmd_info,
++                                           kal_uint32                   rsp_id,
++                                           custom_ssds_csfb_type        *csfb_type)
++{
++#if 1
++	nvram_ef_ssds_response_profile_value_struct		request_info;
++	nvram_ef_ssds_response_profile_action_struct	request_action;
++
++	kal_mem_set(&request_info, 0x0, sizeof(nvram_ef_ssds_response_profile_value_struct));
++	request_info.op_id = in_op_id;
++	kal_mem_cpy(&(request_info.mccmnc[0]), &(req_info->mccmnc[0]), 6);
++	
++	request_info.ims_registered = is_ims_registered;
++	request_info.atcmd_type = atcmd_info->atcmd_type;
++	request_info.roaming_type = roaming_status;
++	request_info.rsp_id = rsp_id;
++	request_info.sim_type = req_info->sim_type;
++
++	if (KAL_TRUE == (custom_ssds_config_get_response_path(req_info->sim_id, &request_info, &request_action)))
++	{
++		*csfb_type = request_action.rsp_path;
++    	kal_prompt_trace(MOD_SSDS, "Use NVRAM response result");
++	}
++#endif
++}
++
++void _custom_ssds_get_rsp_path_post_variable(    custom_ssds_info_struct  	*req_info,
++										   kal_uint32                   in_op_id,
++                                           kal_bool                     is_ims_registered,
++                                           custom_ssds_roaming_type     roaming_status,
++                                           custom_ssds_atcmd_info       *atcmd_info,
++                                           kal_uint32                   rsp_id,
++                                           custom_ssds_csfb_type        *csfb_type)
++{
++
++}
++
++void custom_ssds_get_rsp_path_variable(    custom_ssds_info_struct  	*req_info,
++										   kal_uint32                   in_op_id,
++                                           kal_bool                     is_ims_registered,
++                                           custom_ssds_roaming_type     roaming_status,
++                                           custom_ssds_atcmd_info       *atcmd_info,
++                                           kal_uint32                   rsp_id,
++                                           custom_ssds_csfb_type        *csfb_type)
++{
++	_custom_ssds_get_rsp_path_variable(req_info, in_op_id, is_ims_registered, 
++									   roaming_status, atcmd_info, rsp_id, csfb_type);
++	
++	_custom_ssds_get_rsp_path_nvram_variable(req_info, in_op_id, is_ims_registered, 
++									   roaming_status, atcmd_info, rsp_id, csfb_type);
++	
++	_custom_ssds_get_rsp_path_post_variable(req_info, in_op_id, is_ims_registered, 
++									   roaming_status, atcmd_info, rsp_id, csfb_type);
++
++}
++
++#endif
++
++#if 1
++
++void _custom_ssds_get_pdn_setup_variable( custom_ssds_info_struct  *req_info,
++										  kal_uint32           op_id,
++                                          kal_bool             is_mobile_data_setting_enabled,
++                                          kal_bool             is_data_roaming_setting_enabled,
++                                          custom_ssds_roaming_type   roaming_status,
++                                          custom_ssds_pdn_type    *pdn_type)
++{
++    if ((8==op_id)||(0 == (kal_mem_cmp(req_info->mccmnc, "20416", 5))))
++    {
++        *pdn_type = CUSTOM_SSDS_PDN_TYPE_NO;
++        return;
++    }
++    else if ((0 == (kal_mem_cmp(req_info->mccmnc, "72207", 5))) || (136==op_id) || (1001==op_id))
++    {/* 72207 for Movistar/AR */
++        *pdn_type = CUSTOM_SSDS_PDN_TYPE_INTERNET;
++
++        if (KAL_TRUE != is_mobile_data_setting_enabled)
++        {
++            *pdn_type = CUSTOM_SSDS_PDN_TYPE_NOT_MATCH;
++        }
++        else
++        {
++            if ((KAL_TRUE != is_data_roaming_setting_enabled) &&
++                (CUSTOM_SSDS_ROAMING_TYPE_NO != roaming_status))
++            {
++                *pdn_type = CUSTOM_SSDS_PDN_TYPE_NOT_MATCH;
++            }
++        }
++
++        return;
++
++    }
++    else if (7==op_id)
++    {
++        *pdn_type = CUSTOM_SSDS_PDN_TYPE_XCAP;
++
++        if ((KAL_TRUE != is_data_roaming_setting_enabled) &&
++            (CUSTOM_SSDS_ROAMING_TYPE_INTERNATIONAL == roaming_status))
++        {
++            *pdn_type = CUSTOM_SSDS_PDN_TYPE_NOT_MATCH;
++        }
++        return;
++    }
++    else
++    {
++        *pdn_type = CUSTOM_SSDS_PDN_TYPE_XCAP;
++
++        if ((KAL_TRUE != is_data_roaming_setting_enabled) &&
++            (CUSTOM_SSDS_ROAMING_TYPE_NO != roaming_status) && 
++            (op_id != 5) && (op_id != 18) && (op_id != 19) && 
++            (op_id != 181) && (op_id != 186) && 
++            (0 != (kal_mem_cmp(req_info->mccmnc, "24002", 5))) &&
++			(0 != (kal_mem_cmp(req_info->mccmnc, "23806", 5)))) /* Special case for Telstra(OP19)/TMO-EU(OP05)/H3G-Sweden/Telkom-SA/Idea-Ind */
++        {
++            *pdn_type = CUSTOM_SSDS_PDN_TYPE_NOT_MATCH;
++        }
++
++        return;
++    }
++}
++
++
++void _custom_ssds_get_pdn_setup_nvram_variable( custom_ssds_info_struct  *req_info,
++										  kal_uint32           op_id,
++                                          kal_bool             is_mobile_data_setting_enabled,
++                                          kal_bool             is_data_roaming_setting_enabled,
++                                          custom_ssds_roaming_type   roaming_status,
++                                          custom_ssds_pdn_type    *pdn_type)
++{
++#if 1
++	nvram_ef_ssds_pdn_profile_value_struct		request_info;
++	nvram_ef_ssds_pdn_profile_action_struct		request_action;
++
++	kal_mem_set(&request_info, 0x0, sizeof(nvram_ef_ssds_pdn_profile_value_struct));
++	request_info.op_id = op_id;
++	kal_mem_cpy(&(request_info.mccmnc[0]), &(req_info->mccmnc[0]), 6);
++	
++	request_info.data_setting = is_mobile_data_setting_enabled;
++	request_info.roaming_setting = is_data_roaming_setting_enabled;
++	request_info.roaming_type = roaming_status;
++	request_info.sim_type = req_info->sim_type;
++
++	if (KAL_TRUE == (custom_ssds_config_get_pdn_path(req_info->sim_id, &request_info, &request_action)))
++	{
++		*pdn_type = request_action.pdn_path;
++    	kal_prompt_trace(MOD_SSDS, "Use NVRAM PDN result");
++	}
++#endif
++}
++
++void _custom_ssds_get_pdn_setup_post_variable( custom_ssds_info_struct  *req_info,
++										  kal_uint32           op_id,
++                                          kal_bool             is_mobile_data_setting_enabled,
++                                          kal_bool             is_data_roaming_setting_enabled,
++                                          custom_ssds_roaming_type   roaming_status,
++                                          custom_ssds_pdn_type    *pdn_type)
++{
++	return;
++}
++
++/*
++*   Check if setup-up PDN condition is matched with below case:
++*   1. mobile data setting;
++*   2. data_roaming_setting
++*   3. data_roaming status
++*/
++void custom_ssds_get_pdn_setup_variable(  custom_ssds_info_struct  *req_info,
++										  kal_uint32           op_id,
++                                          kal_bool             is_mobile_data_setting_enabled,
++                                          kal_bool             is_data_roaming_setting_enabled,
++                                          custom_ssds_roaming_type   roaming_status,
++                                          custom_ssds_pdn_type    *pdn_type)
++{
++	_custom_ssds_get_pdn_setup_variable(req_info, op_id, is_mobile_data_setting_enabled,
++									    is_data_roaming_setting_enabled, roaming_status, pdn_type);
++
++	_custom_ssds_get_pdn_setup_nvram_variable(req_info, op_id, is_mobile_data_setting_enabled,
++									    is_data_roaming_setting_enabled, roaming_status, pdn_type);
++
++	_custom_ssds_get_pdn_setup_post_variable(req_info, op_id, is_mobile_data_setting_enabled,
++									    is_data_roaming_setting_enabled, roaming_status, pdn_type);
++}
++#endif
++
++/*
++*   Check if needing to release PDN when below case happened:
++*   1. mobile data setting change;
++*   2. data_roaming_setting change
++*   3. data_roaming status change
++*/
++void custom_ssds_get_pdn_release_variable(  kal_uint32              op_id,
++                                            kal_bool                is_mobile_data_setting_enabled,
++                                            kal_bool                is_data_roaming_setting_enabled,
++                                            custom_ssds_roaming_type   roaming_status,
++                                            kal_bool                *need_to_release)
++{
++    *need_to_release = KAL_FALSE;
++
++    if ((136==op_id) || (1001==op_id))
++    {
++        if (KAL_TRUE != is_mobile_data_setting_enabled)
++        {
++            *need_to_release = KAL_TRUE;
++            return;
++        }
++
++        if ((KAL_TRUE == is_mobile_data_setting_enabled) &&
++            (KAL_TRUE != is_data_roaming_setting_enabled) &&
++            (CUSTOM_SSDS_ROAMING_TYPE_NO != roaming_status))
++        {
++            *need_to_release = KAL_TRUE;
++            return;
++        }
++
++    }
++    else if (7==op_id)
++    {
++        if ((KAL_TRUE != is_data_roaming_setting_enabled) &&
++            (CUSTOM_SSDS_ROAMING_TYPE_INTERNATIONAL == roaming_status))
++        {
++            *need_to_release = KAL_TRUE;
++            return;
++        }
++    }
++    else
++    {
++        if ((KAL_TRUE != is_data_roaming_setting_enabled) &&
++            (CUSTOM_SSDS_ROAMING_TYPE_NO != roaming_status) &&
++            (op_id != 19)) /* Special case for Telstra */
++        {
++            *need_to_release = KAL_TRUE;
++            return;
++        }
++    }
++
++    return;
++}
++
++kal_uint32 custom_ssds_get_reuse_pdn_conn_timer_value(module_type src_module)
++{
++    kal_uint32 timer_value = 0;
++    kal_bool test_sim_flag = KAL_FALSE;
++
++    #if defined(__GEMINI__) || defined(__SGLTE__)
++    test_sim_flag=is_test_sim(src_module - MOD_SSDS);
++    #else
++    test_sim_flag=is_test_sim();
++    #endif
++
++    if(KAL_TRUE == ssds_path_is_pct_icccard(src_module))
++    {
++        timer_value = CUSTOM_SSDS_REUSE_PDN_CONN_PCT_TIMEOUT_TICK;/* for PCT TEST:keep PDN and wait instrument to release PDN  */
++	}
++	else if(KAL_TRUE == test_sim_flag)
++	{
++        timer_value = 0;/* for test SIM */
++	}
++	else
++	{
++        timer_value = CUSTOM_SSDS_REUSE_PDN_CONN_TIMEOUT_TICK;/* for real network */
++	}
++	
++    kal_prompt_trace(src_module,"%s %d the reuse PDN CONN timer value is:%d ",  __FUNCTION__, __LINE__, timer_value);
++
++	return timer_value;
++}
++

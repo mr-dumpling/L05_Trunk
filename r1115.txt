@@ -1,0 +1,41 @@
+Index: frameworks/base/services/core/java/com/android/server/am/AppErrors.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/AppErrors.java	(revision 1114)
++++ frameworks/base/services/core/java/com/android/server/am/AppErrors.java	(revision 1115)
+@@ -797,7 +797,8 @@
+                 if (app.pid == Process.myPid()) {
+                     app.thread.dumpAllMessageHistory();
+                 } else {
+-                    app.thread.dumpMessageHistory();
++                    //app.thread.dumpMessageHistory();
++                    com.mediatek.anrappmanager.ANRAppManager.dumpMessageHistory();
+                 }
+             } catch (Exception e) {
+                 Slog.e(TAG, "Error happens when dumping message history", e);
+Index: packages/apps/Settings/src/com/android/settings/applications/ManageApplications.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/applications/ManageApplications.java	(revision 1114)
++++ packages/apps/Settings/src/com/android/settings/applications/ManageApplications.java	(revision 1115)
+@@ -1186,13 +1186,15 @@
+                 }
+ 				// add dongdongli 20170828 start {
+ 				// only filter highlight app show notification color image
+-				entry.extraInfo = new NotificationBackend().loadAppRow(mContext, mPm, entry.info);
+-				if (((AppRow) entry.extraInfo).notificationColor > 1 && ((AppRow) entry.extraInfo).notificationColor <= 20 && mFilterMode == 16) {
+-					holder.notificationColorImage.setVisibility(View.VISIBLE);
+-					holder.notificationColorImage.setImageLevel(((AppRow) entry.extraInfo).notificationColor);
+-				} else {
+-					holder.notificationColorImage.setVisibility(View.GONE);
+-				}
++                if (mManageApplications.mListType == LIST_TYPE_NOTIFICATION) {
++                    entry.extraInfo = new NotificationBackend().loadAppRow(mContext, mPm, entry.info);
++                    if (((AppRow) entry.extraInfo).notificationColor > 1 && ((AppRow) entry.extraInfo).notificationColor <= 20 && mFilterMode == 16) {
++                        holder.notificationColorImage.setVisibility(View.VISIBLE);
++                        holder.notificationColorImage.setImageLevel(((AppRow) entry.extraInfo).notificationColor);
++                    } else {
++                        holder.notificationColorImage.setVisibility(View.GONE);
++                    }
++                }
+ 				//add end }
+             }
+             mActive.remove(convertView);

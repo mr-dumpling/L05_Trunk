@@ -1,0 +1,283 @@
+Index: packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 1166)
++++ packages/apps/Settings/src/com/android/settings/gestures/GestureSettings.java	(revision 1167)
+@@ -58,6 +58,7 @@
+     private static final String DEBUG_DOZE_COMPONENT = "debug.doze.component";
+ 	//add by wqq start{
+ 	private static final String THREE_FINGER_SHOTSCREEN ="three_finger_shotscreen";
++	private static final String FILP_TO_MUTE ="mute_incoming";
+ 	//add by wqq end}
+     private List<GesturePreference> mPreferences;
+ 
+@@ -114,6 +115,9 @@
+                     getContentResolver(), Secure.THREE_FINGER_SHOTSCREEN_ENABLED, 0);
+ 		addPreference(THREE_FINGER_SHOTSCREEN, threeFingerShotscreenEnabled != 0);
+ 		
++		int filpToMuteEnabled = Secure.getInt(
++                    getContentResolver(), Secure.FILP_TO_MUTE_ENABLED, 0);
++		addPreference(FILP_TO_MUTE,filpToMuteEnabled != 0);
+ 		//add by wqq end}
+     }
+ 
+@@ -181,6 +185,9 @@
+ 		else if(THREE_FINGER_SHOTSCREEN.equals(key)){
+ 			Secure.putInt(getContentResolver(),
+                     Secure.THREE_FINGER_SHOTSCREEN_ENABLED, enabled ? 1 : 0);
++		}else if(FILP_TO_MUTE.equals(key)){
++			Secure.putInt(getContentResolver(),
++                    Secure.FILP_TO_MUTE_ENABLED, enabled ? 1 : 0);
+ 		}
+ 		//add by wqq end
+         return true;
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 1166)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 1167)
+@@ -6779,6 +6779,11 @@
+ 	*/
+ 		public static final String THREE_FINGER_SHOTSCREEN_ENABLED =
+                 "three_finger_shotscreen_enabled";
++	/**
++	*add for incoming calls filp to mute
++	*/
++		public static final String FILP_TO_MUTE_ENABLED =
++                "filp_to_mute_enabled";
+         /**
+          * Control whether Night display is currently activated.
+          * @hide
+@@ -7023,8 +7028,8 @@
+             DOZE_ENABLED,
+             DOZE_PULSE_ON_PICK_UP,
+             DOZE_PULSE_ON_DOUBLE_TAP,
+-            THREE_FINGER_SHOTSCREEN_ENABLED
+-            //add end
++            THREE_FINGER_SHOTSCREEN_ENABLED,
++            FILP_TO_MUTE_ENABLED
+         };
+ 
+         /**
+Index: frameworks/base/packages/SystemUI/AndroidManifest.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 1166)
++++ frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 1167)
+@@ -707,6 +707,9 @@
+              android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize" />
+          <!-- HK ad end -->
+          <!-- added by zengjie for joy lockscreen feature task 5429900 20170927 end-->
++	   <!--add for incoming calls turn to mute -->
++	   <service android:name="com.android.systemui.statusbar.phone.SensorFunctionServiceIncall"
++            android:exported="false"/>
+     </application>
+ 
+     <!-- Add keyguard usage protected broadcast -->
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/SensorFunctionServiceIncall.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/SensorFunctionServiceIncall.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/SensorFunctionServiceIncall.java	(revision 1167)
+@@ -0,0 +1,86 @@
++package com.android.systemui.statusbar.phone;  
++  
++import android.app.Service;  
++import android.content.Context;  
++import android.content.Intent;  
++import android.hardware.Sensor;  
++import android.hardware.SensorEvent;  
++import android.hardware.SensorEventListener;  
++import android.hardware.SensorManager;  
++import android.os.IBinder;  
++import android.os.PowerManager;  
++import android.media.AudioManager;  
++import android.util.Log;  
++import android.content.BroadcastReceiver;  
++  
++public class SensorFunctionServiceIncall extends Service {  
++  
++    private static final String TAG = "SensorFunctionServiceIncall";  
++    private static final float CRITICAL_DOWN_ANGLE = -5.0f;  
++    private static final float CRITICAL_UP_ANGLE = 5.0f;  
++    private static final int Z_ORATIATION = 2;  
++      
++    private AudioManager mAudioManager;  
++    private SensorManager mSensorManager;  
++    private Sensor mGsensor;  
++    private SensorEventListener mGsensorListener;  
++    private int mReverseDownFlg = -1;  
++    private int previousMuteMode = -1;  
++    private boolean mActFlag = false;  
++  
++    @Override  
++    public void onCreate() {  
++        super.onCreate();  
++  
++        mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);  
++        mGsensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
++        mAudioManager= (AudioManager) getSystemService(Context.AUDIO_SERVICE);   
++        mGsensorListener = new SensorEventListener() {  
++            @Override  
++            public void onAccuracyChanged(Sensor sensor, int accuracy) {  
++            }  
++  
++            @Override  
++            public void onSensorChanged(SensorEvent event) {  
++                Log.d(TAG,"onSensorChanged()---event.values[SensorManager.DATA_Z] = " + event.values[SensorManager.DATA_Z]);  
++                if (event.values[SensorManager.DATA_Z] >= CRITICAL_UP_ANGLE) { // screen up   
++                    mReverseDownFlg = 0;  
++                } else if (event.values[SensorManager.DATA_Z] <= CRITICAL_DOWN_ANGLE  
++                            && mReverseDownFlg == 0) { // screen down   
++                    mReverseDownFlg = 1;  
++                }  
++                Log.d(TAG,"onSensorChanged()---mReverseDownFlg = " + mReverseDownFlg+"  previousMuteMode="+previousMuteMode);  
++                if (mReverseDownFlg == 1) {  
++                    if (previousMuteMode == -1 && mAudioManager != null) {  
++                        previousMuteMode = mAudioManager.getRingerMode();  
++                        mAudioManager.setRingerMode(AudioManager.RINGER_MODE_SILENT); 
++                        Log.d(TAG,"onSensorChanged()---mute---previousMuteMode="+previousMuteMode);  
++                    }  
++                }  
++            }  
++        };  
++  
++        if(mGsensorListener != null && mGsensor != null){  
++            mSensorManager.registerListener(mGsensorListener, mGsensor, SensorManager.SENSOR_DELAY_GAME);  
++        }  
++    }  
++  
++    @Override  
++    public IBinder onBind(Intent arg0) {  
++        return null;  
++    }  
++  
++    @Override  
++    public void onDestroy() {  
++        if (previousMuteMode != -1 && mAudioManager != null) {  
++            mAudioManager.setRingerMode(previousMuteMode);    
++            previousMuteMode = -1;   
++            Log.d(TAG,"onDestroy()----set noraml");  
++        }  
++      
++        if(mGsensorListener != null && mGsensor != null){  
++            mSensorManager.unregisterListener(mGsensorListener, mGsensor);  
++        }  
++    }  
++  
++}  
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1166)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 1167)
+@@ -240,6 +240,9 @@
+ //add by wqq start{
+ import android.provider.Settings;
+ import java.text.NumberFormat;
++import android.telephony.TelephonyManager;
++import android.provider.Settings.Secure;
++import android.telephony.PhoneStateListener;
+ //add by wqq end}
+ //Begin added by zengjie for joylockscreen task 5429900 on 10/21/17
+ import com.tcl.mie.launcher.lscreen.LScreen;
+@@ -774,8 +777,43 @@
+ 
+         mScreenPinningRequest = new ScreenPinningRequest(mContext);
+         mFalsingManager = FalsingManager.getInstance(mContext);
++		//add by wqq for turn to mute start{
++		 TelephonyManager telephonyManager = (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);    
++         telephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
++		//add by wqq for turn to mute end}
+     }
+-
++	
++	//add by wqq for turn to mute start{
++	private PhoneStateListener mPhoneStateListener = new PhoneStateListener() {  
++          
++        @Override  
++        public void onCallStateChanged(int state, String incomingNumber) {  
++  
++        final Intent intent = new Intent(mContext, SensorFunctionServiceIncall.class);    
++        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);  
++  
++        boolean bFlipMuteEnabled = Secure.getInt(mContext.getContentResolver(), Secure.FILP_TO_MUTE_ENABLED, 0)==1;    
++          
++            switch (state) {    
++                case TelephonyManager.CALL_STATE_IDLE:      
++               			mContext.stopService(intent);    
++                    break;    
++                case TelephonyManager.CALL_STATE_RINGING:    
++                		if (bFlipMuteEnabled) {  
++                        	mContext.startService(intent);    
++                		}  
++                    break;    
++                case TelephonyManager.CALL_STATE_OFFHOOK:     
++                		mContext.stopService(intent);   
++					break;
++                default:    
++                    break;    
++            }    
++            super.onCallStateChanged(state, incomingNumber);  
++        }  
++    };  
++	//add by wqq for turn to mute end}
++	
+     protected void createIconController() {
+         mIconController = new StatusBarIconController(
+                 mContext, mStatusBarView, mKeyguardStatusBar, this);
+@@ -919,11 +957,22 @@
+         mLocationController = new LocationControllerImpl(mContext,
+                 mHandlerThread.getLooper()); // will post a notification
+         mBatteryController = createBatteryController();
++<<<<<<< .mine
++
+ 		//add by wqq start{
+         mBatteryLevel = (TextView) mStatusBarView.findViewById(R.id.battery_level);
+         mBatteryLevel.setVisibility(Settings.System.getInt(context.getContentResolver(),
+         Settings.System.BATTERY_POWER_PERCENNTAGE_ENABLED, 0)==1 ? View.VISIBLE : View.GONE);
+ 		//add by wqq end}
++		
++||||||| .r1105
++=======
++		//add by wqq start{
++        mBatteryLevel = (TextView) mStatusBarView.findViewById(R.id.battery_level);
++        mBatteryLevel.setVisibility(Settings.System.getInt(context.getContentResolver(),
++        Settings.System.BATTERY_POWER_PERCENNTAGE_ENABLED, 0)==1 ? View.VISIBLE : View.GONE);
++		//add by wqq end}
++>>>>>>> .r1134
+         mBatteryController.addStateChangedCallback(new BatteryStateChangeCallback() {
+             @Override
+             public void onPowerSaveChanged(boolean isPowerSave) {
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1166)
++++ frameworks/base/api/test-current.txt	(revision 1167)
+@@ -32635,6 +32635,7 @@
+     field public static final java.lang.String ENABLED_ACCESSIBILITY_SERVICES = "enabled_accessibility_services";
+     field public static final java.lang.String ENABLED_INPUT_METHODS = "enabled_input_methods";
+     field public static final java.lang.String ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES = "enabled_notification_policy_access_packages";
++    field public static final java.lang.String FILP_TO_MUTE_ENABLED = "filp_to_mute_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final java.lang.String INPUT_METHOD_SELECTOR_VISIBILITY = "input_method_selector_visibility";
+     field public static final java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1166)
++++ frameworks/base/api/current.txt	(revision 1167)
+@@ -32556,6 +32556,7 @@
+     field public static final deprecated java.lang.String DEVICE_PROVISIONED = "device_provisioned";
+     field public static final java.lang.String ENABLED_ACCESSIBILITY_SERVICES = "enabled_accessibility_services";
+     field public static final java.lang.String ENABLED_INPUT_METHODS = "enabled_input_methods";
++    field public static final java.lang.String FILP_TO_MUTE_ENABLED = "filp_to_mute_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final java.lang.String INPUT_METHOD_SELECTOR_VISIBILITY = "input_method_selector_visibility";
+     field public static final java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1166)
++++ frameworks/base/api/system-current.txt	(revision 1167)
+@@ -35315,6 +35315,7 @@
+     field public static final deprecated java.lang.String DEVICE_PROVISIONED = "device_provisioned";
+     field public static final java.lang.String ENABLED_ACCESSIBILITY_SERVICES = "enabled_accessibility_services";
+     field public static final java.lang.String ENABLED_INPUT_METHODS = "enabled_input_methods";
++    field public static final java.lang.String FILP_TO_MUTE_ENABLED = "filp_to_mute_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final java.lang.String INPUT_METHOD_SELECTOR_VISIBILITY = "input_method_selector_visibility";
+     field public static final java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";

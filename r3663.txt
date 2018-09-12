@@ -1,0 +1,27 @@
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 3662)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 3663)
+@@ -401,6 +401,12 @@
+ 			mFunctionShortcut.setOnPreferenceChangeListener(this);
+ 			mFingerprintsCategory = (PreferenceGroup)root.findPreference(KEY_FINGERPRINTS_ITEM_CATEGORY);
+ 			mFingerprintsCategory.setTitle(reNameFingerprintsCategory());
++			
++			if(mFingerprintManager.getEnrolledFingerprints(mUserId).size()>=1){
++				Settings.System.putInt(mContext.getContentResolver(),
++                        Settings.System.FINGERPRINTS_UNCLOCK_DEVICE,1);
++				mUnclockPreference.setChecked(true);
++			}
+             addFingerprintItemPreferences(mFingerprintsCategory);
+ 
+             setPreferenceScreen(root);
+@@ -783,6 +789,9 @@
+ 		private void deleteLastFingerPrint() {
+ 			Settings.System.putInt(mContext.getContentResolver(), Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 0);
+ 			mUnclockPreference.setChecked(false);
++			Settings.System.putInt(mContext.getContentResolver(),
++                        Settings.System.FINGERPRINTS_FUNCTION_SETTING, 0);
++			mFunctionShortcut.setChecked(false); 
+ 		}
+ 		// add by dongdongli for 112587 20171114 end }
+ 

@@ -1,0 +1,30 @@
+Index: frameworks/base/media/java/android/media/RingtoneManager.java
+===================================================================
+--- frameworks/base/media/java/android/media/RingtoneManager.java	(revision 6534)
++++ frameworks/base/media/java/android/media/RingtoneManager.java	(revision 6535)
+@@ -817,8 +817,10 @@
+         final String uriString = Settings.System.getStringForUser(context.getContentResolver(),
+                 setting, context.getUserId());
+ 		Uri uri =  null;
++		Cursor cursor = null;
++		try{
+         if(uriString != null){
+-		    Cursor cursor = null;
++		    
+ 			boolean isExist = false;
+ 		    cursor = context.getContentResolver().query(Uri.parse(uriString),
+                             new String[] { MediaStore.Audio.Media.TITLE }, null, null, null);
+@@ -847,7 +849,12 @@
+ 			   uri = Uri.parse(uriString);
+ 		   }
+         }
+-
++        }catch(Exception e){
++			uri = Uri.parse(uriString);
++		}finally{
++			if(cursor != null)
++				cursor.close();
++		}	
+         Log.i(TAG, "Get actual default ringtone uri= " + uri);
+         return uri;
+     }

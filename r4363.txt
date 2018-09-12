@@ -1,0 +1,106 @@
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java	(revision 4362)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/CallCardFragment.java	(revision 4363)
+@@ -1500,9 +1500,17 @@
+                     (GradientDrawable) mPrimaryCallCardContainer.getBackground();
+             drawable.setColor(themeColors.mPrimaryColor);
+         } else {
+-            mPrimaryCallCardContainer.setBackgroundColor(themeColors.mPrimaryColor);
++			if(!isEmergencyCall()){
++				mPrimaryCallCardContainer.setBackgroundColor(themeColors.mPrimaryColor);
++			} else {
++				mPrimaryCallCardContainer.setBackgroundColor(getResources().getColor(R.color.emergency_call_bg));
++			}
+         }
+-        mCallButtonsContainer.setBackgroundColor(themeColors.mPrimaryColor);
++		if(!isEmergencyCall()){
++			mCallButtonsContainer.setBackgroundColor(themeColors.mPrimaryColor);
++		} else {
++			mCallButtonsContainer.setBackgroundColor(getResources().getColor(R.color.emergency_call_bg));
++		}
+         mCallSubject.setTextColor(themeColors.mPrimaryColor);
+         mContactContext.setBackgroundColor(themeColors.mPrimaryColor);
+         //TODO: set color of message text in call context "recent messages" to be the theme color.
+@@ -2066,4 +2074,14 @@
+             answerView.invalidate();
+         }
+     }
++	
++	private boolean isEmergencyCall() {
++		final CallList calls = CallList.getInstance();
++        final Call call = calls.getFirstCall();
++		if (call != null) {
++			return call.isEmergencyCall();
++		} else {
++			return false;
++		}
++	}
+ }
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/CallButtonFragment.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/CallButtonFragment.java	(revision 4362)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/CallButtonFragment.java	(revision 4363)
+@@ -349,7 +349,12 @@
+     @Override
+     public void updateColors() {
+         MaterialPalette themeColors = InCallPresenter.getInstance().getThemeColors();
+-
++		
++		if (isEmergencyCall()){
++			themeColors = new MaterialPalette(getResources().getColor(R.color.emergency_call_button_bg_unselected),
++											  getResources().getColor(R.color.emergency_call_button_bg_selected));
++		}
++		
+         if (mCurrentThemeColors != null && mCurrentThemeColors.equals(themeColors)) {
+             return;
+         }
+@@ -417,6 +422,16 @@
+         /// @}
+         mCurrentThemeColors = themeColors;
+     }
++	
++	private boolean isEmergencyCall() {
++		final CallList calls = CallList.getInstance();
++        final Call call = calls.getFirstCall();
++		if (call != null) {
++			return call.isEmergencyCall();
++		} else {
++			return false;
++		}
++	}
+ 
+     /**
+      * Generate a RippleDrawable which will be the background for a compound button, i.e.
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallPresenter.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallPresenter.java	(revision 4362)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/InCallPresenter.java	(revision 4363)
+@@ -2257,8 +2257,11 @@
+             color = mThemeColors != null ? mThemeColors.mSecondaryColor
+                     : PhoneAccount.NO_HIGHLIGHT_COLOR;
+         }
+-
+-        mInCallActivity.getWindow().setStatusBarColor(color);
++		if (call != null && call.isEmergencyCall()) {
++			mInCallActivity.getWindow().setStatusBarColor(resources.getColor(R.color.emergency_call_button_bg_unselected));
++		} else {
++			mInCallActivity.getWindow().setStatusBarColor(color);
++		}
+         final TaskDescription td = new TaskDescription(
+                 resources.getString(R.string.notification_ongoing_call), null, color);
+         mInCallActivity.setTaskDescription(td);
+Index: packages/apps/Dialer/InCallUI/res/values/colors.xml
+===================================================================
+--- packages/apps/Dialer/InCallUI/res/values/colors.xml	(revision 4362)
++++ packages/apps/Dialer/InCallUI/res/values/colors.xml	(revision 4363)
+@@ -125,4 +125,9 @@
+ 
+     <!-- M: Background color of CallCardFragment-->
+     <color name="callcard_fragment_background_color">#525252</color>
++	
++	<color name="emergency_call_bg">#ff0000</color>
++	<color name="emergency_call_button_bg_unselected">#ff0000</color>
++	<color name="emergency_call_button_bg_selected">#880000</color>
++	
+ </resources>

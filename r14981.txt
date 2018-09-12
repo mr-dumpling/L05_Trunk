@@ -1,0 +1,67 @@
+Index: vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/NetworkSetting.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 14980)
++++ vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 14981)
+@@ -24,6 +24,7 @@
+ import static android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+ 
+ import java.util.HashMap;
++import java.util.LinkedHashMap; 
+ import java.util.List;
+ 
+ import android.app.AlertDialog;
+@@ -672,7 +673,8 @@
+                 // just use the operator name instead of the mildly
+                 // confusing mcc/mnc.
+                 /// M: add forbidden at the end of operator name
+-				HashMap<String,Preference> tempMap = new HashMap<String,Preference>();;
++				LinkedHashMap<String,Preference> tempMap = new LinkedHashMap<String,Preference>();
++				HashMap<String,Preference> currentCarrierMap = new HashMap<String,Preference>();
+                 int forbiddenCount = 0;
+                 for (OperatorInfo ni : result) {
+                     String forbidden = "";
+@@ -684,13 +686,23 @@
+                     }
+                     Preference carrier = new Preference(this, null);
+ 					String operatorName = getNetworkTitle(ni).replaceAll("2G|3G|4G","");
+-                    carrier.setTitle(operatorName + " (" + ni.getState() + ")"/* forbidden */);
+-                    carrier.setPersistent(false);					
+-					tempMap.put(ni.getOperatorNumeric(),carrier);					
++					String state = (!"AVAILABLE".equals(String.valueOf(ni.getState()))) ? " (" + upperCaseEx(String.valueOf(ni.getState())) + ")" : "";
++                    carrier.setTitle(operatorName + state/* forbidden */);
++                    carrier.setPersistent(false);
++					if ("CURRENT".equals(String.valueOf(ni.getState()))) {
++						currentCarrierMap.put(ni.getOperatorNumeric(),carrier);
++					} else {
++						tempMap.put(ni.getOperatorNumeric(),carrier);
++					}										
+                     mNetworkMap.put(carrier, ni);
+ 					Log.d("NetWorkSetting.TAG",ni.toString());
+                     if (DBG) log("  " + ni);
+                 }
++				if (currentCarrierMap !=null) {
++					for (String operatorNumberic:currentCarrierMap.keySet()) {
++						tempMap.put(operatorNumberic, currentCarrierMap.get(operatorNumberic));
++					}
++				}				
+ 				if (tempMap !=null) {
+ 					for (String operatorNumberic:tempMap.keySet()) {
+ 						mNetworkList.addPreference(tempMap.get(operatorNumberic));
+@@ -707,7 +719,16 @@
+             }
+         }
+     }
+-
++	
++	/**
++	* Return the String with first letter upper 
++	*
++	*/
++	public String upperCaseEx(String str) {  
++		
++		return str.substring(0, 1) + str.substring(1).toLowerCase();  
++	}
++	
+     /**
+      * Returns the title of the network obtained in the manual search.
+      *

@@ -1,0 +1,110 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/BatteryMeterView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/BatteryMeterView.java	(revision 8741)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/BatteryMeterView.java	(revision 8742)
+@@ -27,6 +27,10 @@
+ import com.android.systemui.statusbar.policy.BatteryController;
+ import com.android.systemui.tuner.TunerService;
+ 
++import android.os.Message;
++import android.content.BroadcastReceiver;
++import android.content.Intent;
++import android.content.IntentFilter;
+ public class BatteryMeterView extends ImageView implements
+         BatteryController.BatteryStateChangeCallback, TunerService.Tunable {
+ 
+@@ -33,7 +37,75 @@
+     private final BatteryMeterDrawable mDrawable;
+     private final String mSlotBattery;
+     private BatteryController mBatteryController;
++	private int count = 0;
++	private static int lastTemperature = -500;
++    private boolean isWarning = false;	
++	private Context mContext ;
++	private MyReceiver mReceiver = new MyReceiver();
++    Handler mHandler = new Handler() {  
++        public void handleMessage(Message msg) {
++			switch(msg.what){
++				case 1:
++					count++;
++					if(count%2 == 0){
++						setVisibility(View.INVISIBLE);
++					}else{
++						setVisibility(View.VISIBLE);
++					}
++					break;
++				case 2:
++					setVisibility(View.VISIBLE);
++					break;
++				default:
++					break;
++			}
++        }  
++    };
++	
++public class MyThread implements Runnable {  
++    @Override  
++    public void run() {  
++		isWarning = true;
++        while (isWarning) {  
++            try {
++                Thread.sleep(1000);
++                Message message = new Message();  
++                message.what = 1;  
++                mHandler.sendMessage(message); 
++            } catch (InterruptedException e) {  
++                e.printStackTrace();  
++            }  
++        }  
++		Message message = new Message();  
++        message.what = 2;  
++        mHandler.sendMessage(message);
++		isWarning = false;
++    }  
++}  
+ 
++   public class MyReceiver extends BroadcastReceiver {
++    public MyReceiver() {
++    }
++
++    @Override
++    public void onReceive(Context context, Intent intent) {
++        String action = intent.getAction();
++        if (action.equals(Intent.ACTION_BATTERY_CHANGED)) {		
++			int nowTemperature = intent.getIntExtra("temperature", 0);
++			if(nowTemperature < 0 || nowTemperature > 550 || (nowTemperature > 500 && nowTemperature < lastTemperature)){
++				if(!isWarning){	
++					new Thread(new MyThread()).start();
++				}
++			}else{
++				isWarning = false;
++			}
++			
++			if(nowTemperature != lastTemperature)
++				lastTemperature = nowTemperature;
++		}
++    }
++}
++
+     public BatteryMeterView(Context context) {
+         this(context, null, 0);
+     }
+@@ -44,7 +116,7 @@
+ 
+     public BatteryMeterView(Context context, AttributeSet attrs, int defStyle) {
+         super(context, attrs, defStyle);
+-
++		mContext = context;
+         TypedArray atts = context.obtainStyledAttributes(attrs, R.styleable.BatteryMeterView,
+                 defStyle, 0);
+         final int frameColor = atts.getColor(R.styleable.BatteryMeterView_frameColor,
+@@ -55,6 +127,9 @@
+         mSlotBattery = context.getString(
+                 com.android.internal.R.string.status_bar_battery);
+         setImageDrawable(mDrawable);
++		IntentFilter filter = new IntentFilter();
++		filter.addAction(Intent.ACTION_BATTERY_CHANGED);
++		context.registerReceiver(mReceiver, filter);
+     }
+ 
+     @Override

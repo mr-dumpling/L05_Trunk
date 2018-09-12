@@ -1,0 +1,132 @@
+Index: frameworks/base/services/core/java/com/android/server/power/ShutdownThread.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/power/ShutdownThread.java	(revision 7963)
++++ frameworks/base/services/core/java/com/android/server/power/ShutdownThread.java	(revision 7964)
+@@ -228,8 +228,10 @@
+         final int resourceId = mRebootSafeMode
+                 ? com.android.internal.R.string.reboot_safemode_confirm
+                 : (longPressBehavior == 2
+-                        ? com.android.internal.R.string.shutdown_confirm_question
+-                        : com.android.internal.R.string.shutdown_confirm);
++                        ? (mReboot ? com.android.internal.R.string.reboot:
++						com.android.internal.R.string.shutdown_confirm_question)
++                        : (mReboot ? com.android.internal.R.string.reboot_confirm:
++						com.android.internal.R.string.shutdown_confirm));
+ 
+         Log.d(TAG, "Notifying thread to start shutdown longPressBehavior=" + longPressBehavior);
+ 
+@@ -243,9 +245,11 @@
+             sConfirmDialog = new AlertDialog.Builder(context)
+                 .setTitle(mRebootSafeMode
+                         ? com.android.internal.R.string.reboot_safemode_title
+-                        : com.android.internal.R.string.power_off)
++                        : (mReboot ? com.android.internal.R.string.reboot
++							:com.android.internal.R.string.power_off))
+                 .setMessage(resourceId)
+-                .setPositiveButton(com.android.internal.R.string.shutdown_poweroff,
++                .setPositiveButton((mReboot ? com.android.internal.R.string.reboot:
++					com.android.internal.R.string.shutdown_poweroff),
+                         new DialogInterface.OnClickListener() {
+                     public void onClick(DialogInterface dialog, int which) {
+                         beginShutdownSequence(context);
+@@ -496,8 +500,10 @@
+                         com.android.internal.R.string.reboot_to_reset_message));
+             pd.setIndeterminate(true);
+         } else {
+-            pd.setTitle(context.getText(com.android.internal.R.string.power_off));
+-            pd.setMessage(context.getText(com.android.internal.R.string.shutdown_progress));
++            pd.setTitle(context.getText(mReboot ? com.android.internal.R.string.reboot
++				:com.android.internal.R.string.power_off));
++            pd.setMessage(context.getText(mReboot ? com.android.internal.R.string.reboot_to_reset_message
++				:com.android.internal.R.string.shutdown_progress));
+             pd.setIndeterminate(true);
+         }
+         pd.setCancelable(false);
+Index: frameworks/base/core/res/res/values-es-rMX/strings.xml
+===================================================================
+--- frameworks/base/core/res/res/values-es-rMX/strings.xml	(revision 7963)
++++ frameworks/base/core/res/res/values-es-rMX/strings.xml	(revision 7964)
+@@ -386,7 +386,7 @@
+     <!-- Button to lock the screen, within the Phone Options dialog -->
+     <string name="screen_lock">Bloqueo de pantalla</string>
+     <!-- Button to turn off the phone, within the Phone Options dialog -->
+-    <string name="power_off">Reiniciar</string>
++    <string name="power_off">Apagar</string>
+     <!-- Spoken description for ringer silent option. [CHAR LIMIT=NONE] -->
+     <string name="silent_mode_silent">Timbre desactivado</string>
+     <!-- Spoken description for ringer vibrate option. [CHAR LIMIT=NONE] -->
+@@ -415,10 +415,10 @@
+     
+     <!-- Shutdown Confirmation Dialog.  When the user chooses to power off the watch, there will
+          be a confirmation dialog.  This is the message. -->
+-    <string name="shutdown_confirm" product="watch">El teléfono se reiniciará.</string>
++    <string name="shutdown_confirm" product="watch">El teléfono se apagará.</string>
+     <!-- Shutdown Confirmation Dialog.  When the user chooses to power off the phone, there will
+          be a confirmation dialog.  This is the message. -->
+-    <string name="shutdown_confirm" product="default">El teléfono se reiniciará.</string>
++    <string name="shutdown_confirm" product="default">El teléfono se apagará.</string>
+ 
+     <!-- Shutdown Confirmation Dialog.  When the user chooses to power off the phone, it asks
+          the user if they'd like to shut down.  This is the message.  This is used instead of
+@@ -455,7 +455,7 @@
+     <string name="global_action_lock">Bloqueo de pantalla</string>
+ 
+     <!-- label for item that turns off power in phone options dialog -->
+-    <string name="global_action_power_off">Reiniciar</string>
++    <string name="global_action_power_off">Apagar</string>
+ 
+     <!-- label for item that restarts phone in phone options dialog -->
+     <!-- TODO: promote to separate string-->
+@@ -4067,7 +4067,7 @@
+   <string name="fingerprint_acquired_duplicate_finger">Este dedo está duplicado. Cambie uno de los dedos.</string>
+   <string name="fingerprint_acquired_duplicate_area">Zona duplicada. Inténtelo de nuevo.</string>
+ 
+-  <string name="shutdown_poweroff">REINICIAR</string>
++  <string name="shutdown_poweroff">APAGAR</string>
+ 
+   <!--Begin added by Xutao.Wu for TASK5709544 on 2017/11/28-->
+   <!-- Title of the dialog shown when user inactivity times to start retail demo mode [CHAR LIMIT=40] -->
+Index: vendor/branch/5058A_Telcel/frameworks/base/services/core/java/com/android/server/power/ShutdownThread.java
+===================================================================
+--- vendor/branch/5058A_Telcel/frameworks/base/services/core/java/com/android/server/power/ShutdownThread.java	(revision 7963)
++++ vendor/branch/5058A_Telcel/frameworks/base/services/core/java/com/android/server/power/ShutdownThread.java	(revision 7964)
+@@ -228,8 +228,10 @@
+         final int resourceId = mRebootSafeMode
+                 ? com.android.internal.R.string.reboot_safemode_confirm
+                 : (longPressBehavior == 2
+-                        ? com.android.internal.R.string.shutdown_confirm_question
+-                        : com.android.internal.R.string.shutdown_confirm);
++                        ? (mReboot ? com.android.internal.R.string.reboot:
++						com.android.internal.R.string.shutdown_confirm_question)
++                        : (mReboot ? com.android.internal.R.string.reboot_confirm:
++						com.android.internal.R.string.shutdown_confirm));
+ 
+         Log.d(TAG, "Notifying thread to start shutdown longPressBehavior=" + longPressBehavior);
+ 
+@@ -243,9 +245,11 @@
+             sConfirmDialog = new AlertDialog.Builder(context)
+                 .setTitle(mRebootSafeMode
+                         ? com.android.internal.R.string.reboot_safemode_title
+-                        : com.android.internal.R.string.power_off)
++                        : (mReboot ? com.android.internal.R.string.reboot
++							:com.android.internal.R.string.power_off))
+                 .setMessage(resourceId)
+-                .setPositiveButton(com.android.internal.R.string.shutdown_poweroff,
++                .setPositiveButton((mReboot ? com.android.internal.R.string.reboot:
++					com.android.internal.R.string.shutdown_poweroff),
+                         new DialogInterface.OnClickListener() {
+                     public void onClick(DialogInterface dialog, int which) {
+                         beginShutdownSequence(context);
+@@ -496,8 +500,10 @@
+                         com.android.internal.R.string.reboot_to_reset_message));
+             pd.setIndeterminate(true);
+         } else {
+-            pd.setTitle(context.getText(com.android.internal.R.string.power_off));
+-            pd.setMessage(context.getText(com.android.internal.R.string.shutdown_progress));
++            pd.setTitle(context.getText(mReboot ? com.android.internal.R.string.reboot
++				:com.android.internal.R.string.power_off));
++            pd.setMessage(context.getText(mReboot ? com.android.internal.R.string.reboot_to_reset_message
++				:com.android.internal.R.string.shutdown_progress));
+             pd.setIndeterminate(true);
+         }
+         pd.setCancelable(false);

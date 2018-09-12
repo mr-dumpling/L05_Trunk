@@ -1,0 +1,596 @@
+Index: packages/apps/Dialer/AndroidManifest.xml
+===================================================================
+--- packages/apps/Dialer/AndroidManifest.xml	(revision 5642)
++++ packages/apps/Dialer/AndroidManifest.xml	(revision 5643)
+@@ -514,5 +514,16 @@
+             android:exported="false"
+             android:multiprocess="false"
+             />
++
++        <activity android:name="com.mediatek.dialer.activities.UnlockSettingActivity"
++                  android:label="@string/simmelock_name"
++                  android:configChanges = "orientation|mcc|mnc"
++                  android:process="com.android.phone"
++				  android:screenOrientation="portrait">
++            <intent-filter>
++                <action android:name="android.intent.action.UnlockSettingActivity" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
+     </application>
+ </manifest>
+Index: packages/apps/Dialer/src/com/mediatek/dialer/activities/UnlockSettingActivity.java
+===================================================================
+--- packages/apps/Dialer/src/com/mediatek/dialer/activities/UnlockSettingActivity.java	(revision 0)
++++ packages/apps/Dialer/src/com/mediatek/dialer/activities/UnlockSettingActivity.java	(revision 5643)
+@@ -0,0 +1,337 @@
++/* Copyright Statement:
++ *
++ * This software/firmware and related documentation ("MediaTek Software") are
++ * protected under relevant copyright laws. The information contained herein is
++ * confidential and proprietary to MediaTek Inc. and/or its licensors. Without
++ * the prior written permission of MediaTek inc. and/or its licensors, any
++ * reproduction, modification, use or disclosure of MediaTek Software, and
++ * information contained herein, in whole or in part, shall be strictly
++ * prohibited.
++ *
++ * MediaTek Inc. (C) 2010. All rights reserved.
++ *
++ * BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
++ * THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
++ * RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER
++ * ON AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL
++ * WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR
++ * NONINFRINGEMENT. NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH
++ * RESPECT TO THE SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY,
++ * INCORPORATED IN, OR SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES
++ * TO LOOK ONLY TO SUCH THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO.
++ * RECEIVER EXPRESSLY ACKNOWLEDGES THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO
++ * OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES CONTAINED IN MEDIATEK
++ * SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK SOFTWARE
++ * RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
++ * STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S
++ * ENTIRE AND CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE
++ * RELEASED HEREUNDER WILL BE, AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE
++ * MEDIATEK SOFTWARE AT ISSUE, OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE
++ * CHARGE PAID BY RECEIVER TO MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
++ *
++ * The following software/firmware and/or related documentation ("MediaTek
++ * Software") have been modified by MediaTek Inc. All revisions are subject to
++ * any receiver's applicable license agreements with MediaTek Inc.
++ */
++
++package com.mediatek.dialer.activities;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.app.Dialog;
++import android.content.DialogInterface;
++import android.content.res.Configuration;
++import android.os.AsyncResult;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Message;
++import android.text.InputType;
++import android.telephony.TelephonyManager;
++import android.content.Context;
++import android.util.Log;
++import android.view.KeyEvent;
++import android.view.View;
++import android.widget.Button;
++import android.widget.EditText;
++import android.widget.TextView;
++import com.android.dialer.R;
++import com.android.internal.telephony.Phone;
++import com.android.internal.telephony.PhoneFactory;
++
++public class UnlockSettingActivity extends Activity implements DialogInterface.OnKeyListener {
++    private static final String TAG = "SIMMELOCK";
++    private static final int DIALOG_PASSWORDLENGTHINCORRECT = 1;
++    private static final int DIALOG_UNLOCKSUCCEED = 2;
++    private static final int DIALOG_UNLOCKFAILED = 3;
++    private static final int DIALOG_QUERYFAIL = 4;
++    private static final int DIALOG_ALREADY_UNLOCK = 5;
++    private static final int UNLOCK_ICC_SML_COMPLETE = 120;
++    private static final int UNLOCK_ICC_SML_QUERYLEFTTIMES = 110;
++
++    EditText mEtPwd = null;
++    TextView mEtPwdLeftChances = null;
++    private int mPwdLeftChances = 5;
++    private boolean mClickFlag = false;
++	private boolean mUnlockEnable = true;
++
++    private Handler mHandler = new Handler() {
++        public void handleMessage(Message msg) {
++            AsyncResult ar = (AsyncResult) msg.obj;
++            switch (msg.what) {
++            case UNLOCK_ICC_SML_COMPLETE:
++                if (mClickFlag == true) {
++                    Log.i(TAG, "set ar: " + ar.exception);
++                    if (ar.exception != null) {  // fail to unlock
++                        queryLeftTimes();
++                        showDialog(DIALOG_UNLOCKFAILED);
++                    } else {
++                        showDialog(DIALOG_UNLOCKSUCCEED);
++                    }
++                    Log.i(TAG, "handler UNLOCK_ICC_SML_COMPLETE mPwdLeftChances: "
++                            + mPwdLeftChances);
++                }
++                break;
++            case UNLOCK_ICC_SML_QUERYLEFTTIMES:
++                Log.i(TAG, "handler query");
++                Log.i(TAG, "query ar: " + ar.exception);
++                if (ar.exception != null) {
++                    showDialog(DIALOG_QUERYFAIL); // Query fail!
++                } else {
++                    AsyncResult ar1 = (AsyncResult) msg.obj;
++                    int[] lockState = (int[]) ar1.result;
++					Log.i(TAG, "lockState[0]="+lockState[0]);
++					Log.i(TAG, "lockState[1]="+lockState[1]);
++					Log.i(TAG, "lockState[2]="+lockState[2]);
++                    if (lockState[2] > 0) {
++                        // still have chances to unlock
++                        mPwdLeftChances = lockState[2];
++                        mEtPwdLeftChances.setText(String.valueOf(mPwdLeftChances));
++                        Log.i(TAG, "query mPwdLeftChances: " + mPwdLeftChances);
++                    } else {
++                        UnlockSettingActivity.this.finish();
++                    }
++                    if (lockState[1] == 2) {
++                        // already unlock
++                        showDialog(DIALOG_ALREADY_UNLOCK);
++                    } else if (lockState[2] <= 0) {
++                        UnlockSettingActivity.this.finish();
++                    }
++                }
++                break;
++            default:
++                break;
++            }
++        }
++    };
++
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.unlocksetting);
++
++        // initial left password input chances
++        mEtPwdLeftChances = (TextView) findViewById(R.id.idunlockEditInputChancesleft);
++
++        // set the regulation of EditText
++        mEtPwd = (EditText) findViewById(R.id.idunlockEditInputPassword);
++        //mEtPwd.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
++        //mEtPwd.setOnLongClickListener(mOnLongClickListener);
++
++        Button btnConfirm = (Button) findViewById(R.id.idunlockButtonConfirm);
++        // Yu for ICS
++        btnConfirm.setOnClickListener(new Button.OnClickListener() {
++            public void onClick(View view) {
++                Log.i(TAG, "mClickFlag: " + mClickFlag);
++                if (mClickFlag) {
++                    return;
++                } else {
++                    mClickFlag = true;
++                }
++
++                if (mEtPwd.getText().length() != 16){
++                    showDialog(DIALOG_PASSWORDLENGTHINCORRECT);
++                } else {
++                    // get the left chances to unlock(less than 5)
++                    Message callback = Message.obtain(mHandler, UNLOCK_ICC_SML_COMPLETE);
++                    Phone phone = PhoneFactory.getPhone(0);
++                    String mPasswd = getmEtPwd(); 
++                    //String mPasswd = mEtPwd.getText().toString(); 
++					Log.i(TAG, "mPasswd="+mPasswd);
++					//String cmd[] = {"AT+ESMLCK=0,0,\"" + mPasswd + "\"" };
++                    //sendATCommand(cmd, callback);
++                    phone.getIccCard().setIccNetworkLockEnabled(0, 0, mPasswd, null, null, null, callback);
++                }
++            }
++        });
++
++        Button btnCancel = (Button) findViewById(R.id.idunlockButtonCancel);
++        btnCancel.setOnClickListener(new Button.OnClickListener() {
++            public void onClick(View view) {
++                UnlockSettingActivity.this.finish();
++            }
++        });
++    }
++//chenhu 20180109 start
++    public String getmEtPwd() {
++        String passwd = mEtPwd.getText().toString();
++        String mPasswd =null;
++        String passwd_right = "1234567812345678";
++			String passwd_wrrong = "0000000000000000";
++			String imei_s = "";
++			String imei1 = ((TelephonyManager) this.getSystemService(Context.TELEPHONY_SERVICE)).getDeviceId();
++			long l = 1010101010101010L;
++
++			if (imei1 != null) {
++				if (imei1.length() > 14) {
++					imei_s = imei1.substring(imei1.length() - 15);
++					long imei_i = (long) Long.parseLong(imei_s);
++					imei_i = (imei_i + 2017121910) * 13 - 84628197 + l;
++					imei_s = imei_i + "";
++					if (imei_s.length() > 16) {
++						imei_s = imei_s.substring(imei_s.length() - 16);
++					}
++				}
++			} else {
++				Log.d(TAG, "imei1==null");
++			}
++
++			if (passwd != null && passwd.equals(imei_s)) {
++				mPasswd = passwd_right;
++			} else {
++				mPasswd = passwd_wrrong;
++			}
++        return mPasswd;
++      }
++//chenhu 20180109 end
++    @Override
++    protected void onResume() {
++        super.onResume();
++        queryLeftTimes();
++    }
++
++    @Override
++    protected Dialog onCreateDialog(int id) {
++        if (id == DIALOG_UNLOCKFAILED || id == DIALOG_PASSWORDLENGTHINCORRECT
++                || id == DIALOG_UNLOCKSUCCEED || id == DIALOG_QUERYFAIL
++                || id == DIALOG_ALREADY_UNLOCK) {
++            AlertDialog.Builder builder = new AlertDialog.Builder(this)
++                .setCancelable(false)
++                .setTitle(R.string.strAttention)
++                .setIcon(android.R.drawable.ic_dialog_alert)
++                .setOnKeyListener(this);
++
++            switch (id) {
++            case DIALOG_UNLOCKFAILED: // Fail
++                Log.i(TAG, "show DIALOG_UNLOCKFAILED");
++                builder.setMessage(R.string.strUnlockFail).setPositiveButton(R.string.strYes,
++                        new DialogInterface.OnClickListener() {
++                            public void onClick(DialogInterface dialog, int id) {
++                                Log.i(TAG, "query mPwdLeftChances: " + mPwdLeftChances);
++                                mEtPwd.setText("");
++                                dialog.cancel();
++                                mClickFlag = false;
++                            }
++                        });
++                return builder.create();
++            case DIALOG_PASSWORDLENGTHINCORRECT:// Length is incorrect
++                Log.i(TAG, "show DIALOG_PASSWORDLENGTHINCORRECT");
++                builder.setMessage(R.string.strPasswordLengthIncorrect).setPositiveButton(
++                        R.string.strYes,
++                        new DialogInterface.OnClickListener() {
++                            public void onClick(DialogInterface dialog, int id) {
++                                mEtPwd.setText("");
++                                dialog.cancel();
++                                mClickFlag = false;
++                            }
++                        });
++                return builder.create();
++            case DIALOG_UNLOCKSUCCEED:// Succeed
++                Log.i(TAG, "show DIALOG_UNLOCKSUCCEED");
++                builder.setMessage(R.string.strUnlockSucceed).setPositiveButton(R.string.strYes,
++                        new DialogInterface.OnClickListener() {
++                            public void onClick(DialogInterface dialog, int id) {
++                                if (id == AlertDialog.BUTTON_POSITIVE) {
++                                    Log.i(TAG, "Success dialog UnlockSettingActivity dismissed.");
++                                    mClickFlag = false;
++                                    try {
++                                        if (null != dialog) {
++                                            dialog.cancel();
++                                        }
++                                    } catch (IllegalArgumentException e) {
++                                        Log.e(TAG, "Catch IllegalArgumentException");
++                                    }
++                                    finish();
++                                    Log.i(TAG, "Success dialog dismissed.");
++                                }
++                            }
++                        });
++                return builder.create();
++            case DIALOG_QUERYFAIL:// Query fail
++                Log.i(TAG, "show DIALOG_QUERYFAIL");
++                builder.setMessage(R.string.strQueryFailed).setPositiveButton(R.string.strYes,
++                        new DialogInterface.OnClickListener() {
++                            public void onClick(DialogInterface dialog, int id) {
++                                mEtPwd.setText("");
++                                dialog.cancel();
++                                mClickFlag = false;
++                            }
++                        });
++                return builder.create();
++            case DIALOG_ALREADY_UNLOCK:// alerdy unlock
++                Log.i(TAG, "show DIALOG_ALREADY_UNLOCK");
++                builder.setMessage(R.string.strAlreadyUnlocked).setPositiveButton(
++                        R.string.strYes, new DialogInterface.OnClickListener() {
++                            public void onClick(DialogInterface dialog, int id) {
++                                dialog.cancel();
++                                finish();
++                                mClickFlag = false;
++                                Log.i(TAG, "Alreay unlock.");
++                            }
++                        });
++                return builder.create();
++            default:
++                break;
++            }
++        }
++        Log.i(TAG, "show null");
++        return super.onCreateDialog(id);
++    }
++
++    private void queryLeftTimes() {
++        Message callbackQuery = Message.obtain(mHandler, UNLOCK_ICC_SML_QUERYLEFTTIMES);
++		//String cmd[] = { "AT+ESMLCK?", "+ESMLCK" };
++        //sendATCommand(cmd, callbackQuery);
++        Phone phone = PhoneFactory.getPhone(0);
++        phone.getIccCard().queryIccNetworkLock(0, callbackQuery);
++    }
++
++    @Override
++    public boolean onKey(DialogInterface arg0, int arg1, KeyEvent arg2) {
++        if (arg2.getKeyCode() == KeyEvent.KEYCODE_BACK) {
++            arg0.dismiss();
++            finish();
++            return true;
++        }
++        return false;
++    }
++
++    @Override
++    public void onConfigurationChanged(Configuration newConfig) {
++        Log.i(TAG, "[UnlckSetting]onConfigurationChanged ");
++        super.onConfigurationChanged(newConfig);
++    }
++
++    private void sendATCommand(String[] cmd, Message message) {
++        if (cmd != null) {
++            for (int i = 0; i < cmd.length; i++) {
++                Log.v(TAG, "sendATCommand: cmd[" + i + "] = " + cmd[i]);
++            }
++        }
++        Phone phone = PhoneFactory.getPhone(0);
++        Log.v(TAG, "sendATCommand: mPhoneId = " + 0);
++        if (phone != null) {
++            phone.invokeOemRilRequestStrings(cmd, message);
++        }
++    }
++}
+Index: packages/apps/Dialer/res/layout/unlocksetting.xml
+===================================================================
+--- packages/apps/Dialer/res/layout/unlocksetting.xml	(revision 0)
++++ packages/apps/Dialer/res/layout/unlocksetting.xml	(revision 5643)
+@@ -0,0 +1,81 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout
++  xmlns:android="http://schemas.android.com/apk/res/android"
++  android:layout_width="fill_parent"
++  android:layout_height="fill_parent"
++  android:orientation = "vertical"
++  >
++  <ScrollView
++        android:layout_width="match_parent"
++        android:layout_height="1px"
++        android:layout_weight="1"
++        android:fillViewport="true"
++    >
++    <LinearLayout
++             android:layout_width="fill_parent"
++             android:layout_height="fill_parent"
++             android:orientation = "vertical"
++    >
++    <TextView
++        android:id="@+id/idunlockInputPassword"
++        android:layout_width="fill_parent"
++        android:layout_height="40dp"
++        android:text="@string/strInputPassword"
++        android:textSize = "20sp"
++        android:layout_marginTop = "20dp"
++        android:gravity = "left"
++    />
++    <EditText
++        android:id="@+id/idunlockEditInputPassword"
++        android:layout_width="200dp"
++        android:layout_height="wrap_content"
++        android:layout_gravity = "center"
++        android:inputType="textPassword"
++		android:maxLength="16"
++        android:contentDescription="@string/strInputPassword"
++    />
++    <TextView
++        android:id="@+id/idunlockInputChancesleft"
++        android:layout_width="fill_parent"
++        android:layout_height="40dp"
++        android:text="@string/strInputChancesleft"
++        android:textSize = "20sp"
++        android:layout_marginTop = "20dp"
++        android:gravity = "left"
++    />
++    <TextView
++        android:id="@+id/idunlockEditInputChancesleft"
++        android:layout_width="200dp"
++        android:layout_height="40dp"
++        android:textSize = "20sp"
++        android:layout_gravity = "center"
++        android:gravity = "center"
++    />
++    </LinearLayout>
++    </ScrollView>
++    <LinearLayout
++             android:layout_width="fill_parent"
++             android:layout_height="50dp"
++             android:orientation = "horizontal"
++             android:gravity = "center"
++             android:layout_alignParentBottom = "true"
++             style="@android:style/ButtonBar"
++    >
++                <Button
++                    android:id="@+id/idunlockButtonConfirm"
++                    android:layout_width="0dp"
++                    android:layout_height="50dp"
++                    android:text="@string/strConfirm"
++                    android:textSize = "20sp"
++                    android:layout_weight="1"
++                />
++                <Button
++                    android:id="@+id/idunlockButtonCancel"
++                    android:layout_width="0dp"
++                    android:layout_height="50dp"
++                    android:text="@string/strCancel"
++                    android:textSize = "20sp"
++                    android:layout_weight="1"
++                />
++    </LinearLayout>
++</LinearLayout>
+Index: packages/apps/Dialer/res/values/strings.xml
+===================================================================
+--- packages/apps/Dialer/res/values/strings.xml	(revision 5642)
++++ packages/apps/Dialer/res/values/strings.xml	(revision 5643)
+@@ -1012,4 +1012,78 @@
+     <string name="search_sw_version_telcel">SW Version</string>
+     <string name="search_hw_version_telcel">HW Version</string>
+     <string name="search_customer_ver_external_title_telcel">Version Info</string>
++	
++	<!-- add simlokck string by chenhu start -->
++	    <string name="settings_label">EM SIM ME Lock</string>
++    <!--  for SIM ME lock -->
++    <string name="simmelock_name">SIM ME Lock</string>
++    <string name="strInputPassword">Please input the password :</string>
++    <string name="strConfirm">Finish</string>
++    <string name="strCancel">Cancel</string>
++    <!--
++    <string name="strInputNumebers_4to8">Please input 4-8 numbers:</string>
++    -->
++    <string name="strInputChancesleft">Retires left :</string>
++    <string name="strMCCMNC">MCC+MNC :</string>
++    <string name="strMCCMNCHLR">MCC+MNC+HLR :</string>
++    <string name="strGID1">GID1 :</string>
++    <string name="strGID2">GID2 :</string>
++    <string name="strInputPasswordAgain">Please input the password again :</string>
++    <string name="strIMSI">IMSI :</string>
++    <string name="strAttention">Attention</string>
++    <string name="strConfirmRemove">Really want to remove ?</string>
++    <string name="srtConfirmPermanUnlock">Really want to unlock permanently ?</string>
++    <string name="strYes">Yes</string>
++    <string name="strLockFail">Lock Fail !</string>
++    <string name="strLockSucceed">Lock Succeed !</string>
++    <string name="strUnlockFail">Unlock Fail !</string>
++    <string name="strUnlockSucceed">Unlock Succeed !</string>
++    <string name="strUserInput">User Input</string>
++    <string name="strInputMode">Input by the user?</string>
++    <string name="strLockNameNetwork">Network Personalization</string>
++    <string name="strLockNameNetworkSub">Network Subset Personalization</string>
++    <string name="strLockNameService">Service Provider Personalization</string>
++    <string name="strLockNameCorporate">Corporate Personalization</string>
++    <string name="strLockNameSIM">SIM Personalization</string>
++    <string name="strActionNameLock">Lock</string>
++    <string name="strActionNameUnlock">Unlock</string>
++    <string name="strActionNameAddLock">Add</string>
++    <string name="strActionNameRemoveLock">Remove</string>
++    <string name="strActionNamePermanentUnlock">Unlock permanently</string>
++    <string name="manager_list">Black / White list Manager</string>   
++    <string name="carrier_restriction">CarrierRestriction</string>
++    <string name="unlock">unlock</string>
++    <string name="CarrierRestriction_white">white list</string>
++    <string name="CarrierRestriction_black">black list</string>
++    <string name="strCarrierRestrictionSIM">SIM Carrier restriction</string>
++    <string name="CarrierRestriction_MCC">MCC: </string>
++    <string name="CarrierRestriction_MNC">MNC: </string>
++    <string name="CarrierRestriction_SPN">SPN: </string>
++    <string name="CarrierRestriction_IMSI">IMSI:</string>
++    <string name="CarrierRestriction_GID1">GID1:</string>
++    <string name="CarrierRestriction_GID2">GID2:</string>
++    <string name="CarrierRestriction_get_data">Get data from SIM</string>
++    <string name="CarrierRestriction_add_list">Add data    to  list</string>
++    <string name="CarrierRestriction_delect_select">Delete item from List</string>
++    <string name="CarrierRestriction_finish">Save List</string>
++    <string name="CarrierRestriction_list_load">Load List</string>
++    <string name="CarrierRestriction_list_clean">Clean the white and black List</string>
++    <string name="strPasswordLengthIncorrect">16 numbers!</string>
++    <string name="strQueryFailed">Query failed!</string>
++    <string name="strAddLockFail">Add failed!</string>
++    <string name="strAddLockSucceed">Add succeed!</string>
++    <string name="strMCCMNCLengthIncorrect">MCC+MNC invalid!</string>
++    <string name="strMCCMNCHLRLengthIncorrect">MCC+MNC+HLR invalid!</string>
++    <string name="strIMSILengthIncorrect">IMSI invalid!</string>
++    <string name="strGID1WRONG">GID1 invalid!</string>
++    <string name="strGID2WRONG">GID2 invalid!</string>
++    <!--
++    <string name="strPasswordWrong">Password invalid!</string>
++    <string name="str_simme_AirPlaneMode">In airplane mode!The current state of phone is Off! </string>
++    -->
++    <string name="str_simme_passwords_dont_match">Passwords don\'t match</string>
++    <string name="strAlreadyUnlocked">Already Unlocked</string>
++    <string name="strnosim">please input sim</string>
++    <string name="strunlocksim">Please insert sim you want to unlock</string>
++    <!-- add simlokck string by chenhu end -->
+ </resources>
+\ No newline at end of file
+Index: vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 5642)
++++ vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 5643)
+@@ -105,6 +105,7 @@
+     private static final String MMI_IMEI_DISPLAY = "*#06#";
+     private static final String MMI_REGULATORY_INFO_DISPLAY = "*#07#";
+     private static final String MMI_TEST_DEVICE = "*#2886#";
++    private static final String TELCEL_TEST_DEVICE = "*#2539#";
+ 
+     /// M: add for handle reboot meta secret code @{
+     private static final String FK_SUPPORTED = "1";
+@@ -214,6 +215,7 @@
+                 ||handleInternalVersion(context, dialString)
+                 ||handleExternalVersion(context, dialString)
+                 ||handleCheckEfused(context, dialString)
++                ||handleSimlockTest(context, dialString)
+                 /// @}
+                 ) {
+             return true;
+@@ -388,6 +390,42 @@
+         return false;
+     }
+ 
++    static boolean handleSimlockTest(Context context, String input) {
++        if (input.equals(TELCEL_TEST_DEVICE)) {
++			TelephonyManager telMgr = (TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
++			int simState = telMgr.getSimState();
++			String imsi = telMgr.getSubscriberId();
++			if (TelephonyManager.SIM_STATE_ABSENT == simState) {
++				AlertDialog alert = new AlertDialog.Builder(context)
++					.setTitle(R.string.strAttention)
++					.setMessage(R.string.strnosim) 
++					.setPositiveButton(android.R.string.ok, null) 
++					.create();
++				alert.show();
++			} else if (imsi != null) {
++				if (imsi.startsWith("334020") || imsi.startsWith("46001")) {
++					AlertDialog alert = new AlertDialog.Builder(context)
++					.setTitle(R.string.strAttention)
++					.setMessage(R.string.strunlocksim) 
++					.setPositiveButton(android.R.string.ok, null) 
++					.create();
++					alert.show();
++				} else {
++					showSimlockTestPanel(context);
++				}
++			} else {
++				showSimlockTestPanel(context);
++			}
++            return true;
++        }
++        return false;
++    }
++    static void showSimlockTestPanel(Context context) {
++        Intent activityIntent = new Intent("android.intent.action.UnlockSettingActivity");
++        activityIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++        context.startActivity(activityIntent);
++    }
++
+     static boolean handleMMITest(Context context, String input) {
+         if (input.equals(MMI_TEST_DEVICE)) {
+             showMMITestPanel(context);

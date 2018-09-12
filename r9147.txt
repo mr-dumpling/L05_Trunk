@@ -1,0 +1,1339 @@
+Index: vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 0)
++++ vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java	(revision 9147)
+@@ -0,0 +1,753 @@
++/*
++* Copyright (C) 2014 MediaTek Inc.
++* Modification based on code covered by the mentioned copyright
++* and/or permission notice(s).
++*/
++/*
++ * Copyright (C) 2009 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.mms;
++
++import android.content.Context;
++import android.content.Intent;
++import android.content.SharedPreferences;
++import android.content.res.XmlResourceParser;
++import android.database.Cursor;
++import android.os.Bundle;
++import android.preference.PreferenceManager;
++import android.provider.Telephony;
++import android.telephony.SubscriptionManager;
++import android.util.Log;
++
++import com.android.internal.telephony.TelephonyProperties;
++import com.android.mms.util.FeatureOption;
++
++import com.mediatek.custom.CustomProperties;
++import com.mediatek.ipmsg.util.IpMessageUtils;
++import com.mediatek.mms.ext.IOpMmsConfigExt;
++import com.mediatek.mms.ipmessage.IMmsConfigExt;
++import com.mediatek.opmsg.util.OpMessageUtils;
++import com.mediatek.telephony.TelephonyManagerEx;
++
++import org.xmlpull.v1.XmlPullParser;
++import org.xmlpull.v1.XmlPullParserException;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++public class MmsConfig {
++    private static final String TAG = "MmsConfig";
++    private static final boolean DEBUG = true;
++    private static final boolean LOCAL_LOGV = false;
++
++    private static final String DEFAULT_HTTP_KEY_X_WAP_PROFILE = "x-wap-profile";
++    private static final String DEFAULT_USER_AGENT = "Android-Mms/2.0";
++
++    /// KK migration, for default MMS function. @{
++    private static final String MMS_APP_PACKAGE = "com.android.mms";
++
++    private static final String SMS_PROMO_DISMISSED_KEY = "sms_promo_dismissed_key";
++    ///@}
++    private static final int MAX_IMAGE_HEIGHT = 480;
++    private static final int MAX_IMAGE_WIDTH  = 640;
++
++    /**
++     * Whether to hide MMS functionality from the user (i.e. SMS only).
++     */
++    private static boolean mTransIdEnabled = false;
++    private static int mMmsEnabled = 1;                         // default to true
++    private static int mMaxMessageSize = 300 * 1024;            // default to 300k max size
++    private static String mUserAgent = DEFAULT_USER_AGENT;
++    private static String mUaProfTagName = DEFAULT_HTTP_KEY_X_WAP_PROFILE;
++    private static String mUaProfUrl = null;
++    private static String mHttpParams = null;
++    private static String mHttpParamsLine1Key = null;
++    private static String mEmailGateway = null;
++    private static int mMaxImageHeight = MAX_IMAGE_HEIGHT;      // default value
++    private static int mMaxImageWidth = MAX_IMAGE_WIDTH;        // default value
++    private static int mRecipientLimit = Integer.MAX_VALUE;     // default value
++    private static int mDefaultSMSMessagesPerThread = 10000;    // default value
++    private static int mDefaultMMSMessagesPerThread = 1000;     // default value
++    private static int mMinMessageCountPerThread = 2;           // default value
++    private static int mMaxMessageCountPerThread = 10000;        // default value
++    private static int mMinimumSlideElementDuration = 7;        // default to 7 sec
++    private static boolean mNotifyWapMMSC = false;
++    private static boolean mAllowAttachAudio = true;
++
++    // This flag is somewhat confusing. If mEnableMultipartSMS is true, long sms messages are
++    // always sent as multi-part sms messages, with no checked limit on the number of segments.
++    // If mEnableMultipartSMS is false, then mSmsToMmsTextThreshold is used to determine the
++    // limit of the number of sms segments before turning the long sms message into an mms
++    // message. For example, if mSmsToMmsTextThreshold is 4, then a long sms message with three
++    // or fewer segments will be sent as a multi-part sms. When the user types more characters
++    // to cause the message to be 4 segments or more, the send button will show the MMS tag to
++    // indicate the message will be sent as an mms.
++    private static boolean mEnableMultipartSMS = true;
++
++    private static boolean mEnableSlideDuration = true;
++    private static boolean mEnableMMSReadReports = true;        // key: "enableMMSReadReports"
++    private static boolean mEnableSMSDeliveryReports = true;    // key: "enableSMSDeliveryReports"
++    private static boolean mEnableMMSDeliveryReports = true;    // key: "enableMMSDeliveryReports"
++    private static int mMaxTextLength = -1;
++
++    // This is the max amount of storage multiplied by mMaxMessageSize that we
++    // allow of unsent messages before blocking the user from sending any more
++    // MMS's.
++    private static int mMaxSizeScaleForPendingMmsAllowed = 4;       // default value
++
++    // Email gateway alias support, including the master switch and different rules
++    private static boolean mAliasEnabled = false;
++    private static int mAliasRuleMinChars = 2;
++    private static int mAliasRuleMaxChars = 48;
++
++    private static int mMaxSubjectLength = 40;  // maximum number of characters allowed for mms
++                                                // subject
++
++    /// M: google jb.mr1 patch, group mms
++    // If mEnableGroupMms is true, a message with multiple recipients, regardless of contents,
++    // will be sent as a single MMS message with multiple "TO" fields set for each recipient.
++    // If mEnableGroupMms is false, the group MMS setting/preference will be hidden in the settings
++    // activity.
++    private static boolean mEnableGroupMms = true;
++
++    private static final int RECIPIENTS_LIMIT = 50;
++
++    /// M: Mms size limit, default 300K.
++    private static int mUserSetMmsSizeLimit = 300;
++    /// M: Receive Mms size limit for 2G network
++    private static int mReceiveMmsSizeLimitFor2G = 200;
++    /// M: Receive Mms size limit for TD network
++    private static int mReceiveMmsSizeLimitForTD = 400;
++
++    /// M: default value
++    private static int mMaxRestrictedImageHeight = 1200;
++    private static int mMaxRestrictedImageWidth = 1600;
++    private static int mSmsRecipientLimit = 100;
++
++    private static boolean mDeviceStorageFull = false;
++
++    private static IOpMmsConfigExt mOpConfigExt = null;
++
++    // / M: Add for get max text size from ip message
++    private static Context mContext;
++
++    /// Add for support Auto Test.
++    public static boolean sIsRunTestCase = false;
++    public static boolean sIsDefaultSMSInTestCase = false;
++    /// @}
++
++    private static List<Integer> allQuickTextIds = new ArrayList<Integer>();
++    private static List<String> allQuickTexts = new ArrayList<String>();
++    public static IMmsConfigExt mIpConfig;
++
++    private static int sSmsToMmsTextThreshold = 4;
++    private static int sSmsToMmsTextThresholdForCT = 7;
++
++    private static void initPlugin(Context context) {
++        mOpConfigExt = OpMessageUtils.getOpMessagePlugin().getOpMmsConfigExt();
++        mIpConfig = IpMessageUtils.getIpMessagePlugin(context).getIpConfig();
++    }
++
++    public static void init(Context context) {
++        if (LOCAL_LOGV) {
++            Log.v(TAG, "MmsConfig.init()");
++        }
++        // Always put the mnc/mcc in the log so we can tell which mms_config.xml was loaded.
++        Log.d(TAG, "mnc/mcc: " +
++                android.os.SystemProperties.get(TelephonyProperties.PROPERTY_ICC_OPERATOR_NUMERIC));
++
++        mContext = context;
++        // initialize the operator plugin
++        initPlugin(context);
++
++        loadMmsSettings(context);
++
++        // add for ipmessage
++        mIpConfig.onIpInit(context);
++    }
++
++    /// KK migration, for default MMS function. @{
++    public static boolean isSmsEnabled(Context context) {
++        /// Add for support Auto Test.
++        if (sIsRunTestCase) {
++            return sIsDefaultSMSInTestCase;
++        }
++        /// @}
++        String defaultSmsApplication = Telephony.Sms.getDefaultSmsPackage(context);
++
++        if (defaultSmsApplication != null && defaultSmsApplication.equals(MMS_APP_PACKAGE)) {
++            return true;
++        }
++        return false;
++    }
++
++    public static boolean isSmsPromoDismissed(Context context) {
++        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
++        return preferences.getBoolean(SMS_PROMO_DISMISSED_KEY, false);
++    }
++
++    public static void setSmsPromoDismissed(Context context) {
++        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
++        SharedPreferences.Editor editor = preferences.edit();
++        editor.putBoolean(SMS_PROMO_DISMISSED_KEY, true);
++        editor.apply();
++    }
++
++    public static Intent getRequestDefaultSmsAppActivity() {
++        final Intent intent = new Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT);
++        intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, MMS_APP_PACKAGE);
++        return intent;
++    }
++    ///@}
++
++    public static int getSmsToMmsTextThresholdForC2K(Context context) {
++        if (hasUSIMInserted(context)) {
++            Log.d(TAG, "get getSmsToMmsTextThresholdForC2K" + sSmsToMmsTextThresholdForCT);
++            return sSmsToMmsTextThresholdForCT;
++        }
++        return sSmsToMmsTextThreshold;
++    }
++
++    /**
++     * M: For OM Version: check whethor has usim card.
++     * @param context the context.
++     * @return ture: has usim; false: not.
++     */
++    private static boolean hasUSIMInserted(Context context) {
++        if (context == null) {
++            return false;
++        }
++        int[] ids = SubscriptionManager.from(context).getActiveSubscriptionIdList();
++        if (ids != null && ids.length > 0) {
++            for (int subId : ids) {
++                if (isUSimType(subId)) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
++    /**
++     * M: For EVDO: check the sim is whether UIM or not.
++     *
++     * @param subId the sim's sub id.
++     * @return true: UIM; false: not UIM.
++     */
++    private static boolean isUSimType(int subId) {
++        String phoneType = TelephonyManagerEx.getDefault().getIccCardType(subId);
++        if (phoneType == null) {
++            Log.d(TAG, "[isUIMType]: phoneType = null");
++            return false;
++        }
++        Log.d(TAG, "[isUIMType]: phoneType = " + phoneType);
++        return phoneType.equalsIgnoreCase("CSIM") || phoneType.equalsIgnoreCase("UIM")
++                || phoneType.equalsIgnoreCase("RUIM");
++    }
++
++    public static boolean getMmsEnabled() {
++        return mMmsEnabled == 1 ? true : false;
++    }
++
++    public static int getMaxMessageSize() {
++        if (LOCAL_LOGV) {
++            Log.v(TAG, "MmsConfig.getMaxMessageSize(): " + mMaxMessageSize);
++        }
++        return mMaxMessageSize;
++    }
++
++    /**
++     * This function returns the value of "enabledTransID" present in mms_config file.
++     * In case of single segment wap push message, this "enabledTransID" indicates whether
++     * TransactionID should be appended to URI or not.
++     */
++    public static boolean getTransIdEnabled() {
++        return mTransIdEnabled;
++    }
++
++    public static String getUserAgent() {
++        /// M: @{
++        String value = CustomProperties.getString(
++                CustomProperties.MODULE_MMS,
++                CustomProperties.USER_AGENT,
++                mUserAgent);
++        /// @}
++        return value;
++    }
++
++    public static String getUaProfTagName() {
++        return mUaProfTagName;
++    }
++
++    public static String getUaProfUrl() {
++        /// M: @{
++        String value = CustomProperties.getString(
++                CustomProperties.MODULE_MMS,
++                CustomProperties.UAPROF_URL,
++                mUaProfUrl);
++        /// @}
++        return value;
++    }
++
++    public static String getHttpParams() {
++        return mHttpParams;
++    }
++
++    public static String getHttpParamsLine1Key() {
++        return mHttpParamsLine1Key;
++    }
++
++    public static String getEmailGateway() {
++        return mEmailGateway;
++    }
++
++    public static int getMaxImageHeight() {
++        return mMaxImageHeight;
++    }
++
++    public static int getMaxImageWidth() {
++        return mMaxImageWidth;
++    }
++
++    public static int getRecipientLimit() {
++        return mRecipientLimit;
++    }
++
++    public static int getDefaultSMSMessagesPerThread() {
++        return mDefaultSMSMessagesPerThread;
++    }
++
++    public static int getDefaultMMSMessagesPerThread() {
++        return mDefaultMMSMessagesPerThread;
++    }
++
++    public static int getMinMessageCountPerThread() {
++        return mMinMessageCountPerThread;
++    }
++
++    public static int getMaxMessageCountPerThread() {
++        return mMaxMessageCountPerThread;
++    }
++
++    public static int getMinimumSlideElementDuration() {
++        return mMinimumSlideElementDuration;
++    }
++
++    public static boolean getMultipartSmsEnabled() {
++        return mEnableMultipartSMS;
++    }
++
++    public static boolean getSlideDurationEnabled() {
++        return mEnableSlideDuration;
++    }
++
++    public static boolean getMMSReadReportsEnabled() {
++        return mEnableMMSReadReports;
++    }
++
++    public static boolean getSMSDeliveryReportsEnabled() {
++        return mEnableSMSDeliveryReports;
++    }
++
++    public static boolean getMMSDeliveryReportsEnabled() {
++        return mEnableMMSDeliveryReports;
++    }
++
++    public static boolean getNotifyWapMMSC() {
++        return mNotifyWapMMSC;
++    }
++
++    public static int getMaxSizeScaleForPendingMmsAllowed() {
++        return mMaxSizeScaleForPendingMmsAllowed;
++    }
++
++    public static boolean isAliasEnabled() {
++        return mAliasEnabled;
++    }
++
++    public static int getAliasMinChars() {
++        return mAliasRuleMinChars;
++    }
++
++    public static int getAliasMaxChars() {
++        return mAliasRuleMaxChars;
++    }
++
++    public static boolean getAllowAttachAudio() {
++        return mAllowAttachAudio;
++    }
++
++    public static int getMaxSubjectLength() {
++        return mMaxSubjectLength;
++    }
++
++    /// M: google jb.mr1 patch, group mms
++    public static boolean getGroupMmsEnabled() {
++        return mEnableGroupMms;
++    }
++
++    public static final void beginDocument(XmlPullParser parser, String firstElementName)
++            throws XmlPullParserException, IOException
++    {
++        int type;
++        while ((type = parser.next()) != parser.START_TAG
++                   && type != parser.END_DOCUMENT) {
++            ;
++        }
++
++        if (type != parser.START_TAG) {
++            throw new XmlPullParserException("No start tag found");
++        }
++
++        if (!parser.getName().equals(firstElementName)) {
++            throw new XmlPullParserException("Unexpected start tag: found " + parser.getName() +
++                    ", expected " + firstElementName);
++        }
++    }
++
++    public static final void nextElement(XmlPullParser parser)
++            throws XmlPullParserException, IOException
++    {
++        int type;
++        while ((type = parser.next()) != parser.START_TAG
++                   && type != parser.END_DOCUMENT) {
++            ;
++        }
++    }
++
++    /// M:
++    /**
++     * Notes:for CMCC customization,whether to enable SL automatically lanuch.
++     * default set false
++     */
++    private static boolean mSlAutoLanuchEnabled = true;
++    public static boolean getSlAutoLanuchEnabled() {
++        return mSlAutoLanuchEnabled;
++    }
++
++    public static void setDeviceStorageFullStatus(boolean bFull) {
++        mDeviceStorageFull = bFull;
++    }
++
++    public static boolean getDeviceStorageFullStatus() {
++        return mDeviceStorageFull;
++    }
++
++    /// M: new feature, init defualt quick text @{
++    public static void setInitQuickText(boolean init) {
++        SharedPreferences sp =
++            PreferenceManager.getDefaultSharedPreferences(MmsApp.getApplication());
++        SharedPreferences.Editor editor = sp.edit();
++        editor.putBoolean("InitQuickText", init);
++        editor.commit();
++    }
++
++    public static boolean getInitQuickText() {
++        SharedPreferences sp =
++            PreferenceManager.getDefaultSharedPreferences(MmsApp.getApplication());
++        boolean isFristInit = sp.getBoolean("InitQuickText", true);
++        return isFristInit;
++    }
++    /// @}
++
++    public static List<String> getQuicktexts() {
++        return allQuickTexts;
++    }
++
++    public static List<Integer> getQuicktextsId() {
++        return allQuickTextIds;
++    }
++
++    public static int updateAllQuicktexts() {
++        Cursor cursor = mContext.getContentResolver().query(Telephony.MmsSms.CONTENT_URI_QUICKTEXT,
++                null, null, null, null);
++        allQuickTextIds.clear();
++        allQuickTexts.clear();
++        String[] defaultTexts = mContext.getResources().getStringArray(R.array.default_quick_texts);
++        int maxId = defaultTexts.length;
++        if (cursor != null) {
++            try {
++                while (cursor.moveToNext()) {
++                    int qtId = cursor.getInt(0);
++                    allQuickTextIds.add(qtId);
++                    String qtText = cursor.getString(1);
++                    if (qtText != null && !qtText.isEmpty()) {
++                        allQuickTexts.add(qtText);
++                    } else {
++                        allQuickTexts.add(defaultTexts[qtId - 1]);
++                    }
++                    if (qtId > maxId) {
++                        maxId = qtId;
++                    }
++                }
++            } finally {
++                cursor.close();
++            }
++        }
++        return maxId;
++    }
++
++    public static int getUserSetMmsSizeLimit(boolean isBytes) {
++        if (true == isBytes) {
++            return mUserSetMmsSizeLimit * 1024;
++        } else {
++            return mUserSetMmsSizeLimit;
++        }
++    }
++
++    public static void setUserSetMmsSizeLimit(int limit) {
++        mUserSetMmsSizeLimit = limit;
++    }
++
++    public static int getMaxRestrictedImageHeight() {
++        return mMaxRestrictedImageHeight;
++    }
++
++    public static int getMaxRestrictedImageWidth() {
++        return mMaxRestrictedImageWidth;
++    }
++
++    public static int getSmsRecipientLimit() {
++        return mSmsRecipientLimit;
++    }
++
++    public static int getReceiveMmsLimitFor2G() {
++        return mReceiveMmsSizeLimitFor2G;
++    }
++
++    public static int getReceiveMmsLimitForTD() {
++        return mReceiveMmsSizeLimitForTD;
++    }
++
++    /// APARTODO
++//    public static boolean getSIMSmsAtSettingEnabled() {
++//        return mMmsFeatureManagerPlugin.isFeatureEnabled(
++//    IMmsFeatureManagerExt.SHOW_SIM_SMS_ENTRY_IN_SETTINGS);
++//    }
++
++    public static int getPluginMenuIDBase() {
++        return 0x100;
++    }
++
++    private static boolean sSlot1SimExist = true;
++    private static boolean sSlot2SimExist = true;
++    private static int sSlot1RetryCounter = 0;
++    private static int sSlot2RetryCounter = 0;
++    private static final int MAX_RETRY_COUNT = 3;
++    private static long sSim1Id = -1;
++    private static long sSim2Id = -1;
++
++   /* private static void loadSimInfo(Context context) {
++        /// M: sim1 info maybe not loaded yet, load it.
++        if (sSim1Id <= 0 && sSlot1SimExist) {
++            sSim1Id = EncapsulatedSimInfoManager.getIdBySlot(context, PhoneConstants.SIM_ID_1);
++            sSlot1RetryCounter++;
++            /// M: if we tried 3 times and still can't get valid simId , we think the slot is empty.
++            if (sSlot1RetryCounter == MAX_RETRY_COUNT && sSim1Id <= 0) {
++                sSlot1SimExist = false;
++            }
++        }
++        /// M: sim2 info maybe not loaded yet, load it.
++        if (sSim2Id <= 0 && sSlot2SimExist) {
++            sSim2Id = EncapsulatedSimInfoManager.getIdBySlot(context, PhoneConstants.SIM_ID_2);
++            sSlot2RetryCounter++;
++            /// M: if we tried 3 times and still can't get valid simId , we think the slot is empty.
++            if (sSlot2RetryCounter == MAX_RETRY_COUNT && sSim2Id <= 0) {
++                sSlot2SimExist = false;
++            }
++        }
++    }*/
++
++    public static int getMmsRetryPromptIndex() {
++        return mOpConfigExt.getMmsRetryPromptIndex();
++    }
++
++    /// M: this method is changed to use plugin
++    public static int getSmsToMmsTextThreshold() {
++        int limitSmsCount = mOpConfigExt.getSmsToMmsTextThreshold();
++        if (limitSmsCount > 0) {
++            return limitSmsCount;
++        }
++        // Operator Plugin
++        if (FeatureOption.MTK_C2K_SUPPORT) {
++            return getSmsToMmsTextThresholdForC2K(mContext);
++        }
++        return sSmsToMmsTextThreshold;
++    }
++
++    /// M: change this to plugin
++    public static int getMaxTextLimit() {
++        // add for ipmessage
++        if (mIpConfig.getMaxTextLimit(mContext) != 0) {
++            return mIpConfig.getMaxTextLimit(mContext);
++        }
++        return mOpConfigExt.getMaxTextLimit();
++    }
++
++    private static void loadMmsSettings(Context context) {
++        XmlResourceParser parser = context.getResources().getXml(R.xml.mms_config);
++
++        try {
++            beginDocument(parser, "mms_config");
++
++            while (true) {
++                nextElement(parser);
++                String tag = parser.getName();
++                if (tag == null) {
++                    break;
++                }
++                String name = parser.getAttributeName(0);
++                String value = parser.getAttributeValue(0);
++                String text = null;
++                if (parser.next() == XmlPullParser.TEXT) {
++                    text = parser.getText();
++                }
++
++                if (DEBUG) {
++                    Log.v(TAG, "tag: " + tag + " value: " + value + " - " +
++                            text);
++                }
++                if ("name".equalsIgnoreCase(name)) {
++                    if ("bool".equals(tag)) {
++                        // bool config tags go here
++                        if ("enabledMMS".equalsIgnoreCase(value)) {
++                            mMmsEnabled = "true".equalsIgnoreCase(text) ? 1 : 0;
++                        } else if ("enabledTransID".equalsIgnoreCase(value)) {
++                            mTransIdEnabled = "true".equalsIgnoreCase(text);
++                        } else if ("enabledNotifyWapMMSC".equalsIgnoreCase(value)) {
++                            mNotifyWapMMSC = "true".equalsIgnoreCase(text);
++                        } else if ("aliasEnabled".equalsIgnoreCase(value)) {
++                            mAliasEnabled = "true".equalsIgnoreCase(text);
++                        } else if ("allowAttachAudio".equalsIgnoreCase(value)) {
++                            mAllowAttachAudio = "true".equalsIgnoreCase(text);
++                        } else if ("enableMultipartSMS".equalsIgnoreCase(value)) {
++                            mEnableMultipartSMS = "true".equalsIgnoreCase(text);
++                        } else if ("enableSlideDuration".equalsIgnoreCase(value)) {
++                            mEnableSlideDuration = "true".equalsIgnoreCase(text);
++                        } else if ("enableMMSReadReports".equalsIgnoreCase(value)) {
++                            mEnableMMSReadReports = "true".equalsIgnoreCase(text);
++                        } else if ("enableSMSDeliveryReports".equalsIgnoreCase(value)) {
++                            mEnableSMSDeliveryReports = "true".equalsIgnoreCase(text);
++                        } else if ("enableMMSDeliveryReports".equalsIgnoreCase(value)) {
++                            mEnableMMSDeliveryReports = "true".equalsIgnoreCase(text);
++                        /// M: google jb.mr1 patch, group mms
++                        } else if ("enableGroupMms".equalsIgnoreCase(value)) {
++                            mEnableGroupMms = "true".equalsIgnoreCase(text);
++                        }
++                    } else if ("int".equals(tag)) {
++                        // int config tags go here
++                        if ("maxMessageSize".equalsIgnoreCase(value)) {
++                            mMaxMessageSize = Integer.parseInt(text);
++                        } else if ("maxImageHeight".equalsIgnoreCase(value)) {
++                            mMaxImageHeight = Integer.parseInt(text);
++                        } else if ("maxImageWidth".equalsIgnoreCase(value)) {
++                            mMaxImageWidth = Integer.parseInt(text);
++                        }
++                        /// M: @{
++                        else if ("maxRestrictedImageHeight".equalsIgnoreCase(value)) {
++                            mMaxRestrictedImageHeight = Integer.parseInt(text);
++                        } else if ("maxRestrictedImageWidth".equalsIgnoreCase(value)) {
++                            mMaxRestrictedImageWidth = Integer.parseInt(text);
++                        }
++                        /// @}
++                        else if ("defaultSMSMessagesPerThread".equalsIgnoreCase(value)) {
++                            mDefaultSMSMessagesPerThread = Integer.parseInt(text);
++                        } else if ("defaultMMSMessagesPerThread".equalsIgnoreCase(value)) {
++                            mDefaultMMSMessagesPerThread = Integer.parseInt(text);
++                        } else if ("minMessageCountPerThread".equalsIgnoreCase(value)) {
++                            mMinMessageCountPerThread = Integer.parseInt(text);
++                        } else if ("maxMessageCountPerThread".equalsIgnoreCase(value)) {
++                            mMaxMessageCountPerThread = Integer.parseInt(text);
++                        }
++                        else if ("smsToMmsTextThreshold".equalsIgnoreCase(value)) {
++                            /// M: Operator Plugin
++                            mOpConfigExt.setSmsToMmsTextThreshold(Integer.parseInt(text));
++                        }
++                        else if ("recipientLimit".equalsIgnoreCase(value)) {
++                            /// M: Operator Plugin
++                            mOpConfigExt.setMmsRecipientLimit(Integer.parseInt(text));
++                        } else if ("httpSocketTimeout".equalsIgnoreCase(value)) {
++                            mOpConfigExt.setHttpSocketTimeout(Integer.parseInt(text));
++                        } else if ("minimumSlideElementDuration".equalsIgnoreCase(value)) {
++                            mMinimumSlideElementDuration = Integer.parseInt(text);
++                        } else if ("maxSizeScaleForPendingMmsAllowed".equalsIgnoreCase(value)) {
++                            mMaxSizeScaleForPendingMmsAllowed = Integer.parseInt(text);
++                        } else if ("aliasMinChars".equalsIgnoreCase(value)) {
++                            mAliasRuleMinChars = Integer.parseInt(text);
++                        } else if ("aliasMaxChars".equalsIgnoreCase(value)) {
++                            mAliasRuleMaxChars = Integer.parseInt(text);
++                        } else if ("maxMessageTextSize".equalsIgnoreCase(value)) {
++                            /// M: Operator Plugin
++                            mOpConfigExt.setMaxTextLimit(Integer.parseInt(text));
++                        } else if ("maxSubjectLength".equalsIgnoreCase(value)) {
++                            mMaxSubjectLength = Integer.parseInt(text);
++                        }
++                    } else if ("string".equals(tag)) {
++                        // string config tags go here
++                        if ("userAgent".equalsIgnoreCase(value)) {
++                            mUserAgent = text;
++                        } else if ("uaProfTagName".equalsIgnoreCase(value)) {
++                            mUaProfTagName = text;
++                        } else if ("uaProfUrl".equalsIgnoreCase(value)) {
++                            mUaProfUrl = text;
++                        } else if ("httpParams".equalsIgnoreCase(value)) {
++                            mHttpParams = text;
++                        } else if ("httpParamsLine1Key".equalsIgnoreCase(value)) {
++                            mHttpParamsLine1Key = text;
++                        } else if ("emailGatewayNumber".equalsIgnoreCase(value)) {
++                            mEmailGateway = text;
++                        }
++                    }
++                }
++            }
++        } catch (XmlPullParserException e) {
++            Log.e(TAG, "loadMmsSettings caught ", e);
++        } catch (NumberFormatException e) {
++            Log.e(TAG, "loadMmsSettings caught ", e);
++        } catch (IOException e) {
++            Log.e(TAG, "loadMmsSettings caught ", e);
++        } finally {
++            parser.close();
++        }
++
++        String errorStr = null;
++
++        if (getMmsEnabled() && mUaProfUrl == null) {
++            errorStr = "uaProfUrl";
++        }
++
++        if (errorStr != null) {
++            String err =
++                String.format("MmsConfig.loadMmsSettings mms_config.xml missing %s setting",
++                        errorStr);
++            Log.e(TAG, err);
++        }
++    }
++
++    /// M: change this method to plugin
++    public static int getMmsRecipientLimit() {
++        return mOpConfigExt.getMmsRecipientLimit();
++    }
++
++
++    /// M: Add MmsService configure param @{
++    public static Bundle getMmsServiceConfig() {
++        // Operator Plugin
++        return mOpConfigExt.getMmsServiceConfig();
++    }
++    /// @}
++}
+Index: vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/MmsPreferenceActivity.java
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/MmsPreferenceActivity.java	(revision 0)
++++ vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/MmsPreferenceActivity.java	(revision 9147)
+@@ -0,0 +1,514 @@
++/*
++ * Copyright (C) 2007-2008 Esmertec AG.
++ * Copyright (C) 2007-2008 The Android Open Source Project
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package com.mediatek.setting;
++
++import android.app.ActionBar;
++import android.app.AlertDialog;
++import android.content.Context;
++import android.content.Intent;
++import android.content.SharedPreferences;
++import android.content.res.Configuration;
++import android.os.Bundle;
++import android.os.Handler;
++import android.preference.CheckBoxPreference;
++import android.preference.ListPreference;
++import android.preference.Preference;
++import android.preference.PreferenceActivity;
++import android.preference.PreferenceCategory;
++import android.preference.PreferenceGroup;
++import android.preference.PreferenceManager;
++import android.preference.PreferenceScreen;
++import android.telephony.SubscriptionInfo;
++import android.text.TextUtils;
++import android.util.Log;
++import android.view.Menu;
++import android.view.MenuItem;
++import android.widget.EditText;
++import android.widget.Toast;
++
++import com.android.internal.telephony.PhoneConstants;
++import com.android.mms.MmsApp;
++import com.android.mms.MmsConfig;
++import com.android.mms.R;
++import com.android.mms.data.WorkingMessage;
++import com.android.mms.ui.MessageUtils;
++import com.android.mms.util.FeatureOption;
++import com.android.mms.util.MmsLog;
++
++import com.mediatek.mms.ext.IOpMmsPreferenceActivityExt;
++import com.mediatek.opmsg.util.OpMessageUtils;
++import com.mediatek.setting.SimStateMonitor.SimStateListener;
++
++/**
++ * With this activity, users can set preferences for MMS and SMS and
++ * can access and manipulate SMS messages stored on the SIM.
++ */
++public class MmsPreferenceActivity extends PreferenceActivity
++        implements Preference.OnPreferenceChangeListener, SimStateListener {
++    private static final String TAG = "MmsPreferenceActivity";
++
++    private static final boolean DEBUG = false;
++
++    // Symbolic names for the keys used for preference lookup
++    public static final String MMS_DELIVERY_REPORT_MODE = "pref_key_mms_delivery_reports";
++
++    public static final String EXPIRY_TIME = "pref_key_mms_expiry";
++
++    public static final String PRIORITY = "pref_key_mms_priority";
++
++    public static final String READ_REPORT_MODE = "pref_key_mms_read_reports";
++
++    public static final String MMS_SIZE_LIMIT = "pref_key_mms_size_limit";
++
++    // M: add this for read report
++    public static final String READ_REPORT_AUTO_REPLY = "pref_key_mms_auto_reply_read_reports";
++
++    public static final String AUTO_RETRIEVAL = "pref_key_mms_auto_retrieval";
++
++    public static final String RETRIEVAL_DURING_ROAMING = "pref_key_mms_retrieval_during_roaming";
++
++    public static final String CREATION_MODE = "pref_key_mms_creation_mode";
++
++    public static final String MMS_SETTINGS = "pref_key_mms_settings";
++    // Menu entries
++    private static final int MENU_RESTORE_DEFAULTS = 1;
++
++    /// M: google jb.mr1 patch, add for group mms
++    public static final String GROUP_MMS_MODE = "pref_key_mms_group_mms";
++
++    // all preferences need change key for single sim card
++    private CheckBoxPreference mMmsDeliveryReport;
++
++    private CheckBoxPreference mMmsReadReport;
++
++    // M: add this for read report
++    private CheckBoxPreference mMmsAutoReplyReadReport;
++
++    private CheckBoxPreference mMmsAutoRetrieval;
++
++    private CheckBoxPreference mMmsRetrievalDuringRoaming;
++
++    // M: google jb.mr1 patch, add for group mms
++    private CheckBoxPreference mMmsGroupMms;
++
++    // all preferences need change key for multiple sim card
++    private Preference mMmsDeliveryReportMultiSim;
++
++    private Preference mMmsReadReportMultiSim;
++
++    // M: add this for read report
++    private Preference mMmsAutoReplyReadReportMultiSim;
++
++    private Preference mMmsAutoRetrievalMultiSim;
++
++    private Preference mMmsRetrievalDuringRoamingMultiSim;
++
++    private ListPreference mMmsPriority;
++
++    private ListPreference mMmsCreationMode;
++
++    private ListPreference mMmsSizeLimit;
++
++    private static final String PRIORITY_HIGH = "High";
++
++    private static final String PRIORITY_LOW = "Low";
++
++    private static final String PRIORITY_NORMAL = "Normal";
++
++    private static final String LOCATION_PHONE = "Phone";
++
++    private static final String LOCATION_SIM = "Sim";
++
++    private static final String CREATION_MODE_RESTRICTED = "RESTRICTED";
++
++    private static final String CREATION_MODE_WARNING = "WARNING";
++
++    private static final String CREATION_MODE_FREE = "FREE";
++
++    private static final String SIZE_LIMIT_100 = "100";
++
++    private static final String SIZE_LIMIT_200 = "200";
++
++    private static final String SIZE_LIMIT_300 = "300";
++
++    private Handler mSMSHandler = new Handler();
++
++    private Handler mMMSHandler = new Handler();
++
++    private EditText mNumberText;
++
++    private AlertDialog mNumberTextDialog;
++
++    private IOpMmsPreferenceActivityExt mOpMmsPreferenceActivityExt;
++
++    @Override
++    protected void onPause() {
++        super.onPause();
++    }
++
++    @Override
++    protected void onResume() {
++        super.onResume();
++        /// KK migration, for default MMS function. @{
++        boolean isSmsEnabled = MmsConfig.isSmsEnabled(this);
++        MmsLog.d(TAG, "onResume sms enable? " + isSmsEnabled);
++        if (!isSmsEnabled) {
++            finish();
++            return;
++        }
++        /// @}
++        setListPrefSummary();
++    }
++
++    private void setListPrefSummary() {
++        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
++        // For mMmsPriority;
++        String stored = sp.getString(PRIORITY, getString(R.string.priority_normal));
++        mMmsPriority.setSummary(MessageUtils.getVisualTextName(this,
++                stored, R.array.pref_key_mms_priority_choices,
++                R.array.pref_key_mms_priority_values));
++        // For mMmsCreationMode
++        stored = sp.getString(CREATION_MODE, CREATION_MODE_FREE);
++        mMmsCreationMode.setSummary(MessageUtils.getVisualTextName(this,
++                stored, R.array.pref_mms_creation_mode_choices,
++                R.array.pref_mms_creation_mode_values));
++        // For mMmsSizeLimit
++        stored = sp.getString(MMS_SIZE_LIMIT, SIZE_LIMIT_300);
++        mMmsSizeLimit.setSummary(MessageUtils.getVisualTextName(this,
++                stored, R.array.pref_mms_size_limit_choices_ ,
++                R.array.pref_mms_size_limit_values_ ));
++    }
++
++    @Override
++    protected void onCreate(Bundle icicle) {
++        super.onCreate(icicle);
++        MmsLog.d(TAG, "onCreate");
++        ActionBar actionBar = getActionBar();
++        actionBar.setTitle(getResources().getString(R.string.actionbar_mms_setting));
++        actionBar.setDisplayHomeAsUpEnabled(true);
++        setMessagePreferences();
++    }
++
++    private void setMessagePreferences() {
++
++        MmsLog.d(TAG, "SubCount is :" + SimStateMonitor.getInstance().getSubCount());
++        // / M: fix bug ALPS00421364
++        if (SimStateMonitor.getInstance().getSubCount() == 0) {
++            addPreferencesFromResource(R.xml.mmspreferences);
++            mMmsDeliveryReport = (CheckBoxPreference) findPreference(MMS_DELIVERY_REPORT_MODE);
++            mMmsDeliveryReport.setEnabled(false);
++            mMmsReadReport = (CheckBoxPreference) findPreference(READ_REPORT_MODE);
++            mMmsReadReport.setEnabled(false);
++            mMmsAutoReplyReadReport = (CheckBoxPreference) findPreference(READ_REPORT_AUTO_REPLY);
++            mMmsAutoReplyReadReport.setEnabled(false);
++            mMmsAutoRetrieval = (CheckBoxPreference) findPreference(AUTO_RETRIEVAL);
++            mMmsAutoRetrieval.setEnabled(false);
++            mMmsRetrievalDuringRoaming
++                    = (CheckBoxPreference) findPreference(RETRIEVAL_DURING_ROAMING);
++            mMmsRetrievalDuringRoaming.setEnabled(false);
++            // / @}
++        } else if (SimStateMonitor.getInstance().getSubCount() == 1) {
++            addPreferencesFromResource(R.xml.mmspreferences);
++        } else {
++            addPreferencesFromResource(R.xml.mmsmulticardpreferences);
++        }
++
++        PreferenceCategory mmsCategory
++                = (PreferenceCategory) findPreference("pref_key_mms_settings");
++        mOpMmsPreferenceActivityExt = OpMessageUtils.getOpMessagePlugin()
++                .getOpMmsPreferenceActivityExt();
++        mOpMmsPreferenceActivityExt.setMessagePreferences(MmsPreferenceActivity.this,
++                mmsCategory, SimStateMonitor.getInstance().getSubCount());
++
++        // M: add for read report
++        if (!FeatureOption.MTK_SEND_RR_SUPPORT) {
++            // remove read report entry
++            MmsLog.d(MmsApp.TXN_TAG, "remove the read report entry, it should be hidden.");
++            PreferenceCategory mmOptions = (PreferenceCategory) findPreference(MMS_SETTINGS);
++            mmOptions.removePreference(findPreference(READ_REPORT_AUTO_REPLY));
++        }
++        // M: google jb.mr1 patch, add for group mms
++        if (!MmsConfig.getGroupMmsEnabled()) {
++            // remove group mms entry
++            MmsLog.d(MmsApp.TXN_TAG, "remove the group mms entry, it should be hidden.");
++            PreferenceCategory mmOptions = (PreferenceCategory) findPreference(MMS_SETTINGS);
++            mmOptions.removePreference(findPreference(GROUP_MMS_MODE));
++        }
++        mMmsPriority = (ListPreference) findPreference(PRIORITY);
++        mMmsPriority.setOnPreferenceChangeListener(this);
++        ((PreferenceGroup) findPreference(MMS_SETTINGS)).removePreference(mMmsPriority);
++        mMmsCreationMode = (ListPreference) findPreference(CREATION_MODE);
++        mMmsCreationMode.setOnPreferenceChangeListener(this);
++        ((PreferenceGroup) findPreference(MMS_SETTINGS)).removePreference(mMmsCreationMode);
++        mMmsSizeLimit = (ListPreference) findPreference(MMS_SIZE_LIMIT);
++        mMmsSizeLimit.setOnPreferenceChangeListener(this);
++
++        if (!MmsConfig.getMmsEnabled()) {
++            // No Mms, remove all the mms-related preferences
++            PreferenceCategory mmsOptions = (PreferenceCategory) findPreference(MMS_SETTINGS);
++            getPreferenceScreen().removePreference(mmsOptions);
++        }
++        // Change the key to the SIM-related key, if has one SIM card, else set default value.
++        if (SimStateMonitor.getInstance().getSubCount() == 1) {
++            MmsLog.d(TAG, "single sim");
++            changeSingleCardKeyToSimRelated();
++        } else if (SimStateMonitor.getInstance().getSubCount() > 1) {
++            setMultiCardPreference();
++        }
++    }
++
++    private void changeSingleCardKeyToSimRelated() {
++        // get to know which one
++        if (SimStateMonitor.getInstance().getSubCount() == 0) {
++            return;
++        }
++        SubscriptionInfo singleCardInfo = null;
++        singleCardInfo = SimStateMonitor.getInstance().getSubInfoList().get(0);
++
++        if (singleCardInfo == null) {
++            return;
++        }
++        int subId = singleCardInfo.getSubscriptionId();
++        MmsLog.d(TAG, "changeSingleCardKeyToSimRelated Got subId = " + subId);
++        // translate all key to SIM-related key;
++        mMmsDeliveryReport = (CheckBoxPreference) findPreference(MMS_DELIVERY_REPORT_MODE);
++        mMmsReadReport = (CheckBoxPreference) findPreference(READ_REPORT_MODE);
++        // M: add this for read report
++        mMmsAutoReplyReadReport = (CheckBoxPreference) findPreference(READ_REPORT_AUTO_REPLY);
++        mMmsAutoRetrieval = (CheckBoxPreference) findPreference(AUTO_RETRIEVAL);
++        mMmsRetrievalDuringRoaming = (CheckBoxPreference) findPreference(RETRIEVAL_DURING_ROAMING);
++        mMmsDeliveryReport.setKey(Long.toString(subId) + "_" + MMS_DELIVERY_REPORT_MODE);
++        mMmsReadReport.setKey(Long.toString(subId) + "_" + READ_REPORT_MODE);
++        // M: add this for read report
++        if (mMmsAutoReplyReadReport != null) {
++            mMmsAutoReplyReadReport.setKey(Long.toString(subId) + "_" + READ_REPORT_AUTO_REPLY);
++        }
++        // M: google jb.mr1 patch, add for group mms
++        mMmsGroupMms = (CheckBoxPreference) findPreference(GROUP_MMS_MODE);
++        if (mMmsGroupMms != null) {
++            mMmsGroupMms.setKey(GROUP_MMS_MODE);
++        }
++        mMmsAutoRetrieval.setKey(Long.toString(subId) + "_" + AUTO_RETRIEVAL);
++        mMmsRetrievalDuringRoaming.setDependency(Long.toString(subId) + "_" + AUTO_RETRIEVAL);
++        mMmsRetrievalDuringRoaming.setKey(Long.toString(subId) + "_" + RETRIEVAL_DURING_ROAMING);
++        // get the stored value
++        SharedPreferences sp = getSharedPreferences(
++                "com.android.mms_preferences", MODE_PRIVATE);
++        if (mMmsDeliveryReport != null) {
++            mMmsDeliveryReport.setChecked(sp.getBoolean(mMmsDeliveryReport.getKey(), false));
++        }
++        if (mMmsReadReport != null) {
++            mMmsReadReport.setChecked(sp.getBoolean(mMmsReadReport.getKey(), false));
++        }
++        // M: add for read report
++        if (mMmsAutoReplyReadReport != null) {
++            mMmsAutoReplyReadReport.setChecked(
++                    sp.getBoolean(mMmsAutoReplyReadReport.getKey(), false));
++        }
++        if (mMmsAutoRetrieval != null) {
++            mMmsAutoRetrieval.setChecked(sp.getBoolean(mMmsAutoRetrieval.getKey(), true));
++        }
++        if (mMmsRetrievalDuringRoaming != null) {
++            mMmsRetrievalDuringRoaming.setChecked(
++                    sp.getBoolean(mMmsRetrievalDuringRoaming.getKey(), false));
++        }
++        // M: google jb.mr1 patch, add for group mms
++        if (mMmsGroupMms != null) {
++            mMmsGroupMms.setChecked(sp.getBoolean(mMmsGroupMms.getKey(), false));
++        }
++    }
++
++    private void setMultiCardPreference() {
++        mMmsDeliveryReportMultiSim = findPreference(MMS_DELIVERY_REPORT_MODE);
++
++        mMmsReadReportMultiSim = findPreference(READ_REPORT_MODE);
++        // M: add this for read report
++        mMmsAutoReplyReadReportMultiSim = findPreference(READ_REPORT_AUTO_REPLY);
++        mMmsAutoRetrievalMultiSim = findPreference(AUTO_RETRIEVAL);
++        mMmsRetrievalDuringRoamingMultiSim = findPreference(RETRIEVAL_DURING_ROAMING);
++        // M: google jb.mr1 patch, add for group mms
++        // get the stored value
++        SharedPreferences sp = getSharedPreferences(
++                "com.android.mms_preferences", MODE_PRIVATE);
++        mMmsGroupMms = (CheckBoxPreference) findPreference(GROUP_MMS_MODE);
++        if (mMmsGroupMms != null) {
++            mMmsGroupMms.setKey(GROUP_MMS_MODE);
++        }
++        if (mMmsGroupMms != null) {
++            mMmsGroupMms.setChecked(sp.getBoolean(mMmsGroupMms.getKey(), false));
++        }
++        mMmsDeliveryReportMultiSim.setKey(MMS_DELIVERY_REPORT_MODE);
++        mMmsReadReportMultiSim.setKey(READ_REPORT_MODE);
++        mMmsAutoReplyReadReportMultiSim.setKey(READ_REPORT_AUTO_REPLY);
++        mMmsAutoRetrievalMultiSim.setKey(AUTO_RETRIEVAL);
++        mMmsRetrievalDuringRoamingMultiSim.setKey(RETRIEVAL_DURING_ROAMING);
++    }
++
++    public boolean onCreateOptionsMenu(Menu menu) {
++        super.onCreateOptionsMenu(menu);
++        menu.clear();
++        menu.add(0, MENU_RESTORE_DEFAULTS, 0, R.string.restore_default);
++        return true;
++    }
++
++    @Override
++    public boolean onOptionsItemSelected(MenuItem item) {
++        switch (item.getItemId()) {
++        case android.R.id.home:
++            // The user clicked on the Messaging icon in the action bar. Take them back from
++            // wherever they came from
++            finish();
++            return true;
++        case MENU_RESTORE_DEFAULTS:
++            restoreDefaultPreferences();
++            return true;
++        default:
++            break;
++        }
++        return false;
++    }
++
++    @Override
++    public boolean onPreferenceTreeClick(PreferenceScreen preferenceScreen,
++            Preference preference) {
++        if (preference == mMmsDeliveryReportMultiSim
++            || preference == mMmsReadReportMultiSim
++            // M: add this for read report
++            || preference == mMmsAutoReplyReadReportMultiSim
++            || preference == mMmsAutoRetrievalMultiSim
++            || preference == mMmsRetrievalDuringRoamingMultiSim) {
++            Intent it = new Intent();
++            it.setClass(this, SubSelectActivity.class);
++            it.putExtra(SmsPreferenceActivity.PREFERENCE_KEY, preference.getKey());
++            if (preference == mMmsDeliveryReportMultiSim) {
++                it.putExtra(SmsPreferenceActivity.PREFERENCE_TITLE_ID,
++                        R.string.pref_title_mms_delivery_reports);
++            } else if (preference == mMmsReadReportMultiSim) {
++                it.putExtra(SmsPreferenceActivity.PREFERENCE_TITLE_ID,
++                        R.string.pref_title_mms_read_reports);
++            } else if (preference == mMmsAutoReplyReadReportMultiSim) {
++                it.putExtra(SmsPreferenceActivity.PREFERENCE_TITLE_ID,
++                        R.string.pref_title_mms_auto_reply_read_reports);
++            } else if (preference == mMmsAutoRetrievalMultiSim) {
++                it.putExtra(SmsPreferenceActivity.PREFERENCE_TITLE_ID,
++                        R.string.pref_title_mms_auto_retrieval);
++            } else if (preference == mMmsRetrievalDuringRoamingMultiSim) {
++                it.putExtra(SmsPreferenceActivity.PREFERENCE_TITLE_ID,
++                        R.string.pref_title_mms_retrieval_during_roaming);
++            }
++            startActivity(it);
++        }
++        return super.onPreferenceTreeClick(preferenceScreen, preference);
++    }
++
++    private void restoreDefaultPreferences() {
++        SharedPreferences.Editor editor = PreferenceManager.getDefaultSharedPreferences(
++                MmsPreferenceActivity.this).edit();
++        int simCount = SimStateMonitor.getInstance().getSubCount();
++        if (simCount > 0) {
++            for (int i = 0; i < simCount; i++) {
++                int subId = SimStateMonitor.getInstance().getSubInfoList().get(i)
++                        .getSubscriptionId();
++                editor.putBoolean(Long.toString(subId) + "_" + MMS_DELIVERY_REPORT_MODE, false);
++                editor.putBoolean(Long.toString(subId) + "_" + READ_REPORT_MODE, false);
++                editor.putBoolean(Long.toString(subId) + "_" + READ_REPORT_AUTO_REPLY, false);
++                editor.putBoolean(Long.toString(subId) + "_" + AUTO_RETRIEVAL, true);
++                editor.putBoolean(Long.toString(subId) + "_" + RETRIEVAL_DURING_ROAMING, false);
++            }
++        }
++
++        editor.putString(CREATION_MODE, CREATION_MODE_FREE);
++        editor.putString(MMS_SIZE_LIMIT, SIZE_LIMIT_300);
++        editor.putString(PRIORITY, PRIORITY_NORMAL);
++        /// M: fix bug ALPS00432361, restore default preferences
++        /// about GroupMms and ShowEmailAddress @{
++        editor.putBoolean(GROUP_MMS_MODE, false);
++        mOpMmsPreferenceActivityExt.restoreDefaultPreferences(this, editor);
++        /// @}
++        editor.apply();
++        setPreferenceScreen(null);
++        setMessagePreferences();
++        setListPrefSummary();
++    }
++
++    @Override
++    public boolean onPreferenceChange(Preference arg0, Object arg1) {
++        final String key = arg0.getKey();
++        String stored = (String) arg1;
++        if (PRIORITY.equals(key)) {
++            mMmsPriority.setSummary(MessageUtils.getVisualTextName(this,
++                    stored, R.array.pref_key_mms_priority_choices,
++                    R.array.pref_key_mms_priority_values));
++        } else if (MMS_SIZE_LIMIT.equals(key)) {
++            mMmsSizeLimit.setSummary(MessageUtils.getVisualTextName(this,
++                    stored, R.array.pref_mms_size_limit_choices_ ,
++                    R.array.pref_mms_size_limit_values_ ));
++            MmsConfig.setUserSetMmsSizeLimit(Integer.valueOf(stored));
++        } else if (CREATION_MODE.equals(key)) {
++            mMmsCreationMode.setSummary(MessageUtils.getVisualTextName(this,
++                    stored, R.array.pref_mms_creation_mode_choices,
++                    R.array.pref_mms_creation_mode_values));
++            mMmsCreationMode.setValue(stored);
++            WorkingMessage.updateCreationMode(this);
++        }
++        return true;
++    }
++
++    private void showToast(int id) {
++        Toast t = Toast.makeText(getApplicationContext(), getString(id), Toast.LENGTH_SHORT);
++        t.show();
++    }
++
++    @Override
++    public void onConfigurationChanged(Configuration newConfig) {
++        MmsLog.d(TAG, "onConfigurationChanged: newConfig = " + newConfig + ",this = " + this);
++        super.onConfigurationChanged(newConfig);
++//        new EncapsulatedListView(this.getListView()).clearScrapViewsIfNeeded();//csw
++    }
++    // For the group mms feature to be enabled, the following must be true:
++    //  1. the feature is enabled in mms_config.xml (currently on by default)
++    //  2. the feature is enabled in the mms settings page
++    //  3. the SIM knows its own phone number
++    public static boolean getIsGroupMmsEnabled(Context context) {
++        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++        boolean groupMmsPrefOn = prefs.getBoolean(MmsPreferenceActivity.GROUP_MMS_MODE, false);
++        boolean isKnowNumber = false;
++            isKnowNumber =
++               !TextUtils.isEmpty(MessageUtils.getLocalNumber(PhoneConstants.SIM_ID_1))
++            || !TextUtils.isEmpty(MessageUtils.getLocalNumber(PhoneConstants.SIM_ID_2));
++        return MmsConfig.getGroupMmsEnabled() && groupMmsPrefOn; // && isKnowNumber;
++    }
++
++    /// M: fix bug ALPS00421364, update sim state dynamically. @{
++    @Override
++    protected void onStart() {
++        super.onStart();
++        SimStateMonitor.getInstance().addListener(this);
++    }
++
++    @Override
++    protected void onStop() {
++        super.onStop();
++        SimStateMonitor.getInstance().removeListener(this);
++    }
++    /// @}
++
++    @Override
++    public void onSimStateChanged() {
++        Log.d(TAG, "onSimStateChanged");
++        setPreferenceScreen(null);
++        setMessagePreferences();
++        setListPrefSummary();
++    }
++}
+Index: vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/mmspreferences.xml
+===================================================================
+--- vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/mmspreferences.xml	(revision 0)
++++ vendor/branch/5058A_TelefonicaPeru/vendor/mediatek/proprietary/packages/apps/Mms/res/xml/mmspreferences.xml	(revision 9147)
+@@ -0,0 +1,57 @@
++<?xml version="1.0" encoding="utf-8"?>
++    <!--
++        /* * Copyright (C) 2007-2008 Esmertec AG. * Copyright (C) 2007-2008 The
++        Android Open Source Project * * Licensed under the Apache License,
++        Version 2.0 (the "License"); * you may not use this file except in
++        compliance with the License. * You may obtain a copy of the License at *
++        * http://www.apache.org/licenses/LICENSE-2.0 * * Unless required by
++        applicable law or agreed to in writing, software * distributed under the
++        License is distributed on an "AS IS" BASIS, * WITHOUT WARRANTIES OR
++        CONDITIONS OF ANY KIND, either express or implied. * See the License for
++        the specific language governing permissions and * limitations under the
++        License. */
++    -->
++<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
++    <PreferenceCategory android:title="@string/pref_mms_settings_title"
++        android:key="pref_key_mms_settings">
++        <CheckBoxPreference android:defaultValue="false"
++            android:key="pref_key_mms_group_mms"
++            android:summary="@string/pref_summary_mms_group_mms"
++            android:title="@string/pref_title_mms_group_mms" />
++        <CheckBoxPreference android:defaultValue="false"
++            android:key="pref_key_mms_delivery_reports" android:summary="@string/pref_summary_mms_delivery_reports"
++            android:title="@string/pref_title_mms_delivery_reports" />
++        <CheckBoxPreference android:defaultValue="false"
++            android:key="pref_key_mms_read_reports" android:summary="@string/pref_summary_mms_read_reports"
++            android:title="@string/pref_title_mms_read_reports" />
++        <CheckBoxPreference android:defaultValue="false"
++            android:key="pref_key_mms_auto_reply_read_reports" android:summary="@string/pref_summary_mms_auto_reply_read_reports"
++            android:title="@string/pref_title_mms_auto_reply_read_reports" />
++        <CheckBoxPreference android:defaultValue="true"
++            android:key="pref_key_mms_auto_retrieval" android:title="@string/pref_title_mms_auto_retrieval"
++            android:summary="@string/pref_summary_mms_auto_retrieval" />
++        <CheckBoxPreference android:layout="?android:attr/preferenceLayoutChild"
++            android:dependency="pref_key_mms_auto_retrieval"
++            android:defaultValue="false" android:key="pref_key_mms_retrieval_during_roaming"
++            android:title="@string/pref_title_mms_retrieval_during_roaming"
++            android:summary="@string/pref_summary_mms_retrieval_during_roaming" />
++        <ListPreference android:key="pref_key_mms_creation_mode"
++            android:title="@string/pref_title_mms_creation_mode"
++            android:defaultValue="FREE" android:entries="@array/pref_mms_creation_mode_choices"
++            android:entryValues="@array/pref_mms_creation_mode_values"
++            android:dialogTitle="@string/pref_title_mms_creation_mode"
++            android:summary="@string/pref_summary_mms_creation_mode" />
++        <ListPreference android:key="pref_key_mms_size_limit"
++            android:title="@string/pref_title_mms_size_limit"
++            android:dialogTitle="@string/pref_title_mms_size_limit"
++            android:summary="@string/pref_summary_mms_size_limit"
++            android:defaultValue="300" android:entries="@array/pref_mms_size_limit_choices"
++            android:entryValues="@array/pref_mms_size_limit_values" />
++        <ListPreference android:key="pref_key_mms_priority"
++            android:title="@string/mms_priority_label" android:dialogTitle="@string/mms_priority_label"
++            android:summary="@string/mms_priority_label" android:defaultValue="Normal"
++            android:entries="@array/pref_key_mms_priority_choices"
++            android:entryValues="@array/pref_key_mms_priority_values" />
++    </PreferenceCategory>
++</PreferenceScreen>
++

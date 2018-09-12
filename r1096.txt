@@ -1,0 +1,83 @@
+Index: packages/apps/Settings/src/com/android/settings/MasterClear.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 1095)
++++ packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 1096)
+@@ -42,6 +42,8 @@
+ 
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ import com.android.settingslib.RestrictedLockUtils;
++import android.app.AlertDialog;
++import android.content.DialogInterface;
+ 
+ import java.util.List;
+ 
+@@ -113,11 +115,35 @@
+     private final Button.OnClickListener mInitiateListener = new Button.OnClickListener() {
+ 
+         public void onClick(View v) {
+-            if (!runKeyguardConfirmation(KEYGUARD_REQUEST)) {
++            /*if (!runKeyguardConfirmation(KEYGUARD_REQUEST)) {
+                 showFinalConfirmation();
+-            }
++                  }*/
++                Resources res = getActivity().getResources();
++                AlertDialog ad=new AlertDialog.Builder(getActivity()).create(); //getActivity().getResources().getString(R.string.reset_attention);      
++                ad.setMessage(res.getString(R.string.reset_attention));  
++                ad.setButton(res.getString(R.string.reset_confirm), new DialogInterface.OnClickListener() {
++                    @Override  
++                    public void onClick(DialogInterface dialog, int which) {  
++                        doMasterClear();     
++                    }  
++                });  
++                ad.setButton2(res.getString(R.string.reset_cancel), new DialogInterface.OnClickListener() {       
++                    @Override  
++                    public void onClick(DialogInterface dialog, int which) {           
++                          
++                    }  
++                });  
++                ad.show();        
+         }
+     };
++	 private void doMasterClear() {
++        Intent intent = new Intent(Intent.ACTION_MASTER_CLEAR);
++        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
++        intent.putExtra(Intent.EXTRA_REASON, "MasterClearConfirm");
++        intent.putExtra(Intent.EXTRA_WIPE_EXTERNAL_STORAGE, mExternalStorage.isChecked());
++        getActivity().sendBroadcast(intent);
++        // Intent handling is asynchronous -- assume it will happen soon.
++    }
+ 
+     /**
+      * In its initial state, the activity presents a button for the user to
+@@ -153,7 +179,8 @@
+             externalOption.setVisibility(View.GONE);
+ 
+             final View externalAlsoErased = mContentView.findViewById(R.id.also_erases_external);
+-            externalAlsoErased.setVisibility(View.VISIBLE);
++            //externalAlsoErased.setVisibility(View.VISIBLE);
++			externalAlsoErased.setVisibility(View.GONE);
+ 
+             // If it's not emulated, it is on a separate partition but it means we're doing
+             // a force wipe due to encryption.
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1095)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1096)
+@@ -2887,7 +2887,8 @@
+     <!-- SD card & phone storage settings screen, message on screen after user selects Factory data reset [CHAR LIMIT=NONE] -->
+     <string name="master_clear_desc" product="tablet">"This will erase all data from your tablet\u2019s <b>internal storage</b>, including:\n\n<li>Your Google account</li>\n<li>System and app data and settings</li>\n<li>Downloaded apps</li>"</string>
+     <!-- SD card & phone storage settings screen, message on screen after user selects Factory data reset [CHAR LIMIT=NONE] -->
+-    <string name="master_clear_desc" product="default">"This will erase all data from your phone\u2019s <b>internal storage</b>, including:\n\n<li>Your Google account</li>\n<li>System and app data and settings</li>\n<li>Downloaded apps"</li></string>
++    <string name="master_clear_desc" product="default">"All data on your internal storage will be erased including:\n\n<li>Multimedia (photos, videos,music etc)</li>\n<li>Documents</li>\n<li>Downloaded applications</li>\n<li>System data &amp; settings</li>\n<li>User accounts</li>\n<li>All encrypted data on an SD card
++will also become unreadable</li>"</string>
+     <!-- SD card & phone storage settings screen, instructions and list of current accounts.  The list of accounts follows this text[CHAR LIMIT=NONE] -->
+     <string name="master_clear_accounts" product="default">"\n\nYou are currently signed into the following accounts:\n"</string>
+     <!-- SD card & phone storage settings screen, notification if other users are present on the device [CHAR LIMIT=NONE] -->
+@@ -7882,4 +7883,7 @@
+     <string name="navigationbar_background_color_summary">"Change the background color of navigation bar, but it may not be applied to all apps."</string>
+     <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+ 	<string name="regulartory_safety_title">Regulatory &amp; Safety</string>
++    <string name="reset_attention">Erase all data and reset to factory defaults? Your device will restart to perform a factory reset. This action can not be undone.</string>
++    <string name="reset_confirm">RESET</string>
++    <string name="reset_cancel">CANCEL</string>	
+ </resources>

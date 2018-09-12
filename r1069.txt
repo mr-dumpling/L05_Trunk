@@ -1,0 +1,166 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/recents/views/RecentsView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/recents/views/RecentsView.java	(revision 1068)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/recents/views/RecentsView.java	(revision 1069)
+@@ -148,7 +148,7 @@
+                     EventBus.getDefault().send(new DismissAllTaskViewsEvent());
+                 }
+             });
+-            addView(mStackActionButton);
++           // addView(mStackActionButton);
+         }
+         mEmptyView = (TextView) inflater.inflate(R.layout.recents_empty, this, false);
+         addView(mEmptyView);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/recents/RecentsActivity.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/recents/RecentsActivity.java	(revision 1068)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/recents/RecentsActivity.java	(revision 1069)
+@@ -64,6 +64,7 @@
+ import com.android.systemui.recents.events.component.ScreenPinningRequestEvent;
+ import com.android.systemui.recents.events.ui.AllTaskViewsDismissedEvent;
+ import com.android.systemui.recents.events.ui.DeleteTaskDataEvent;
++import com.android.systemui.recents.events.ui.DismissAllTaskViewsEvent;
+ import com.android.systemui.recents.events.ui.HideIncompatibleAppOverlayEvent;
+ import com.android.systemui.recents.events.ui.RecentsDrawnEvent;
+ import com.android.systemui.recents.events.ui.ShowApplicationInfoEvent;
+@@ -85,10 +86,12 @@
+ import com.android.systemui.recents.views.RecentsView;
+ import com.android.systemui.recents.views.SystemBarScrimViews;
+ import com.android.systemui.statusbar.BaseStatusBar;
+-
++import android.widget.ImageButton;
+ import java.io.FileDescriptor;
+ import java.io.PrintWriter;
+ import java.util.List;
++import android.widget.Toast;
++import java.text.DecimalFormat;
+ 
+ /**
+  * The main Recents activity that is started from RecentsComponent.
+@@ -347,6 +350,30 @@
+         filter.addAction(Intent.ACTION_SCREEN_OFF);
+         filter.addAction(Intent.ACTION_TIME_CHANGED);
+         registerReceiver(mSystemBroadcastReceiver, filter);
++         boolean isSupportClearAllTasks = true;
++         if(isSupportClearAllTasks){
++            ImageButton clearButton = (ImageButton) findViewById(R.id.clear_button);
++            clearButton.setVisibility(View.VISIBLE);
++            clearButton.setOnClickListener(new View.OnClickListener() {
++                @Override
++                public void onClick(View v) {
++                   Runtime runtime = Runtime.getRuntime();       
++                   long dalvikOldFree = runtime.freeMemory();
++				   Log.d(TAG,"duxingheng----dalvikOldFree="+dalvikOldFree);
++                   EventBus.getDefault().send(new DismissAllTaskViewsEvent());
++				   runtime.gc();
++				   long dalvikNewFree = runtime.freeMemory();
++				   Log.d(TAG,"duxingheng----dalvikNewFree="+dalvikNewFree);
++				   if(dalvikNewFree >dalvikOldFree){
++				      float releaseDalvikFree = (dalvikNewFree - dalvikOldFree)/(1024.0f*1024.0f);
++				      DecimalFormat df=new DecimalFormat("0.00");
++				      String rdf = df.format(releaseDalvikFree);
++				      Log.d(TAG,"duxingheng----releaseDalvikFree="+releaseDalvikFree);
++				      Toast.makeText(getApplicationContext(),rdf + " MB memory freed up",Toast.LENGTH_SHORT).show();
++					  }
++                }
++            });
++        }
+ 
+         getWindow().addPrivateFlags(LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION);
+ 
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_clean_btn.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_clean_btn.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_clean_btn.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_clean_btn.png	(revision 1069)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxhdpi/ic_clean_btn.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-nodpi/ic_clean_btn.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-nodpi/ic_clean_btn.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-nodpi/ic_clean_btn.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-nodpi/ic_clean_btn.png	(revision 1069)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-nodpi/ic_clean_btn.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_clean_btn.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_clean_btn.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_clean_btn.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_clean_btn.png	(revision 1069)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xhdpi/ic_clean_btn.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_clean_btn.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_clean_btn.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_clean_btn.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_clean_btn.png	(revision 1069)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/ic_clean_btn.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/layout/recents.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/recents.xml	(revision 1068)
++++ frameworks/base/packages/SystemUI/res/layout/recents.xml	(revision 1069)
+@@ -24,7 +24,15 @@
+         android:layout_width="match_parent"
+         android:layout_height="match_parent">
+     </com.android.systemui.recents.views.RecentsView>
+-
++    <ImageButton
++        android:id="@+id/clear_button"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_gravity="center|bottom"
++        android:layout_marginBottom="40dp"
++        android:background="@android:color/transparent"
++        android:src="@drawable/ic_clean_btn"
++         />
+     <!-- Incompatible task overlay -->
+     <ViewStub android:id="@+id/incompatible_app_overlay_stub"
+         android:inflatedId="@+id/incompatible_app_overlay"
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_clean_btn.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_clean_btn.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_clean_btn.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_clean_btn.png	(revision 1069)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-xxxhdpi/ic_clean_btn.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property

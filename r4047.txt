@@ -1,0 +1,115 @@
+Index: packages/apps/Settings/src/com/android/settings/applications/ProcessStatsSummary.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/applications/ProcessStatsSummary.java	(revision 4046)
++++ packages/apps/Settings/src/com/android/settings/applications/ProcessStatsSummary.java	(revision 4047)
+@@ -28,9 +28,17 @@
+ import com.android.settings.Utils;
+ import com.android.settings.applications.ProcStatsData.MemInfo;
+ import com.android.settings.dashboard.SummaryLoader;
++import com.android.settings.search.BaseSearchIndexProvider;
++import com.android.settings.search.Indexable;
++import android.provider.SearchIndexableResource;
++import com.android.settings.search.SearchIndexableRaw;
++import java.util.ArrayList;
++import java.util.List;
+ 
+-public class ProcessStatsSummary extends ProcessStatsBase implements OnPreferenceClickListener {
+ 
++
++public class ProcessStatsSummary extends ProcessStatsBase implements OnPreferenceClickListener ,Indexable{
++
+     private static final String KEY_STATUS_HEADER = "status_header";
+ 
+     private static final String KEY_PERFORMANCE = "performance";
+@@ -159,4 +167,19 @@
+         }
+     };
+ 
++	//add for search
++	 public static final SearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
++            new BaseSearchIndexProvider() {
++                @Override
++                public List<SearchIndexableResource> getXmlResourcesToIndex(Context context,
++                        boolean enabled) {
++                    ArrayList<SearchIndexableResource> result =
++                            new ArrayList<SearchIndexableResource>();
++                    SearchIndexableResource sir = new SearchIndexableResource(context);
++                    sir.xmlResId = R.xml.process_stats_summary;
++                    result.add(sir);
++                    return result;
++                }
++     };
++
+ }
+Index: packages/apps/Settings/src/com/android/settings/search/Ranking.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/search/Ranking.java	(revision 4046)
++++ packages/apps/Settings/src/com/android/settings/search/Ranking.java	(revision 4047)
+@@ -58,7 +58,7 @@
+ import com.android.settings.LockScreenSettings;
+ import com.android.settings.navigationbar.NavigationBarSettings;
+ import java.util.HashMap;
+-
++import com.android.settings.applications.ProcessStatsSummary;
+ /**
+  * Utility class for dealing with Search Ranking.
+  */
+@@ -91,7 +91,8 @@
+     public static final int RANK_FUNC= 25;
+     public static final int RANK_NAVI_BAR= 26;
+     public static final int RANK_REGULATORY_SAFETY= 27;
+-
++	public static final int RANK_MEMORY= 28;
++	
+     public static final int RANK_UNDEFINED = -1;
+     public static final int RANK_OTHERS = 1024;
+     public static final int BASE_RANK_DEFAULT = 2048;
+@@ -157,7 +158,8 @@
+ 
+         //LockScreenSettings
+         sRankMap.put(LockScreenSettings.class.getName(), RANK_FUNC);
+-
++		//MemorySettings
++		sRankMap.put(ProcessStatsSummary.class.getName(), RANK_MEMORY);
+         //NavigationBarSettings
+         sRankMap.put(NavigationBarSettings.class.getName(), RANK_NAVI_BAR);
+ 
+Index: packages/apps/Settings/src/com/android/settings/search/SearchIndexableResources.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/search/SearchIndexableResources.java	(revision 4046)
++++ packages/apps/Settings/src/com/android/settings/search/SearchIndexableResources.java	(revision 4047)
+@@ -56,6 +56,7 @@
+ import com.android.settings.wifi.AdvancedWifiSettings;
+ import com.android.settings.wifi.SavedAccessPointsWifiSettings;
+ import com.android.settings.wifi.WifiSettings;
++import com.android.settings.applications.ProcessStatsSummary;
+ 
+ import com.mediatek.audioprofile.SoundEnhancement;
+ import com.mediatek.nfc.NfcSettings;
+@@ -264,6 +265,13 @@
+                         "android.settings.RegulatorySaftySettings",
+                         R.drawable.ic_settings_regulatory_safety));
+ 
++		sResMap.put(LockScreenSettings.class.getName(),
++                new SearchIndexableResource(
++                        Ranking.getRankForClassName(ProcessStatsSummary.class.getName()),
++                        R.xml.process_stats_summary,
++                        ProcessStatsSummary.class.getName(),
++                        R.drawable.ic_settings_memory));
++		
+         sResMap.put(NavigationBarSettings.class.getName(),
+                 new SearchIndexableResource(
+                         Ranking.getRankForClassName(NavigationBarSettings.class.getName()),
+Index: packages/apps/Settings/res/xml/process_stats_summary.xml
+===================================================================
+--- packages/apps/Settings/res/xml/process_stats_summary.xml	(revision 4046)
++++ packages/apps/Settings/res/xml/process_stats_summary.xml	(revision 4047)
+@@ -16,7 +16,7 @@
+ 
+ <PreferenceScreen
+     xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:title="@string/app_memory_use"
++    android:title="@string/memory_settings_title"
+     android:key="app_list">
+ 
+     <PreferenceCategory

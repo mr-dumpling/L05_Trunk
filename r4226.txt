@@ -1,0 +1,116 @@
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertFullScreen.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertFullScreen.java	(revision 4225)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertFullScreen.java	(revision 4226)
+@@ -45,6 +45,7 @@
+ import java.util.ArrayList;
+ import java.util.concurrent.atomic.AtomicInteger;
+ import java.text.SimpleDateFormat;
++import android.os.SystemProperties;
+ 
+ /**
+  * Full-screen emergency alert with flashing warning icon.
+@@ -421,6 +422,8 @@
+             Log.e(TAG, "dismiss() called with empty message list!");
+             return;
+         }
++		
++		SystemProperties.set("persist.sys.cmasalert", "0");
+ 
+         // Mark the alert as read.
+         final long deliveryTime = lastMessage.getDeliveryTime();
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 4225)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 4226)
+@@ -26,6 +26,7 @@
+ import com.mediatek.cmas.ext.ICmasMessageInitiationExt;
+ import com.mediatek.cmas.ext.DefaultCmasMessageInitiationExt.IAutoLinkClick;
+ import java.text.SimpleDateFormat;
++import android.os.SystemProperties;
+ 
+ public class CMASAlertFullWindow {
+ 
+@@ -163,7 +164,7 @@
+                 //clearViewFlag(view);
+                 dismissAndMarkRead(view, message, msgRowId);
+                 ((Button) view.findViewById(R.id.dismissButton)).setOnClickListener(null);
+-
++				SystemProperties.set("persist.sys.cmasalert", "0");
+                 rmViewByRowId(msgRowId);
+                 if (!sShowingView.isEmpty()) {
+                     Log.i(TAG, "after dismiss current dialog, there are still some other window showing");
+@@ -248,7 +249,11 @@
+         Message msg = new Message();
+         msg.what = CLEAR_SCREEN_FLAG;
+         msg.obj = vInfo;
+-        mScreenOffHandler.sendMessageDelayed(msg, ALERT_TIME_LENGTH);
++		if (message.getServiceCategory() == 4370 && CellBroadcastReceiverApp.isCellAreaInChile()) {
++			mScreenOffHandler.sendMessageDelayed(msg, 24*60*60*1000);
++		} else {	
++			mScreenOffHandler.sendMessageDelayed(msg, ALERT_TIME_LENGTH);
++		}
+     }
+ 
+     private WindowManager.LayoutParams initLayoutParams(int type) {
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 4225)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 4226)
+@@ -45,6 +45,7 @@
+ 
+ import java.util.ArrayList;
+ import java.util.HashSet;
++import android.os.SystemProperties;
+ 
+ /**
+  * This service manages the display and animation of broadcast messages.
+@@ -64,6 +65,8 @@
+ 
+     /** Use the same notification ID for non-emergency alerts. */
+     static final int NOTIFICATION_ID = 1;
++	
++	private static final String PROPERTY_CMAS_ALERT = "persist.sys.cmasalert";
+ 
+     /** Container for message ID and geographical scope, for duplicate message detection. */
+     private static final class MessageServiceCategoryAndScope {
+@@ -369,7 +372,10 @@
+ 
+         if (message.isCmasMessage()) {
+             //Log.d(TAG, "in isMessageEnabledByUser , CMASMessageClass " + message.getCmasMessageClass());
+-            switch (message.getCmasMessageClass()) {
++            if (message.getServiceCategory() == 4370 && CellBroadcastReceiverApp.isCellAreaInChile()) {
++				SystemProperties.set(PROPERTY_CMAS_ALERT, "1");
++			}
++			switch (message.getCmasMessageClass()) {
+                 case SmsCbCmasInfo.CMAS_CLASS_PRESIDENTIAL_LEVEL_ALERT:
+                 if (CellBroadcastReceiverApp.isCellAreaInTw() &&
+                         (message.getServiceCategory() == 919 ||
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 4225)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 4226)
+@@ -6262,6 +6262,23 @@
+             // If we have not yet booted, don't let key events do anything.
+             return 0;
+         }
++		
++		ActivityManager activityManager = (ActivityManager)mContext.getSystemService(Context.ACTIVITY_SERVICE);
++		ComponentName topActivity = activityManager.getRunningTasks(1).get(0).topActivity;
++		
++		if (isScreenOn()){
++			if (KeyEvent.KEYCODE_POWER == event.getKeyCode() && (SystemProperties.getInt("persist.sys.cmasalert", 0) == 1)){
++				return 0;
++			}
++			
++			if (KeyEvent.KEYCODE_VOLUME_UP == event.getKeyCode() && (SystemProperties.getInt("persist.sys.cmasalert", 0) == 1)){
++				return 0;
++			}
++			
++			if (KeyEvent.KEYCODE_VOLUME_DOWN == event.getKeyCode() && (SystemProperties.getInt("persist.sys.cmasalert", 0) == 1)){
++				return 0;
++			}
++		}
+ 
+         /// M: If USP service freeze display, disable power key
+         if (interceptKeyBeforeHandling(event)) {

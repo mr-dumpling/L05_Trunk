@@ -1,0 +1,107 @@
+Index: vendor/mediatek/proprietary/frameworks/opt/fullscreenswitchservice/src/com/mediatek/fullscreenswitch/FullscreenDataHelper.java
+===================================================================
+--- vendor/mediatek/proprietary/frameworks/opt/fullscreenswitchservice/src/com/mediatek/fullscreenswitch/FullscreenDataHelper.java	(revision 4717)
++++ vendor/mediatek/proprietary/frameworks/opt/fullscreenswitchservice/src/com/mediatek/fullscreenswitch/FullscreenDataHelper.java	(revision 4718)
+@@ -165,8 +165,11 @@
+             Log.e(FullscreenSwitchService.TAG, " loadModes error :"
+                     + e.getMessage());
+         }
+-        Log.d(FullscreenSwitchService.TAG,
+-                "loadModes, all app size : " + map.size());
++        
++        if (FullscreenSwitchService.DEBUG) {
++            Log.d(FullscreenSwitchService.TAG,
++                    "loadModes, all app size : " + map.size());
++        }
+         return map;
+     }
+ 
+@@ -197,7 +200,9 @@
+             if (cursor != null) {
+                 if (cursor.moveToNext()) {
+                     newState = getData(cursor);
+-                    Log.d(FullscreenSwitchService.TAG, " load state : " + newState);
++                    if (FullscreenSwitchService.DEBUG) {
++                        Log.d(FullscreenSwitchService.TAG, " load state : " + newState);
++                    }
+                 } else {
+                     Log.e(FullscreenSwitchService.TAG, "moveToNext failed, uri=: "
+                             + uri);
+@@ -259,30 +264,34 @@
+             mode.level = FullscreenMode.APP_LEVEL_THIRD_PARTY;
+             mode.mode = FullscreenMode.APP_FULL_SCREEN_MODE;
+             if(!isWhiteList(pkgName)) {
+-                try {
+-                    PackageInfo pkgInfo = packageManager.getPackageInfo(pkgName,
+-                            PackageManager.GET_ACTIVITIES);
+-                    ActivityInfo[] activities = pkgInfo.activities;
+-                    if (activities != null) {
+-                        int length = activities.length;
+-                        int unresizeNum = 0;
+-                        for (int i = 0; i < length; i++) {
+-                            if (activities[i].resizeMode == ActivityInfo.RESIZE_MODE_UNRESIZEABLE) {
+-                                unresizeNum++;
+-                                Log.i(FullscreenSwitchService.TAG, "UNRESIZEABLE:" + activities[i]);
+-                                break;
++                if ((appInfo.privateFlags & ApplicationInfo.PRIVATE_FLAG_RESIZEABLE_ACTIVITIES) != 0) {
++                    try {
++                        PackageInfo pkgInfo = packageManager.getPackageInfo(pkgName,
++                                PackageManager.GET_ACTIVITIES);
++                        ActivityInfo[] activities = pkgInfo.activities;
++                        if (activities != null) {
++                            boolean isCropScreenMode = false;
++                            for (ActivityInfo activityInfo : activities) {
++                                if (activityInfo.resizeMode == ActivityInfo.RESIZE_MODE_UNRESIZEABLE) {
++                                    isCropScreenMode = true;
++                                    break;
++                                }
+                             }
++                            
++                            if(isCropScreenMode) {
++                                mode.mode = FullscreenMode.APP_CROP_SCREEN_MODE;
++                            }
++                            if (FullscreenSwitchService.DEBUG) {
++                                Log.i(FullscreenSwitchService.TAG, pkgName
++                                        + " initAppMode: mode = " + mode.mode
++                                        + " ,isCropScreenMode = " + isCropScreenMode);
++                            }
+                         }
+-                        if (length == unresizeNum) {
+-                            mode.mode = FullscreenMode.APP_CROP_SCREEN_MODE;
+-                        }
+-                        Log.i(FullscreenSwitchService.TAG, pkgName
+-                                + " initAppMode: mode = " + mode.mode
+-                                + " ,activities.length = " + length
+-                                + " ,unresizeNum = " + unresizeNum);
++                    } catch (PackageManager.NameNotFoundException e) {
++                        Log.e(FullscreenSwitchService.TAG, "Can't find my package : " + pkgName);
+                     }
+-                } catch (PackageManager.NameNotFoundException e) {
+-                    Log.e(FullscreenSwitchService.TAG, "Can't find my package : " + pkgName);
++                } else {
++                    mode.mode = FullscreenMode.APP_CROP_SCREEN_MODE;
+                 }
+             }
+         }
+@@ -305,7 +314,7 @@
+                     launchIntent, PackageManager.GET_DISABLED_COMPONENTS);
+             initAppMode(packageManager, appInfo, intents);
+         } catch (NameNotFoundException e) {
+-            Log.d(FullscreenSwitchService.TAG, " not found: " + e.getMessage());
++            Log.e(FullscreenSwitchService.TAG, " not found: " + e.getMessage());
+         }
+     }
+ 
+Index: vendor/mediatek/proprietary/frameworks/opt/fullscreenswitchservice/src/com/mediatek/fullscreenswitch/FullscreenSwitchService.java
+===================================================================
+--- vendor/mediatek/proprietary/frameworks/opt/fullscreenswitchservice/src/com/mediatek/fullscreenswitch/FullscreenSwitchService.java	(revision 4717)
++++ vendor/mediatek/proprietary/frameworks/opt/fullscreenswitchservice/src/com/mediatek/fullscreenswitch/FullscreenSwitchService.java	(revision 4718)
+@@ -152,7 +152,7 @@
+ 
+     public static final String TAG = FullscreenSwitchService.class
+             .getSimpleName();
+-    public static final boolean DEBUG = true;
++    public static final boolean DEBUG = false;
+     public static final String APP_LOAEED_NAME = "app_loaded_name";
+     public static final int APP_LOAD_INIT_VALUE = 0;
+     public static final int APP_LOADED_VALUE = 1;

@@ -1,0 +1,29 @@
+Index: vendor/branch/5058I_IsraelMobile_BD-USD/packages/apps/Email/src/com/android/mail/browse/MessageViewDownloadRemain.java
+===================================================================
+--- vendor/branch/5058I_IsraelMobile_BD-USD/packages/apps/Email/src/com/android/mail/browse/MessageViewDownloadRemain.java	(revision 7338)
++++ vendor/branch/5058I_IsraelMobile_BD-USD/packages/apps/Email/src/com/android/mail/browse/MessageViewDownloadRemain.java	(revision 7339)
+@@ -91,6 +91,24 @@
+             updateViewState(mLoadingText, false);
+         }
+         updateViewState(this, show);
++		/// M: We Can't download remain in low storage state @{
++		if (StorageLowState.checkIfStorageLow(mContext)) {
++			LogUtils.e(LOG_TAG, "Can't download remain due to low storage");
++			return;
++		}
++		/// @}
++		/** M: We can not refresh in network disconnection state.@{ */
++		if (!Utility.hasConnectivity(getContext())) {
++			UiUtilities.showConnectionAlertDialog(mFragmentManager);
++			return;
++		}
++		/** @} */
++		// Just doing fetch once
++		if (mUiState != UIProvider.MessageState.LOADING) {
++			startFetchMessage(mConvMessage);
++			mConvMessage.state = UIProvider.MessageState.LOADING;
++			updateButtonAsState(mConvMessage.state);
++		}
+     }
+ 
+     private void updateViewState(View view, boolean show) {

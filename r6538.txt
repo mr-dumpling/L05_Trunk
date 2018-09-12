@@ -1,0 +1,50 @@
+Index: vendor/branch/5058A/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java
+===================================================================
+--- vendor/branch/5058A/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 6537)
++++ vendor/branch/5058A/frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 6538)
+@@ -3593,18 +3593,21 @@
+         else if (strNumPlmn != null && strNumPlmn.equals(mSimOperatorNumeric)) {
+             log("Home PLMN, get CPHS ons");
+             plmn = (simRecords != null) ? simRecords.getSIMCPHSOns() : "";
+-            loge("plmn update to cphs" +plmn );
+-				if(strNumPlmn.equals("74810")){
+-                    TelephonyManager tm =
+-                            (TelephonyManager) mPhone.getContext().getSystemService(Context.TELEPHONY_SERVICE);
+-					if((TelephonyManager.getNetworkClass(tm.getNetworkType()) == TelephonyManager.NETWORK_CLASS_2_G)||
++            loge("plmn update to cphs, plmn = " + plmn  + ", strNumPlmn = " + strNumPlmn);
++            if(strNumPlmn.equals("74810")){
++                TelephonyManager tm = (TelephonyManager) mPhone.getContext().getSystemService(Context.TELEPHONY_SERVICE);
++                if((TelephonyManager.getNetworkClass(tm.getNetworkType()) == TelephonyManager.NETWORK_CLASS_2_G)||
+                                        (TelephonyManager.getNetworkClass(tm.getNetworkType()) == TelephonyManager.NETWORK_CLASS_3_G)){
+-									plmn = "Claro UY";
+-									}
+-					else if(TelephonyManager.getNetworkClass(tm.getNetworkType()) == TelephonyManager.NETWORK_CLASS_4_G){
+-										plmn = "Claro LTE";
+-									}
+-								}
++                    plmn = "Claro UY";
++                } else if(TelephonyManager.getNetworkClass(tm.getNetworkType()) == TelephonyManager.NETWORK_CLASS_4_G){
++                    plmn = "Claro LTE";
++                }
++            }
++            if (strNumPlmn.equals("00101")) {
++                if (plmn.contains("Operateur Name StrinRROR") || plmn.contains("Operateur Name StrinF FF")) {
++                	plmn = "Operateur Name String";
++                }
++            }
+         }
+ 
+         if (TextUtils.isEmpty(plmn)) {
+Index: frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java
+===================================================================
+--- frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 6537)
++++ frameworks/opt/telephony/src/java/com/android/internal/telephony/ServiceStateTracker.java	(revision 6538)
+@@ -3578,7 +3578,7 @@
+             log("Home PLMN, get CPHS ons");
+             plmn = (simRecords != null) ? simRecords.getSIMCPHSOns() : "";
+             if (strNumPlmn.equals("00101")) {
+-                if (plmn.equals("Operateur Name StrinRROR") || plmn.equals("Operateur Name StrinF FF")) {
++                if (plmn.contains("Operateur Name StrinRROR") || plmn.contains("Operateur Name StrinF FF")) {
+                 	plmn = "Operateur Name String";
+                 }
+             }

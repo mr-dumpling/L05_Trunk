@@ -1,0 +1,85 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 4506)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 4507)
+@@ -29,6 +29,7 @@
+ import java.util.Timer;
+ import java.util.TimerTask;
+ import com.android.systemui.db.DBManager;
++import java.util.Iterator;
+ /**
+  * Created by Administrator on 2017/9/1.
+  */
+@@ -253,22 +254,33 @@
+         resolveIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+         resolveIntent.setPackage(packageinfo.packageName);
+ 
+-        List<ResolveInfo> resolveinfoList =context. getPackageManager()
++        List<ResolveInfo> resolveinfoList = context.getPackageManager()
+                 .queryIntentActivities(resolveIntent, 0);
+ 
+-        ResolveInfo resolveinfo = resolveinfoList.iterator().next();
++
++        Iterator iter = resolveinfoList.iterator();
++        ResolveInfo resolveinfo = null;
++        if (iter.hasNext()){
++            resolveinfo = (ResolveInfo)iter.next();
++        }
++        
+         if (resolveinfo != null) {
+-         
+             String packageName = resolveinfo.activityInfo.packageName;
+             String className = resolveinfo.activityInfo.name;
+             
+-             intent= new Intent(Intent.ACTION_MAIN);
++            intent= new Intent(Intent.ACTION_MAIN);
+             intent.addCategory(Intent.CATEGORY_LAUNCHER);
+-
+            
+             ComponentName cn = new ComponentName(packageName, className);
+ 
+             intent.setComponent(cn);
++        } else if (packagename.equals("com.android.wallpaper.livepicker")) {
++        	String packageName = "com.android.wallpaper.livepicker";
++            String className = "com.android.wallpaper.livepicker.LiveWallpaperActivity";
++           
++            ComponentName cn = new ComponentName(packageName, className);
++            intent = new Intent();
++            intent.setComponent(cn);
+         }
+         return intent;
+     }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 4506)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 4507)
+@@ -1050,6 +1050,8 @@
+             if (view == null) {
+                 view = v;
+             } else {
++                Log.d(TAG, "xiawei onclick");
++                Log.d(TAG, "xiawei v.id = " + v.getId() + ",view.id = " + view.getId());
+                 if (v.getId() != view.getId()) {
+                     view = v;
+                     mLastTime = System.currentTimeMillis();
+@@ -1059,6 +1061,7 @@
+                     } else {
+                    
+                         packagerName = list.get(index).getPackerName();
++                        Log.d(TAG, "xiawei packagerName = " + packagerName);
+ 						saveUsageToDiagnostics(packagerName); //lance modify for Diagnostic
+                         if (packagerName.equals(CAMERA)) {
+ 							// modify by dongdongli for 112586 20171114 start {
+@@ -1074,9 +1077,9 @@
+                             launchVoiceAssist();
+                         } else if (packagerName.equals(RECORD_VIDEO)) {
+                             launchCamera(CAMERA_LAUNCH_SOURCE_AFFORDANCE);
+-                        }else if (packagerName.equals(CALCULATOR)) {
+-                            startApp(packagerName);
+-                        }else if(packagerName.equals(MUSIC)){
++                        } else if (packagerName.equals(CALCULATOR)) {
++                            startApp(mContext, packagerName);
++                        } else if(packagerName.equals(MUSIC)){
+                         	String playMusic =Settings.System.getString(mContext.getContentResolver(),AppUtils.FUNC_TO_MUSIC);
+ 							if(playMusic!=null){
+ 								

@@ -1,0 +1,22 @@
+Index: packages/apps/Settings/src/com/android/settings/SettingsActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 8651)
++++ packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 8652)
+@@ -969,9 +969,14 @@
+     @Override
+     protected void onStop() {
+         super.onStop();
+-        unregisterReceiver(mBatteryInfoReceiver);
+-        unregisterReceiver(mUserAddRemoveReceiver);
+-        mDynamicIndexableContentMonitor.unregister();
++        try {
++            unregisterReceiver(mBatteryInfoReceiver);
++            unregisterReceiver(mUserAddRemoveReceiver);
++        } catch (IllegalArgumentException ex) {
++            // Ignore this exeption, just handle for some unexpected case
++            Log.e(LOG_TAG, "unregister receiver exception");
++        }
++		mDynamicIndexableContentMonitor.unregister();
+     }
+ 
+     @Override

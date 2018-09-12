@@ -1,0 +1,2614 @@
+Index: vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/contactinfo/ContactInfoCache.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/contactinfo/ContactInfoCache.java	(revision 0)
++++ vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/contactinfo/ContactInfoCache.java	(revision 8576)
+@@ -0,0 +1,377 @@
++/*
++ * Copyright (C) 2015 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.dialer.contactinfo;
++
++import android.os.Handler;
++import android.os.Message;
++import android.text.TextUtils;
++import android.util.Log;
++
++import com.android.dialer.calllog.ContactInfo;
++import com.android.dialer.calllog.ContactInfoHelper;
++import com.android.dialer.util.ExpirableCache;
++import com.google.common.annotations.VisibleForTesting;
++import com.mediatek.dialer.util.DialerFeatureOptions;
++
++import java.util.LinkedList;
++import com.android.dialer.calllog.CallLogFragment;
++import android.telephony.PhoneNumberUtils;
++
++/**
++ * This is a cache of contact details for the phone numbers in the c all log. The key is the
++ * phone number with the country in which teh call was placed or received. The content of the
++ * cache is expired (but not purged) whenever the application comes to the foreground.
++ *
++ * This cache queues request for information and queries for information on a background thread,
++ * so {@code start()} and {@code stop()} must be called to initiate or halt that thread's exeuction
++ * as needed.
++ *
++ * TODO: Explore whether there is a pattern to remove external dependencies for starting and
++ * stopping the query thread.
++ */
++public class ContactInfoCache {
++    public interface OnContactInfoChangedListener {
++        public void onContactInfoChanged();
++    }
++
++    /*
++     * Handles requests for contact name and number type.
++     */
++    private class QueryThread extends Thread {
++        private volatile boolean mDone = false;
++
++        public QueryThread() {
++            super("ContactInfoCache.QueryThread");
++        }
++
++        public void stopProcessing() {
++            mDone = true;
++        }
++
++        @Override
++        public void run() {
++            boolean needRedraw = false;
++            while (true) {
++                // Check if thread is finished, and if so return immediately.
++                if (mDone) return;
++
++                // Obtain next request, if any is available.
++                // Keep synchronized section small.
++                ContactInfoRequest req = null;
++                synchronized (mRequests) {
++                    if (!mRequests.isEmpty()) {
++                        req = mRequests.removeFirst();
++                    }
++                }
++
++                Log.d(TAG, " cache run : " + (req == null ? "empty" : req.number));
++                if (req != null) {
++                    // Process the request. If the lookup succeeds, schedule a redraw.
++                    needRedraw |= queryContactInfo(req.number, req.countryIso, req.callLogInfo);
++                } else {
++                    // Throttle redraw rate by only sending them when there are
++                    // more requests.
++                    if (needRedraw) {
++                        needRedraw = false;
++                        mHandler.sendEmptyMessage(REDRAW);
++                    }
++
++                    // Wait until another request is available, or until this
++                    // thread is no longer needed (as indicated by being
++                    // interrupted).
++                    try {
++                        synchronized (mRequests) {
++                            mRequests.wait(1000);
++                        }
++                    } catch (InterruptedException ie) {
++                        // Ignore, and attempt to continue processing requests.
++                    }
++                }
++            }
++        }
++    }
++
++    private Handler mHandler = new Handler() {
++        @Override
++        public void handleMessage(Message msg) {
++            switch (msg.what) {
++                case REDRAW:
++                    mOnContactInfoChangedListener.onContactInfoChanged();
++                    break;
++                case START_THREAD:
++                    startRequestProcessing();
++                    break;
++            }
++        }
++    };
++
++    private static final int REDRAW = 1;
++    private static final int START_THREAD = 2;
++
++    /// M: cache size increase to 500 from 100.
++    private static final int CONTACT_INFO_CACHE_SIZE = 500;
++    private static final int START_PROCESSING_REQUESTS_DELAY_MS = 1000;
++    /// M: add log tag.
++    private static final String TAG = "ContactInfoCache";
++
++
++    /**
++     * List of requests to update contact details. Each request contains a phone number to look up,
++     * and the contact info currently stored in the call log for this number.
++     *
++     * The requests are added when displaying contacts and are processed by a background thread.
++     */
++    private final LinkedList<ContactInfoRequest> mRequests;
++
++    private ExpirableCache<NumberWithCountryIso, ContactInfo> mCache;
++
++    private ContactInfoHelper mContactInfoHelper;
++    private QueryThread mContactInfoQueryThread;
++    private OnContactInfoChangedListener mOnContactInfoChangedListener;
++    private Context mContext;
++
++    public ContactInfoCache(ContactInfoHelper contactInfoHelper,
++            OnContactInfoChangedListener onContactInfoChangedListener) {
++        mContactInfoHelper = contactInfoHelper;
++        mOnContactInfoChangedListener = onContactInfoChangedListener;
++
++        mRequests = new LinkedList<ContactInfoRequest>();
++        mCache = ExpirableCache.create(CONTACT_INFO_CACHE_SIZE);
++    }
++
++    public ContactInfo getValue(String number, String countryIso, ContactInfo cachedContactInfo) {
++        NumberWithCountryIso numberCountryIso = new NumberWithCountryIso(number, countryIso);
++        ExpirableCache.CachedValue<ContactInfo> cachedInfo =
++                mCache.getCachedValue(numberCountryIso);
++        ContactInfo info = cachedInfo == null ? null : cachedInfo.getValue();
++        if (cachedInfo == null) {
++            mCache.put(numberCountryIso, ContactInfo.EMPTY);
++            // Use the cached contact info from the call log.
++            info = cachedContactInfo;
++            // The db request should happen on a non-UI thread.
++            // Request the contact details immediately since they are currently missing.
++            enqueueRequest(number, countryIso, cachedContactInfo, true);
++            // We will format the phone number when we make the background request.
++        } else {
++            if (cachedInfo.isExpired()) {
++                // The contact info is no longer up to date, we should request it. However, we
++                // do not need to request them immediately.
++                enqueueRequest(number, countryIso, cachedContactInfo, false);
++            } else if (!callLogInfoMatches(cachedContactInfo, info)) {
++                // The call log information does not match the one we have, look it up again.
++                // We could simply update the call log directly, but that needs to be done in a
++                // background thread, so it is easier to simply request a new lookup, which will, as
++                // a side-effect, update the call log.
++                enqueueRequest(number, countryIso, cachedContactInfo, false);
++            }
++
++            if (info == ContactInfo.EMPTY) {
++                // Use the cached contact info from the call log.
++                info = cachedContactInfo;
++            }
++        }
++        return info;
++    }
++
++    /**
++     * Queries the appropriate content provider for the contact associated with the number.
++     *
++     * Upon completion it also updates the cache in the call log, if it is different from
++     * {@code callLogInfo}.
++     *
++     * The number might be either a SIP address or a phone number.
++     *
++     * It returns true if it updated the content of the cache and we should therefore tell the
++     * view to update its content.
++     */
++    private boolean queryContactInfo(String number, String countryIso, ContactInfo callLogInfo) {
++        final ContactInfo info = mContactInfoHelper.lookupNumber(number, countryIso);
++
++        if (info == null) {
++            // The lookup failed, just return without requesting to update the view.
++            return false;
++        }
++
++        // Check the existing entry in the cache: only if it has changed we should update the
++        // view.
++        NumberWithCountryIso numberCountryIso = new NumberWithCountryIso(number, countryIso);
++        ContactInfo existingInfo = mCache.getPossiblyExpired(numberCountryIso);
++
++        final boolean isRemoteSource = info.sourceType != 0;
++
++        // Don't force redraw if existing info in the cache is equal to {@link ContactInfo#EMPTY}
++        // to avoid updating the data set for every new row that is scrolled into view.
++        // see (https://googleplex-android-review.git.corp.google.com/#/c/166680/)
++
++        // Exception: Photo uris for contacts from remote sources are not cached in the call log
++        // cache, so we have to force a redraw for these contacts regardless.
++        boolean updated = (existingInfo != ContactInfo.EMPTY || isRemoteSource) &&
++                !info.equals(existingInfo);
++        
++        for (int i = 0; i < CallLogFragment.list.size(); i++) {
++            String fdnNumber = CallLogFragment.list.get(i).get("number");
++            String fdnName = CallLogFragment.list.get(i).get("name");
++            Log.d(TAG, "fdnNumber: "+ fdnNumber+"; fdnName="+fdnName);
++
++            String minNum = fetchMinNumber(number);
++            String minfdnNumber = fetchMinNumber(fdnNumber);          
++            Log.d(TAG, "minNum: "+ minNum+"; minfdnNumber:"+minfdnNumber);
++            if(TextUtils.equals(minfdnNumber, minNum)) info.name = fdnName;
++        }
++
++        // Store the data in the cache so that the UI thread can use to display it. Store it
++        // even if it has not changed so that it is marked as not expired.
++        mCache.put(numberCountryIso, info);
++
++        // Update the call log even if the cache it is up-to-date: it is possible that the cache
++        // contains the value from a different call log entry.
++        mContactInfoHelper.updateCallLogContactInfo(number, countryIso, info, callLogInfo);
++        return updated;
++    }
++
++    public String  fetchMinNumber(String str){
++        Log.d(TAG, "fetchMinNumber ");
++        String num,num2,num3,num4;
++        num = str.replace(" ", "");
++        num2 = num.replace("-", "");
++        num3 = num2.replace("+", "");
++        num4 = PhoneNumberUtils.toCallerIDMinMatch(num3);
++        return num4;
++    }
++
++    /**
++     * After a delay, start the thread to begin processing requests. We perform lookups on a
++     * background thread, but this must be called to indicate the thread should be running.
++     */
++    public void start() {
++        // Schedule a thread-creation message if the thread hasn't been created yet, as an
++        // optimization to queue fewer messages.
++        if (mContactInfoQueryThread == null) {
++            // TODO: Check whether this delay before starting to process is necessary.
++            mHandler.sendEmptyMessageDelayed(START_THREAD, START_PROCESSING_REQUESTS_DELAY_MS);
++        }
++    }
++
++    /**
++     * Stops the thread and clears the queue of messages to process. This cleans up the thread
++     * for lookups so that it is not perpetually running.
++     */
++    public void stop() {
++        stopRequestProcessing();
++
++        /// M: move the thread stopping code to stop() from stopRequestProcessing() @{
++        if (mContactInfoQueryThread != null) {
++            // Stop the thread; we are finished with it.
++            mContactInfoQueryThread.stopProcessing();
++            mContactInfoQueryThread.interrupt();
++            mContactInfoQueryThread = null;
++            Log.d(TAG, " cache thread stopped... ");
++        }
++        /// @}
++    }
++
++    /**
++     * Starts a background thread to process contact-lookup requests, unless one
++     * has already been started.
++     */
++    private synchronized void startRequestProcessing() {
++        // For unit-testing.
++        if (mRequestProcessingDisabled) return;
++
++        // If a thread is already started, don't start another.
++        if (mContactInfoQueryThread != null) {
++            return;
++        }
++
++        mContactInfoQueryThread = new QueryThread();
++        mContactInfoQueryThread.setPriority(Thread.MIN_PRIORITY);
++        mContactInfoQueryThread.start();
++    }
++
++    public void invalidate() {
++        mCache.expireAll();
++        stopRequestProcessing();
++    }
++
++    /**
++     * Stops the background thread that processes updates and cancels any
++     * pending requests to start it.
++     */
++    private synchronized void stopRequestProcessing() {
++        // Remove any pending requests to start the processing thread.
++        mHandler.removeMessages(START_THREAD);
++        /// M: Just clear all pending requests, move the thread stopping code to stop()
++        /// don't stop thread here. Don't stop thread when invalidate called. @{
++        synchronized (mRequests) {
++            mRequests.clear();
++            mRequests.notifyAll();
++        }
++        /// @}
++    }
++
++    /**
++     * Enqueues a request to look up the contact details for the given phone number.
++     * <p>
++     * It also provides the current contact info stored in the call log for this number.
++     * <p>
++     * If the {@code immediate} parameter is true, it will start immediately the thread that looks
++     * up the contact information (if it has not been already started). Otherwise, it will be
++     * started with a delay. See {@link #START_PROCESSING_REQUESTS_DELAY_MILLIS}.
++     */
++    protected void enqueueRequest(String number, String countryIso, ContactInfo callLogInfo,
++            boolean immediate) {
++        ContactInfoRequest request = new ContactInfoRequest(number, countryIso, callLogInfo);
++        synchronized (mRequests) {
++            if (!mRequests.contains(request)) {
++                mRequests.add(request);
++                mRequests.notifyAll();
++            }
++        }
++        /// M: don't create thread here, thread leakage happened if start(), stop() not be called.
++        /// e.g. launch dialer, don't swipe to call log fragment, and exit. thread leaked.
++//        if (immediate) {
++//            startRequestProcessing();
++//        }
++    }
++
++    /**
++     * Checks whether the contact info from the call log matches the one from the contacts db.
++     */
++    private boolean callLogInfoMatches(ContactInfo callLogInfo, ContactInfo info) {
++        // The call log only contains a subset of the fields in the contacts db. Only check those.
++        return TextUtils.equals(callLogInfo.name, info.name)
++                && callLogInfo.type == info.type
++                && TextUtils.equals(callLogInfo.label, info.label);
++    }
++
++    private volatile boolean mRequestProcessingDisabled = false;
++
++    /**
++     * Sets whether processing of requests for contact details should be enabled.
++     * @param disable M: add to reset it
++     */
++    public void disableRequestProcessing(boolean disable) {
++        mRequestProcessingDisabled = disable;
++    }
++
++    @VisibleForTesting
++    public void injectContactInfoForTest(
++            String number, String countryIso, ContactInfo contactInfo) {
++        NumberWithCountryIso numberCountryIso = new NumberWithCountryIso(number, countryIso);
++        mCache.put(numberCountryIso, contactInfo);
++    }
++}
+Index: vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java	(revision 0)
++++ vendor/branch/5058A_Telcel/packages/apps/Dialer/src/com/android/dialer/calllog/CallLogAdapter.java	(revision 8576)
+@@ -0,0 +1,1132 @@
++/*
++ * Copyright (C) 2011 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.dialer.calllog;
++
++import com.google.common.annotations.VisibleForTesting;
++
++import android.content.Context;
++import android.content.Intent;
++import android.content.SharedPreferences;
++import android.content.res.Resources;
++import android.database.ContentObserver;
++import android.database.Cursor;
++import android.net.Uri;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Trace;
++import android.preference.PreferenceManager;
++import android.provider.CallLog;
++import android.provider.ContactsContract.CommonDataKinds.Phone;
++import android.support.v7.widget.RecyclerView;
++import android.support.v7.widget.RecyclerView.ViewHolder;
++import android.telecom.PhoneAccountHandle;
++import android.telephony.PhoneNumberUtils;
++import android.telephony.TelephonyManager;
++import android.text.TextUtils;
++import android.util.ArrayMap;
++import android.util.Log;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.View.AccessibilityDelegate;
++import android.view.ViewGroup;
++import android.view.accessibility.AccessibilityEvent;
++
++import com.android.contacts.common.ContactsUtils;
++import com.android.contacts.common.compat.CompatUtils;
++import com.android.contacts.common.compat.PhoneNumberUtilsCompat;
++import com.android.contacts.common.preference.ContactsPreferences;
++import com.android.contacts.common.util.PermissionsUtil;
++import com.android.dialer.DialtactsActivity;
++import com.android.dialer.PhoneCallDetails;
++import com.android.dialer.R;
++import com.android.dialer.calllog.calllogcache.CallLogCache;
++import com.android.dialer.contactinfo.ContactInfoCache;
++import com.android.dialer.contactinfo.ContactInfoCache.OnContactInfoChangedListener;
++import com.android.dialer.database.FilteredNumberAsyncQueryHandler;
++import com.android.dialer.database.VoicemailArchiveContract;
++import com.android.dialer.filterednumber.BlockNumberDialogFragment.Callback;
++import com.android.dialer.logging.InteractionEvent;
++import com.android.dialer.logging.Logger;
++import com.android.dialer.service.ExtendedBlockingButtonRenderer;
++import com.android.dialer.util.DialerUtils;
++import com.android.dialer.util.PhoneNumberUtil;
++import com.android.dialer.voicemail.VoicemailPlaybackPresenter;
++
++import com.google.common.annotations.VisibleForTesting;
++
++import com.mediatek.dialer.ext.ExtensionManager;
++import com.mediatek.dialer.search.Throttle;
++import com.mediatek.dialer.util.DialerFeatureOptions;
++
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.Map;
++
++/**
++ * Adapter class to fill in data for the Call Log.
++ */
++public class CallLogAdapter extends GroupingListAdapter
++        implements CallLogGroupBuilder.GroupCreator,
++                VoicemailPlaybackPresenter.OnVoicemailDeletedListener,
++                ExtendedBlockingButtonRenderer.Listener {
++
++    // Types of activities the call log adapter is used for
++    public static final int ACTIVITY_TYPE_CALL_LOG = 1;
++    public static final int ACTIVITY_TYPE_ARCHIVE = 2;
++    public static final int ACTIVITY_TYPE_DIALTACTS = 3;
++
++    /** Interface used to initiate a refresh of the content. */
++    public interface CallFetcher {
++        public void fetchCalls();
++    }
++
++    private static final int NO_EXPANDED_LIST_ITEM = -1;
++    // ConcurrentHashMap doesn't store null values. Use this value for numbers which aren't blocked.
++    private static final int NOT_BLOCKED = -1;
++
++    private static final int VOICEMAIL_PROMO_CARD_POSITION = 0;
++
++    protected static final int VIEW_TYPE_NORMAL = 0;
++    private static final int VIEW_TYPE_VOICEMAIL_PROMO_CARD = 1;
++
++    /**
++     * The key for the show voicemail promo card preference which will determine whether the promo
++     * card was permanently dismissed or not.
++     */
++    private static final String SHOW_VOICEMAIL_PROMO_CARD = "show_voicemail_promo_card";
++    private static final boolean SHOW_VOICEMAIL_PROMO_CARD_DEFAULT = true;
++
++    protected final Context mContext;
++    private final ContactInfoHelper mContactInfoHelper;
++    protected final VoicemailPlaybackPresenter mVoicemailPlaybackPresenter;
++    private final CallFetcher mCallFetcher;
++    private final FilteredNumberAsyncQueryHandler mFilteredNumberAsyncQueryHandler;
++    private final Map<String, Boolean> mBlockedNumberCache = new ArrayMap<>();
++
++    protected ContactInfoCache mContactInfoCache;
++
++    private final int mActivityType;
++
++    private static final String KEY_EXPANDED_POSITION = "expanded_position";
++    private static final String KEY_EXPANDED_ROW_ID = "expanded_row_id";
++
++    // Tracks the position of the currently expanded list item.
++    private int mCurrentlyExpandedPosition = RecyclerView.NO_POSITION;
++    // Tracks the rowId of the currently expanded list item, so the position can be updated if there
++    // are any changes to the call log entries, such as additions or removals.
++    private long mCurrentlyExpandedRowId = NO_EXPANDED_LIST_ITEM;
++    private int mHiddenPosition = RecyclerView.NO_POSITION;
++    private Uri mHiddenItemUri = null;
++    private boolean mPendingHide = false;
++
++    /**
++     *  Hashmap, keyed by call Id, used to track the day group for a call.  As call log entries are
++     *  put into the primary call groups in {@link com.android.dialer.calllog.CallLogGroupBuilder},
++     *  they are also assigned a secondary "day group".  This hashmap tracks the day group assigned
++     *  to all calls in the call log.  This information is used to trigger the display of a day
++     *  group header above the call log entry at the start of a day group.
++     *  Note: Multiple calls are grouped into a single primary "call group" in the call log, and
++     *  the cursor used to bind rows includes all of these calls.  When determining if a day group
++     *  change has occurred it is necessary to look at the last entry in the call log to determine
++     *  its day group.  This hashmap provides a means of determining the previous day group without
++     *  having to reverse the cursor to the start of the previous day call log entry.
++     */
++    private HashMap<Long, Integer> mDayGroups = new HashMap<>();
++
++    private boolean mLoading = true;
++
++    private SharedPreferences mPrefs;
++
++    private ContactsPreferences mContactsPreferences;
++
++    protected boolean mShowVoicemailPromoCard = false;
++
++    /** Instance of helper class for managing views. */
++    private final CallLogListItemHelper mCallLogListItemHelper;
++
++    /** Cache for repeated requests to Telecom/Telephony. */
++    protected final CallLogCache mCallLogCache;
++
++    /** Helper to group call log entries. */
++    private final CallLogGroupBuilder mCallLogGroupBuilder;
++
++    /**
++     * The OnClickListener used to expand or collapse the action buttons of a call log entry.
++     */
++    private final View.OnClickListener mExpandCollapseListener = new View.OnClickListener() {
++        @Override
++        public void onClick(View v) {
++            CallLogListItemViewHolder viewHolder = (CallLogListItemViewHolder) v.getTag();
++            if (viewHolder == null) {
++                return;
++            }
++
++            if (mVoicemailPlaybackPresenter != null) {
++                // Always reset the voicemail playback state on expand or collapse.
++                mVoicemailPlaybackPresenter.resetAll();
++            }
++
++            if (viewHolder.getAdapterPosition() == mCurrentlyExpandedPosition) {
++                // Hide actions, if the clicked item is the expanded item.
++                viewHolder.showActions(false);
++
++                mCurrentlyExpandedPosition = RecyclerView.NO_POSITION;
++                mCurrentlyExpandedRowId = NO_EXPANDED_LIST_ITEM;
++            } else {
++                if (viewHolder.callType == CallLog.Calls.MISSED_TYPE) {
++                    CallLogAsyncTaskUtil.markCallAsRead(mContext, viewHolder.callIds);
++                    if (mActivityType == ACTIVITY_TYPE_DIALTACTS) {
++                        ((DialtactsActivity) v.getContext()).updateTabUnreadCounts();
++                    }
++                }
++                expandViewHolderActions(viewHolder);
++            }
++
++        }
++    };
++
++    /**
++     * Click handler used to dismiss the promo card when the user taps the "ok" button.
++     */
++    private final View.OnClickListener mOkActionListener = new View.OnClickListener() {
++        @Override
++        public void onClick(View view) {
++            dismissVoicemailPromoCard();
++        }
++    };
++
++    /**
++     * Click handler used to send the user to the voicemail settings screen and then dismiss the
++     * promo card.
++     */
++    private final View.OnClickListener mVoicemailSettingsActionListener =
++            new View.OnClickListener() {
++        @Override
++        public void onClick(View view) {
++            Intent intent = new Intent(TelephonyManager.ACTION_CONFIGURE_VOICEMAIL);
++            mContext.startActivity(intent);
++            dismissVoicemailPromoCard();
++        }
++    };
++
++    private void expandViewHolderActions(CallLogListItemViewHolder viewHolder) {
++        // If another item is expanded, notify it that it has changed. Its actions will be
++        // hidden when it is re-binded because we change mCurrentlyExpandedPosition below.
++        if (mCurrentlyExpandedPosition != RecyclerView.NO_POSITION) {
++            notifyItemChanged(mCurrentlyExpandedPosition);
++        }
++        // Show the actions for the clicked list item.
++        viewHolder.showActions(true);
++        mCurrentlyExpandedPosition = viewHolder.getAdapterPosition();
++        mCurrentlyExpandedRowId = viewHolder.rowId;
++        // M: Add for Presence
++        ExtensionManager.getInstance().getCallLogExtension()
++                .onExpandViewHolderActions(viewHolder.number);
++    }
++
++    /**
++     * Expand the actions on a list item when focused in Talkback mode, to aid discoverability.
++     */
++    private AccessibilityDelegate mAccessibilityDelegate = new AccessibilityDelegate() {
++        @Override
++        public boolean onRequestSendAccessibilityEvent(
++                ViewGroup host, View child, AccessibilityEvent event) {
++            if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED) {
++                // Only expand if actions are not already expanded, because triggering the expand
++                // function on clicks causes the action views to lose the focus indicator.
++                CallLogListItemViewHolder viewHolder = (CallLogListItemViewHolder) host.getTag();
++                if (mCurrentlyExpandedPosition != viewHolder.getAdapterPosition()) {
++                    if (mVoicemailPlaybackPresenter != null) {
++                        // Always reset the voicemail playback state on expand.
++                        mVoicemailPlaybackPresenter.resetAll();
++                    }
++
++                    expandViewHolderActions((CallLogListItemViewHolder) host.getTag());
++                }
++            }
++            return super.onRequestSendAccessibilityEvent(host, child, event);
++        }
++    };
++
++    protected final OnContactInfoChangedListener mOnContactInfoChangedListener =
++            new OnContactInfoChangedListener() {
++                @Override
++                public void onContactInfoChanged() {
++                    notifyDataSetChanged();
++                }
++            };
++
++    public CallLogAdapter(
++            Context context,
++            CallFetcher callFetcher,
++            ContactInfoHelper contactInfoHelper,
++            VoicemailPlaybackPresenter voicemailPlaybackPresenter,
++            int activityType) {
++        super(context);
++
++        mContext = context;
++        mCallFetcher = callFetcher;
++        mContactInfoHelper = contactInfoHelper;
++        mVoicemailPlaybackPresenter = voicemailPlaybackPresenter;
++        if (mVoicemailPlaybackPresenter != null) {
++            mVoicemailPlaybackPresenter.setOnVoicemailDeletedListener(this);
++        }
++
++        mActivityType = activityType;
++
++        mContactInfoCache = new ContactInfoCache(
++                mContactInfoHelper, mOnContactInfoChangedListener);
++        if (!PermissionsUtil.hasContactsPermissions(context)) {
++            mContactInfoCache.disableRequestProcessing(true);
++        }
++
++        Resources resources = mContext.getResources();
++        CallTypeHelper callTypeHelper = new CallTypeHelper(resources);
++
++        mCallLogCache = CallLogCache.getCallLogCache(mContext);
++
++        PhoneCallDetailsHelper phoneCallDetailsHelper =
++                new PhoneCallDetailsHelper(mContext, resources, mCallLogCache);
++        mCallLogListItemHelper =
++                new CallLogListItemHelper(phoneCallDetailsHelper, resources, mCallLogCache);
++        mCallLogGroupBuilder = new CallLogGroupBuilder(this);
++        mFilteredNumberAsyncQueryHandler =
++                new FilteredNumberAsyncQueryHandler(mContext.getContentResolver());
++
++        mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
++        mContactsPreferences = new ContactsPreferences(mContext);
++        maybeShowVoicemailPromoCard();
++        /// M: To improve scroll performance, using throttle observer to do call fetching. @{
++        mChangeObserver = new ThrottledObserver(new Handler(), mContext, new Runnable() {
++            @Override
++            public void run() {
++                onContentChanged();
++            }
++        }, "CallLogAdapter");
++        /// @}
++    }
++
++    public void onSaveInstanceState(Bundle outState) {
++        outState.putInt(KEY_EXPANDED_POSITION, mCurrentlyExpandedPosition);
++        outState.putLong(KEY_EXPANDED_ROW_ID, mCurrentlyExpandedRowId);
++    }
++
++    public void onRestoreInstanceState(Bundle savedInstanceState) {
++        if (savedInstanceState != null) {
++            mCurrentlyExpandedPosition =
++                    savedInstanceState.getInt(KEY_EXPANDED_POSITION, RecyclerView.NO_POSITION);
++            mCurrentlyExpandedRowId =
++                    savedInstanceState.getLong(KEY_EXPANDED_ROW_ID, NO_EXPANDED_LIST_ITEM);
++        }
++    }
++
++    @Override
++    public void onBlockedNumber(String number,String countryIso) {
++        String cacheKey = PhoneNumberUtils.formatNumberToE164(number, countryIso);
++        if (!TextUtils.isEmpty(cacheKey)) {
++            mBlockedNumberCache.put(cacheKey, true);
++            notifyDataSetChanged();
++        }
++    }
++
++    @Override
++    public void onUnblockedNumber( String number, String countryIso) {
++        String cacheKey = PhoneNumberUtils.formatNumberToE164(number, countryIso);
++        if (!TextUtils.isEmpty(cacheKey)) {
++            mBlockedNumberCache.put(cacheKey, false);
++            notifyDataSetChanged();
++        }
++    }
++
++    /**
++     * Requery on background thread when {@link Cursor} changes.
++     */
++    @Override
++    protected void onContentChanged() {
++        mCallFetcher.fetchCalls();
++    }
++
++    public void setLoading(boolean loading) {
++        mLoading = loading;
++    }
++
++    public boolean isEmpty() {
++        if (mLoading) {
++            // We don't want the empty state to show when loading.
++            return false;
++        } else {
++            return getItemCount() == 0;
++        }
++    }
++
++    public void invalidateCache() {
++        mContactInfoCache.invalidate();
++    }
++
++    public void onResume() {
++        if (PermissionsUtil.hasPermission(mContext, android.Manifest.permission.READ_CONTACTS)) {
++            /// M: enable request process if permission is enable
++            mContactInfoCache.disableRequestProcessing(false);
++            mContactInfoCache.start();
++        }
++        mContactsPreferences.refreshValue(ContactsPreferences.DISPLAY_ORDER_KEY);
++    }
++
++    public void onPause() {
++        pauseCache();
++
++        if (mHiddenItemUri != null) {
++            CallLogAsyncTaskUtil.deleteVoicemail(mContext, mHiddenItemUri, null);
++        }
++    }
++
++    @VisibleForTesting
++    /* package */ void pauseCache() {
++        mContactInfoCache.stop();
++        mCallLogCache.reset();
++    }
++
++    @Override
++    protected void addGroups(Cursor cursor) {
++        mCallLogGroupBuilder.addGroups(cursor);
++    }
++
++    @Override
++    public void addVoicemailGroups(Cursor cursor) {
++        mCallLogGroupBuilder.addVoicemailGroups(cursor);
++    }
++
++    @Override
++    public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
++        if (viewType == VIEW_TYPE_VOICEMAIL_PROMO_CARD) {
++            return createVoicemailPromoCardViewHolder(parent);
++        }
++        return createCallLogEntryViewHolder(parent);
++    }
++
++    /**
++     * Creates a new call log entry {@link ViewHolder}.
++     *
++     * @param parent the parent view.
++     * @return The {@link ViewHolder}.
++     */
++    private ViewHolder createCallLogEntryViewHolder(ViewGroup parent) {
++        LayoutInflater inflater = LayoutInflater.from(mContext);
++        View view = inflater.inflate(R.layout.call_log_list_item, parent, false);
++        CallLogListItemViewHolder viewHolder = CallLogListItemViewHolder.create(
++                view,
++                mContext,
++                this,
++                mExpandCollapseListener,
++                mCallLogCache,
++                mCallLogListItemHelper,
++                mVoicemailPlaybackPresenter,
++                mFilteredNumberAsyncQueryHandler,
++                new Callback() {
++                    @Override
++                    public void onFilterNumberSuccess() {
++                        Logger.logInteraction(
++                                InteractionEvent.BLOCK_NUMBER_CALL_LOG);
++                    }
++
++                    @Override
++                    public void onUnfilterNumberSuccess() {
++                        Logger.logInteraction(
++                                InteractionEvent.UNBLOCK_NUMBER_CALL_LOG);
++                    }
++
++                    @Override
++                    public void onChangeFilteredNumberUndo() {}
++                }, mActivityType == ACTIVITY_TYPE_ARCHIVE);
++
++        viewHolder.callLogEntryView.setTag(viewHolder);
++        viewHolder.callLogEntryView.setAccessibilityDelegate(mAccessibilityDelegate);
++
++        viewHolder.primaryActionView.setTag(viewHolder);
++
++        return viewHolder;
++    }
++
++    /**
++     * Binds the views in the entry to the data in the call log.
++     * TODO: This gets called 20-30 times when Dialer starts up for a single call log entry and
++     * should not. It invokes cross-process methods and the repeat execution can get costly.
++     *
++     * @param viewHolder The view corresponding to this entry.
++     * @param position The position of the entry.
++     */
++    @Override
++    public void onBindViewHolder(ViewHolder viewHolder, int position) {
++        Trace.beginSection("onBindViewHolder: " + position);
++
++        switch (getItemViewType(position)) {
++            case VIEW_TYPE_VOICEMAIL_PROMO_CARD:
++                bindVoicemailPromoCardViewHolder(viewHolder);
++                break;
++            default:
++                bindCallLogListViewHolder(viewHolder, position);
++                break;
++        }
++
++        Trace.endSection();
++    }
++
++    /**
++     * Binds the promo card view holder.
++     *
++     * @param viewHolder The promo card view holder.
++     */
++    protected void bindVoicemailPromoCardViewHolder(ViewHolder viewHolder) {
++        PromoCardViewHolder promoCardViewHolder = (PromoCardViewHolder) viewHolder;
++
++        promoCardViewHolder.getSecondaryActionView()
++                .setOnClickListener(mVoicemailSettingsActionListener);
++        promoCardViewHolder.getPrimaryActionView().setOnClickListener(mOkActionListener);
++    }
++
++    /**
++     * M: [Volte ConfCallLog] Change into 'protected' for inheriting.
++     * Binds the view holder for the call log list item view.
++     *
++     * @param viewHolder The call log list item view holder.
++     * @param position The position of the list item.
++     */
++
++    protected void bindCallLogListViewHolder(ViewHolder viewHolder, int position) {
++        Cursor c = (Cursor) getItem(position);
++        if (c == null) {
++            return;
++        }
++        int count = getGroupSize(position);
++
++        final String number = c.getString(CallLogQuery.NUMBER);
++        final String countryIso = c.getString(CallLogQuery.COUNTRY_ISO);
++        final String postDialDigits = CompatUtils.isNCompatible()
++                && mActivityType != ACTIVITY_TYPE_ARCHIVE ?
++                c.getString(CallLogQuery.POST_DIAL_DIGITS) : "";
++        final String viaNumber = CompatUtils.isNCompatible()
++                && mActivityType != ACTIVITY_TYPE_ARCHIVE ?
++                c.getString(CallLogQuery.VIA_NUMBER) : "";
++        final int numberPresentation = c.getInt(CallLogQuery.NUMBER_PRESENTATION);
++        final PhoneAccountHandle accountHandle = PhoneAccountUtils.getAccount(
++                c.getString(CallLogQuery.ACCOUNT_COMPONENT_NAME),
++                c.getString(CallLogQuery.ACCOUNT_ID));
++        final ContactInfo cachedContactInfo = ContactInfoHelper.getContactInfo(c);
++        final boolean isVoicemailNumber =
++                mCallLogCache.isVoicemailNumber(accountHandle, number);
++
++        // Note: Binding of the action buttons is done as required in configureActionViews when the
++        // user expands the actions ViewStub.
++
++        ContactInfo info = ContactInfo.EMPTY;
++
++        if (PhoneNumberUtil.canPlaceCallsTo(number, numberPresentation) && !isVoicemailNumber) {
++                // Lookup contacts with this number
++                info = mContactInfoCache.getValue(number + postDialDigits,
++                                countryIso, cachedContactInfo);
++        }
++
++        CharSequence formattedNumber = info.formattedNumber == null
++                ? null : PhoneNumberUtilsCompat.createTtsSpannable(info.formattedNumber);
++
++        final PhoneCallDetails details = new PhoneCallDetails(
++                mContext, number, numberPresentation, formattedNumber,
++                postDialDigits, isVoicemailNumber);
++        details.viaNumber = viaNumber;
++        details.accountHandle = accountHandle;
++        details.countryIso = countryIso;
++        details.date = c.getLong(CallLogQuery.DATE);
++        details.duration = c.getLong(CallLogQuery.DURATION);
++        details.features = getCallFeatures(c, count);
++        details.geocode = c.getString(CallLogQuery.GEOCODED_LOCATION);
++        details.transcription = c.getString(CallLogQuery.TRANSCRIPTION);
++        details.callTypes = getCallTypes(c, count);
++
++        if (!c.isNull(CallLogQuery.DATA_USAGE)) {
++            details.dataUsage = c.getLong(CallLogQuery.DATA_USAGE);
++        }
++
++        if (!TextUtils.isEmpty(info.name) || !TextUtils.isEmpty(info.nameAlternative)) {
++            details.contactUri = info.lookupUri;
++            details.namePrimary = info.name;
++            details.nameAlternative = info.nameAlternative;
++            details.nameDisplayOrder = mContactsPreferences.getDisplayOrder();
++            details.numberType = info.type;
++            details.numberLabel = info.label;
++            details.photoUri = info.photoUri;
++            details.sourceType = info.sourceType;
++            details.objectId = info.objectId;
++            details.contactUserType = info.userType;
++        }
++
++        final CallLogListItemViewHolder views = (CallLogListItemViewHolder) viewHolder;
++        views.info = info;
++        views.rowId = c.getLong(CallLogQuery.ID);
++        // Store values used when the actions ViewStub is inflated on expansion.
++        views.number = number;
++        views.postDialDigits = details.postDialDigits;
++        views.displayNumber = details.displayNumber;
++        views.numberPresentation = numberPresentation;
++
++        views.accountHandle = accountHandle;
++        // Stash away the Ids of the calls so that we can support deleting a row in the call log.
++        views.callIds = getCallIds(c, count);
++        views.isBusiness = mContactInfoHelper.isBusiness(info.sourceType);
++        views.numberType = (String) Phone.getTypeLabel(mContext.getResources(), details.numberType,
++                details.numberLabel);
++        // Default case: an item in the call log.
++        views.primaryActionView.setVisibility(View.VISIBLE);
++        views.workIconView.setVisibility(
++                details.contactUserType == ContactsUtils.USER_TYPE_WORK ? View.VISIBLE : View.GONE);
++
++        // Check if the day group has changed and display a header if necessary.
++        int currentGroup = getDayGroupForCall(views.rowId);
++        int previousGroup = getPreviousDayGroup(c);
++        if (currentGroup != previousGroup) {
++            views.dayGroupHeader.setVisibility(View.VISIBLE);
++            views.dayGroupHeader.setText(getGroupDescription(currentGroup));
++        } else {
++            views.dayGroupHeader.setVisibility(View.GONE);
++        }
++
++        if (mActivityType == ACTIVITY_TYPE_ARCHIVE) {
++            views.callType = CallLog.Calls.VOICEMAIL_TYPE;
++            views.voicemailUri = VoicemailArchiveContract.VoicemailArchive.buildWithId(c.getInt(
++                    c.getColumnIndex(VoicemailArchiveContract.VoicemailArchive._ID)))
++                    .toString();
++
++        } else {
++            if (details.callTypes[0] == CallLog.Calls.VOICEMAIL_TYPE ||
++                    details.callTypes[0] == CallLog.Calls.MISSED_TYPE) {
++                details.isRead = c.getInt(CallLogQuery.IS_READ) == 1;
++            }
++            views.callType = c.getInt(CallLogQuery.CALL_TYPE);
++            views.voicemailUri = c.getString(CallLogQuery.VOICEMAIL_URI);
++        }
++
++        /// M: [Dialer Global Search] Highlight the search text @{
++        if (DialerFeatureOptions.DIALER_GLOBAL_SEARCH && mUpperCaseQueryString != null
++                && mUpperCaseQueryString.length > 0) {
++            mCallLogListItemHelper.setHighlightedText(mUpperCaseQueryString);
++        }
++        /// @}
++
++        /// M: [VoLTE ConfCallLog] For Volte Conference CallLog @{
++        long confCallId = -1;
++        if (DialerFeatureOptions.isVolteConfCallLogSupport()) {
++            confCallId = c.getLong(CallLogQuery.CONFERENCE_CALL_ID);
++        }
++        if (confCallId > 0 && !mIsConfCallMemberList) {
++            ArrayList<String> numbers = getConferenceCallNumbers(c, count);
++            details.date = getConferenceCallDate(c, count);
++            details.namePrimary = getConferenceCallName(c, count);
++            views.confCallNumbers = numbers;
++            int firstCallType = details.callTypes[0];
++            details.callTypes = new int[1];
++            details.callTypes[0] = firstCallType;
++            Log.d(TAG, "Volte ConfCall numbers= " + PhoneNumberUtil.pii(numbers) + ", date="
++                    + details.date + ", name=" + details.namePrimary);
++        } else {
++            views.confCallNumbers = null;
++        }
++        /// @}
++
++        mCallLogListItemHelper.setPhoneCallDetails(views, details);
++
++        if (mCurrentlyExpandedRowId == views.rowId) {
++            // In case ViewHolders were added/removed, update the expanded position if the rowIds
++            // match so that we can restore the correct expanded state on rebind.
++            /**
++             * M:original code: mCurrentlyExpandedPosition = position; @{
++             */
++            if(mIsConfCallMemberList) {
++                // The first position is call detail header
++                mCurrentlyExpandedPosition = position + 1;
++            } else {
++                mCurrentlyExpandedPosition = position;
++            }
++            /**@}*/
++            views.showActions(true);
++        } else {
++            views.showActions(false);
++        }
++		
++		if(PhoneNumberUtils.isEmergencyNumber(number)){
++			//for feature: FR_EMC_CALL_INFO_IN_INDIA = true
++			setEmcTitle(views, number);
++			views.emergencyNumberView.setVisibility(View.VISIBLE);
++		}else{
++			views.emergencyNumberView.setVisibility(View.GONE);
++		}
++		
++        views.updatePhoto();
++        /// M: why AOSP call it twice? delete it
++        //mCallLogListItemHelper.setPhoneCallDetails(views, details);
++
++        /// M: for Plug-in @{
++        ExtensionManager.getInstance().getRCSeCallLogExtension().bindPluginViewForCallLogList(
++                mContext, (ViewGroup) views.primaryActionView, number);
++
++        ExtensionManager.getInstance().getCallLogExtension()
++                .setCallAccountForCallLogList(mContext,
++                        ((CallLogListItemViewHolder) viewHolder).primaryActionView, accountHandle);
++        /// @}
++    }
++	private void setEmcTitle(CallLogListItemViewHolder views, String number){
++		boolean bFrEmcIndia = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_EMC_CALL_INFO_IN_INDIA);
++		if(bFrEmcIndia && (views != null) && (views.emergencyNumberView != null)){
++			String arrEmc[][] = {
++				{"100","Police Emergency"},
++				{"101","Fire Emergency"},
++				{"102","Ambulance Emergency"},
++				//{"112","Emergency Number"},
++			};
++			views.emergencyNumberView.setText(R.string.emergency_number);
++			for(int i = 0; i < arrEmc.length; i++){
++				if(arrEmc[i][0].equals(number)){
++					views.emergencyNumberView.setText(arrEmc[i][1]);
++					break;
++				}
++			}
++		}
++	}
++
++    private String getPreferredDisplayName(ContactInfo contactInfo) {
++        if (mContactsPreferences.getDisplayOrder() == ContactsPreferences.DISPLAY_ORDER_PRIMARY ||
++                TextUtils.isEmpty(contactInfo.nameAlternative)) {
++            return contactInfo.name;
++        }
++        return contactInfo.nameAlternative;
++    }
++
++    @Override
++    public int getItemCount() {
++        return super.getItemCount() + (mShowVoicemailPromoCard ? 1 : 0)
++                - (mHiddenPosition != RecyclerView.NO_POSITION ? 1 : 0);
++    }
++
++    @Override
++    public int getItemViewType(int position) {
++        if (position == VOICEMAIL_PROMO_CARD_POSITION && mShowVoicemailPromoCard) {
++            return VIEW_TYPE_VOICEMAIL_PROMO_CARD;
++        }
++        return super.getItemViewType(position);
++    }
++
++    /**
++     * Retrieves an item at the specified position, taking into account the presence of a promo
++     * card.
++     *
++     * @param position The position to retrieve.
++     * @return The item at that position.
++     */
++    @Override
++    public Object getItem(int position) {
++        return super.getItem(position - (mShowVoicemailPromoCard ? 1 : 0)
++                + ((mHiddenPosition != RecyclerView.NO_POSITION && position >= mHiddenPosition)
++                ? 1 : 0));
++    }
++
++    @Override
++    public int getGroupSize(int position) {
++        return super.getGroupSize(position - (mShowVoicemailPromoCard ? 1 : 0));
++    }
++
++    protected boolean isCallLogActivity() {
++        return mActivityType == ACTIVITY_TYPE_CALL_LOG;
++    }
++
++    /**
++     * In order to implement the "undo" function, when a voicemail is "deleted" i.e. when the user
++     * clicks the delete button, the deleted item is temporarily hidden from the list. If a user
++     * clicks delete on a second item before the first item's undo option has expired, the first
++     * item is immediately deleted so that only one item can be "undoed" at a time.
++     */
++    @Override
++    public void onVoicemailDeleted(Uri uri) {
++        if (mHiddenItemUri == null) {
++            // Immediately hide the currently expanded card.
++            mHiddenPosition = mCurrentlyExpandedPosition;
++            notifyDataSetChanged();
++        } else {
++            // This means that there was a previous item that was hidden in the UI but not
++            // yet deleted from the database (call it a "pending delete"). Delete this previous item
++            // now since it is only possible to do one "undo" at a time.
++            CallLogAsyncTaskUtil.deleteVoicemail(mContext, mHiddenItemUri, null);
++
++            // Set pending hide action so that the current item is hidden only after the previous
++            // item is permanently deleted.
++            mPendingHide = true;
++        }
++
++        collapseExpandedCard();
++
++        // Save the new hidden item uri in case it needs to be deleted from the database when
++        // a user attempts to delete another item.
++        mHiddenItemUri = uri;
++    }
++
++    private void collapseExpandedCard() {
++        mCurrentlyExpandedRowId = NO_EXPANDED_LIST_ITEM;
++        mCurrentlyExpandedPosition = RecyclerView.NO_POSITION;
++    }
++
++    /**
++     * When the list is changing all stored position is no longer valid.
++     */
++    public void invalidatePositions() {
++        mCurrentlyExpandedPosition = RecyclerView.NO_POSITION;
++        mHiddenPosition = RecyclerView.NO_POSITION;
++    }
++
++    /**
++     * When the user clicks "undo", the hidden item is unhidden.
++     */
++    @Override
++    public void onVoicemailDeleteUndo() {
++        mHiddenPosition = RecyclerView.NO_POSITION;
++        mHiddenItemUri = null;
++
++        mPendingHide = false;
++        notifyDataSetChanged();
++    }
++
++    /**
++     * This callback signifies that a database deletion has completed. This means that if there is
++     * an item pending deletion, it will be hidden because the previous item that was in "undo" mode
++     * has been removed from the database. Otherwise it simply resets the hidden state because there
++     * are no pending deletes and thus no hidden items.
++     */
++    @Override
++    public void onVoicemailDeletedInDatabase() {
++        if (mPendingHide) {
++            mHiddenPosition = mCurrentlyExpandedPosition;
++            mPendingHide = false;
++        } else {
++            // There should no longer be any hidden item because it has been deleted from the
++            // database.
++            mHiddenPosition = RecyclerView.NO_POSITION;
++            mHiddenItemUri = null;
++        }
++    }
++
++    /**
++     * Retrieves the day group of the previous call in the call log.  Used to determine if the day
++     * group has changed and to trigger display of the day group text.
++     *
++     * @param cursor The call log cursor.
++     * @return The previous day group, or DAY_GROUP_NONE if this is the first call.
++     */
++    private int getPreviousDayGroup(Cursor cursor) {
++        // We want to restore the position in the cursor at the end.
++        int startingPosition = cursor.getPosition();
++        int dayGroup = CallLogGroupBuilder.DAY_GROUP_NONE;
++        if (cursor.moveToPrevious()) {
++            // If the previous entry is hidden (deleted in the UI but not in the database), skip it
++            // and check the card above it. A list with the voicemail promo card at the top will be
++            // 1-indexed because the 0th index is the promo card iteself.
++            int previousViewPosition = mShowVoicemailPromoCard ? startingPosition :
++                startingPosition - 1;
++            if (previousViewPosition != mHiddenPosition ||
++                    (previousViewPosition == mHiddenPosition && cursor.moveToPrevious())) {
++                long previousRowId = cursor.getLong(CallLogQuery.ID);
++                dayGroup = getDayGroupForCall(previousRowId);
++            }
++        }
++        cursor.moveToPosition(startingPosition);
++        return dayGroup;
++    }
++
++    /**
++     * Given a call Id, look up the day group that the call belongs to.  The day group data is
++     * populated in {@link com.android.dialer.calllog.CallLogGroupBuilder}.
++     *
++     * @param callId The call to retrieve the day group for.
++     * @return The day group for the call.
++     */
++    private int getDayGroupForCall(long callId) {
++        if (mDayGroups.containsKey(callId)) {
++            return mDayGroups.get(callId);
++        }
++        return CallLogGroupBuilder.DAY_GROUP_NONE;
++    }
++
++    /**
++     * Returns the call types for the given number of items in the cursor.
++     * <p>
++     * It uses the next {@code count} rows in the cursor to extract the types.
++     * <p>
++     * It position in the cursor is unchanged by this function.
++     */
++    private int[] getCallTypes(Cursor cursor, int count) {
++        if (mActivityType == ACTIVITY_TYPE_ARCHIVE) {
++            return new int[] {CallLog.Calls.VOICEMAIL_TYPE};
++        }
++        int position = cursor.getPosition();
++        int[] callTypes = new int[count];
++        for (int index = 0; index < count; ++index) {
++            callTypes[index] = cursor.getInt(CallLogQuery.CALL_TYPE);
++            cursor.moveToNext();
++        }
++        cursor.moveToPosition(position);
++        return callTypes;
++    }
++
++    /**
++     * Determine the features which were enabled for any of the calls that make up a call log
++     * entry.
++     *
++     * @param cursor The cursor.
++     * @param count The number of calls for the current call log entry.
++     * @return The features.
++     */
++    private int getCallFeatures(Cursor cursor, int count) {
++        int features = 0;
++        int position = cursor.getPosition();
++        for (int index = 0; index < count; ++index) {
++            features |= cursor.getInt(CallLogQuery.FEATURES);
++            cursor.moveToNext();
++        }
++        cursor.moveToPosition(position);
++        return features;
++    }
++
++    /**
++     * Sets whether processing of requests for contact details should be enabled.
++     *
++     * This method should be called in tests to disable such processing of requests when not
++     * needed.
++     */
++    @VisibleForTesting
++    void disableRequestProcessingForTest() {
++        // TODO: Remove this and test the cache directly.
++        mContactInfoCache.disableRequestProcessing(true);
++    }
++
++    @VisibleForTesting
++    void injectContactInfoForTest(String number, String countryIso, ContactInfo contactInfo) {
++        // TODO: Remove this and test the cache directly.
++        mContactInfoCache.injectContactInfoForTest(number, countryIso, contactInfo);
++    }
++
++    /**
++     * Stores the day group associated with a call in the call log.
++     *
++     * @param rowId The row Id of the current call.
++     * @param dayGroup The day group the call belongs in.
++     */
++    @Override
++    public void setDayGroup(long rowId, int dayGroup) {
++        if (!mDayGroups.containsKey(rowId)) {
++            mDayGroups.put(rowId, dayGroup);
++        }
++    }
++
++    /**
++     * Clears the day group associations on re-bind of the call log.
++     */
++    @Override
++    public void clearDayGroups() {
++        mDayGroups.clear();
++    }
++
++    /**
++     * Retrieves the call Ids represented by the current call log row.
++     *
++     * @param cursor Call log cursor to retrieve call Ids from.
++     * @param groupSize Number of calls associated with the current call log row.
++     * @return Array of call Ids.
++     */
++    private long[] getCallIds(final Cursor cursor, final int groupSize) {
++        // We want to restore the position in the cursor at the end.
++        int startingPosition = cursor.getPosition();
++        long[] ids = new long[groupSize];
++        // Copy the ids of the rows in the group.
++        for (int index = 0; index < groupSize; ++index) {
++            ids[index] = cursor.getLong(CallLogQuery.ID);
++            cursor.moveToNext();
++        }
++        cursor.moveToPosition(startingPosition);
++        return ids;
++    }
++
++    /**
++     * Determines the description for a day group.
++     *
++     * @param group The day group to retrieve the description for.
++     * @return The day group description.
++     */
++    private CharSequence getGroupDescription(int group) {
++       if (group == CallLogGroupBuilder.DAY_GROUP_TODAY) {
++           return mContext.getResources().getString(R.string.call_log_header_today);
++       } else if (group == CallLogGroupBuilder.DAY_GROUP_YESTERDAY) {
++           return mContext.getResources().getString(R.string.call_log_header_yesterday);
++       } else {
++           return mContext.getResources().getString(R.string.call_log_header_other);
++       }
++    }
++
++    /**
++     * Determines if the voicemail promo card should be shown or not.  The voicemail promo card will
++     * be shown as the first item in the voicemail tab.
++     */
++    private void maybeShowVoicemailPromoCard() {
++        boolean showPromoCard = mPrefs.getBoolean(SHOW_VOICEMAIL_PROMO_CARD,
++                SHOW_VOICEMAIL_PROMO_CARD_DEFAULT);
++        mShowVoicemailPromoCard = mActivityType != ACTIVITY_TYPE_ARCHIVE &&
++                (mVoicemailPlaybackPresenter != null) && showPromoCard;
++    }
++
++    /**
++     * Dismisses the voicemail promo card and refreshes the call log.
++     */
++    private void dismissVoicemailPromoCard() {
++        mPrefs.edit().putBoolean(SHOW_VOICEMAIL_PROMO_CARD, false).apply();
++        mShowVoicemailPromoCard = false;
++        notifyItemRemoved(VOICEMAIL_PROMO_CARD_POSITION);
++    }
++
++    /**
++     * Creates the view holder for the voicemail promo card.
++     *
++     * @param parent The parent view.
++     * @return The {@link ViewHolder}.
++     */
++    protected ViewHolder createVoicemailPromoCardViewHolder(ViewGroup parent) {
++        LayoutInflater inflater = LayoutInflater.from(mContext);
++        View view = inflater.inflate(R.layout.voicemail_promo_card, parent, false);
++
++        PromoCardViewHolder viewHolder = PromoCardViewHolder.create(view);
++        return viewHolder;
++    }
++
++    /// M: [Dialer Global Search] New Feature CallLogSearch @{
++    private char[] mUpperCaseQueryString;
++
++    // Add for call log search feature
++    public void setQueryString(String queryString) {
++        if (TextUtils.isEmpty(queryString)) {
++            mUpperCaseQueryString = null;
++        } else {
++            mUpperCaseQueryString = queryString.toUpperCase().toCharArray();
++        }
++    }
++    /// @}
++
++    /// M: [VoLTE ConfCallLog] For volte conference callLog @{
++    private static String TAG = "CallLogAdapter";
++
++    private boolean mIsConfCallMemberList = false;
++
++    /**
++     * Is this adapter used to show the conference call member list
++     */
++    public void setIsConfCallMemberList(boolean isConfCallMemberList) {
++        mIsConfCallMemberList = isConfCallMemberList;
++    }
++
++    private ArrayList<String> getConferenceCallNumbers(Cursor cursor, int count) {
++        int position = cursor.getPosition();
++        ArrayList<String> numbers = new ArrayList<String>(count);
++        for (int index = 0; index < count; ++index) {
++            /// M: add postDialDigits when get numbers @{
++            final String postDialDigits = CompatUtils.isNCompatible()
++                    && mActivityType != ACTIVITY_TYPE_ARCHIVE ?
++                    cursor.getString(CallLogQuery.POST_DIAL_DIGITS) : "";
++            numbers.add(cursor.getString(CallLogQuery.NUMBER) + postDialDigits);
++            /// @}
++            cursor.moveToNext();
++        }
++        cursor.moveToPosition(position);
++        return numbers;
++    }
++
++    private long getConferenceCallDate(Cursor cursor, int count) {
++        int position = cursor.getPosition();
++        long minDate = cursor.getLong(CallLogQuery.DATE);
++        for (int index = 1; index < count; ++index) {
++            cursor.moveToNext();
++            long date = cursor.getLong(CallLogQuery.DATE);
++            if (minDate > date) {
++                minDate = date;
++            }
++        }
++        cursor.moveToPosition(position);
++        return minDate;
++    }
++
++    private String getConferenceCallName(Cursor cursor, int count) {
++        int position = cursor.getPosition();
++        ArrayList<CharSequence> names = new ArrayList<CharSequence>(count);
++        for (int index = 0; index < count; ++index) {
++            String name = getName(cursor);
++            if (TextUtils.isEmpty(name)) {
++                /// M: add postDialDigits when show numbers @{
++                final String postDialDigits = CompatUtils.isNCompatible()
++                        && mActivityType != ACTIVITY_TYPE_ARCHIVE ?
++                        cursor.getString(CallLogQuery.POST_DIAL_DIGITS) : "";
++                names.add(cursor.getString(CallLogQuery.NUMBER) + postDialDigits);
++                /// @}
++            } else {
++                names.add(name);
++            }
++            cursor.moveToNext();
++        }
++        cursor.moveToPosition(position);
++        return DialerUtils.join(mContext.getResources(), names).toString();
++    }
++
++    private String getName(Cursor c) {
++        final ContactInfo cachedContactInfo = mContactInfoHelper.getContactInfo(c);
++        final String number = c.getString(CallLogQuery.NUMBER);
++        final int numberPresentation = c.getInt(CallLogQuery.NUMBER_PRESENTATION);
++        final String countryIso = c.getString(CallLogQuery.COUNTRY_ISO);
++        /// M: add postDialDigits when lookup contacts @{
++        final String postDialDigits = CompatUtils.isNCompatible()
++                && mActivityType != ACTIVITY_TYPE_ARCHIVE ?
++                c.getString(CallLogQuery.POST_DIAL_DIGITS) : "";
++        /// @}
++
++        ContactInfo info = ContactInfo.EMPTY;
++        if (PhoneNumberUtil.canPlaceCallsTo(number, numberPresentation)) {
++            // Lookup contacts with this number
++            info = mContactInfoCache.getValue(number + postDialDigits,
++                    countryIso, cachedContactInfo);
++        }
++        return info.name;
++    }
++    /// @}
++
++    /**
++     * M: To improve scroll performance, using throttle observer to do call fetching @{
++     */
++    private class ThrottledObserver extends ContentObserver {
++        private final Throttle mThrottle;
++
++        public ThrottledObserver(Handler handler, Context context, Runnable runnable,
++                String name) {
++            super(handler);
++            mThrottle = new Throttle(name, runnable, handler, 500, 1500);
++        }
++
++        @Override
++        public void onChange(boolean selfChange, Uri uri) {
++            mThrottle.onEvent();
++        }
++    }
++    /** @}*/
++}
+Index: vendor/branch/5058A_Telcel/packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java
+===================================================================
+--- vendor/branch/5058A_Telcel/packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java	(revision 8575)
++++ vendor/branch/5058A_Telcel/packages/apps/Dialer/InCallUI/src/com/android/incallui/ContactInfoCache.java	(revision 8576)
+@@ -1,1090 +0,0 @@
+-/*
+-* Copyright (C) 2014 MediaTek Inc.
+-* Modification based on code covered by the mentioned copyright
+-* and/or permission notice(s).
+-*/
+-/*
+- * Copyright (C) 2013 The Android Open Source Project
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *      http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License
+- */
+-
+-package com.android.incallui;
+-
+-import com.google.common.base.MoreObjects;
+-import com.google.common.base.Preconditions;
+-import com.google.common.collect.Maps;
+-import com.google.common.collect.Sets;
+-
+-import android.content.Context;
+-import android.graphics.Bitmap;
+-import android.graphics.drawable.BitmapDrawable;
+-import android.graphics.drawable.Drawable;
+-import android.location.Address;
+-import android.media.RingtoneManager;
+-import android.net.Uri;
+-import android.os.AsyncTask;
+-import android.os.Looper;
+-import android.provider.ContactsContract;
+-import android.provider.ContactsContract.CommonDataKinds.Phone;
+-import android.provider.ContactsContract.Contacts;
+-import android.provider.ContactsContract.DisplayNameSources;
+-import android.telecom.TelecomManager;
+-import android.telephony.PhoneNumberUtils;
+-import android.text.TextUtils;
+-import android.util.Pair;
+-
+-import com.android.contacts.common.ContactsUtils;
+-import com.android.contacts.common.util.PhoneNumberHelper;
+-import com.android.dialer.R;
+-import com.android.dialer.calllog.ContactInfo;
+-import com.android.dialer.service.CachedNumberLookupService;
+-import com.android.dialer.service.CachedNumberLookupService.CachedContactInfo;
+-import com.android.dialer.util.MoreStrings;
+-import com.android.incallui.Call.LogState;
+-import com.android.incallui.service.PhoneNumberService;
+-import com.android.incalluibind.ObjectFactory;
+-
+-import org.json.JSONException;
+-import org.json.JSONObject;
+-
+-import java.util.Calendar;
+-/// M: add for Volte. @{
+-import com.mediatek.incallui.CallDetailChangeHandler;
+-import com.mediatek.incallui.CallDetailChangeHandler.CallDetailChangeListener;
+-import com.mediatek.incallui.volte.InCallUIVolteUtils;
+-/// @}
+-import android.database.Cursor;
+-import android.content.ContentResolver;
+-import com.mediatek.incallui.InCallUtils;
+-
+-/// M: add for Volte.
+-import java.util.ArrayList;
+-import java.util.HashMap;
+-/// M: add for Volte.
+-import java.util.List;
+-import java.util.Set;
+-/// M: add for Volte.
+-import java.util.concurrent.CopyOnWriteArraySet;
+-import android.provider.Settings;
+-
+-/**
+- * Class responsible for querying Contact Information for Call objects. Can perform asynchronous
+- * requests to the Contact Provider for information as well as respond synchronously for any data
+- * that it currently has cached from previous queries. This class always gets called from the UI
+- * thread so it does not need thread protection.
+- */
+-public class ContactInfoCache implements ContactsAsyncHelper.OnImageLoadCompleteListener {
+-
+-    private static final String TAG = ContactInfoCache.class.getSimpleName();
+-    private static final int TOKEN_UPDATE_PHOTO_FOR_CALL_STATE = 0;
+-    /// M: Token update photo for phone number service
+-    private static final int TOKEN_UPDATE_PHOTO_FOR_CALL_STATE_WITH_PHONE_NUMBER_SERVICE = 1;
+-
+-    private final Context mContext;
+-    private final PhoneNumberService mPhoneNumberService;
+-    private final CachedNumberLookupService mCachedNumberLookupService;
+-    private final HashMap<String, ContactCacheEntry> mInfoMap = Maps.newHashMap();
+-    private final HashMap<String, Set<ContactInfoCacheCallback>> mCallBacks = Maps.newHashMap();
+-
+-    private static ContactInfoCache sCache = null;
+-
+-    private Drawable mDefaultContactPhotoDrawable;
+-    private Drawable mConferencePhotoDrawable;
+-    private ContactUtils mContactUtils;
+-
+-    private static final Uri FDN_CONTENT_URI = Uri.parse("content://icc/fdn");
+-    private static final String FDN_CONTENT_PATH_WITH_SUB_ID = "content://icc/fdn/subId/";
+-
+-    public static synchronized ContactInfoCache getInstance(Context mContext) {
+-        if (sCache == null) {
+-            sCache = new ContactInfoCache(mContext.getApplicationContext());
+-        }
+-        return sCache;
+-    }
+-
+-    private ContactInfoCache(Context context) {
+-        mContext = context;
+-        mPhoneNumberService = ObjectFactory.newPhoneNumberService(context);
+-        mCachedNumberLookupService =
+-                com.android.dialerbind.ObjectFactory.newCachedNumberLookupService();
+-        mContactUtils = ObjectFactory.getContactUtilsInstance(context);
+-        /// M: For volte @{
+-        CallDetailChangeHandler.getInstance()
+-                .addCallDetailChangeListener(mCallDetailChangeListener);
+-        /// @}
+-
+-    }
+-
+-    public ContactCacheEntry getInfo(String callId) {
+-        return mInfoMap.get(callId);
+-    }
+-
+-    public static ContactCacheEntry buildCacheEntryFromCall(Context context, Call call,
+-            boolean isIncoming) {
+-        final ContactCacheEntry entry = new ContactCacheEntry();
+-
+-        // TODO: get rid of caller info.
+-        final CallerInfo info = CallerInfoUtils.buildCallerInfo(context, call);
+-        ContactInfoCache.populateCacheEntry(context, info, entry, call.getNumberPresentation(),
+-                isIncoming);
+-
+-        /// M: For VoLTE @{
+-        // If the call is VoLTE call with sip-uri number, we do not think it as sip call.
+-        // M: fix CR:ALPS02360533,Dereference before null check.
+-        if (entry.isSipCall) {
+-            entry.isSipCall = !call.isTelephonyCall();
+-        }
+-        /// @}
+-
+-        return entry;
+-    }
+-
+-    public void maybeInsertCnapInformationIntoCache(Context context, final Call call,
+-            final CallerInfo info) {
+-        if (mCachedNumberLookupService == null || TextUtils.isEmpty(info.cnapName)
+-                || mInfoMap.get(call.getId()) != null) {
+-            return;
+-        }
+-        final Context applicationContext = context.getApplicationContext();
+-        Log.i(TAG, "Found contact with CNAP name - inserting into cache");
+-        new AsyncTask<Void, Void, Void>() {
+-            @Override
+-            protected Void doInBackground(Void... params) {
+-                ContactInfo contactInfo = new ContactInfo();
+-                CachedContactInfo cacheInfo = mCachedNumberLookupService.buildCachedContactInfo(
+-                        contactInfo);
+-                cacheInfo.setSource(CachedContactInfo.SOURCE_TYPE_CNAP, "CNAP", 0);
+-                contactInfo.name = info.cnapName;
+-                contactInfo.number = call.getNumber();
+-                contactInfo.type = ContactsContract.CommonDataKinds.Phone.TYPE_MAIN;
+-                try {
+-                    final JSONObject contactRows = new JSONObject().put(Phone.CONTENT_ITEM_TYPE,
+-                            new JSONObject()
+-                                    .put(Phone.NUMBER, contactInfo.number)
+-                                    .put(Phone.TYPE, Phone.TYPE_MAIN));
+-                    final String jsonString = new JSONObject()
+-                            .put(Contacts.DISPLAY_NAME, contactInfo.name)
+-                            .put(Contacts.DISPLAY_NAME_SOURCE, DisplayNameSources.STRUCTURED_NAME)
+-                            .put(Contacts.CONTENT_ITEM_TYPE, contactRows).toString();
+-                    cacheInfo.setLookupKey(jsonString);
+-                } catch (JSONException e) {
+-                    Log.w(TAG, "Creation of lookup key failed when caching CNAP information");
+-                }
+-                mCachedNumberLookupService.addContact(applicationContext, cacheInfo);
+-                return null;
+-            }
+-        }.execute();
+-    }
+-
+-    private class FindInfoCallback implements CallerInfoAsyncQuery.OnQueryCompleteListener {
+-        private final boolean mIsIncoming;
+-
+-        public FindInfoCallback(boolean isIncoming) {
+-            mIsIncoming = isIncoming;
+-        }
+-
+-        @Override
+-        public void onQueryComplete(int token, Object cookie, CallerInfo callerInfo) {
+-            /// M: ALPS01771032. If first query is cancelled, it should not call function. @{
+-            // M: fix CR:ALPS02360493,dereference after null check.
+-            if (cookie != null && cookie instanceof Call) {
+-                String callId = ((Call) cookie).getId();
+-                findInfoQueryComplete((Call) cookie, callerInfo, mIsIncoming, true);
+-            }
+-            /// @}
+-        }
+-    }
+-
+-    /**
+-     * Requests contact data for the Call object passed in.
+-     * Returns the data through callback.  If callback is null, no response is made, however the
+-     * query is still performed and cached.
+-     *
+-     * @param callback The function to call back when the call is found. Can be null.
+-     */
+-    public void findInfo(final Call call, final boolean isIncoming,
+-            ContactInfoCacheCallback callback) {
+-        Preconditions.checkState(Looper.getMainLooper().getThread() == Thread.currentThread());
+-        Preconditions.checkNotNull(callback);
+-
+-        final String callId = call.getId();
+-        final ContactCacheEntry cacheEntry = mInfoMap.get(callId);
+-        Set<ContactInfoCacheCallback> callBacks = mCallBacks.get(callId);
+-
+-        // If we have a previously obtained intermediate result return that now
+-        if (cacheEntry != null) {
+-            Log.d(TAG, "Contact lookup. In memory cache hit; lookup "
+-                    + (callBacks == null ? "complete" : "still running"));
+-            callback.onContactInfoComplete(callId, cacheEntry);
+-            // If no other callbacks are in flight, we're done.
+-            if (callBacks == null) {
+-                return;
+-            }
+-        }
+-
+-        // If the entry already exists, add callback
+-        if (callBacks != null) {
+-            callBacks.add(callback);
+-            return;
+-        }
+-        Log.d(TAG, "Contact lookup. In memory cache miss; searching provider.");
+-        // New lookup
+-        /// M: for ALPS01769758 @{
+-        // Multi-Thread may cause ConcurrentModificationException for HashSet.
+-        // Original Code:
+-        // callBacks = Sets.newHashSet();
+-        callBacks = new CopyOnWriteArraySet<ContactInfoCacheCallback>();
+-        /// @}
+-        callBacks.add(callback);
+-        mCallBacks.put(callId, callBacks);
+-        /**
+-         * Performs a query for caller information.
+-         * Save any immediate data we get from the query. An asynchronous query may also be made
+-         * for any data that we do not already have. Some queries, such as those for voicemail and
+-         * emergency call information, will not perform an additional asynchronous query.
+-         */
+-        final CallerInfo callerInfo = CallerInfoUtils.getCallerInfoForCall(
+-                mContext, call, new FindInfoCallback(isIncoming));
+-
+-        findInfoQueryComplete(call, callerInfo, isIncoming, false);
+-    }
+-
+-    public String  fetchMinNumber(String str){
+-        Log.d(TAG, "fetchMinNumber ");
+-        String num,num2,num3,num4;
+-        num = str.replace(" ", "");
+-        num2 = num.replace("-", "");
+-        num3 = num2.replace("+", "");
+-        num4 = PhoneNumberUtils.toCallerIDMinMatch(num3);
+-        return num4;
+-    }
+-
+-    private void findInfoQueryComplete(Call call, CallerInfo callerInfo, boolean isIncoming,
+-            boolean didLocalLookup) {
+-        final String callId = call.getId();
+-        int presentationMode = call.getNumberPresentation();
+-        if (callerInfo.contactExists || callerInfo.isEmergencyNumber() ||
+-                callerInfo.isVoiceMailNumber()) {
+-            presentationMode = TelecomManager.PRESENTATION_ALLOWED;
+-        }
+-
+-        ContactCacheEntry cacheEntry = mInfoMap.get(callId);
+-        // Ensure we always have a cacheEntry. Replace the existing entry if
+-        // it has no name or if we found a local contact.
+-
+-        /// M: For VoLTE & SS @{
+-        // when phone number changed, we should force rebuild the ContactCacheEntry.
+-        // Original Code:
+-        /*if (cacheEntry == null || TextUtils.isEmpty(cacheEntry.namePrimary) ||
+-                callerInfo.contactExists) {
+-        */
+-        if (cacheEntry == null || TextUtils.isEmpty(cacheEntry.namePrimary) ||
+-                callerInfo.contactExists || isDifferentQueryResult(cacheEntry, callerInfo)) {
+-         /// @}
+-            cacheEntry = buildEntry(mContext, callId, callerInfo, presentationMode, isIncoming);
+-            mInfoMap.put(callId, cacheEntry);
+-        }
+-        boolean isFDNAct = Settings.Global.getInt(mContext.getContentResolver(), "is_fdn_enable", 0) != 0;
+-        if (isFDNAct) {      
+-            int mSubId = InCallUtils.getSubId(call);
+-            Uri mFdnUri = (mSubId != -1) ? Uri.parse(FDN_CONTENT_PATH_WITH_SUB_ID + mSubId): FDN_CONTENT_URI;
+-
+-            if (didLocalLookup) {
+-                String name = null;
+-                Cursor locFdnContact;
+-                ContentResolver cr = mContext.getContentResolver();    
+-                locFdnContact = cr.query(mFdnUri,
+-                    new String[] {"name","number","emails"},null,null, null);
+-
+-                if(locFdnContact != null && cacheEntry.number!=null && cacheEntry.number.length() > 0){
+-                    try {
+-                        if(locFdnContact.moveToFirst()) {
+-                            do {
+-                                int numColumnIndex = locFdnContact.getColumnIndex("number");
+-                                String tempNum = locFdnContact.getString(numColumnIndex);
+-                                Log.d(TAG, "cacheEntry.number: "+ cacheEntry.number+"; tempNum:"+tempNum);
+-                            
+-                                String mintempNum = fetchMinNumber(tempNum);
+-                                String minNum = fetchMinNumber(cacheEntry.number);
+-                                Log.d(TAG, "minNum: "+ minNum+"; mintempNum:"+mintempNum);
+-                                if(TextUtils.equals(minNum, mintempNum)){
+-                                    name = locFdnContact.getString(locFdnContact.getColumnIndex("name"));
+-                                    Log.d(TAG, "name: "+ name);
+-                                    cacheEntry.namePrimary = name;
+-                                }
+-
+-                            } while(locFdnContact.moveToNext());
+-                        }
+-                    } catch (Exception e) {
+-                        Log.w(TAG, "locFdnContact error:" + e.getMessage());
+-                    } finally {
+-                        locFdnContact.close();
+-                    }
+-                }
+-                Log.d(TAG, "cacheEntry.namePrimary: "+ cacheEntry.namePrimary);
+-            }
+-        }
+-
+-        sendInfoNotifications(callId, cacheEntry);
+-
+-        if (didLocalLookup) {
+-            // Before issuing a request for more data from other services, we only check that the
+-            // contact wasn't found in the local DB.  We don't check the if the cache entry already
+-            // has a name because we allow overriding cnap data with data from other services.
+-            if (!callerInfo.contactExists && mPhoneNumberService != null) {
+-                Log.d(TAG, "Contact lookup. Local contacts miss, checking remote");
+-                final PhoneNumberServiceListener listener = new PhoneNumberServiceListener(callId);
+-                mPhoneNumberService.getPhoneNumberInfo(cacheEntry.number, listener, listener,
+-                        isIncoming);
+-            } else if (cacheEntry.displayPhotoUri != null) {
+-                Log.d(TAG, "Contact lookup. Local contact found, starting image load");
+-                // Load the image with a callback to update the image state.
+-                // When the load is finished, onImageLoadComplete() will be called.
+-                cacheEntry.isLoadingPhoto = true;
+-                ContactsAsyncHelper.startObtainPhotoAsync(TOKEN_UPDATE_PHOTO_FOR_CALL_STATE,
+-                        mContext, cacheEntry.displayPhotoUri, ContactInfoCache.this,
+-                        new ContactPhotoQueryCookie(callId,
+-                                cacheEntry.displayPhotoUri.buildUpon().build()));
+-            } else {
+-                if (callerInfo.contactExists) {
+-                    Log.d(TAG, "Contact lookup done. Local contact found, no image.");
+-                } else {
+-                    Log.d(TAG, "Contact lookup done. Local contact not found and"
+-                            + " no remote lookup service available.");
+-                }
+-                /// M: Don't clear callbacks when phone number has changed @{
+-                String callNo = PhoneNumberUtils.normalizeNumber(InCallUIVolteUtils.getPhoneNumber(
+-                        call.getTelecomCall().getDetails()));
+-                String infoNo = PhoneNumberUtils.normalizeNumber(callerInfo.phoneNumber);
+-                if (TextUtils.equals(callNo, infoNo)) {
+-                    clearCallbacks(callId);
+-                } else {
+-                    Log.d(TAG, "Don't clear callbacks cause phone numbe don't match! callNo: "
+-                            + callNo + " VS infoNo: " + infoNo);
+-                }
+-                /// @}
+-            }
+-        }
+-    }
+-
+-    class PhoneNumberServiceListener implements PhoneNumberService.NumberLookupListener,
+-                                     PhoneNumberService.ImageLookupListener, ContactUtils.Listener {
+-        private final String mCallId;
+-
+-        PhoneNumberServiceListener(String callId) {
+-            mCallId = callId;
+-        }
+-
+-        @Override
+-        public void onPhoneNumberInfoComplete(
+-                final PhoneNumberService.PhoneNumberInfo info) {
+-            // If we got a miss, this is the end of the lookup pipeline,
+-            // so clear the callbacks and return.
+-            if (info == null) {
+-                Log.d(TAG, "Contact lookup done. Remote contact not found.");
+-                clearCallbacks(mCallId);
+-                return;
+-            }
+-
+-            ContactCacheEntry entry = new ContactCacheEntry();
+-            entry.namePrimary = info.getDisplayName();
+-            entry.number = info.getNumber();
+-            entry.contactLookupResult = info.getLookupSource();
+-            final int type = info.getPhoneType();
+-            final String label = info.getPhoneLabel();
+-            if (type == Phone.TYPE_CUSTOM) {
+-                entry.label = label;
+-            } else {
+-                final CharSequence typeStr = Phone.getTypeLabel(
+-                        mContext.getResources(), type, label);
+-                entry.label = typeStr == null ? null : typeStr.toString();
+-            }
+-            final ContactCacheEntry oldEntry = mInfoMap.get(mCallId);
+-            if (oldEntry != null) {
+-                // Location is only obtained from local lookup so persist
+-                // the value for remote lookups. Once we have a name this
+-                // field is no longer used; it is persisted here in case
+-                // the UI is ever changed to use it.
+-                entry.location = oldEntry.location;
+-                // Contact specific ringtone is obtained from local lookup.
+-                entry.contactRingtoneUri = oldEntry.contactRingtoneUri;
+-            }
+-
+-            // If no image and it's a business, switch to using the default business avatar.
+-            if (info.getImageUrl() == null && info.isBusiness()) {
+-                Log.d(TAG, "Business has no image. Using default.");
+-                entry.photo = mContext.getResources().getDrawable(R.drawable.img_business);
+-            }
+-
+-            mInfoMap.put(mCallId, entry);
+-            sendInfoNotifications(mCallId, entry);
+-
+-            if (mContactUtils != null) {
+-                // This method will callback "onContactInteractionsFound".
+-                entry.isLoadingContactInteractions =
+-                        mContactUtils.retrieveContactInteractionsFromLookupKey(
+-                                info.getLookupKey(), this);
+-            }
+-
+-            entry.isLoadingPhoto = info.getImageUrl() != null;
+-
+-            // If there is no image or contact interactions then we should not expect another
+-            // callback.
+-            if (!entry.isLoadingPhoto && !entry.isLoadingContactInteractions) {
+-                // We're done, so clear callbacks
+-                clearCallbacks(mCallId);
+-            }
+-        }
+-
+-        @Override
+-        public void onImageFetchComplete(Bitmap bitmap) {
+-            onImageLoadComplete(TOKEN_UPDATE_PHOTO_FOR_CALL_STATE_WITH_PHONE_NUMBER_SERVICE, null,
+-                    bitmap, mCallId);
+-        }
+-
+-        @Override
+-        public void onContactInteractionsFound(Address address,
+-                List<Pair<Calendar, Calendar>> openingHours) {
+-            final ContactCacheEntry entry = mInfoMap.get(mCallId);
+-            if (entry == null) {
+-                Log.e(this, "Contact context received for empty search entry.");
+-                clearCallbacks(mCallId);
+-                return;
+-            }
+-
+-            entry.isLoadingContactInteractions = false;
+-
+-            Log.v(ContactInfoCache.this, "Setting contact interactions for entry: ", entry);
+-
+-            entry.locationAddress = address;
+-            entry.openingHours = openingHours;
+-            sendContactInteractionsNotifications(mCallId, entry);
+-
+-            if (!entry.isLoadingPhoto) {
+-                clearCallbacks(mCallId);
+-            }
+-        }
+-    }
+-
+-    /**
+-     * M: Use a more flexible cookie object class, to avoid unexpected photo setting
+-     * and callback clearing.
+-     * Implemented for ContactsAsyncHelper.OnImageLoadCompleteListener interface.
+-     * make sure that the call state is reflected after the image is loaded.
+-     */
+-    @Override
+-    public void onImageLoadComplete(int token, Drawable photo, Bitmap photoIcon, Object cookie) {
+-        Log.d(this, "Image load complete with context: ", mContext);
+-        // TODO: may be nice to update the image view again once the newer one
+-        // is available on contacts database.
+-
+-        String callId = "";
+-        Uri displayUri = Uri.EMPTY;
+-        if (TOKEN_UPDATE_PHOTO_FOR_CALL_STATE_WITH_PHONE_NUMBER_SERVICE == token) {
+-            callId = (String) cookie;
+-        } else if (TOKEN_UPDATE_PHOTO_FOR_CALL_STATE == token) {
+-            final ContactPhotoQueryCookie queryCookie = (ContactPhotoQueryCookie) cookie;
+-            callId = queryCookie.callId;
+-            displayUri = queryCookie.displayUri;
+-        }
+-        final ContactCacheEntry entry = mInfoMap.get(callId);
+-
+-        if (entry == null) {
+-            Log.e(this, "Image Load received for empty search entry.");
+-            clearCallbacks(callId);
+-            return;
+-        }
+-
+-        entry.isLoadingPhoto = false;
+-
+-        Log.d(this, "setting photo for entry: ", entry);
+-
+-        /// M: Only set photo, notify and clear for same display uri when return from async query
+-        if (TOKEN_UPDATE_PHOTO_FOR_CALL_STATE_WITH_PHONE_NUMBER_SERVICE == token
+-                || displayUri.equals(entry.displayPhotoUri)) {
+-            // Conference call icons are being handled in CallCardPresenter.
+-            if (photo != null) {
+-                Log.v(this, "direct drawable: ", photo);
+-                entry.photo = photo;
+-            } else if (photoIcon != null) {
+-                Log.v(this, "photo icon: ", photoIcon);
+-                entry.photo = new BitmapDrawable(mContext.getResources(), photoIcon);
+-            } else {
+-                Log.v(this, "unknown photo");
+-                entry.photo = null;
+-            }
+-
+-            sendImageNotifications(callId, entry);
+-
+-            if (!entry.isLoadingContactInteractions) {
+-                clearCallbacks(callId);
+-            }
+-        }
+-    }
+-
+-    /**
+-     * Blows away the stored cache values.
+-     */
+-    public void clearCache() {
+-        mInfoMap.clear();
+-        mCallBacks.clear();
+-    }
+-
+-    private ContactCacheEntry buildEntry(Context context, String callId,
+-            CallerInfo info, int presentation, boolean isIncoming) {
+-        // The actual strings we're going to display onscreen:
+-        Drawable photo = null;
+-
+-        final ContactCacheEntry cce = new ContactCacheEntry();
+-        populateCacheEntry(context, info, cce, presentation, isIncoming);
+-
+-        /// M: For VoLTE @{
+-        // If the call is VoLTE call with sip-uri number, we do not think it as sip call.
+-        // we can also do the judge in populateCacheEntry(),
+-        // but then we must scan the whole callList to get the call.
+-        // TODO: re-write populateCacheEntry(), and add an extra parameter (callId).
+-        if (cce.isSipCall) {
+-            Call call = CallList.getInstance().getCallById(callId);
+-            if (call != null) {
+-                cce.isSipCall = !call.isTelephonyCall();
+-            }
+-        }
+-        /// @}
+-
+-        // This will only be true for emergency numbers
+-        if (info.photoResource != 0) {
+-            photo = context.getResources().getDrawable(info.photoResource);
+-        } else if (info.isCachedPhotoCurrent) {
+-            if (info.cachedPhoto != null) {
+-                photo = info.cachedPhoto;
+-            } else {
+-                photo = getDefaultContactPhotoDrawable();
+-            }
+-        } else if (info.contactDisplayPhotoUri == null) {
+-            photo = getDefaultContactPhotoDrawable();
+-        } else {
+-            cce.displayPhotoUri = info.contactDisplayPhotoUri;
+-        }
+-
+-        // Support any contact id in N because QuickContacts in N starts supporting enterprise
+-        // contact id
+-        if (info.lookupKeyOrNull != null
+-                && (ContactsUtils.FLAG_N_FEATURE || info.contactIdOrZero != 0)) {
+-            cce.lookupUri = Contacts.getLookupUri(info.contactIdOrZero, info.lookupKeyOrNull);
+-        } else {
+-            Log.v(TAG, "lookup key is null or contact ID is 0 on M. Don't create a lookup uri.");
+-            cce.lookupUri = null;
+-        }
+-
+-        cce.photo = photo;
+-        cce.lookupKey = info.lookupKeyOrNull;
+-        cce.contactRingtoneUri = info.contactRingtoneUri;
+-        if (cce.contactRingtoneUri == null || cce.contactRingtoneUri == Uri.EMPTY) {
+-            cce.contactRingtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+-        }
+-
+-        return cce;
+-    }
+-
+-    /**
+-     * Populate a cache entry from a call (which got converted into a caller info).
+-     */
+-    public static void populateCacheEntry(Context context, CallerInfo info, ContactCacheEntry cce,
+-            int presentation, boolean isIncoming) {
+-        Preconditions.checkNotNull(info);
+-        String displayName = null;
+-        String displayNumber = null;
+-        String displayLocation = null;
+-        String label = null;
+-        boolean isSipCall = false;
+-
+-            // It appears that there is a small change in behaviour with the
+-            // PhoneUtils' startGetCallerInfo whereby if we query with an
+-            // empty number, we will get a valid CallerInfo object, but with
+-            // fields that are all null, and the isTemporary boolean input
+-            // parameter as true.
+-
+-            // In the past, we would see a NULL callerinfo object, but this
+-            // ends up causing null pointer exceptions elsewhere down the
+-            // line in other cases, so we need to make this fix instead. It
+-            // appears that this was the ONLY call to PhoneUtils
+-            // .getCallerInfo() that relied on a NULL CallerInfo to indicate
+-            // an unknown contact.
+-
+-            // Currently, infi.phoneNumber may actually be a SIP address, and
+-            // if so, it might sometimes include the "sip:" prefix. That
+-            // prefix isn't really useful to the user, though, so strip it off
+-            // if present. (For any other URI scheme, though, leave the
+-            // prefix alone.)
+-            // TODO: It would be cleaner for CallerInfo to explicitly support
+-            // SIP addresses instead of overloading the "phoneNumber" field.
+-            // Then we could remove this hack, and instead ask the CallerInfo
+-            // for a "user visible" form of the SIP address.
+-            String number = info.phoneNumber;
+-
+-            if (!TextUtils.isEmpty(number)) {
+-                isSipCall = PhoneNumberHelper.isUriNumber(number);
+-                if (number.startsWith("sip:")) {
+-                    number = number.substring(4);
+-                }
+-            }
+-
+-            if (TextUtils.isEmpty(info.name)) {
+-                // No valid "name" in the CallerInfo, so fall back to
+-                // something else.
+-                // (Typically, we promote the phone number up to the "name" slot
+-                // onscreen, and possibly display a descriptive string in the
+-                // "number" slot.)
+-                if (TextUtils.isEmpty(number)) {
+-                    // No name *or* number! Display a generic "unknown" string
+-                    // (or potentially some other default based on the presentation.)
+-                    displayName = getPresentationString(context, presentation, info.callSubject);
+-                    Log.d(TAG, "  ==> no name *or* number! displayName = " + displayName);
+-                } else if (presentation != TelecomManager.PRESENTATION_ALLOWED) {
+-                    // This case should never happen since the network should never send a phone #
+-                    // AND a restricted presentation. However we leave it here in case of weird
+-                    // network behavior
+-                    displayName = getPresentationString(context, presentation, info.callSubject);
+-                    Log.d(TAG, "  ==> presentation not allowed! displayName = " + displayName);
+-                } else if (!TextUtils.isEmpty(info.cnapName)) {
+-                    // No name, but we do have a valid CNAP name, so use that.
+-                    displayName = info.cnapName;
+-                    info.name = info.cnapName;
+-                    displayNumber = number;
+-                    Log.d(TAG, "  ==> cnapName available: displayName '" + displayName +
+-                            "', displayNumber '" + displayNumber + "'");
+-                } else {
+-                    // No name; all we have is a number. This is the typical
+-                    // case when an incoming call doesn't match any contact,
+-                    // or if you manually dial an outgoing number using the
+-                    // dialpad.
+-                    displayNumber = number;
+-
+-                    /// M: for ALPS01953843 @{
+-                    // For the number not stored in contact, we should still show
+-                    // the geo info even when make outgoing call.
+-                    // Original Code:
+-                    // Display a geographical description string if available
+-                    // (but only for incoming calls.)
+-                    // if (isIncoming) {
+-                    if (!TextUtils.isEmpty(info.geoDescription)) {
+-                        // TODO (CallerInfoAsyncQuery cleanup): Fix the CallerInfo
+-                        // query to only do the geoDescription lookup in the first
+-                        // place for incoming calls.
+-                        displayLocation = info.geoDescription; // may be null
+-                        Log.d(TAG, "Geodescrption: " + info.geoDescription);
+-                    }
+-                    /// @}
+-
+-                    Log.d(TAG, "  ==>  no name; falling back to number:"
+-                            + " displayNumber '" + displayNumber
+-                            + "', displayLocation '" + displayLocation + "'");
+-                }
+-            } else {
+-                // We do have a valid "name" in the CallerInfo. Display that
+-                // in the "name" slot, and the phone number in the "number" slot.
+-                if (presentation != TelecomManager.PRESENTATION_ALLOWED) {
+-                    // This case should never happen since the network should never send a name
+-                    // AND a restricted presentation. However we leave it here in case of weird
+-                    // network behavior
+-                    displayName = getPresentationString(context, presentation, info.callSubject);
+-                    Log.d(TAG, "  ==> valid name, but presentation not allowed!" +
+-                            " displayName = " + displayName);
+-                } else {
+-                    // Causes cce.namePrimary to be set as info.name below. CallCardPresenter will
+-                    // later determine whether to use the name or nameAlternative when presenting
+-                    displayName = info.name;
+-                    cce.nameAlternative = info.nameAlternative;
+-                    displayNumber = number;
+-                    label = info.phoneLabel;
+-                    Log.d(TAG, "  ==>  name is present in CallerInfo: displayName '" + displayName
+-                            + "', displayNumber '" + displayNumber + "'");
+-                }
+-            }
+-
+-        cce.namePrimary = displayName;
+-        cce.number = displayNumber;
+-        cce.location = displayLocation;
+-        cce.label = label;
+-        cce.isSipCall = isSipCall;
+-        cce.userType = info.userType;
+-
+-        if (info.contactExists) {
+-            cce.contactLookupResult = LogState.LOOKUP_LOCAL_CONTACT;
+-        }
+-    }
+-
+-    /**
+-     * Sends the updated information to call the callbacks for the entry.
+-     */
+-    private void sendInfoNotifications(String callId, ContactCacheEntry entry) {
+-        final Set<ContactInfoCacheCallback> callBacks = mCallBacks.get(callId);
+-        if (callBacks != null) {
+-            for (ContactInfoCacheCallback callBack : callBacks) {
+-                callBack.onContactInfoComplete(callId, entry);
+-            }
+-        }
+-    }
+-
+-    private void sendImageNotifications(String callId, ContactCacheEntry entry) {
+-        final Set<ContactInfoCacheCallback> callBacks = mCallBacks.get(callId);
+-        if (callBacks != null && entry.photo != null) {
+-            for (ContactInfoCacheCallback callBack : callBacks) {
+-                callBack.onImageLoadComplete(callId, entry);
+-            }
+-        }
+-    }
+-
+-    private void sendContactInteractionsNotifications(String callId, ContactCacheEntry entry) {
+-        final Set<ContactInfoCacheCallback> callBacks = mCallBacks.get(callId);
+-        if (callBacks != null) {
+-            for (ContactInfoCacheCallback callBack : callBacks) {
+-                callBack.onContactInteractionsInfoComplete(callId, entry);
+-            }
+-        }
+-    }
+-
+-    private void clearCallbacks(String callId) {
+-        mCallBacks.remove(callId);
+-    }
+-
+-    /**
+-     * Gets name strings based on some special presentation modes and the associated custom label.
+-     */
+-    private static String getPresentationString(Context context, int presentation,
+-             String customLabel) {
+-        String name = context.getString(R.string.unknown);
+-        if (!TextUtils.isEmpty(customLabel) &&
+-                ((presentation == TelecomManager.PRESENTATION_UNKNOWN) ||
+-                 (presentation == TelecomManager.PRESENTATION_RESTRICTED))) {
+-            name = customLabel;
+-            return name;
+-        } else {
+-            if (presentation == TelecomManager.PRESENTATION_RESTRICTED) {
+-                name = context.getString(R.string.private_num);
+-            } else if (presentation == TelecomManager.PRESENTATION_PAYPHONE) {
+-                name = context.getString(R.string.payphone);
+-            }
+-        }
+-        return name;
+-    }
+-
+-    public Drawable getDefaultContactPhotoDrawable() {
+-        if (mDefaultContactPhotoDrawable == null) {
+-            mDefaultContactPhotoDrawable =
+-                    mContext.getResources().getDrawable(R.drawable.img_no_image_automirrored);
+-        }
+-        return mDefaultContactPhotoDrawable;
+-    }
+-
+-    public Drawable getConferenceDrawable() {
+-        if (mConferencePhotoDrawable == null) {
+-            mConferencePhotoDrawable =
+-                    mContext.getResources().getDrawable(R.drawable.img_conference_automirrored);
+-        }
+-        return mConferencePhotoDrawable;
+-    }
+-
+-    /**
+-     * Callback interface for the contact query.
+-     */
+-    public interface ContactInfoCacheCallback {
+-        public void onContactInfoComplete(String callId, ContactCacheEntry entry);
+-        public void onImageLoadComplete(String callId, ContactCacheEntry entry);
+-        public void onContactInteractionsInfoComplete(String callId, ContactCacheEntry entry);
+-    }
+-
+-    public static class ContactCacheEntry {
+-        public String namePrimary;
+-        public String nameAlternative;
+-        public String number;
+-        public String location;
+-        public String label;
+-        public Drawable photo;
+-        public boolean isSipCall;
+-        // Note in cache entry whether this is a pending async loading action to know whether to
+-        // wait for its callback or not.
+-        public boolean isLoadingPhoto;
+-        public boolean isLoadingContactInteractions;
+-        /** This will be used for the "view" notification. */
+-        public Uri contactUri;
+-        /** Either a display photo or a thumbnail URI. */
+-        public Uri displayPhotoUri;
+-        public Uri lookupUri; // Sent to NotificationMananger
+-        public String lookupKey;
+-        public Address locationAddress;
+-        public List<Pair<Calendar, Calendar>> openingHours;
+-        public int contactLookupResult = LogState.LOOKUP_NOT_FOUND;
+-        public long userType = ContactsUtils.USER_TYPE_CURRENT;
+-        public Uri contactRingtoneUri;
+-
+-        @Override
+-        public String toString() {
+-            return MoreObjects.toStringHelper(this)
+-                    .add("name", MoreStrings.toSafeString(namePrimary))
+-                    .add("nameAlternative", MoreStrings.toSafeString(nameAlternative))
+-                    .add("number", MoreStrings.toSafeString(number))
+-                    .add("location", MoreStrings.toSafeString(location))
+-                    .add("label", label)
+-                    .add("photo", photo)
+-                    .add("isSipCall", isSipCall)
+-                    .add("contactUri", contactUri)
+-                    .add("displayPhotoUri", displayPhotoUri)
+-                    .add("locationAddress", locationAddress)
+-                    .add("openingHours", openingHours)
+-                    .add("contactLookupResult", contactLookupResult)
+-                    .add("userType", userType)
+-                    .add("contactRingtoneUri", contactRingtoneUri)
+-                    .toString();
+-        }
+-    }
+-
+-    /// -----------------------------------Mediatek------------------------------------
+-    /// M: For volte @{
+-    /**
+-     * M: listener, which will get notified onContactInfoUpdated() when re-query of certain
+-     *  call complete.
+-     */
+-    public static abstract class ContactInfoUpdatedListener {
+-        public void onContactInfoUpdated(String callId) {}
+-    }
+-
+-    /**
+-     * M: restore all ContactInfoUpdatedListener, who will get notified later.
+-     */
+-    private final List<ContactInfoUpdatedListener> mContactInfoUpdatedListener
+-            = new ArrayList<ContactInfoUpdatedListener>();
+-
+-    /**
+-     * M: add ContactInfoUpdatedListener.
+-     * @param listener
+-     */
+-    public void addContactInfoUpdatedListener(ContactInfoUpdatedListener listener) {
+-        if (!mContactInfoUpdatedListener.contains(listener)) {
+-            mContactInfoUpdatedListener.add(listener);
+-        }
+-    }
+-
+-    /**
+-     * M: remove ContactInfoUpdatedListener.
+-     * @param listener
+-     */
+-    public void removeContactInfoUpdatedListener(ContactInfoUpdatedListener listener) {
+-        if (mContactInfoUpdatedListener.contains(listener)) {
+-            mContactInfoUpdatedListener.remove(listener);
+-        }
+-    }
+-
+-    /**
+-     * M: listen onVolteMarkedEccChanged() and onPhoneNumberChanged() from CallDetailsChangeHandler.
+-     */
+-    private final CallDetailChangeListener mCallDetailChangeListener
+-            = new CallDetailChangeListener() {
+-
+-        public void onVolteMarkedEccChanged(Call call) {
+-            handleIsEmergencyChanged(call);
+-        }
+-
+-        public void onPhoneNumberChanged(Call call) {
+-            handlePhoneNumberChanged(call);
+-        }
+-    };
+-
+-    /**
+-     * M: When certain call is marked as Ecc by NW, notify listners.
+-     * @param call
+-     */
+-    private void handleIsEmergencyChanged(Call call) {
+-        Log.d(TAG, "handleIsEmergencyChanged()... call = " + call);
+-        // check whether it is a ecc call again
+-        if (call != null && call.isVolteMarkedEcc()) {
+-            final String callId = call.getId();
+-            final ContactCacheEntry cacheEntry = mInfoMap.get(callId);
+-            Set<ContactInfoCacheCallback> callBacks = mCallBacks.get(callId);
+-
+-            if (cacheEntry != null && callBacks != null) {
+-                // query is still running, remove callbacks
+-                clearCallbacks(callId);
+-            }
+-            CallerInfo callerInfo = new CallerInfo().markAsEmergency(mContext, (call != null) ? call.getNumber() : "");
+-            findInfoQueryComplete(call, callerInfo, call.getState() == Call.State.INCOMING, false);
+-            // make EntryCache complete into mInCfoMap, notify CallCardPresenter to get it again.
+-            for (ContactInfoUpdatedListener listener : mContactInfoUpdatedListener) {
+-                listener.onContactInfoUpdated(callId);
+-            }
+-        }
+-    }
+-
+-    /**
+-     * M: when number of certain call changed, re-query for it.
+-     * when re-query complete, will notify all listeners to trigger them to get new ContactInfo
+-     * from here.
+-     * @param call
+-     */
+-    private void handlePhoneNumberChanged(Call call) {
+-        Log.d(TAG, "handlePhoneNumberChanged()... call = " + call);
+-        if (call != null && !call.isVolteMarkedEcc()) {
+-            // if is ecc, will show ecc info, so no need re-query.(consider network mark it as
+-            // ecc while pau changed).
+-            updateInfo(call, call.getState() == Call.State.INCOMING
+-                    , new ContactInfoCacheCallback() {
+-                @Override
+-                public void onContactInfoComplete(String callId, ContactCacheEntry entry) {
+-                    // re-query complete, notify users to re-get new ContactCacheEntry.
+-                    for (ContactInfoUpdatedListener listener : mContactInfoUpdatedListener) {
+-                        listener.onContactInfoUpdated(callId);
+-                    }
+-                }
+-                @Override
+-                public void onImageLoadComplete(String callId, ContactCacheEntry entry) {
+-                     // re-query complete, notify users to re-get new ContactCacheEntry.
+-                    for (ContactInfoUpdatedListener listener : mContactInfoUpdatedListener) {
+-                        listener.onContactInfoUpdated(callId);
+-                    }
+-                }
+-
+-                @Override
+-                public void onContactInteractionsInfoComplete(String callId, ContactCacheEntry
+-                        entry) {
+-                    // re-query complete, notify users to re-get new ContactCacheEntry.
+-                    for (ContactInfoUpdatedListener listener : mContactInfoUpdatedListener) {
+-                        listener.onContactInfoUpdated(callId);
+-                    }
+-                }
+-            });
+-        }
+-    }
+-
+-    /**
+-     * M: This function trigger re-query. If satisfied, will always force re-query,
+-     * even if there has a running query. So need avoiding call this function continue.
+-     * @param call
+-     * @param isIncoming
+-     * @param callback
+-     */
+-    private void updateInfo(final Call call, final boolean isIncoming,
+-            ContactInfoCacheCallback callback) {
+-        Preconditions.checkState(Looper.getMainLooper().getThread() == Thread.currentThread());
+-        Preconditions.checkNotNull(callback);
+-
+-        final String callId = call.getId();
+-        final ContactCacheEntry cacheEntry = mInfoMap.get(callId);
+-        Set<ContactInfoCacheCallback> callBacks = mCallBacks.get(callId);
+-
+-        if (cacheEntry != null) {
+-            // the query has done or still running.
+-            if (callBacks != null) {
+-                // still running, clear callbacks
+-                clearCallbacks(callId);
+-            }
+-            // force re-query
+-            callBacks = new CopyOnWriteArraySet<ContactInfoCache.ContactInfoCacheCallback>();
+-            callBacks.add(callback);
+-            mCallBacks.put(callId, callBacks);
+-            final CallerInfo callerInfo = CallerInfoUtils.getCallerInfoForCall(
+-                    mContext, call, new FindInfoCallback(isIncoming));
+-        }
+-    }
+-
+-    /**
+-     * M: The main logic is same as findInfo().
+-     * You maybe consider that there may exist conflict like ALPS01771032.
+-     * because findInfo() equals to findInfoEx(). so may exist below conflicts:
+-     * 1/ findInfo() + updateInfo()     => resolved by ALPS01771032.
+-     * 2/ updateInfo() + findInfo()     => updateInfo() will skip this query request.
+-     * 3/ findInfo() + findInfo()       => findInfo() will handle this case.
+-     * @param call
+-     * @param isIncoming
+-     * @param callback
+-     * @param returnTempleResult
+-     */
+-    public void findInfoEx(final Call call, final boolean isIncoming,
+-            ContactInfoCacheCallback callback, boolean returnTempleResult) {
+-        Log.d(TAG, "findInfoEx()...");
+-        Preconditions.checkState(Looper.getMainLooper().getThread() == Thread.currentThread());
+-        Preconditions.checkNotNull(callback);
+-
+-        final String callId = call.getId();
+-        final ContactCacheEntry cacheEntry = mInfoMap.get(callId);
+-        Set<ContactInfoCacheCallback> callBacks = mCallBacks.get(callId);
+-
+-        // If we have a previously obtained intermediate result return that now
+-        if (cacheEntry != null) {
+-            Log.d(TAG, "findInfoEx()... Contact lookup. In memory cache hit; lookup "
+-                    + (callBacks == null ? "complete" : "still running"));
+-            callback.onContactInfoComplete(callId, cacheEntry);
+-            // If no other callbacks are in flight, we're done.
+-            if (callBacks == null) {
+-                return;
+-            }
+-        }
+-
+-        // If the entry already exists, add callback
+-        if (callBacks != null) {
+-            callBacks.add(callback);
+-            return;
+-        }
+-        Log.d(TAG, "findInfoEx()... Contact lookup. In memory cache miss; searching provider.");
+-        // New lookup
+-        callBacks = new CopyOnWriteArraySet<ContactInfoCache.ContactInfoCacheCallback>();
+-        callBacks.add(callback);
+-        mCallBacks.put(callId, callBacks);
+-
+-        /**
+-         * Performs a query for caller information.
+-         * Save any immediate data we get from the query. An asynchronous query may also be made
+-         * for any data that we do not already have. Some queries, such as those for voicemail and
+-         * emergency call information, will not perform an additional asynchronous query.
+-         */
+-        final CallerInfo callerInfo = CallerInfoUtils.getCallerInfoForCall(
+-                mContext, call, new FindInfoCallback(isIncoming));
+-
+-        if (returnTempleResult) {
+-            findInfoQueryComplete(call, callerInfo, isIncoming, false);
+-        }
+-    }
+-
+-    /**
+-     * M: Judge whether the phoneNumber is updated, if so, we should force update
+-     * ContactCacheEntry.
+-     * That means phoneNumber is different in ContactCacheEntry and CallerInfo
+-     * @param entry
+-     * @param callerInfo
+-     * @return
+-     */
+-    private boolean isDifferentQueryResult(ContactCacheEntry entry, CallerInfo callerInfo) {
+-        boolean isDifferent = false;
+-        if (entry != null && callerInfo != null) {
+-            String numberInEntry = entry.number;
+-            String numberInCallerInfo = callerInfo.phoneNumber;
+-            if (!TextUtils.equals(numberInEntry, numberInCallerInfo)) {
+-                isDifferent = true;
+-            }
+-        }
+-        return isDifferent;
+-    }
+-    /// @}
+-
+-    /// M: Cookie object class for contact photo query @{
+-    private class ContactPhotoQueryCookie {
+-        public String callId;
+-        public Uri displayUri;
+-
+-        public ContactPhotoQueryCookie(String id, Uri uri) {
+-            callId = id;
+-            displayUri = uri;
+-        }
+-    }
+-    /// @}
+-}

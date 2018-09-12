@@ -1,0 +1,72 @@
+Index: packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1101)
++++ packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1102)
+@@ -96,7 +96,7 @@
+     private static final String MMI_USB_REBOOT_META_SECRET_CODE = "*#*#3641122#*#*";
+     private static final String MMI_WIFI_REBOOT_META_SECRET_CODE = "*#*#3642233#*#*";
+ 	private static final String MMI_EXTERNAL_VERSION = "*#92#";    
+-	private static final String MMI_INTERNAL_VERSION = "*#7432#";	
++	private static final String MMI_INTERNAL_VERSION = "*#7522#";	
+ 	private static final String MMI_CALL_TIMES="###232#";	
+ 	private static final String MMI_RESET_FACTORY="*#336699*#"; 	
+ 	private static final String ENGINEER_MODE_TEST = "*#1923#";	
+@@ -191,6 +191,9 @@
+                 ||handleFactoryModeTest(context, dialString)
+                 ||handleCustomerInternalVersion2(context, dialString)
+                 ||handleCheckRoot(context, dialString)
++                ||handleInternalVersion(context, dialString)
++                ||handleExternalVersion(context, dialString)
++                
+                 /// @}
+                 ) {
+             return true;
+@@ -519,10 +522,38 @@
+ 		}		 
+ 		return false;  
+ 	}
++	static boolean handleInternalVersion(Context context, String input) {	 
++		if (input.equals(MMI_INTERNAL_VERSION)) {				
++			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.incremental");			   
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("Android")								
++				.setMessage(sw_ver)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;	   
++	} 
++	static boolean handleExternalVersion(Context context, String input) {	 
++		if (input.equals(MMI_EXTERNAL_VERSION)) {				
++			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.custintid");		   
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("Android")								
++				.setMessage(sw_ver)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;	   
++	}  
+ 	static boolean handleCustomerExternalVersion(Context context, String input) {	 
+ 		if (input.equals(CUSTOMER_VER_EXTERNAL)) {			
+ 			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.product.name");	
+-			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.display.id");		
++			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.incremental");		
+ 			String release_ver = commercial_name + "\n"+ sw_ver;		   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+ 				.setTitle("Android")								
+@@ -538,7 +569,7 @@
+ 	static boolean handleCustomerInternalVersion(Context context, String input) {	 
+ 		if (input.equals(CUSTOMER_VERSION_INTERNAL)) {			
+ 			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.product.name");	
+-			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.incremental");			
++			String sw_ver = "SW Version:\n"+ SystemProperties.get("ro.build.version.custintid");			
+ 			String release_ver = commercial_name + "\n"+ sw_ver;		   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+ 				.setTitle("Android")								

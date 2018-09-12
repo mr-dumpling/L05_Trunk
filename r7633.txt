@@ -1,0 +1,85 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardServiceDelegate.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardServiceDelegate.java	(revision 7632)
++++ frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardServiceDelegate.java	(revision 7633)
+@@ -204,6 +204,14 @@
+         return mKeyguardState.showing;
+     }
+ 
++    public boolean isSimSecure() {
++        if (mKeyguardService != null) {
++            boolean rt = mKeyguardService.isSimSecure();
++            return rt;
++        }
++        return false;
++    }
++
+     public boolean isTrusted() {
+         if (mKeyguardService != null) {
+             return mKeyguardService.isTrusted();
+Index: frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardServiceWrapper.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardServiceWrapper.java	(revision 7632)
++++ frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardServiceWrapper.java	(revision 7633)
+@@ -249,6 +249,10 @@
+         return mKeyguardStateMonitor.isSecure(userId);
+     }
+ 
++    public boolean isSimSecure() {
++        return mKeyguardStateMonitor.isSimSecure();
++    }
++
+     public boolean isInputRestricted() {
+         return mKeyguardStateMonitor.isInputRestricted();
+     }
+Index: frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardStateMonitor.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardStateMonitor.java	(revision 7632)
++++ frameworks/base/services/core/java/com/android/server/policy/keyguard/KeyguardStateMonitor.java	(revision 7633)
+@@ -75,6 +75,10 @@
+         return mLockPatternUtils.isSecure(userId) || mSimSecure || mIsAnthTheftEnabled;
+     }
+ 
++    public boolean isSimSecure() {
++        return mSimSecure;
++    }
++
+     public boolean isInputRestricted() {
+         return mInputRestricted;
+     }
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 7632)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 7633)
+@@ -7185,9 +7185,29 @@
+     }
+ 	
+ 	
+-	    private void startFaceVerify() { //startFaceVerifyInternal
+-		Log.d(TAG,"startFaceVerify():keyguardOn()="+keyguardOn());
++    private void startFaceVerify() { //startFaceVerifyInternal
++        if (mKeyguardDelegate == null) {
++            Log.e(TAG,"error!!! mKeyguardDelegate is null");
++            return;
++        }
++        Log.d(TAG,"startFaceVerify():keyguardOn()="+keyguardOn() + " : simsecure=" + mKeyguardDelegate.isSimSecure());
++        if (keyguardOn() && mKeyguardDelegate.isSimSecure()) {
++            //in sim lock state, so do not continue FaceVerify
++            if (mAwake) {
++                Log.d(TAG,"startFaceVerify(), return cause sim lock state.");
++                //post again so that face verify can work on PIN verify screen just after sim lock verification.
++                mHandler.postDelayed(new Runnable() {
++                    @Override
++                    public void run() {
++                        Slog.d(TAG, "--start face verify when simlock~:" + mAwake);
++                        startFaceVerify();
++                    }
++                }, START_FACE_VERIFY_DELAY * 2);
++            }
++            return;
++        }
+ 	
++        Log.d(TAG, "startFaceVerify continue after no simsecure");
+         //if (keyguardOn() /*&& !isSimPinKeyguardStart && !inCall() && !isSwitchingUser zxp*/) {
+             String faceEnable = Settings.System.getStringForUser(mContext.getContentResolver(), Settings.System.FACE_STATE_ENABLED, 0);
+             int faceUnlockState = Settings.System.getInt(mContext.getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);

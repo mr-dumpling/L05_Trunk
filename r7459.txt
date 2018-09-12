@@ -1,0 +1,114 @@
+Index: vendor/branch/5058A_Telcel/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A_Telcel/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7458)
++++ vendor/branch/5058A_Telcel/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7459)
+@@ -615,7 +615,7 @@
+ MTK_SMT_SUPPORT = no
+ MTK_SOTER_SUPPORT = no
+ MTK_SPECIAL_FACTORY_RESET = no
+-MTK_SPECIFIC_SM_CAUSE = no
++MTK_SPECIFIC_SM_CAUSE = yes
+ MTK_SUBTITLE_SUPPORT = no
+ MTK_SUPER_DIMMING_SUPPORT = no
+ MTK_SVP_64BIT_SUPPORT = no
+@@ -723,4 +723,4 @@
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ TCL_LED_SUPPORT = no
+ OP01SOUNDRECORDER_APP = yes
+-MTK_BICR_SUPPORT = yes
+\ No newline at end of file
++MTK_BICR_SUPPORT = yes
+Index: vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java
+===================================================================
+--- vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 7458)
++++ vendor/branch/5058A_Telcel/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 7459)
+@@ -4376,6 +4376,9 @@
+             mPhone.notifyPreciseDataConnectionFailed(apnContext.getReason(),
+                     apnContext.getApnType(), apn != null ? apn.apn : "unknown", cause.toString());
+ 
++            if (MTK_CC33_SUPPORT) {
++                clearCodes33Or29Warning(cause);
++            }
+             // Compose broadcast intent send to the specific carrier signaling receivers
+             Intent intent = new Intent(TelephonyIntents
+                     .ACTION_CARRIER_SIGNAL_REQUEST_NETWORK_FAILED);
+@@ -4464,43 +4467,6 @@
+             mPhone.notifyDataConnection(Phone.REASON_APN_FAILED, apnContext.getApnType());
+             apnContext.setDataConnectionAc(null);
+             log("onDataSetupCompleteError: Stop retrying APNs.");
+-
+-            //Feature-ClearCode 33/29,pop the dialog,Add-begin by chnehu,2018/01/03
+-            DcFailCause cause = (DcFailCause) (ar.result);
+-            Rlog.i(LOG_TAG,"onDataSetupCompleteError cause:" + cause);
+-            if (cause == DcFailCause.USER_AUTHENTICATION
+-                || cause == DcFailCause.SERVICE_OPTION_NOT_SUBSCRIBED){
+-            	//after 3rd retry,add dialog here with judgement whether is 29 or 33
+-                String text = mPhone.getContext().getResources().getString(com.android.
+-                            internal.R.string.data_clearcode_33);
+-                if (cause == DcFailCause.USER_AUTHENTICATION) {
+-                    text = mPhone.getContext().getResources().getString(com.android.
+-                            internal.R.string.data_clearcode_29);
+-                }
+-
+-                AlertDialog dlg = null;
+-                AlertDialog.Builder builder = new AlertDialog.Builder(mPhone.getContext());
+-                builder.setMessage(text);
+-                builder.setPositiveButton(
+-                        mPhone.getContext().getResources().getString(com.android.
+-                                internal.R.string.ok),null);
+-                builder.setOnDismissListener(new DialogInterface.OnDismissListener() {
+-                    public void onDismiss(final DialogInterface dialog) {
+-                        log("onDataSetupComplete Dialog dimiss");
+-                    }
+-                });
+-                dlg = builder.create();
+-                dlg.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG);
+-                dlg.show();
+-                dlg.setCanceledOnTouchOutside(false);
+-                if (dlg.isShowing()) {
+-                    log("onDataSetupComplete: dialog is show");
+-                } else {
+-                    log("onDataSetupComplete: dialog is no");
+-                }
+-                log("onDataSetupComplete: SETUP complete OK");
+-            }
+-            //Feature-ClearCode 33/29,pop the dialog,Add-end by chenhu,2018/01/03
+         }
+     }
+ 
+@@ -7638,4 +7604,35 @@
+             }
+         }
+     }
++
++    private void clearCodes33Or29Warning(DcFailCause pdpRejectCause) {
++        Rlog.i(LOG_TAG,"clearCodes33Or29Warning cause:" + pdpRejectCause);
++        boolean shouldAlert = true;
++        IccRecords r = mIccRecords.get();
++        String operatorNumericIcc = (r != null) ? r.getOperatorNumeric() : "";
++        shouldAlert = "334020".equals(operatorNumericIcc) || "33402".equals(operatorNumericIcc);
++        if (!shouldAlert) {
++            Rlog.i(LOG_TAG,"clearCodes33Or29Warning skip dialog cause:" + pdpRejectCause + ",operatorNumericIcc:" + operatorNumericIcc);
++            return;
++        }
++        if (pdpRejectCause == DcFailCause.USER_AUTHENTICATION
++            || pdpRejectCause == DcFailCause.SERVICE_OPTION_NOT_SUBSCRIBED){
++        	//after 3rd retry,add dialog here with judgement whether is 29 or 33
++            String text = mPhone.getContext().getResources().getString(com.android.
++                        internal.R.string.data_clearcode_33);
++            if (pdpRejectCause == DcFailCause.USER_AUTHENTICATION) {
++                text = mPhone.getContext().getResources().getString(com.android.
++                        internal.R.string.data_clearcode_29);
++            }
++
++	        AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(mPhone.getContext());
++	        alertDialogBuilder.setMessage(text);
++	        alertDialogBuilder.setPositiveButton(android.R.string.ok, null);
++
++	        AlertDialog DataRejectDialog = alertDialogBuilder.create();
++	        DataRejectDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
++	        DataRejectDialog.setCanceledOnTouchOutside(false);
++	        DataRejectDialog.show();
++        }
++    }
+ }

@@ -1,0 +1,3446 @@
+Index: vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/RingbackPlayer.java
+===================================================================
+--- vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/RingbackPlayer.java	(revision 0)
++++ vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/RingbackPlayer.java	(revision 13859)
+@@ -0,0 +1,92 @@
++/*
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License
++ */
++
++package com.android.server.telecom;
++
++import com.android.internal.util.Preconditions;
++
++/**
++ * Plays ringback tones. Ringback is different from other tones because it operates as the current
++ * audio for a call, whereas most tones play as simple timed events. This means ringback must be
++ * able to turn off and on as the user switches between calls. This is why it is implemented as its
++ * own class.
++ */
++public class RingbackPlayer {
++
++    private final InCallTonePlayer.Factory mPlayerFactory;
++
++    /**
++     * The current call for which the ringback tone is being played.
++     */
++    private Call mCall;
++
++    /**
++     * The currently active player.
++     */
++    private InCallTonePlayer mTonePlayer;
++
++    RingbackPlayer(InCallTonePlayer.Factory playerFactory) {
++        mPlayerFactory = playerFactory;
++    }
++
++    /**
++     * Starts ringback for the specified dialing call as needed.
++     *
++     * @param call The call for which to ringback.
++     */
++    public void startRingbackForCall(Call call) {
++        Preconditions.checkState(call.getState() == CallState.DIALING);
++
++        if (mCall == call) {
++            Log.d(this, "Ignoring duplicate requests to ring for %s.", call);
++            return;
++        }
++
++        if (mCall != null) {
++            // We only get here for the foreground call so, there's no reason why there should
++            // exist a current dialing call.
++            Log.wtf(this, "Ringback player thinks there are two foreground-dialing calls.");
++        }
++
++        mCall = call;
++        if (mTonePlayer == null) {
++            Log.d(this, "Playing the ringback tone for %s.", call);
++            mTonePlayer = mPlayerFactory.createPlayer(InCallTonePlayer.TONE_RING_BACK);
++            mTonePlayer.startTone();
++        }
++    }
++
++    /**
++     * Stops the ringback for the specified dialing call as needed.
++     *
++     * @param call The call for which to stop ringback.
++     */
++    public void stopRingbackForCall(Call call) {
++        if (mCall == call) {
++            // The foreground call is no longer dialing or is no longer the foreground call. In
++            // either case, stop the ringback tone.
++            mCall = null;
++
++            if (mTonePlayer == null) {
++                Log.w(this, "No player found to stop.");
++            } else {
++                Log.d(this, "Stopping the ringback tone for %s.", call);
++                mTonePlayer.stopTone();
++                mTonePlayer = null;
++            }
++        }
++    }
++}
+
+Property changes on: vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/RingbackPlayer.java
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/InCallTonePlayer.java
+===================================================================
+--- vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/InCallTonePlayer.java	(revision 0)
++++ vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/InCallTonePlayer.java	(revision 13859)
+@@ -0,0 +1,311 @@
++/*
++ * Copyright 2014, The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.server.telecom;
++
++import android.media.AudioManager;
++import android.media.ToneGenerator;
++import android.os.Handler;
++import android.os.Looper;
++
++import com.android.internal.annotations.VisibleForTesting;
++
++/**
++ * Play a call-related tone (ringback, busy signal, etc.) through ToneGenerator. To use, create an
++ * instance using InCallTonePlayer.Factory (passing in the TONE_* constant for the tone you want)
++ * and start() it. Implemented on top of {@link Thread} so that the tone plays in its own thread.
++ */
++public class InCallTonePlayer extends Thread {
++
++    /**
++     * Factory used to create InCallTonePlayers. Exists to aid with testing mocks.
++     */
++    public static class Factory {
++        private CallAudioManager mCallAudioManager;
++        private final CallAudioRoutePeripheralAdapter mCallAudioRoutePeripheralAdapter;
++        private final TelecomSystem.SyncRoot mLock;
++
++        Factory(CallAudioRoutePeripheralAdapter callAudioRoutePeripheralAdapter,
++                TelecomSystem.SyncRoot lock) {
++            mCallAudioRoutePeripheralAdapter = callAudioRoutePeripheralAdapter;
++            mLock = lock;
++        }
++
++        public void setCallAudioManager(CallAudioManager callAudioManager) {
++            mCallAudioManager = callAudioManager;
++        }
++
++        public InCallTonePlayer createPlayer(int tone) {
++            return new InCallTonePlayer(tone, mCallAudioManager,
++                    mCallAudioRoutePeripheralAdapter, mLock);
++        }
++    }
++
++    // The possible tones that we can play.
++    public static final int TONE_INVALID = 0;
++    public static final int TONE_BUSY = 1;
++    public static final int TONE_CALL_ENDED = 2;
++    public static final int TONE_OTA_CALL_ENDED = 3;
++    public static final int TONE_CALL_WAITING = 4;
++    public static final int TONE_CDMA_DROP = 5;
++    public static final int TONE_CONGESTION = 6;
++    public static final int TONE_INTERCEPT = 7;
++    public static final int TONE_OUT_OF_SERVICE = 8;
++    public static final int TONE_REDIAL = 9;
++    public static final int TONE_REORDER = 10;
++    public static final int TONE_RING_BACK = 11;
++    public static final int TONE_UNOBTAINABLE_NUMBER = 12;
++    public static final int TONE_VOICE_PRIVACY = 13;
++    public static final int TONE_VIDEO_UPGRADE = 14;
++
++    private static final int RELATIVE_VOLUME_EMERGENCY = 100;
++    private static final int RELATIVE_VOLUME_HIPRI = 80;
++    private static final int RELATIVE_VOLUME_LOPRI = 50;
++
++    // Buffer time (in msec) to add on to the tone timeout value. Needed mainly when the timeout
++    // value for a tone is exact duration of the tone itself.
++    private static final int TIMEOUT_BUFFER_MILLIS = 20;
++
++    // The tone state.
++    private static final int STATE_OFF = 0;
++    private static final int STATE_ON = 1;
++    private static final int STATE_STOPPED = 2;
++
++    /**
++     * Keeps count of the number of actively playing tones so that we can notify CallAudioManager
++     * when we need focus and when it can be release. This should only be manipulated from the main
++     * thread.
++     */
++    private static int sTonesPlaying = 0;
++
++    private final CallAudioManager mCallAudioManager;
++    private final CallAudioRoutePeripheralAdapter mCallAudioRoutePeripheralAdapter;
++
++    private final Handler mMainThreadHandler = new Handler(Looper.getMainLooper());
++
++    /** The ID of the tone to play. */
++    private final int mToneId;
++
++    /** Current state of the tone player. */
++    private int mState;
++
++    /** Telecom lock object. */
++    private final TelecomSystem.SyncRoot mLock;
++
++    private Session mSession;
++    private final Object mSessionLock = new Object();
++
++    /**
++     * Initializes the tone player. Private; use the {@link Factory} to create tone players.
++     *
++     * @param toneId ID of the tone to play, see TONE_* constants.
++     */
++    private InCallTonePlayer(
++            int toneId,
++            CallAudioManager callAudioManager,
++            CallAudioRoutePeripheralAdapter callAudioRoutePeripheralAdapter,
++            TelecomSystem.SyncRoot lock) {
++        mState = STATE_OFF;
++        mToneId = toneId;
++        mCallAudioManager = callAudioManager;
++        mCallAudioRoutePeripheralAdapter = callAudioRoutePeripheralAdapter;
++        mLock = lock;
++    }
++
++    /** {@inheritDoc} */
++    @Override
++    public void run() {
++        ToneGenerator toneGenerator = null;
++        try {
++            synchronized (mSessionLock) {
++                if (mSession != null) {
++                    Log.continueSession(mSession, "ICTP.r");
++                    mSession = null;
++                }
++            }
++            Log.d(this, "run(toneId = %s)", mToneId);
++
++            final int toneType;  // Passed to ToneGenerator.startTone.
++            final int toneVolume;  // Passed to the ToneGenerator constructor.
++            final int toneLengthMillis;
++
++            switch (mToneId) {
++                case TONE_BUSY:
++                    // TODO: CDMA-specific tones
++                    toneType = ToneGenerator.TONE_SUP_BUSY;
++                    toneVolume = RELATIVE_VOLUME_HIPRI;
++                    toneLengthMillis = 4000;
++                    break;
++                case TONE_CALL_ENDED:
++                    toneType = ToneGenerator.TONE_PROP_PROMPT;
++                    toneVolume = RELATIVE_VOLUME_HIPRI;
++                    toneLengthMillis = 200;
++                    break;
++                case TONE_OTA_CALL_ENDED:
++                    // TODO: fill in
++                    throw new IllegalStateException("OTA Call ended NYI.");
++                case TONE_CALL_WAITING:
++                    toneType = ToneGenerator.TONE_SUP_CALL_WAITING;
++                    toneVolume = RELATIVE_VOLUME_HIPRI;
++                    toneLengthMillis = Integer.MAX_VALUE - TIMEOUT_BUFFER_MILLIS;
++                    break;
++                case TONE_CDMA_DROP:
++                    toneType = ToneGenerator.TONE_CDMA_CALLDROP_LITE;
++                    toneVolume = RELATIVE_VOLUME_LOPRI;
++                    toneLengthMillis = 375;
++                    break;
++                case TONE_CONGESTION:
++                    toneType = ToneGenerator.TONE_SUP_CONGESTION;
++                    toneVolume = RELATIVE_VOLUME_HIPRI;
++                    toneLengthMillis = 4000;
++                    break;
++                case TONE_INTERCEPT:
++                    toneType = ToneGenerator.TONE_CDMA_ABBR_INTERCEPT;
++                    toneVolume = RELATIVE_VOLUME_LOPRI;
++                    toneLengthMillis = 500;
++                    break;
++                case TONE_OUT_OF_SERVICE:
++                    toneType = ToneGenerator.TONE_CDMA_CALLDROP_LITE;
++                    toneVolume = RELATIVE_VOLUME_LOPRI;
++                    toneLengthMillis = 375;
++                    break;
++                case TONE_REDIAL:
++                    toneType = ToneGenerator.TONE_CDMA_ALERT_AUTOREDIAL_LITE;
++                    toneVolume = RELATIVE_VOLUME_LOPRI;
++                    toneLengthMillis = 5000;
++                    break;
++                case TONE_REORDER:
++                    toneType = ToneGenerator.TONE_CDMA_REORDER;
++                    toneVolume = RELATIVE_VOLUME_HIPRI;
++                    toneLengthMillis = 4000;
++                    break;
++                case TONE_RING_BACK:
++                    toneType = ToneGenerator.TONE_SUP_RINGTONE;
++                    toneVolume = RELATIVE_VOLUME_HIPRI;
++                    toneLengthMillis = Integer.MAX_VALUE - TIMEOUT_BUFFER_MILLIS;
++                    break;
++                case TONE_UNOBTAINABLE_NUMBER:
++                    toneType = ToneGenerator.TONE_SUP_ERROR;
++                    toneVolume = RELATIVE_VOLUME_HIPRI;
++                    toneLengthMillis = 4000;
++                    break;
++                case TONE_VOICE_PRIVACY:
++                    // TODO: fill in.
++                    throw new IllegalStateException("Voice privacy tone NYI.");
++                case TONE_VIDEO_UPGRADE:
++                    // Similar to the call waiting tone, but does not repeat.
++                    toneType = ToneGenerator.TONE_SUP_CALL_WAITING;
++                    toneVolume = RELATIVE_VOLUME_HIPRI;
++                    toneLengthMillis = 4000;
++                    break;
++                default:
++                    throw new IllegalStateException("Bad toneId: " + mToneId);
++            }
++
++            int stream = AudioManager.STREAM_VOICE_CALL;
++            if (mCallAudioRoutePeripheralAdapter.isBluetoothAudioOn()) {
++                stream = AudioManager.STREAM_BLUETOOTH_SCO;
++            }
++
++            // If the ToneGenerator creation fails, just continue without it. It is a local audio
++            // signal, and is not as important.
++            try {
++                Log.v(this, "Creating generator");
++                toneGenerator = new ToneGenerator(stream, toneVolume);
++            } catch (RuntimeException e) {
++                Log.w(this, "Failed to create ToneGenerator.", e);
++                return;
++            }
++
++            // TODO: Certain CDMA tones need to check the ringer-volume state before
++            // playing. See CallNotifier.InCallTonePlayer.
++
++            // TODO: Some tones play through the end of a call so we need to inform
++            // CallAudioManager that we want focus the same way that Ringer does.
++
++            synchronized (this) {
++                if (mState != STATE_STOPPED) {
++                    mState = STATE_ON;
++                    toneGenerator.startTone(toneType);
++                    try {
++                        Log.v(this, "Starting tone %d...waiting for %d ms.", mToneId,
++                                toneLengthMillis + TIMEOUT_BUFFER_MILLIS);
++                        wait(toneLengthMillis + TIMEOUT_BUFFER_MILLIS);
++                    } catch (InterruptedException e) {
++                        Log.w(this, "wait interrupted", e);
++                    }
++                }
++            }
++            mState = STATE_OFF;
++        } finally {
++            if (toneGenerator != null) {
++                toneGenerator.release();
++            }
++            cleanUpTonePlayer();
++            Log.endSession();
++        }
++    }
++    
++    @VisibleForTesting
++    public void startTone() {
++        sTonesPlaying++;
++        if (sTonesPlaying == 1) {
++            mCallAudioManager.setIsTonePlaying(true);
++        }
++
++        synchronized (mSessionLock) {
++            if (mSession != null) {
++                Log.cancelSubsession(mSession);
++            }
++            mSession = Log.createSubsession();
++        }
++
++        super.start();
++    }
++
++    @Override
++    public void start() {
++        Log.w(this, "Do not call the start method directly; use startTone instead.");
++    }
++
++    /**
++     * Stops the tone.
++     */
++    @VisibleForTesting
++    public void stopTone() {
++        synchronized (this) {
++            if (mState == STATE_ON) {
++                Log.d(this, "Stopping the tone %d.", mToneId);
++                notify();
++            }
++            mState = STATE_STOPPED;
++        }
++    }
++
++    private void cleanUpTonePlayer() {
++        // Release focus on the main thread.
++        mMainThreadHandler.post(new Runnable("ICTP.cUTP", mLock) {
++            @Override
++            public void loggedRun() {
++                if (sTonesPlaying == 0) {
++                    Log.wtf(this, "Over-releasing focus for tone player.");
++                } else if (--sTonesPlaying == 0) {
++                    mCallAudioManager.setIsTonePlaying(false);
++                }
++            }
++        }.prepare());
++    }
++}
+
+Property changes on: vendor/branch/5058I_HK/packages/services/Telecomm/src/com/android/server/telecom/InCallTonePlayer.java
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058I_HK/frameworks/av/media/libmedia/ToneGenerator.cpp
+===================================================================
+--- vendor/branch/5058I_HK/frameworks/av/media/libmedia/ToneGenerator.cpp	(revision 0)
++++ vendor/branch/5058I_HK/frameworks/av/media/libmedia/ToneGenerator.cpp	(revision 13859)
+@@ -0,0 +1,1741 @@
++/*
++* Copyright (C) 2014 MediaTek Inc.
++* Modification based on code covered by the mentioned copyright
++* and/or permission notice(s).
++*/
++/*
++ * Copyright (C) 2008 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#define LOG_NDEBUG 0
++#define LOG_TAG "ToneGenerator"
++
++#include <math.h>
++#include <utils/Log.h>
++#include <cutils/properties.h>
++#include "media/ToneGenerator.h"
++
++
++namespace android {
++
++#ifdef MTK_AOSP_ENHANCEMENT
++uint32_t kMaxSampleRate = (1 << sizeof(unsigned short)*8) - 1 ;
++uint32_t kDefaultSampleRate = 44100;
++#endif
++
++// Descriptors for all available tones (See ToneGenerator::ToneDescriptor class declaration for details)
++const ToneGenerator::ToneDescriptor ToneGenerator::sToneDescriptors[] = {
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1336, 941, 0 }, 0, 0},
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_0
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1209, 697, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_1
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1336, 697, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_2
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1477, 697, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_3
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1209, 770, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_4
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1336, 770, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_5
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1477, 770, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_6
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1209, 852, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_7
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1336, 852, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_8
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1477, 852, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_9
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1209, 941, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_S
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1477, 941, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_P
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1633, 697, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_A
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1633, 770, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                             // TONE_DTMF_B
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1633, 852, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_C
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 1633, 941, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_DTMF_D
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_SUP_DIAL
++        { .segments = { { .duration = 500 , .waveFreq = { 425, 0 }, 0, 0},
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0},
++                           { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_SUP_BUSY
++        { .segments = { { .duration = 200, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_SUP_CONGESTION
++        { .segments = { { .duration = 200, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                              // TONE_SUP_RADIO_ACK
++        { .segments = { { .duration = 200, .waveFreq = { 425, 0 }, 0, 0},
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0},
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 2,
++          .repeatSegment = 0 },                              // TONE_SUP_RADIO_NOTAVAIL
++        { .segments = { { .duration = 330, .waveFreq = { 950, 1400, 1800, 0 }, 0, 0},
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0},
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_SUP_ERROR
++        { .segments = { { .duration = 200, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 600, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 200, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 3000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_SUP_CALL_WAITING
++        { .segments = { { .duration = 1000, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 4000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_SUP_RINGTONE
++        { .segments = { { .duration = 40, .waveFreq = { 400, 1200, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                              // TONE_PROP_BEEP
++        { .segments = { { .duration = 100, .waveFreq = { 1200, 0 }, 0, 0 },
++                        { .duration = 100, .waveFreq = { 0 }, 0, 0  },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 1,
++          .repeatSegment = 0 },                              // TONE_PROP_ACK
++        { .segments = { { .duration = 400, .waveFreq = { 300, 400, 500, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                              // TONE_PROP_NACK
++        { .segments = { { .duration = 200, .waveFreq = { 400, 1200, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                              // TONE_PROP_PROMPT
++        { .segments = { { .duration = 40, .waveFreq = { 400, 1200, 0 }, 0, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 40, .waveFreq = { 400, 1200, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                             // TONE_PROP_BEEP2
++        { .segments = { { .duration = 250, .waveFreq = { 440, 0 }, 0, 0 },
++                        { .duration = 250, .waveFreq = { 620, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_SUP_INTERCEPT
++        { .segments = { { .duration = 250, .waveFreq = { 440, 0 }, 0, 0 },
++                        { .duration = 250, .waveFreq = { 620, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 7,
++          .repeatSegment = 0 },                             // TONE_SUP_INTERCEPT_ABBREV
++        { .segments = { { .duration = 250, .waveFreq = { 480, 620, 0 }, 0, 0 },
++                        { .duration = 250, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 7,
++          .repeatSegment = 0 },                             // TONE_SUP_CONGESTION_ABBREV
++        { .segments = { { .duration = 100, .waveFreq = { 350, 440, 0 }, 0, 0 },
++                        { .duration = 100, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 2,
++          .repeatSegment = 0 },                             // TONE_SUP_CONFIRM
++        { .segments = { { .duration = 100, .waveFreq = { 480, 0 }, 0, 0 },
++                        { .duration = 100, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 3,
++          .repeatSegment = 0 },                              // TONE_SUP_PIP
++        { .segments = {{ .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 425, 0 }, 0, 0},
++                       { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_CDMA_DIAL_TONE_LITE
++        { .segments = { { .duration = 2000, .waveFreq = { 440, 480, 0 }, 0, 0 },
++                        { .duration = 4000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_CDMA_NETWORK_USA_RINGBACK
++        { .segments = { { .duration = 250, .waveFreq = { 440, 0 }, 0, 0 },
++                        { .duration = 250, .waveFreq = { 620, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt =  ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                             // TONE_CDMA_INTERCEPT
++        { .segments = { { .duration = 250, .waveFreq = { 440, 0 }, 0, 0 },
++                        { .duration = 250, .waveFreq = { 620, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt =  0,
++          .repeatSegment = 0 },                             // TONE_CDMA_ABBR_INTERCEPT
++        { .segments = { { .duration = 250, .waveFreq = { 480, 620, 0 }, 0, 0 },
++                        { .duration = 250, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_CDMA_REORDER
++        { .segments = { { .duration = 250, .waveFreq = { 480, 620, 0 }, 0, 0 },
++                        { .duration = 250, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 7,
++          .repeatSegment = 0 },                              // TONE_CDMA_ABBR_REORDER
++        { .segments = { { .duration = 500, .waveFreq = { 480, 620, 0 }, 0, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_CDMA_NETWORK_BUSY
++        { .segments = { { .duration = 100, .waveFreq = { 350, 440, 0 }, 0, 0 },
++                        { .duration = 100, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 2,
++          .repeatSegment = 0 },                              // TONE_CDMA_CONFIRM
++        { .segments = { { .duration = 500, .waveFreq = { 660, 1000, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                              // TONE_CDMA_ANSWER
++        { .segments = { { .duration = 300, .waveFreq = { 440, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                              // TONE_CDMA_NETWORK_CALLWAITING
++        { .segments = { { .duration = 100, .waveFreq = { 480, 0 }, 0, 0 },
++                        { .duration = 100, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 3,
++          .repeatSegment = 0 },                              // TONE_CDMA_PIP
++
++        { .segments = { { .duration = 32, .waveFreq = { 2091, 0}, 0, 0 },
++                        { .duration = 64, .waveFreq = { 2556, 0}, 19, 0},
++                        { .duration = 32, .waveFreq = { 2091, 0}, 0, 0},
++                        { .duration = 48, .waveFreq = { 2556, 0}, 0, 0},
++                        { .duration = 4000, .waveFreq = { 0 }, 0, 0},
++                        { .duration = 0,  .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                             // TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL
++        { .segments = { { .duration = 32, .waveFreq = { 2091, 0}, 0, 0 },
++                        { .duration = 64, .waveFreq = { 2556, 0}, 7, 0 },
++                        { .duration = 32, .waveFreq = { 2091, 0}, 0, 0 },
++                        { .duration = 400, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 32,  .waveFreq = { 2091, 0}, 0, 0 },
++                        { .duration = 64,  .waveFreq = { 2556, 0}, 7, 4 },
++                        { .duration = 32,  .waveFreq = { 2091, 0}, 0, 0 },
++                        { .duration = 4000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0,    .waveFreq = { 0 }, 0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                              // TONE_CDMA_CALL_SIGNAL_ISDN_INTERGROUP
++        { .segments = { { .duration = 32, .waveFreq = { 2091, 0}, 0, 0 },
++                        { .duration = 64, .waveFreq = { 2556, 0}, 3, 0 },
++                        { .duration = 16, .waveFreq = { 2091, 0}, 0, 0 },
++                        { .duration = 200, .waveFreq = { 0 },     0, 0 },
++                        { .duration = 32, .waveFreq = { 2091, 0}, 0, 0 },
++                        { .duration = 64, .waveFreq = { 2556, 0}, 3, 4 },
++                        { .duration = 16, .waveFreq = { 2091, 0}, 0, 0 },
++                        { .duration = 200, .waveFreq = { 0 },     0, 0 },
++                        { .duration = 0,   .waveFreq = { 0 },     0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_CALL_SIGNAL_ISDN_SP_PRI
++        { .segments = { { .duration = 0,  .waveFreq = { 0 }, 0, 0} },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_CALL_SIGNAL_ISDN_PAT3
++        { .segments = { { .duration = 32, .waveFreq = { 2091, 0 }, 0, 0 },
++                        { .duration = 64, .waveFreq = { 2556, 0 }, 4, 0 },
++                        { .duration = 20, .waveFreq = { 2091, 0 }, 0, 0 },
++                        { .duration = 0,  .waveFreq = { 0 }      , 0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                             // TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING
++        { .segments = { { .duration = 0,  .waveFreq = { 0 }, 0, 0} },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                             // TONE_CDMA_CALL_SIGNAL_ISDN_PAT5
++        { .segments = { { .duration = 0,  .waveFreq = { 0 }, 0, 0} },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                             // TONE_CDMA_CALL_SIGNAL_ISDN_PAT6
++        { .segments = { { .duration = 0,  .waveFreq = { 0 }, 0, 0} },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                             // TONE_CDMA_CALL_SIGNAL_ISDN_PAT7
++
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 39, 0 },
++                        { .duration = 4000, .waveFreq = { 0 },     0, 0 },
++                        { .duration = 0,    .waveFreq = { 0 },     0, 0 } },
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_L
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 39, 0 },
++                        { .duration = 4000, .waveFreq = { 0 },     0, 0 },
++                        { .duration = 0,    .waveFreq = { 0 },     0, 0 } },
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_L
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 39, 0 },
++                        { .duration = 4000, .waveFreq = { 0 },     0, 0 },
++                        { .duration = 0,    .waveFreq = { 0 },     0, 0 } },
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_L
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 15, 0 },
++                        { .duration = 400, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 } },
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_SS
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 15, 0 },
++                        { .duration = 400, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_SS
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 15, 0 },
++                        { .duration = 400, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_SS
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 15, 6 },
++                        { .duration = 4000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_SSL
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 15, 6 },
++                        { .duration = 4000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_SSL
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 15, 6 },
++                        { .duration = 4000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_SSL
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                          { .duration = 25, .waveFreq = { 4000, 0 }, 19, 0 },
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 19, 3 },
++                        { .duration = 3000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_SS_2
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 19, 0 },
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 19, 3 },
++                        { .duration = 3000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_SS_2
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 19, 0 },
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 19, 3 },
++                        { .duration = 3000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_SS_2
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 9, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 19, 3 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 9, 6 },
++                        { .duration = 3000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_SLS
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 9, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 19, 3 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 9, 6 },
++                        { .duration = 3000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_SLS
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 9, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 19, 3 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 9, 6 },
++                        { .duration = 3000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_SLS
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 9, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 9, 3 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 9, 6 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 9, 9 },
++                        { .duration = 2500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_S_X4
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 9, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 9, 3 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 9, 6 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 9, 9 },
++                        { .duration = 2500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_S_X4
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 9, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 9, 3 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 9, 6 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 9, 9 },
++                        { .duration = 2500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_S_X4
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 19, 0 },
++                        { .duration = 2000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_PBX_L
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 19, 0 },
++                        { .duration = 2000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_PBX_L
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 19, 0 },
++                        { .duration = 2000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_PBX_L
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 3 },
++                        { .duration = 2000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_PBX_SS
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 3 },
++                        { .duration = 2000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_PBX_SS
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 3 },
++                        { .duration = 2000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_PBX_SS
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 15, 6 },
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_PBX_SSL
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 15, 6 },
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_PBX_SSL
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 15, 6 },
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_PBX_SSL
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 15, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 6 },
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_PBX_SLS
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 15, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 6 },
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_PBX_SLS
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 15, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 6 },
++                        { .duration = 1000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++           .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_PBX_SLS
++        { .segments = { { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 6 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 3700, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 4000, 0 }, 7, 9 },
++                        { .duration = 800, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_HIGH_PBX_S_X4
++        { .segments = { { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 6 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2600, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 2900, 0 }, 7, 9 },
++                        { .duration = 800, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_MED_PBX_S_X4
++        { .segments = { { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 3 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 6 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1300, 0 }, 0, 0 },
++                        { .duration = 25, .waveFreq = { 1450, 0 }, 7, 9 },
++                        { .duration = 800, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                           // TONE_CDMA_LOW_PBX_S_X4
++
++        { .segments = { { .duration = 62, .waveFreq = { 1109, 0 }, 0, 0 },
++                        { .duration = 62, .waveFreq = { 784, 0 },  0, 0 },
++                        { .duration = 62, .waveFreq = { 740, 0 },  0, 0 },
++                        { .duration = 62, .waveFreq = { 622, 0 },  0, 0 },
++                        { .duration = 62, .waveFreq = { 1109, 0 }, 0, 0 },
++                        { .duration = 0,  .waveFreq = { 0 },       0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_ALERT_NETWORK_LITE
++        { .segments = { { .duration = 62, .waveFreq = { 1245, 0 }, 0, 0 },
++                        { .duration = 62, .waveFreq = { 659, 0 },  2, 0 },
++                        { .duration = 62, .waveFreq = { 1245, 0 }, 0, 0 },
++                        { .duration = 0,  .waveFreq = { 0 },       0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_ALERT_AUTOREDIAL_LITE
++        { .segments = { { .duration = 400, .waveFreq = { 1150, 770, 0 }, 0, 0 },
++                        { .duration = 0,   .waveFreq = { 0 },            0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_ONE_MIN_BEEP
++        { .segments = { { .duration = 120, .waveFreq = { 941, 1477, 0 }, 0, 0 },
++                        { .duration = 0,   .waveFreq = { 0 },            0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_KEYPAD_VOLUME_KEY_LITE
++        { .segments = { { .duration = 375, .waveFreq = { 587, 0 }, 0, 0 },
++                        { .duration = 125, .waveFreq = { 1175, 0 }, 0, 0 },
++                        { .duration = 0,   .waveFreq = { 0 },       0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_PRESSHOLDKEY_LITE
++        { .segments = { { .duration = 62, .waveFreq = { 587, 0 }, 0, 0 },
++                        { .duration = 62, .waveFreq = { 784, 0 }, 0, 0 },
++                        { .duration = 62, .waveFreq = { 831, 0 }, 0, 0 },
++                        { .duration = 62, .waveFreq = { 784, 0 }, 0, 0 },
++                        { .duration = 62, .waveFreq = { 1109, 0 }, 0, 0 },
++                        { .duration = 62, .waveFreq = { 784, 0 }, 0, 0 },
++                        { .duration = 62, .waveFreq = { 831, 0 }, 0, 0 },
++                        { .duration = 62, .waveFreq = { 784, 0 }, 0, 0 },
++                        { .duration = 0,  .waveFreq = { 0 },      0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                             // TONE_CDMA_ALERT_INCALL_LITE
++        { .segments = { { .duration = 125, .waveFreq = { 941, 0 }, 0, 0 },
++                        { .duration = 10,  .waveFreq = { 0 },      2, 0 },
++                        { .duration = 4990, .waveFreq = { 0 },     0, 0 },
++                        { .duration = 0,    .waveFreq = { 0 },     0, 0 } },
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                            // TONE_CDMA_EMERGENCY_RINGBACK
++        { .segments = { { .duration = 125, .waveFreq = { 1319, 0 }, 0, 0 },
++                        { .duration = 125, .waveFreq = { 0 },       0, 0 },
++                        { .duration = 0,   .waveFreq = { 0 },       0, 0 } },
++          .repeatCnt = 2,
++          .repeatSegment = 0 },                            // TONE_CDMA_ALERT_CALL_GUARD
++        { .segments = { { .duration = 125, .waveFreq = { 1047, 0 }, 0, 0 },
++                        { .duration = 125, .waveFreq = { 370,  0 }, 0, 0 },
++                        { .duration = 0,   .waveFreq = { 0 },       0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_SOFT_ERROR_LITE
++        { .segments = { { .duration = 125, .waveFreq = { 1480, 0 }, 0, 0 },
++                        { .duration = 125, .waveFreq = { 1397, 0 }, 0, 0 },
++                        { .duration = 125, .waveFreq = { 784, 0 },  0, 0 },
++                        { .duration = 0,   .waveFreq = { 0 },       0, 0 } },
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_CALLDROP_LITE
++
++        { .segments = { { .duration = 500, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                           // TONE_CDMA_NETWORK_BUSY_ONE_SHOT
++        { .segments = { { .duration = 400, .waveFreq = { 1150, 770 }, 0, 0 },
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                           // TONE_CDMA_ABBR_ALERT
++          { .segments = { { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
++          .repeatCnt = 0,
++          .repeatSegment = 0 },                            // TONE_CDMA_SIGNAL_OFF
++		//add by wenping.ye for task731020 begin
++         { .segments = { { .duration = 300, .waveFreq = { 440, 0 }, 0, 0 },
++        		 	 	 { .duration = 100, .waveFreq = { 0 }, 0, 0 },
++        		 	 	 { .duration = 100, .waveFreq = { 440, 0 },  0, 0 },
++                         { .duration = 100, .waveFreq = { 0 }, 0, 0 },
++                         { .duration = 100, .waveFreq = { 440, 0 },  0, 0 },
++                         { .duration = 5600, .waveFreq = { 0 }, 0, 0 }},
++                         .repeatCnt = 3,
++                         .repeatSegment = 0 }, // TCT_TONE_CALL_WAITING_LATAM
++        //add by wenping.ye for task731020 end
++        //added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin
++        { .segments = { { .duration = 2000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 1000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 1000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 2000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 1000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 1000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 0 , .waveFreq = {0}, 0, 0}},
++         .repeatCnt = 0,
++         .repeatSegment = 0 },                    // TONE_CMAS
++        //added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 350, 440, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_ANSI_DIAL
++        { .segments = { { .duration = 500, .waveFreq = { 480, 620, 0 }, 0, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_ANSI_BUSY
++        { .segments = { { .duration = 250, .waveFreq = { 480, 620, 0 }, 0, 0 },
++                        { .duration = 250, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_ANSI_CONGESTION
++        { .segments = { { .duration = 300, .waveFreq = { 440, 0 }, 0, 0 },
++                        { .duration = 9700, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 100, .waveFreq = { 440, 0 }, 0, 0 },
++                        { .duration = 100, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 100, .waveFreq = { 440, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 1 },                              // TONE_ANSI_CALL_WAITING
++        { .segments = { { .duration = 2000, .waveFreq = { 440, 480, 0 }, 0, 0 },
++                        { .duration = 4000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_ANSI_RINGTONE
++        { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 400, 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_JAPAN_DIAL
++        { .segments = { { .duration = 500, .waveFreq = { 400, 0 }, 0, 0 },
++                        { .duration = 500, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_JAPAN_BUSY
++        { .segments = { { .duration = 1000, .waveFreq = { 400, 0 }, 0, 0 },
++                        { .duration = 2000, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_JAPAN_RADIO_ACK
++        { .segments = { { .duration = 400, .waveFreq = { 400, 450, 0 }, 0, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 400, .waveFreq = { 400, 450, 0 }, 0, 0 },
++                        { .duration = 2000, .waveFreq = { 0 }, 0, 0},
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_GB_RINGTONE
++        { .segments = { { .duration = 400, .waveFreq = { 400, 450, 0 }, 0, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 400, .waveFreq = { 400, 450, 0 }, 0, 0 },
++                        { .duration = 2000, .waveFreq = { 0 }, 0, 0},
++                        { .duration = 0, .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_AUSTRALIA_RINGTONE
++        { .segments = { { .duration = 375, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 375, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_AUSTRALIA_BUSY
++        { .segments = { { .duration = 200, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 200, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 200, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 4400, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_AUSTRALIA_CALL_WAITING
++        { .segments = { { .duration = 375, .waveFreq = { 425, 0 }, 0, 0 },
++                        { .duration = 375, .waveFreq = { 0 }, 0, 0 },
++                        { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
++          .repeatCnt = ToneGenerator::TONEGEN_INF,
++          .repeatSegment = 0 },                              // TONE_AUSTRALIA_CONGESTION
++};
++
++// Used by ToneGenerator::getToneForRegion() to convert user specified supervisory tone type
++// to actual tone for current region.
++const unsigned char /*tone_type*/ ToneGenerator::sToneMappingTable[NUM_REGIONS-1][NUM_SUP_TONES] = {
++        {   // ANSI
++            TONE_ANSI_DIAL,             // TONE_SUP_DIAL
++            TONE_ANSI_BUSY,             // TONE_SUP_BUSY
++            TONE_ANSI_CONGESTION,       // TONE_SUP_CONGESTION
++            TONE_SUP_RADIO_ACK,         // TONE_SUP_RADIO_ACK
++            TONE_SUP_RADIO_NOTAVAIL,    // TONE_SUP_RADIO_NOTAVAIL
++            TONE_SUP_ERROR,             // TONE_SUP_ERROR
++            TONE_ANSI_CALL_WAITING,     // TONE_SUP_CALL_WAITING
++            TONE_ANSI_RINGTONE          // TONE_SUP_RINGTONE
++        },
++        {   // JAPAN
++            TONE_JAPAN_DIAL,             // TONE_SUP_DIAL
++            TONE_JAPAN_BUSY,             // TONE_SUP_BUSY
++            TONE_SUP_CONGESTION,         // TONE_SUP_CONGESTION
++            TONE_JAPAN_RADIO_ACK,        // TONE_SUP_RADIO_ACK
++            TONE_SUP_RADIO_NOTAVAIL,     // TONE_SUP_RADIO_NOTAVAIL
++            TONE_SUP_ERROR,              // TONE_SUP_ERROR
++            TONE_SUP_CALL_WAITING,       // TONE_SUP_CALL_WAITING
++            TONE_SUP_RINGTONE            // TONE_SUP_RINGTONE
++        },
++        {   // GB
++            TONE_SUP_DIAL,               // TONE_SUP_DIAL
++            TONE_SUP_BUSY,               // TONE_SUP_BUSY
++            TONE_SUP_CONGESTION,         // TONE_SUP_CONGESTION
++            TONE_SUP_RADIO_ACK,          // TONE_SUP_RADIO_ACK
++            TONE_SUP_RADIO_NOTAVAIL,     // TONE_SUP_RADIO_NOTAVAIL
++            TONE_SUP_ERROR,              // TONE_SUP_ERROR
++            TONE_SUP_CALL_WAITING,       // TONE_SUP_CALL_WAITING
++            TONE_GB_RINGTONE             // TONE_SUP_RINGTONE
++        },
++        {   // AUSTRALIA
++            TONE_ANSI_DIAL,             // TONE_SUP_DIAL
++            TONE_AUSTRALIA_BUSY,        // TONE_SUP_BUSY
++            TONE_AUSTRALIA_CONGESTION,  // TONE_SUP_CONGESTION
++            TONE_SUP_RADIO_ACK,         // TONE_SUP_RADIO_ACK
++            TONE_SUP_RADIO_NOTAVAIL,    // TONE_SUP_RADIO_NOTAVAIL
++            TONE_SUP_ERROR,             // TONE_SUP_ERROR
++            TONE_AUSTRALIA_CALL_WAITING,// TONE_SUP_CALL_WAITING
++            TONE_AUSTRALIA_RINGTONE     // TONE_SUP_RINGTONE
++        }
++};
++
++
++////////////////////////////////////////////////////////////////////////////////
++//                           ToneGenerator class Implementation
++////////////////////////////////////////////////////////////////////////////////
++
++
++//---------------------------------- public methods ----------------------------
++
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        ToneGenerator::ToneGenerator()
++//
++//    Description:    Constructor. Initializes the tone sequencer, intantiates required sine wave
++//        generators, instantiates output audio track.
++//
++//    Input:
++//        streamType:        Type of stream used for tone playback
++//        volume:            volume applied to tone (0.0 to 1.0)
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++ToneGenerator::ToneGenerator(audio_stream_type_t streamType, float volume, bool threadCanCallJava) {
++
++    ALOGV("ToneGenerator constructor: streamType=%d, volume=%f", streamType, volume);
++#ifdef MTK_AOSP_ENHANCEMENT
++//    ALOGD("ToneGenerator constructor: streamType=%d, volume=%f", streamType, volume);
++#ifdef VOLUME_NEWMAP
++    volume = AudioSystem::logToLinear ( volume);
++    volume = volume * 256.0/100.0;
++    volume = AudioSystem::linearToLog ( volume);
++#endif
++#endif
++
++    mState = TONE_IDLE;
++
++    if (AudioSystem::getOutputSamplingRate(&mSamplingRate, streamType) != NO_ERROR) {
++        ALOGE("Unable to marshal AudioFlinger");
++        return;
++    }
++#ifdef MTK_AOSP_ENHANCEMENT
++    if (mSamplingRate > kMaxSampleRate) {
++        ALOGD("mSamplingRate:%d > kMaxSampleRate:%d,set mSamplingRate to kDefaultSampleRate",mSamplingRate,kMaxSampleRate);
++        mSamplingRate = kDefaultSampleRate;
++    }
++#endif
++    mThreadCanCallJava = threadCanCallJava;
++    mStreamType = streamType;
++    mVolume = volume;
++    mpToneDesc = NULL;
++    mpNewToneDesc = NULL;
++    // Generate tone by chunks of 20 ms to keep cadencing precision
++    mProcessSize = (mSamplingRate * 20) / 1000;
++
++    char value[PROPERTY_VALUE_MAX];
++    if (property_get("gsm.operator.iso-country", value, "") == 0) {
++        property_get("gsm.sim.operator.iso-country", value, "");
++    }
++    if (strstr(value, "us") != NULL ||
++        strstr(value, "ca") != NULL) {
++        mRegion = ANSI;
++    } else if (strstr(value, "jp") != NULL) {
++        mRegion = JAPAN;
++    } else if (strstr(value, "gb") != NULL) {
++        mRegion = GB;
++    } else if (strstr(value, "au") != NULL) {
++        mRegion = AUSTRALIA;
++    } else {
++        mRegion = CEPT;
++    }
++
++    if (initAudioTrack()) {
++        ALOGV("ToneGenerator INIT OK, time: %d", (unsigned int)(systemTime()/1000000));
++    } else {
++        ALOGV("!!!ToneGenerator INIT FAILED!!!");
++    }
++}
++
++
++
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        ToneGenerator::~ToneGenerator()
++//
++//    Description:    Destructor. Stop sound playback and delete audio track if
++//      needed and delete sine wave generators.
++//
++//    Input:
++//        none
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++ToneGenerator::~ToneGenerator() {
++    ALOGV("ToneGenerator destructor");
++//#ifdef MTK_AOSP_ENHANCEMENT
++//    ALOGD("ToneGenerator destructor\n");
++//#endif
++    if (mpAudioTrack != 0) {
++        stopTone();
++#ifdef CONFIG_MT_ENG_BUILD
++        ALOGV("Delete Track: %p", mpAudioTrack.get());
++#endif
++        mpAudioTrack.clear();
++    }
++    clearWaveGens();
++}
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        ToneGenerator::startTone()
++//
++//    Description:    Starts tone playback.
++//
++//    Input:
++//        toneType:        Type of tone generated (values in enum tone_type)
++//        durationMs:      The tone duration in milliseconds. If the tone is limited in time by definition,
++//              the actual duration will be the minimum of durationMs and the defined tone duration.
++//              Ommiting or setting durationMs to -1 does not limit tone duration.
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++bool ToneGenerator::startTone(tone_type toneType, int durationMs) {
++    bool lResult = false;
++    status_t lStatus;
++
++    if ((toneType < 0) || (toneType >= NUM_TONES))
++        return lResult;
++
++    toneType = getToneForRegion(toneType);
++    if (toneType == TONE_CDMA_SIGNAL_OFF) {
++        return true;
++    }
++
++    if (mState == TONE_IDLE) {
++        ALOGV("startTone: try to re-init AudioTrack");
++        if (!initAudioTrack()) {
++            return lResult;
++        }
++    }
++
++    ALOGV("startTone");
++//#ifdef MTK_AOSP_ENHANCEMENT
++//    ALOGD("startTone\n");
++//#endif
++    mLock.lock();
++
++    // Get descriptor for requested tone
++    mpNewToneDesc = &sToneDescriptors[toneType];
++
++    mDurationMs = durationMs;
++
++    if (mState == TONE_STOPPED) {
++        ALOGV("Start waiting for previous tone to stop");
++        lStatus = mWaitCbkCond.waitRelative(mLock, seconds(3));
++        if (lStatus != NO_ERROR) {
++            ALOGE("--- start wait for stop timed out, status %d", lStatus);
++            mState = TONE_IDLE;
++            mLock.unlock();
++            return lResult;
++        }
++    }
++
++    if (mState == TONE_INIT) {
++        if (prepareWave()) {
++            ALOGV("Immediate start, time %d", (unsigned int)(systemTime()/1000000));
++            lResult = true;
++            mState = TONE_STARTING;
++            if (clock_gettime(CLOCK_MONOTONIC, &mStartTime) != 0) {
++                mStartTime.tv_sec = 0;
++            }
++            mLock.unlock();
++            mpAudioTrack->start();
++            mLock.lock();
++            if (mState == TONE_STARTING) {
++                ALOGV("Wait for start callback");
++                lStatus = mWaitCbkCond.waitRelative(mLock, seconds(3));
++                if (lStatus != NO_ERROR) {
++                    ALOGE("--- Immediate start timed out, status %d", lStatus);
++                    mState = TONE_IDLE;
++                    lResult = false;
++                }
++            }
++        } else {
++            mState = TONE_IDLE;
++        }
++    } else {
++        ALOGV("Delayed start");
++        mState = TONE_RESTARTING;
++        mStartTime.tv_sec = 0;
++        lStatus = mWaitCbkCond.waitRelative(mLock, seconds(3));
++        if (lStatus == NO_ERROR) {
++            if (mState != TONE_IDLE) {
++                lResult = true;
++            }
++            ALOGV("cond received");
++        } else {
++            ALOGE("--- Delayed start timed out, status %d", lStatus);
++            mState = TONE_IDLE;
++        }
++    }
++    mLock.unlock();
++
++    ALOGV_IF(lResult, "Tone started, time %d", (unsigned int)(systemTime()/1000000));
++    ALOGW_IF(!lResult, "Tone start failed!!!, time %d", (unsigned int)(systemTime()/1000000));
++//#ifdef MTK_AOSP_ENHANCEMENT
++//    ALOGD("startTone done\n");
++//#endif
++
++    return lResult;
++}
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        ToneGenerator::stopTone()
++//
++//    Description:    Stops tone playback.
++//
++//    Input:
++//        none
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++void ToneGenerator::stopTone() {
++    ALOGV("stopTone");
++//#ifdef MTK_AOSP_ENHANCEMENT
++//    ALOGD("stopTone");
++//#endif
++
++    mLock.lock();
++    if (mState != TONE_IDLE && mState != TONE_INIT) {
++        if (mState == TONE_PLAYING || mState == TONE_STARTING || mState == TONE_RESTARTING) {
++            struct timespec stopTime;
++            // If the start time is valid, make sure that the number of audio samples produced
++            // corresponds at least to the time between the start and stop commands.
++            // This is needed in case of cold start of the output stream.
++            if ((mStartTime.tv_sec != 0) && (clock_gettime(CLOCK_MONOTONIC, &stopTime) == 0)) {
++                time_t sec = stopTime.tv_sec - mStartTime.tv_sec;
++                long nsec = stopTime.tv_nsec - mStartTime.tv_nsec;
++                if (nsec < 0) {
++                    --sec;
++                    nsec += 1000000000;
++                }
++
++                if ((sec + 1) > ((long)(INT_MAX / mSamplingRate))) {
++                    mMaxSmp = sec * mSamplingRate;
++                } else {
++                    // mSamplingRate is always > 1000
++                    sec = sec * 1000 + nsec / 1000000; // duration in milliseconds
++                    mMaxSmp = (unsigned int)(((int64_t)sec * mSamplingRate) / 1000);
++                }
++                ALOGV("stopTone() forcing mMaxSmp to %d, total for far %d", mMaxSmp,  mTotalSmp);
++            } else {
++                mState = TONE_STOPPING;
++            }
++        }
++        ALOGV("waiting cond");
++        status_t lStatus = mWaitCbkCond.waitRelative(mLock, seconds(3));
++        if (lStatus == NO_ERROR) {
++            // If the tone was restarted exit now before calling clearWaveGens();
++            if (mState != TONE_INIT) {
++                mLock.unlock();
++                return;
++            }
++            ALOGV("track stop complete, time %d", (unsigned int)(systemTime()/1000000));
++        } else {
++            ALOGE("--- Stop timed out");
++            mState = TONE_IDLE;
++            mpAudioTrack->stop();
++        }
++        clearWaveGens();
++    }
++
++    mLock.unlock();
++#ifdef MTK_AOSP_ENHANCEMENT
++#ifdef CONFIG_MT_ENG_BUILD
++    ALOGD("stopTone done");
++#endif
++#endif
++}
++
++//---------------------------------- private methods ---------------------------
++
++
++
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        ToneGenerator::initAudioTrack()
++//
++//    Description:    Allocates and configures AudioTrack used for PCM output.
++//
++//    Input:
++//        none
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++bool ToneGenerator::initAudioTrack() {
++    // Open audio track in mono, PCM 16bit, default sampling rate.
++    mpAudioTrack = new AudioTrack();
++    ALOGV("AudioTrack(%p) created", mpAudioTrack.get());
++
++    const size_t frameCount = mProcessSize;
++    status_t status = mpAudioTrack->set(
++            mStreamType,
++#ifndef MTK_AOSP_ENHANCEMENT
++            0,    // sampleRate
++#else
++            mSamplingRate,
++#endif
++            AUDIO_FORMAT_PCM_16_BIT,
++            AUDIO_CHANNEL_OUT_MONO,
++            frameCount,
++            AUDIO_OUTPUT_FLAG_FAST,
++            audioCallback,
++            this, // user
++            0,    // notificationFrames
++            0,    // sharedBuffer
++            mThreadCanCallJava,
++            AUDIO_SESSION_ALLOCATE,
++            AudioTrack::TRANSFER_CALLBACK);
++
++    if (status != NO_ERROR) {
++        ALOGE("AudioTrack(%p) set failed with error %d", mpAudioTrack.get(), status);
++        mpAudioTrack.clear();
++        return false;
++    }
++
++    mpAudioTrack->setVolume(mVolume);
++    mState = TONE_INIT;
++    return true;
++}
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        ToneGenerator::audioCallback()
++//
++//    Description:    AudioTrack callback implementation. Generates a block of
++//        PCM samples
++//        and manages tone generator sequencer: tones pulses, tone duration...
++//
++//    Input:
++//        user    reference (pointer to our ToneGenerator)
++//        info    audio buffer descriptor
++//
++//    Output:
++//        returned value: always true.
++//
++////////////////////////////////////////////////////////////////////////////////
++void ToneGenerator::audioCallback(int event, void* user, void *info) {
++
++    if (event != AudioTrack::EVENT_MORE_DATA) return;
++
++    AudioTrack::Buffer *buffer = static_cast<AudioTrack::Buffer *>(info);
++    ToneGenerator *lpToneGen = static_cast<ToneGenerator *>(user);
++    short *lpOut = buffer->i16;
++    unsigned int lNumSmp = buffer->size/sizeof(short);
++    const ToneDescriptor *lpToneDesc = lpToneGen->mpToneDesc;
++
++    if (buffer->size == 0) return;
++
++
++    // Clear output buffer: WaveGenerator accumulates into lpOut buffer
++    memset(lpOut, 0, buffer->size);
++
++    while (lNumSmp) {
++        unsigned int lReqSmp = lNumSmp < lpToneGen->mProcessSize*2 ? lNumSmp : lpToneGen->mProcessSize;
++        unsigned int lGenSmp;
++        unsigned int lWaveCmd = WaveGenerator::WAVEGEN_CONT;
++        bool lSignal = false;
++
++        lpToneGen->mLock.lock();
++
++
++        // Update pcm frame count and end time (current time at the end of this process)
++        lpToneGen->mTotalSmp += lReqSmp;
++
++        // Update tone gen state machine and select wave gen command
++        switch (lpToneGen->mState) {
++        case TONE_PLAYING:
++            lWaveCmd = WaveGenerator::WAVEGEN_CONT;
++            break;
++        case TONE_STARTING:
++            ALOGV("Starting Cbk");
++
++            lWaveCmd = WaveGenerator::WAVEGEN_START;
++            break;
++        case TONE_STOPPING:
++        case TONE_RESTARTING:
++            ALOGV("Stop/restart Cbk");
++
++            lWaveCmd = WaveGenerator::WAVEGEN_STOP;
++            lpToneGen->mNextSegSmp = TONEGEN_INF; // forced to skip state machine management below
++            break;
++        case TONE_STOPPED:
++            ALOGV("Stopped Cbk");
++            goto audioCallback_EndLoop;
++        default:
++            ALOGV("Extra Cbk");
++            goto audioCallback_EndLoop;
++        }
++
++        // Exit if tone sequence is over
++        if (lpToneDesc->segments[lpToneGen->mCurSegment].duration == 0 ||
++            lpToneGen->mTotalSmp > lpToneGen->mMaxSmp) {
++            if (lpToneGen->mState == TONE_PLAYING) {
++                lpToneGen->mState = TONE_STOPPING;
++            }
++            if (lpToneDesc->segments[lpToneGen->mCurSegment].duration == 0) {
++                goto audioCallback_EndLoop;
++            }
++            // fade out before stopping if maximum duration reached
++            lWaveCmd = WaveGenerator::WAVEGEN_STOP;
++            lpToneGen->mNextSegSmp = TONEGEN_INF; // forced to skip state machine management below
++        }
++
++        if (lpToneGen->mTotalSmp > lpToneGen->mNextSegSmp) {
++            // Time to go to next sequence segment
++
++            ALOGV("End Segment, time: %d", (unsigned int)(systemTime()/1000000));
++
++            lGenSmp = lReqSmp;
++
++            // If segment,  ON -> OFF transition : ramp volume down
++            if (lpToneDesc->segments[lpToneGen->mCurSegment].waveFreq[0] != 0) {
++                lWaveCmd = WaveGenerator::WAVEGEN_STOP;
++                unsigned int lFreqIdx = 0;
++                unsigned short lFrequency = lpToneDesc->segments[lpToneGen->mCurSegment].waveFreq[lFreqIdx];
++
++                while (lFrequency != 0) {
++#ifdef MTK_AOSP_ENHANCEMENT
++                    if(lpToneGen->mWaveGens.size() > 0)
++                    {
++#endif
++                    WaveGenerator *lpWaveGen = lpToneGen->mWaveGens.valueFor(lFrequency);
++                    lpWaveGen->getSamples(lpOut, lGenSmp, lWaveCmd);
++#ifdef MTK_AOSP_ENHANCEMENT
++                    }
++#endif
++                    lFrequency = lpToneDesc->segments[lpToneGen->mCurSegment].waveFreq[++lFreqIdx];
++                }
++                ALOGV("ON->OFF, lGenSmp: %d, lReqSmp: %d", lGenSmp, lReqSmp);
++            }
++
++            // check if we need to loop and loop for the reqd times
++            if (lpToneDesc->segments[lpToneGen->mCurSegment].loopCnt) {
++                if (lpToneGen->mLoopCounter < lpToneDesc->segments[lpToneGen->mCurSegment].loopCnt) {
++                    ALOGV ("in if loop loopCnt(%d) loopctr(%d), CurSeg(%d)",
++                          lpToneDesc->segments[lpToneGen->mCurSegment].loopCnt,
++                          lpToneGen->mLoopCounter,
++                          lpToneGen->mCurSegment);
++                    lpToneGen->mCurSegment = lpToneDesc->segments[lpToneGen->mCurSegment].loopIndx;
++                    ++lpToneGen->mLoopCounter;
++                } else {
++                    // completed loop. go to next segment
++                    lpToneGen->mLoopCounter = 0;
++                    lpToneGen->mCurSegment++;
++                    ALOGV ("in else loop loopCnt(%d) loopctr(%d), CurSeg(%d)",
++                          lpToneDesc->segments[lpToneGen->mCurSegment].loopCnt,
++                          lpToneGen->mLoopCounter,
++                          lpToneGen->mCurSegment);
++                }
++            } else {
++                lpToneGen->mCurSegment++;
++                ALOGV ("Goto next seg loopCnt(%d) loopctr(%d), CurSeg(%d)",
++                      lpToneDesc->segments[lpToneGen->mCurSegment].loopCnt,
++                      lpToneGen->mLoopCounter,
++                      lpToneGen->mCurSegment);
++
++            }
++
++            // Handle loop if last segment reached
++            if (lpToneDesc->segments[lpToneGen->mCurSegment].duration == 0) {
++                ALOGV("Last Seg: %d", lpToneGen->mCurSegment);
++
++                // Pre increment loop count and restart if total count not reached. Stop sequence otherwise
++                if (++lpToneGen->mCurCount <= lpToneDesc->repeatCnt) {
++                    ALOGV("Repeating Count: %d", lpToneGen->mCurCount);
++
++                    lpToneGen->mCurSegment = lpToneDesc->repeatSegment;
++                    if (lpToneDesc->segments[lpToneDesc->repeatSegment].waveFreq[0] != 0) {
++                        lWaveCmd = WaveGenerator::WAVEGEN_START;
++                    }
++#ifndef MTK_AOSP_ENHANCEMENT
++                    ALOGV("New segment %d, Next Time: %d", lpToneGen->mCurSegment,
++                            (lpToneGen->mNextSegSmp*1000)/lpToneGen->mSamplingRate);
++#endif
++                } else {
++                    lGenSmp = 0;
++                    ALOGV("End repeat, time: %d", (unsigned int)(systemTime()/1000000));
++                }
++            } else {
++#ifndef MTK_AOSP_ENHANCEMENT
++                ALOGV("New segment %d, Next Time: %d", lpToneGen->mCurSegment,
++                        (lpToneGen->mNextSegSmp*1000)/lpToneGen->mSamplingRate);
++#endif
++                if (lpToneDesc->segments[lpToneGen->mCurSegment].waveFreq[0] != 0) {
++                    // If next segment is not silent,  OFF -> ON transition : reset wave generator
++                    lWaveCmd = WaveGenerator::WAVEGEN_START;
++
++                    ALOGV("OFF->ON, lGenSmp: %d, lReqSmp: %d", lGenSmp, lReqSmp);
++                } else {
++                    lGenSmp = 0;
++                }
++            }
++
++            // Update next segment transition position. No harm to do it also for last segment as lpToneGen->mNextSegSmp won't be used any more
++            lpToneGen->mNextSegSmp
++                    += (lpToneDesc->segments[lpToneGen->mCurSegment].duration * lpToneGen->mSamplingRate) / 1000;
++
++        } else {
++            // Inside a segment keep tone ON or OFF
++            if (lpToneDesc->segments[lpToneGen->mCurSegment].waveFreq[0] == 0) {
++                lGenSmp = 0;  // If odd segment, tone is currently OFF
++            } else {
++                lGenSmp = lReqSmp;  // If event segment, tone is currently ON
++            }
++        }
++
++        if (lGenSmp) {
++            // If samples must be generated, call all active wave generators and acumulate waves in lpOut
++            unsigned int lFreqIdx = 0;
++            unsigned short lFrequency = lpToneDesc->segments[lpToneGen->mCurSegment].waveFreq[lFreqIdx];
++
++            while (lFrequency != 0) {
++#ifdef MTK_AOSP_ENHANCEMENT
++               if(lpToneGen->mWaveGens.size() > 0)
++               {
++#endif
++                  WaveGenerator *lpWaveGen = lpToneGen->mWaveGens.valueFor(lFrequency);
++                  lpWaveGen->getSamples(lpOut, lGenSmp, lWaveCmd);
++#ifdef MTK_AOSP_ENHANCEMENT
++               }
++#endif
++                lFrequency = lpToneDesc->segments[lpToneGen->mCurSegment].waveFreq[++lFreqIdx];
++            }
++        }
++
++        lNumSmp -= lReqSmp;
++        lpOut += lReqSmp;
++
++audioCallback_EndLoop:
++
++        switch (lpToneGen->mState) {
++        case TONE_RESTARTING:
++            ALOGV("Cbk restarting track");
++            if (lpToneGen->prepareWave()) {
++                lpToneGen->mState = TONE_STARTING;
++                if (clock_gettime(CLOCK_MONOTONIC, &lpToneGen->mStartTime) != 0) {
++                    lpToneGen->mStartTime.tv_sec = 0;
++                }
++                // must reload lpToneDesc as prepareWave() may change mpToneDesc
++                lpToneDesc = lpToneGen->mpToneDesc;
++            } else {
++                ALOGW("Cbk restarting prepareWave() failed");
++                lpToneGen->mState = TONE_IDLE;
++                lpToneGen->mpAudioTrack->stop();
++                // Force loop exit
++                lNumSmp = 0;
++            }
++            lSignal = true;
++            break;
++        case TONE_STOPPING:
++            ALOGV("Cbk Stopping");
++            lpToneGen->mState = TONE_STOPPED;
++            // Force loop exit
++            lNumSmp = 0;
++            break;
++        case TONE_STOPPED:
++            lpToneGen->mState = TONE_INIT;
++            ALOGV("Cbk Stopped track");
++            lpToneGen->mpAudioTrack->stop();
++            // Force loop exit
++            lNumSmp = 0;
++            buffer->size = 0;
++            lSignal = true;
++            break;
++        case TONE_STARTING:
++            ALOGV("Cbk starting track");
++            lpToneGen->mState = TONE_PLAYING;
++            lSignal = true;
++            break;
++        case TONE_PLAYING:
++            break;
++        default:
++            // Force loop exit
++            lNumSmp = 0;
++            buffer->size = 0;
++            break;
++        }
++
++        if (lSignal)
++            lpToneGen->mWaitCbkCond.broadcast();
++        lpToneGen->mLock.unlock();
++    }
++}
++
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        ToneGenerator::prepareWave()
++//
++//    Description:    Prepare wave generators and reset tone sequencer state machine.
++//      mpNewToneDesc must have been initialized before calling this function.
++//    Input:
++//        none
++//
++//    Output:
++//        returned value:   true if wave generators have been created, false otherwise
++//
++////////////////////////////////////////////////////////////////////////////////
++bool ToneGenerator::prepareWave() {
++    unsigned int segmentIdx = 0;
++
++    if (mpNewToneDesc == NULL) {
++        return false;
++    }
++
++    // Remove existing wave generators if any
++    clearWaveGens();
++
++    mpToneDesc = mpNewToneDesc;
++
++    if (mDurationMs == -1) {
++        mMaxSmp = TONEGEN_INF;
++    } else {
++        if (mDurationMs > (int)(TONEGEN_INF / mSamplingRate)) {
++            mMaxSmp = (mDurationMs / 1000) * mSamplingRate;
++        } else {
++            mMaxSmp = (mDurationMs * mSamplingRate) / 1000;
++        }
++        ALOGV("prepareWave, duration limited to %d ms", mDurationMs);
++    }
++
++    while (mpToneDesc->segments[segmentIdx].duration) {
++        // Get total number of sine waves: needed to adapt sine wave gain.
++        unsigned int lNumWaves = numWaves(segmentIdx);
++        unsigned int freqIdx = 0;
++        unsigned int frequency = mpToneDesc->segments[segmentIdx].waveFreq[freqIdx];
++        while (frequency) {
++            // Instantiate a wave generator if  ot already done for this frequency
++            if (mWaveGens.indexOfKey(frequency) == NAME_NOT_FOUND) {
++                ToneGenerator::WaveGenerator *lpWaveGen =
++                        new ToneGenerator::WaveGenerator((unsigned short)mSamplingRate,
++                                frequency,
++                                TONEGEN_GAIN/lNumWaves);
++                mWaveGens.add(frequency, lpWaveGen);
++            }
++            frequency = mpNewToneDesc->segments[segmentIdx].waveFreq[++freqIdx];
++        }
++        segmentIdx++;
++    }
++
++    // Initialize tone sequencer
++    mTotalSmp = 0;
++    mCurSegment = 0;
++    mCurCount = 0;
++    mLoopCounter = 0;
++    if (mpToneDesc->segments[0].duration == TONEGEN_INF) {
++        mNextSegSmp = TONEGEN_INF;
++    } else{
++        mNextSegSmp = (mpToneDesc->segments[0].duration * mSamplingRate) / 1000;
++    }
++
++    return true;
++}
++
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        ToneGenerator::numWaves()
++//
++//    Description:    Count number of sine waves needed to generate a tone segment (e.g 2 for DTMF).
++//
++//    Input:
++//        segmentIdx        tone segment index
++//
++//    Output:
++//        returned value:    nummber of sine waves
++//
++////////////////////////////////////////////////////////////////////////////////
++unsigned int ToneGenerator::numWaves(unsigned int segmentIdx) {
++    unsigned int lCnt = 0;
++
++    if (mpToneDesc->segments[segmentIdx].duration) {
++        while (mpToneDesc->segments[segmentIdx].waveFreq[lCnt]) {
++            lCnt++;
++        }
++        lCnt++;
++    }
++
++    return lCnt;
++}
++
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        ToneGenerator::clearWaveGens()
++//
++//    Description:    Removes all wave generators.
++//
++//    Input:
++//        none
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++void ToneGenerator::clearWaveGens() {
++    ALOGV("Clearing mWaveGens:");
++
++    for (size_t lIdx = 0; lIdx < mWaveGens.size(); lIdx++) {
++        delete mWaveGens.valueAt(lIdx);
++    }
++    mWaveGens.clear();
++}
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:       ToneGenerator::getToneForRegion()
++//
++//    Description:  Get correct ringtone type according to current region.
++//      The corrected ring tone type is the tone descriptor index in sToneDescriptors[].
++//
++//    Input:
++//        none
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++ToneGenerator::tone_type ToneGenerator::getToneForRegion(tone_type toneType) {
++    tone_type regionTone;
++
++    if (mRegion == CEPT || toneType < FIRST_SUP_TONE || toneType > LAST_SUP_TONE) {
++        regionTone = toneType;
++    } else {
++        regionTone = (tone_type) sToneMappingTable[mRegion][toneType - FIRST_SUP_TONE];
++    }
++
++    ALOGV("getToneForRegion, tone %d, region %d, regionTone %d", toneType, mRegion, regionTone);
++
++    return regionTone;
++}
++
++
++////////////////////////////////////////////////////////////////////////////////
++//                WaveGenerator::WaveGenerator class    Implementation
++////////////////////////////////////////////////////////////////////////////////
++
++//---------------------------------- public methods ----------------------------
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        WaveGenerator::WaveGenerator()
++//
++//    Description:    Constructor.
++//
++//    Input:
++//        samplingRate:    Output sampling rate in Hz
++//        frequency:       Frequency of the sine wave to generate in Hz
++//        volume:          volume (0.0 to 1.0)
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++ToneGenerator::WaveGenerator::WaveGenerator(unsigned short samplingRate,
++        unsigned short frequency, float volume) {
++    double d0;
++    double F_div_Fs;  // frequency / samplingRate
++
++    F_div_Fs = frequency / (double)samplingRate;
++    d0 = - (float)GEN_AMP * sin(2 * M_PI * F_div_Fs);
++    mS2_0 = (short)d0;
++    mS1 = 0;
++    mS2 = mS2_0;
++
++    mAmplitude_Q15 = (short)(32767. * 32767. * volume / GEN_AMP);
++    // take some margin for amplitude fluctuation
++    if (mAmplitude_Q15 > 32500)
++        mAmplitude_Q15 = 32500;
++
++    d0 = 32768.0 * cos(2 * M_PI * F_div_Fs);  // Q14*2*cos()
++    if (d0 > 32767)
++        d0 = 32767;
++    mA1_Q14 = (short) d0;
++
++    ALOGV("WaveGenerator init, mA1_Q14: %d, mS2_0: %d, mAmplitude_Q15: %d",
++            mA1_Q14, mS2_0, mAmplitude_Q15);
++}
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        WaveGenerator::~WaveGenerator()
++//
++//    Description:    Destructor.
++//
++//    Input:
++//        none
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++ToneGenerator::WaveGenerator::~WaveGenerator() {
++}
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//    Method:        WaveGenerator::getSamples()
++//
++//    Description:    Generates count samples of a sine wave and accumulates
++//        result in outBuffer.
++//
++//    Input:
++//        outBuffer:      Output buffer where to accumulate samples.
++//        count:          number of samples to produce.
++//        command:        special action requested (see enum gen_command).
++//
++//    Output:
++//        none
++//
++////////////////////////////////////////////////////////////////////////////////
++void ToneGenerator::WaveGenerator::getSamples(short *outBuffer,
++        unsigned int count, unsigned int command) {
++    long lS1, lS2;
++    long lA1, lAmplitude;
++    long Sample;  // current sample
++
++    // init local
++    if (command == WAVEGEN_START) {
++        lS1 = (long)0;
++        lS2 = (long)mS2_0;
++    } else {
++        lS1 = mS1;
++        lS2 = mS2;
++    }
++    lA1 = (long)mA1_Q14;
++    lAmplitude = (long)mAmplitude_Q15;
++
++    if (command == WAVEGEN_STOP) {
++        lAmplitude <<= 16;
++        if (count == 0) {
++            return;
++        }
++        long dec = lAmplitude/count;
++        // loop generation
++        while (count) {
++            count--;
++            Sample = ((lA1 * lS1) >> S_Q14) - lS2;
++            // shift delay
++            lS2 = lS1;
++            lS1 = Sample;
++            Sample = ((lAmplitude>>16) * Sample) >> S_Q15;
++            *(outBuffer++) += (short)Sample;  // put result in buffer
++            lAmplitude -= dec;
++        }
++    } else {
++        // loop generation
++        while (count) {
++            count--;
++            Sample = ((lA1 * lS1) >> S_Q14) - lS2;
++            // shift delay
++            lS2 = lS1;
++            lS1 = Sample;
++            Sample = (lAmplitude * Sample) >> S_Q15;
++            *(outBuffer++) += (short)Sample;  // put result in buffer
++        }
++    }
++
++    // save status
++    mS1 = lS1;
++    mS2 = lS2;
++}
++
++}  // end namespace android
+
+Property changes on: vendor/branch/5058I_HK/frameworks/av/media/libmedia/ToneGenerator.cpp
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058I_HK/frameworks/av/include/media/ToneGenerator.h
+===================================================================
+--- vendor/branch/5058I_HK/frameworks/av/include/media/ToneGenerator.h	(revision 0)
++++ vendor/branch/5058I_HK/frameworks/av/include/media/ToneGenerator.h	(revision 13859)
+@@ -0,0 +1,329 @@
++/*
++ * Copyright (C) 2008 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef ANDROID_TONEGENERATOR_H_
++#define ANDROID_TONEGENERATOR_H_
++
++#include <media/AudioSystem.h>
++#include <media/AudioTrack.h>
++#include <utils/Compat.h>
++#include <utils/KeyedVector.h>
++#include <utils/RefBase.h>
++#include <utils/threads.h>
++
++namespace android {
++
++class ToneGenerator {
++public:
++
++    // List of all available tones
++    // This enum must be kept consistant with constants in ToneGenerator JAVA class
++    enum tone_type {
++        // DTMF tones  ITU-T Recommendation Q.23
++        TONE_DTMF_0 = 0,  // 0 key: 1336Hz, 941Hz
++        TONE_DTMF_1,  // 1 key: 1209Hz, 697Hz
++        TONE_DTMF_2,  // 2 key: 1336Hz, 697Hz
++        TONE_DTMF_3,  // 3 key: 1477Hz, 697Hz
++        TONE_DTMF_4,  // 4 key: 1209Hz, 770Hz
++        TONE_DTMF_5,  // 5 key: 1336Hz, 770Hz
++        TONE_DTMF_6,  // 6 key: 1477Hz, 770Hz
++        TONE_DTMF_7,  // 7 key: 1209Hz, 852Hz
++        TONE_DTMF_8,  // 8 key: 1336Hz, 852Hz
++        TONE_DTMF_9,  // 9 key: 1477Hz, 852Hz
++        TONE_DTMF_S,  // * key: 1209Hz, 941Hz
++        TONE_DTMF_P,  // # key: 1477Hz, 941Hz
++        TONE_DTMF_A,  // A key: 1633Hz, 697Hz
++        TONE_DTMF_B,  // B key: 1633Hz, 770Hz
++        TONE_DTMF_C,  // C key: 1633Hz, 852Hz
++        TONE_DTMF_D,  // D key: 1633Hz, 941Hz
++        // Call supervisory tones:  3GPP TS 22.001 (CEPT)
++        TONE_SUP_DIAL,  // Dial tone: CEPT: 425Hz, continuous
++        FIRST_SUP_TONE = TONE_SUP_DIAL,
++        TONE_SUP_BUSY,  // Busy tone, CEPT: 425Hz, 500ms ON, 500ms OFF...
++        TONE_SUP_CONGESTION,  // Congestion tone CEPT, JAPAN: 425Hz, 200ms ON, 200ms OFF...
++        TONE_SUP_RADIO_ACK,  // Radio path acknowlegment, CEPT, ANSI: 425Hz, 200ms ON
++        TONE_SUP_RADIO_NOTAVAIL,  // Radio path not available: 425Hz, 200ms ON, 200 OFF 3 bursts
++        TONE_SUP_ERROR,  // Error/Special info:  950Hz+1400Hz+1800Hz, 330ms ON, 1s OFF...
++        TONE_SUP_CALL_WAITING,  // Call Waiting CEPT,JAPAN:  425Hz, 200ms ON, 600ms OFF, 200ms ON, 3s OFF...
++        TONE_SUP_RINGTONE,  // Ring Tone CEPT, JAPAN:  425Hz, 1s ON, 4s OFF...
++        LAST_SUP_TONE = TONE_SUP_RINGTONE,
++        // Proprietary tones:  3GPP TS 31.111
++        TONE_PROP_BEEP,  // General beep: 400Hz+1200Hz, 35ms ON
++        TONE_PROP_ACK,  // Positive Acknowlgement: 1200Hz, 100ms ON, 100ms OFF 2 bursts
++        TONE_PROP_NACK,  // Negative Acknowlgement: 300Hz+400Hz+500Hz, 400ms ON
++        TONE_PROP_PROMPT,  // Prompt tone: 400Hz+1200Hz, 200ms ON
++        TONE_PROP_BEEP2,  // General double beep: 400Hz+1200Hz, 35ms ON, 200ms OFF, 35ms on
++        // Additional call supervisory tones: specified by IS-95 only
++        TONE_SUP_INTERCEPT, // Intercept tone: alternating 440 Hz and 620 Hz tones, each on for 250 ms.
++        TONE_SUP_INTERCEPT_ABBREV, // Abbreviated intercept: intercept tone limited to 4 seconds
++        TONE_SUP_CONGESTION_ABBREV, // Abbreviated congestion: congestion tone limited to 4 seconds
++        TONE_SUP_CONFIRM, // Confirm tone: a 350 Hz tone added to a 440 Hz tone repeated 3 times in a 100 ms on, 100 ms off cycle.
++        TONE_SUP_PIP, // Pip tone: four bursts of 480 Hz tone (0.1 s on, 0.1 s off).
++
++        // CDMA Tones
++        TONE_CDMA_DIAL_TONE_LITE,
++        TONE_CDMA_NETWORK_USA_RINGBACK,
++        TONE_CDMA_INTERCEPT,
++        TONE_CDMA_ABBR_INTERCEPT,
++        TONE_CDMA_REORDER,
++        TONE_CDMA_ABBR_REORDER,
++        TONE_CDMA_NETWORK_BUSY,
++        TONE_CDMA_CONFIRM,
++        TONE_CDMA_ANSWER,
++        TONE_CDMA_NETWORK_CALLWAITING,
++        TONE_CDMA_PIP,
++
++        // ISDN
++        TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL,  // ISDN Alert Normal
++        TONE_CDMA_CALL_SIGNAL_ISDN_INTERGROUP, // ISDN Intergroup
++        TONE_CDMA_CALL_SIGNAL_ISDN_SP_PRI, // ISDN SP PRI
++        TONE_CDMA_CALL_SIGNAL_ISDN_PAT3,  // ISDN Alert PAT3
++        TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING, // ISDN Alert PING RING
++        TONE_CDMA_CALL_SIGNAL_ISDN_PAT5,  // ISDN Alert PAT5
++        TONE_CDMA_CALL_SIGNAL_ISDN_PAT6,  // ISDN Alert PAT6
++        TONE_CDMA_CALL_SIGNAL_ISDN_PAT7,  // ISDN Alert PAT7
++        // ISDN end
++
++        // IS54
++        TONE_CDMA_HIGH_L,  // IS54 High Pitch Long
++        TONE_CDMA_MED_L, // IS54 Med Pitch Long
++        TONE_CDMA_LOW_L, // IS54 Low Pitch Long
++        TONE_CDMA_HIGH_SS, // IS54 High Pitch Short Short
++        TONE_CDMA_MED_SS, // IS54 Medium Pitch Short Short
++        TONE_CDMA_LOW_SS, // IS54 Low Pitch Short Short
++        TONE_CDMA_HIGH_SSL, // IS54 High Pitch Short Short Long
++        TONE_CDMA_MED_SSL, // IS54 Medium  Pitch Short Short Long
++        TONE_CDMA_LOW_SSL, // IS54 Low  Pitch Short Short Long
++        TONE_CDMA_HIGH_SS_2, // IS54 High Pitch Short Short 2
++        TONE_CDMA_MED_SS_2, // IS54 Med Pitch Short Short 2
++        TONE_CDMA_LOW_SS_2, // IS54 Low  Pitch Short Short 2
++        TONE_CDMA_HIGH_SLS, // IS54 High Pitch Short Long Short
++        TONE_CDMA_MED_SLS, // IS54 Med Pitch Short Long Short
++        TONE_CDMA_LOW_SLS, // IS54 Low Pitch Short Long Short
++        TONE_CDMA_HIGH_S_X4, // IS54 High Pitch Short Short Short Short
++        TONE_CDMA_MED_S_X4, // IS54 Med Pitch Short Short Short Short
++        TONE_CDMA_LOW_S_X4, // IS54 Low Pitch Short Short Short Short
++        TONE_CDMA_HIGH_PBX_L, // PBX High Pitch Long
++        TONE_CDMA_MED_PBX_L, // PBX Med Pitch Long
++        TONE_CDMA_LOW_PBX_L, // PBX Low  Pitch Long
++        TONE_CDMA_HIGH_PBX_SS, // PBX High Short Short
++        TONE_CDMA_MED_PBX_SS, // PBX Med Short Short
++        TONE_CDMA_LOW_PBX_SS, // PBX Low  Short Short
++        TONE_CDMA_HIGH_PBX_SSL, // PBX High Short Short Long
++        TONE_CDMA_MED_PBX_SSL, // PBX Med Short Short Long
++        TONE_CDMA_LOW_PBX_SSL,  // PBX Low Short Short Long
++        TONE_CDMA_HIGH_PBX_SLS, // PBX High  SLS
++        TONE_CDMA_MED_PBX_SLS,  // PBX Med SLS
++        TONE_CDMA_LOW_PBX_SLS, // PBX Low SLS
++        TONE_CDMA_HIGH_PBX_S_X4, // PBX High SSSS
++        TONE_CDMA_MED_PBX_S_X4, // PBX Med SSSS
++        TONE_CDMA_LOW_PBX_S_X4, // PBX LOW SSSS
++        //IS54 end
++        // proprietary
++        TONE_CDMA_ALERT_NETWORK_LITE,
++        TONE_CDMA_ALERT_AUTOREDIAL_LITE,
++        TONE_CDMA_ONE_MIN_BEEP,
++        TONE_CDMA_KEYPAD_VOLUME_KEY_LITE,
++        TONE_CDMA_PRESSHOLDKEY_LITE,
++        TONE_CDMA_ALERT_INCALL_LITE,
++        TONE_CDMA_EMERGENCY_RINGBACK,
++        TONE_CDMA_ALERT_CALL_GUARD,
++        TONE_CDMA_SOFT_ERROR_LITE,
++        TONE_CDMA_CALLDROP_LITE,
++        // proprietary end
++        TONE_CDMA_NETWORK_BUSY_ONE_SHOT,
++        TONE_CDMA_ABBR_ALERT,
++        TONE_CDMA_SIGNAL_OFF,
++        //CDMA end
++		TCT_TONE_CALL_WAITING_LATAM, //added by wenping.ye for task731020
++		TONE_CMAS,// added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14
++        NUM_TONES,
++        NUM_SUP_TONES = LAST_SUP_TONE-FIRST_SUP_TONE+1
++    };
++
++    ToneGenerator(audio_stream_type_t streamType, float volume, bool threadCanCallJava = false);
++    ~ToneGenerator();
++
++    bool startTone(tone_type toneType, int durationMs = -1);
++    void stopTone();
++
++    bool isInited() { return (mState == TONE_IDLE)?false:true;}
++
++    // returns the audio session this ToneGenerator belongs to or 0 if an error occured.
++    int getSessionId() { return (mpAudioTrack == 0) ? 0 : mpAudioTrack->getSessionId(); }
++
++private:
++
++    enum tone_state {
++        TONE_IDLE,  // ToneGenerator is being initialized or initialization failed
++        TONE_INIT,  // ToneGenerator has been successfully initialized and is not playing
++        TONE_STARTING,  // ToneGenerator is starting playing
++        TONE_PLAYING,  // ToneGenerator is playing
++        TONE_STOPPING,  // ToneGenerator is stoping
++        TONE_STOPPED,  // ToneGenerator is stopped: the AudioTrack will be stopped
++        TONE_RESTARTING  // A start request was received in active state (playing or stopping)
++    };
++
++
++    // Region specific tones.
++    // These supervisory tones are different depending on the region (USA/CANADA, JAPAN, rest of the world).
++    // When a tone in the range [FIRST_SUP_TONE, LAST_SUP_TONE] is requested, the region is determined
++    // from system property gsm.operator.iso-country and the proper tone descriptor is selected with the
++    // help of sToneMappingTable[]
++    enum regional_tone_type {
++        // ANSI supervisory tones
++        TONE_ANSI_DIAL = NUM_TONES, // Dial tone: a continuous 350 Hz + 440 Hz tone.
++        TONE_ANSI_BUSY,             // Busy tone on:  a 480 Hz + 620 Hz tone repeated in a 500 ms on, 500 ms off cycle.
++        TONE_ANSI_CONGESTION,       // Network congestion (reorder) tone on:  a 480 Hz + 620 Hz tone repeated in a 250 ms on, 250 ms off cycle.
++        TONE_ANSI_CALL_WAITING,     // Call waiting tone on: 440 Hz, on for 300 ms, 9,7 s off followed by
++                                    // (440 Hz, on for 100 ms off for 100 ms, on for 100 ms, 9,7s off and repeated as necessary).
++        TONE_ANSI_RINGTONE,         // Ring Tone:  a 440 Hz + 480 Hz tone repeated in a 2 s on, 4 s off pattern.
++        // JAPAN Supervisory tones
++        TONE_JAPAN_DIAL,            // Dial tone: 400Hz, continuous
++        TONE_JAPAN_BUSY,            // Busy tone: 400Hz, 500ms ON, 500ms OFF...
++        TONE_JAPAN_RADIO_ACK,       // Radio path acknowlegment: 400Hz, 1s ON, 2s OFF...
++        // GB Supervisory tones
++        TONE_GB_RINGTONE,           // Ring Tone: A 400Hz + 450Hz tone repeated in a 0.4s on, 0.2s off, 0.4s on, 2.0s off pattern.
++        // AUSTRALIA Supervisory tones
++        TONE_AUSTRALIA_RINGTONE,    // Ring tone: A 400Hz + 450Hz tone repeated in a 0.4s on, 0.2s off, 0.4s on, 2.0s off pattern.
++        TONE_AUSTRALIA_BUSY,        // Busy tone: 425 Hz repeated in a 0.375s on, 0.375s off pattern.
++        TONE_AUSTRALIA_CALL_WAITING,// Call waiting tone: 425Hz tone repeated in a 0.2s on, 0.2s off, 0.2s on, 4.4s off pattern.
++        TONE_AUSTRALIA_CONGESTION,  // Congestion tone: 425Hz tone repeated in a 0.375s on, 0.375s off pattern
++        NUM_ALTERNATE_TONES
++    };
++
++    enum region {
++        ANSI,
++        JAPAN,
++        GB,
++        AUSTRALIA,
++        CEPT,
++        NUM_REGIONS
++    };
++
++    static const unsigned char sToneMappingTable[NUM_REGIONS-1][NUM_SUP_TONES];
++
++    static const unsigned int TONEGEN_MAX_WAVES = 3;     // Maximun number of sine waves in a tone segment
++    static const unsigned int TONEGEN_MAX_SEGMENTS = 12;  // Maximun number of segments in a tone descriptor
++    static const unsigned int TONEGEN_INF = 0xFFFFFFFF;  // Represents infinite time duration
++    static const CONSTEXPR float TONEGEN_GAIN = 0.9;  // Default gain passed to  WaveGenerator().
++
++    // ToneDescriptor class contains all parameters needed to generate a tone:
++    //    - The array waveFreq[]:
++    //         1 for static tone descriptors: contains the frequencies of all individual waves making the multi-tone.
++    //         2 for active tone descritors: contains the indexes of the WaveGenerator objects in mWaveGens
++    //        The number of sine waves varies from 1 to TONEGEN_MAX_WAVES.
++    //        The first null value indicates that no more waves are needed.
++    //    - The array segments[] is used to generate the tone pulses. A segment is a period of time
++    //        during which the tone is ON or OFF.    Segments with even index (starting from 0)
++    //        correspond to tone ON state and segments with odd index to OFF state.
++    //        The data stored in segments[] is the duration of the corresponding period in ms.
++    //        The first segment encountered with a 0 duration    indicates that no more segment follows.
++    //    - loopCnt - Number of times to repeat a sequence of seqments after playing this
++    //    - loopIndx - The segment index to go back and play is loopcnt > 0
++    //    - repeatCnt indicates the number of times the sequence described by segments[] array must be repeated.
++    //        When the tone generator encounters the first 0 duration segment, it will compare repeatCnt to mCurCount.
++    //        If mCurCount > repeatCnt, the tone is stopped automatically. Otherwise, tone sequence will be
++    //        restarted from segment repeatSegment.
++    //    - repeatSegment number of the first repeated segment when repeatCnt is not null
++
++    class ToneSegment {
++    public:
++        unsigned int duration;
++        unsigned short waveFreq[TONEGEN_MAX_WAVES+1];
++        unsigned short loopCnt;
++        unsigned short loopIndx;
++    };
++
++    class ToneDescriptor {
++    public:
++        ToneSegment segments[TONEGEN_MAX_SEGMENTS+1];
++        unsigned long repeatCnt;
++        unsigned long repeatSegment;
++    };
++
++    static const ToneDescriptor sToneDescriptors[];
++
++    bool mThreadCanCallJava;
++    unsigned int mTotalSmp;  // Total number of audio samples played (gives current time)
++    unsigned int mNextSegSmp;  // Position of next segment transition expressed in samples
++    // NOTE: because mTotalSmp, mNextSegSmp are stored on 32 bit, current design will operate properly
++    // only if tone duration is less than about 27 Hours(@44100Hz sampling rate). If this time is exceeded,
++    // no crash will occur but tone sequence will show a glitch.
++    unsigned int mMaxSmp;  // Maximum number of audio samples played (maximun tone duration)
++    int mDurationMs;  // Maximum tone duration in ms
++
++    unsigned short mCurSegment;  // Current segment index in ToneDescriptor segments[]
++    unsigned short mCurCount;  // Current sequence repeat count
++    volatile unsigned short mState;  // ToneGenerator state (tone_state)
++    unsigned short mRegion;
++    const ToneDescriptor *mpToneDesc;  // pointer to active tone descriptor
++    const ToneDescriptor *mpNewToneDesc;  // pointer to next active tone descriptor
++
++    unsigned short mLoopCounter; // Current tone loopback count
++
++    uint32_t mSamplingRate;  // AudioFlinger Sampling rate
++    sp<AudioTrack> mpAudioTrack;  // Pointer to audio track used for playback
++    Mutex mLock;  // Mutex to control concurent access to ToneGenerator object from audio callback and application API
++    Mutex mCbkCondLock; // Mutex associated to mWaitCbkCond
++    Condition mWaitCbkCond; // condition enabling interface to wait for audio callback completion after a change is requested
++    float mVolume;  // Volume applied to audio track
++    audio_stream_type_t mStreamType; // Audio stream used for output
++    unsigned int mProcessSize;  // Size of audio blocks generated at a time by audioCallback() (in PCM frames).
++    struct timespec mStartTime; // tone start time: needed to guaranty actual tone duration
++
++    bool initAudioTrack();
++    static void audioCallback(int event, void* user, void *info);
++    bool prepareWave();
++    unsigned int numWaves(unsigned int segmentIdx);
++    void clearWaveGens();
++    tone_type getToneForRegion(tone_type toneType);
++
++    // WaveGenerator generates a single sine wave
++    class WaveGenerator {
++    public:
++        enum gen_command {
++            WAVEGEN_START,  // Start/restart wave from phase 0
++            WAVEGEN_CONT,  // Continue wave from current phase
++            WAVEGEN_STOP  // Stop wave on zero crossing
++        };
++
++        WaveGenerator(unsigned short samplingRate, unsigned short frequency,
++                float volume);
++        ~WaveGenerator();
++
++        void getSamples(short *outBuffer, unsigned int count,
++                unsigned int command);
++
++    private:
++        static const short GEN_AMP = 32000;  // amplitude of generator
++        static const short S_Q14 = 14;  // shift for Q14
++        static const short S_Q15 = 15;  // shift for Q15
++
++        short mA1_Q14;  // Q14 coefficient
++        // delay line of full amplitude generator
++        long mS1, mS2;  // delay line S2 oldest
++        short mS2_0;  // saved value for reinitialisation
++        short mAmplitude_Q15;  // Q15 amplitude
++    };
++
++    KeyedVector<unsigned short, WaveGenerator *> mWaveGens;  // list of active wave generators.
++};
++
++}
++;  // namespace android
++
++#endif /*ANDROID_TONEGENERATOR_H_*/
+
+Property changes on: vendor/branch/5058I_HK/frameworks/av/include/media/ToneGenerator.h
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property
+Index: vendor/branch/5058I_HK/frameworks/base/media/java/android/media/ToneGenerator.java
+===================================================================
+--- vendor/branch/5058I_HK/frameworks/base/media/java/android/media/ToneGenerator.java	(revision 0)
++++ vendor/branch/5058I_HK/frameworks/base/media/java/android/media/ToneGenerator.java	(revision 13859)
+@@ -0,0 +1,913 @@
++/*
++ * Copyright (C) 2008 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package android.media;
++
++
++
++/**
++ * This class provides methods to play DTMF tones (ITU-T Recommendation Q.23),
++ * call supervisory tones (3GPP TS 22.001, CEPT) and proprietary tones (3GPP TS 31.111).
++ * Depending on call state and routing options, tones are mixed to the downlink audio
++ * or output to the speaker phone or headset.
++ * This API is not for generating tones over the uplink audio path.
++ */
++public class ToneGenerator
++{
++
++    /* Values for toneType parameter of ToneGenerator() constructor */
++    /*
++     * List of all available tones: These constants must be kept consistant with
++     * the enum in ToneGenerator C++ class.     */
++
++    /**
++     * Default value for an unknown or unspecified tone.
++     * @hide
++     */
++    public static final int TONE_UNKNOWN = -1;
++
++    /**
++     * DTMF tone for key 0: 1336Hz, 941Hz, continuous</p>
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_0 = 0;
++    /**
++     * DTMF tone for key 1: 1209Hz, 697Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_1 = 1;
++    /**
++     * DTMF tone for key 2: 1336Hz, 697Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_2 = 2;
++    /**
++     * DTMF tone for key 3: 1477Hz, 697Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_3 = 3;
++    /**
++     * DTMF tone for key 4: 1209Hz, 770Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_4 = 4;
++    /**
++     * DTMF tone for key 5: 1336Hz, 770Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_5 = 5;
++    /**
++     * DTMF tone for key 6: 1477Hz, 770Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_6 = 6;
++    /**
++     * DTMF tone for key 7: 1209Hz, 852Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_7 = 7;
++    /**
++     * DTMF tone for key 8: 1336Hz, 852Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_8 = 8;
++    /**
++     * DTMF tone for key 9: 1477Hz, 852Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_9 = 9;
++    /**
++     * DTMF tone for key *: 1209Hz, 941Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_S = 10;
++    /**
++     * DTMF tone for key #: 1477Hz, 941Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_P = 11;
++    /**
++     * DTMF tone for key A: 1633Hz, 697Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_A = 12;
++    /**
++     * DTMF tone for key B: 1633Hz, 770Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_B = 13;
++    /**
++     * DTMF tone for key C: 1633Hz, 852Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_C = 14;
++    /**
++     * DTMF tone for key D: 1633Hz, 941Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_DTMF_D = 15;
++    /**
++     * Call supervisory tone, Dial tone:
++     *      CEPT:           425Hz, continuous
++     *      ANSI (IS-95):   350Hz+440Hz, continuous
++     *      JAPAN:          400Hz, continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_DIAL = 16;
++    /**
++     * Call supervisory tone, Busy:
++     *      CEPT:           425Hz, 500ms ON, 500ms OFF...
++     *      ANSI (IS-95):   480Hz+620Hz, 500ms ON, 500ms OFF...
++     *      JAPAN:          400Hz, 500ms ON, 500ms OFF...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_BUSY = 17;
++    /**
++     * Call supervisory tone, Congestion:
++     *      CEPT, JAPAN:    425Hz, 200ms ON, 200ms OFF...
++     *      ANSI (IS-95):   480Hz+620Hz, 250ms ON, 250ms OFF...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_CONGESTION = 18;
++    /**
++     * Call supervisory tone, Radio path acknowlegment :
++     *      CEPT, ANSI:    425Hz, 200ms ON
++     *      JAPAN:         400Hz, 1s ON, 2s OFF...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_RADIO_ACK = 19;
++    /**
++     * Call supervisory tone, Radio path not available: 425Hz, 200ms ON, 200 OFF 3 bursts
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_RADIO_NOTAVAIL = 20;
++    /**
++     * Call supervisory tone, Error/Special info: 950Hz+1400Hz+1800Hz, 330ms ON, 1s OFF...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_ERROR = 21;
++    /**
++     * Call supervisory tone, Call Waiting:
++     *      CEPT, JAPAN:    425Hz, 200ms ON, 600ms OFF, 200ms ON, 3s OFF...
++     *      ANSI (IS-95):   440 Hz, 300 ms ON, 9.7 s OFF,
++     *                      (100 ms ON, 100 ms OFF, 100 ms ON, 9.7s OFF ...)
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_CALL_WAITING = 22;
++    /**
++     * Call supervisory tone, Ring Tone:
++     *      CEPT, JAPAN:    425Hz, 1s ON, 4s OFF...
++     *      ANSI (IS-95):   440Hz + 480Hz, 2s ON, 4s OFF...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_RINGTONE = 23;
++    /**
++     * Proprietary tone, general beep: 400Hz+1200Hz, 35ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_PROP_BEEP = 24;
++    /**
++     * Proprietary tone, positive acknowlegement: 1200Hz, 100ms ON, 100ms OFF 2 bursts
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_PROP_ACK = 25;
++    /**
++     * Proprietary tone, negative acknowlegement: 300Hz+400Hz+500Hz, 400ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_PROP_NACK = 26;
++    /**
++     * Proprietary tone, prompt tone: 400Hz+1200Hz, 200ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int  TONE_PROP_PROMPT = 27;
++    /**
++     * Proprietary tone, general double beep: twice 400Hz+1200Hz, 35ms ON, 200ms OFF, 35ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_PROP_BEEP2 = 28;
++    /**
++     * Call supervisory tone (IS-95), intercept tone: alternating 440 Hz and 620 Hz tones,
++     * each on for 250 ms
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_INTERCEPT = 29;
++    /**
++     * Call supervisory tone (IS-95), abbreviated intercept: intercept tone limited to 4 seconds
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_INTERCEPT_ABBREV = 30;
++    /**
++     * Call supervisory tone (IS-95), abbreviated congestion: congestion tone limited to 4 seconds
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_CONGESTION_ABBREV = 31;
++    /**
++     * Call supervisory tone (IS-95), confirm tone: a 350 Hz tone added to a 440 Hz tone
++     * repeated 3 times in a 100 ms on, 100 ms off cycle
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_CONFIRM = 32;
++    /**
++     * Call supervisory tone (IS-95), pip tone: four bursts of 480 Hz tone (0.1 s on, 0.1 s off).
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_SUP_PIP = 33;
++    /**
++     *  CDMA Dial tone : 425Hz  continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_DIAL_TONE_LITE = 34;
++    /**
++     * CDMA USA Ringback: 440Hz+480Hz 2s ON, 4000 OFF ...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_NETWORK_USA_RINGBACK = 35;
++    /**
++     *  CDMA Intercept tone: 440Hz 250ms ON, 620Hz 250ms ON ...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_INTERCEPT = 36;
++    /**
++     * CDMA Abbr Intercept tone: 440Hz 250ms ON, 620Hz 250ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_ABBR_INTERCEPT = 37;
++    /**
++     * CDMA Reorder tone: 480Hz+620Hz 250ms ON, 250ms OFF...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_REORDER = 38;
++    /**
++     *
++     * CDMA Abbr Reorder tone: 480Hz+620Hz 250ms ON, 250ms OFF repeated for 8 times
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_ABBR_REORDER = 39;
++    /**
++     * CDMA Network Busy tone: 480Hz+620Hz 500ms ON, 500ms OFF continuous
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_NETWORK_BUSY = 40;
++    /**
++     * CDMA Confirm tone: 350Hz+440Hz 100ms ON, 100ms OFF repeated for 3 times
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_CONFIRM = 41;
++    /**
++     *
++     * CDMA answer tone: silent tone - defintion Frequency 0, 0ms ON, 0ms OFF
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_ANSWER = 42;
++    /**
++     *
++     * CDMA Network Callwaiting tone: 440Hz 300ms ON
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_NETWORK_CALLWAITING = 43;
++    /**
++     * CDMA PIP tone: 480Hz 100ms ON, 100ms OFF repeated for 4 times
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_PIP = 44;
++    /**
++     *  ISDN Call Signal Normal tone: {2091Hz 32ms ON, 2556 64ms ON} 20 times,
++     *  2091 32ms ON, 2556 48ms ON, 4s OFF
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL = 45;
++    /**
++     *  ISDN Call Signal Intergroup tone: {2091Hz 32ms ON, 2556 64ms ON} 8 times,
++     * 2091Hz 32ms ON, 400ms OFF, {2091Hz 32ms ON, 2556Hz 64ms ON} times,
++     * 2091Hz 32ms ON, 4s OFF.
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_CALL_SIGNAL_ISDN_INTERGROUP = 46;
++    /**
++     * ISDN Call Signal SP PRI tone:{2091Hz 32ms ON, 2556 64ms ON} 4 times
++     * 2091Hz 16ms ON, 200ms OFF, {2091Hz 32ms ON, 2556Hz 64ms ON} 4 times,
++     * 2091Hz 16ms ON, 200ms OFF
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_CALL_SIGNAL_ISDN_SP_PRI = 47;
++    /**
++     * ISDN Call sign PAT3 tone: silent tone
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_CALL_SIGNAL_ISDN_PAT3 = 48;
++    /**
++     * ISDN Ping Ring tone: {2091Hz 32ms ON, 2556Hz 64ms ON} 5 times
++     * 2091Hz 20ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING = 49;
++    /**
++     *
++     * ISDN Pat5 tone: silent tone
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_CALL_SIGNAL_ISDN_PAT5 = 50;
++    /**
++     *
++     * ISDN Pat6 tone: silent tone
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_CALL_SIGNAL_ISDN_PAT6 = 51;
++    /**
++     * ISDN Pat7 tone: silent tone
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_CALL_SIGNAL_ISDN_PAT7 = 52;
++    /**
++     * TONE_CDMA_HIGH_L tone: {3700Hz 25ms, 4000Hz 25ms} 40 times
++     * 4000ms OFF, Repeat ....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_L = 53;
++    /**
++     * TONE_CDMA_MED_L tone: {2600Hz 25ms, 2900Hz 25ms} 40 times
++     * 4000ms OFF, Repeat ....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_L = 54;
++    /**
++     * TONE_CDMA_LOW_L tone: {1300Hz 25ms, 1450Hz 25ms} 40 times,
++     * 4000ms OFF, Repeat ....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_L = 55;
++    /**
++     * CDMA HIGH SS tone: {3700Hz 25ms, 4000Hz 25ms} repeat 16 times,
++     * 400ms OFF, repeat ....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_SS = 56;
++    /**
++     * CDMA MED SS tone: {2600Hz 25ms, 2900Hz 25ms} repeat 16 times,
++     * 400ms OFF, repeat ....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_SS = 57;
++    /**
++     * CDMA LOW SS tone: {1300z 25ms, 1450Hz 25ms} repeat 16 times,
++     * 400ms OFF, repeat ....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_SS = 58;
++    /**
++     * CDMA HIGH SSL tone: {3700Hz 25ms, 4000Hz 25ms} 8 times,
++     * 200ms OFF, {3700Hz 25ms, 4000Hz 25ms} repeat 8 times,
++     * 200ms OFF, {3700Hz 25ms, 4000Hz 25ms} repeat 16 times,
++     * 4000ms OFF, repeat ...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_SSL = 59;
++    /**
++     * CDMA MED SSL tone: {2600Hz 25ms, 2900Hz 25ms} 8 times,
++     * 200ms OFF, {2600Hz 25ms, 2900Hz 25ms} repeat 8 times,
++     * 200ms OFF, {2600Hz 25ms, 2900Hz 25ms} repeat 16 times,
++     * 4000ms OFF, repeat ...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_SSL = 60;
++    /**
++     * CDMA LOW SSL tone: {1300Hz 25ms, 1450Hz 25ms} 8 times,
++     * 200ms OFF, {1300Hz 25ms, 1450Hz 25ms} repeat 8 times,
++     * 200ms OFF, {1300Hz 25ms, 1450Hz 25ms} repeat 16 times,
++     * 4000ms OFF, repeat ...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_SSL = 61;
++    /**
++     * CDMA HIGH SS2 tone: {3700Hz 25ms, 4000Hz 25ms} 20 times,
++     * 1000ms OFF, {3700Hz 25ms, 4000Hz 25ms} 20 times,
++     * 3000ms OFF, repeat ....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_SS_2 = 62;
++    /**
++     * CDMA MED SS2 tone: {2600Hz 25ms, 2900Hz 25ms} 20 times,
++     * 1000ms OFF, {2600Hz 25ms, 2900Hz 25ms} 20 times,
++     * 3000ms OFF, repeat ....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_SS_2 = 63;
++    /**
++     * CDMA LOW SS2 tone: {1300Hz 25ms, 1450Hz 25ms} 20 times,
++     * 1000ms OFF, {1300Hz 25ms, 1450Hz 25ms} 20 times,
++     * 3000ms OFF, repeat ....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_SS_2 = 64;
++    /**
++     *  CDMA HIGH SLS tone: {3700Hz 25ms, 4000Hz 25ms} 10 times,
++     *  500ms OFF, {3700Hz 25ms, 4000Hz 25ms} 20 times, 500ms OFF,
++     *  {3700Hz 25ms, 4000Hz 25ms} 10 times, 3000ms OFF, REPEAT
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_SLS = 65;
++    /**
++     *  CDMA MED  SLS tone: {2600Hz 25ms, 2900Hz 25ms} 10 times,
++     *  500ms OFF, {2600Hz 25ms, 2900Hz 25ms} 20 times, 500ms OFF,
++     *  {2600Hz 25ms, 2900Hz 25ms} 10 times, 3000ms OFF, REPEAT
++     *
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_SLS = 66;
++    /**
++     *  CDMA LOW SLS tone: {1300Hz 25ms, 1450Hz 25ms} 10 times,
++     *  500ms OFF, {1300Hz 25ms, 1450Hz 25ms} 20 times, 500ms OFF,
++     *  {1300Hz 25ms, 1450Hz 25ms} 10 times, 3000ms OFF, REPEAT
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_SLS = 67;
++    /**
++     *  CDMA HIGH S X4 tone: {3700Hz 25ms, 4000Hz 25ms} 10 times,
++     *  500ms OFF, {3700Hz 25ms, 4000Hz 25ms} 10 times, 500ms OFF,
++     *  {3700Hz 25ms, 4000Hz 25ms} 10 times, 500ms OFF,
++     *  {3700Hz 25ms, 4000Hz 25ms} 10 times, 2500ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_S_X4 = 68;
++    /**
++     *  CDMA MED S X4 tone: {2600Hz 25ms, 2900Hz 25ms} 10 times,
++     *  500ms OFF, {2600Hz 25ms, 2900Hz 25ms} 10 times, 500ms OFF,
++     *  {2600Hz 25ms, 2900Hz 25ms} 10 times, 500ms OFF,
++     *  {2600Hz 25ms, 2900Hz 25ms} 10 times, 2500ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_S_X4 = 69;
++    /**
++     *  CDMA LOW  S X4 tone: {2600Hz 25ms, 2900Hz 25ms} 10 times,
++     *  500ms OFF, {2600Hz 25ms, 2900Hz 25ms} 10 times, 500ms OFF,
++     *  {2600Hz 25ms, 2900Hz 25ms} 10 times, 500ms OFF,
++     *  {2600Hz 25ms, 2900Hz 25ms} 10 times, 2500ms OFF, REPEAT....
++     *
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_S_X4 = 70;
++    /**
++     * CDMA HIGH PBX L: {3700Hz 25ms, 4000Hz 25ms}20 times,
++     * 2000ms OFF,  REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_PBX_L = 71;
++    /**
++     *  CDMA MED PBX L: {2600Hz 25ms, 2900Hz 25ms}20 times,
++     * 2000ms OFF,  REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_PBX_L = 72;
++    /**
++     * CDMA LOW PBX L: {1300Hz 25ms,1450Hz 25ms}20 times,
++     * 2000ms OFF,  REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_PBX_L = 73;
++    /**
++     * CDMA HIGH PBX SS tone: {3700Hz 25ms, 4000Hz 25ms} 8 times
++     * 200 ms OFF, {3700Hz 25ms 4000Hz 25ms}8 times,
++     * 2000ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_PBX_SS = 74;
++    /**
++     * CDMA MED PBX SS tone: {2600Hz 25ms, 2900Hz 25ms} 8 times
++     * 200 ms OFF, {2600Hz 25ms 2900Hz 25ms}8 times,
++     * 2000ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_PBX_SS = 75;
++    /**
++     * CDMA LOW PBX SS tone: {1300Hz 25ms, 1450Hz 25ms} 8 times
++     * 200 ms OFF, {1300Hz 25ms 1450Hz 25ms}8 times,
++     * 2000ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_PBX_SS = 76;
++    /**
++     * CDMA HIGH PBX SSL tone:{3700Hz 25ms, 4000Hz 25ms} 8 times
++     * 200ms OFF, {3700Hz 25ms, 4000Hz 25ms} 8 times, 200ms OFF,
++     * {3700Hz 25ms, 4000Hz 25ms} 16 times, 1000ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_PBX_SSL = 77;
++    /**
++     * CDMA MED PBX SSL tone:{2600Hz 25ms, 2900Hz 25ms} 8 times
++     * 200ms OFF, {2600Hz 25ms, 2900Hz 25ms} 8 times, 200ms OFF,
++     * {2600Hz 25ms, 2900Hz 25ms} 16 times, 1000ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_PBX_SSL = 78;
++    /**
++     * CDMA LOW PBX SSL tone:{1300Hz 25ms, 1450Hz 25ms} 8 times
++     * 200ms OFF, {1300Hz 25ms, 1450Hz 25ms} 8 times, 200ms OFF,
++     * {1300Hz 25ms, 1450Hz 25ms} 16 times, 1000ms OFF, REPEAT....
++     *
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_PBX_SSL = 79;
++    /**
++     * CDMA HIGH PBX SSL tone:{3700Hz 25ms, 4000Hz 25ms} 8 times
++     * 200ms OFF, {3700Hz 25ms, 4000Hz 25ms} 16 times, 200ms OFF,
++     * {3700Hz 25ms, 4000Hz 25ms} 8 times, 1000ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_PBX_SLS = 80;
++    /**
++     * CDMA HIGH PBX SLS tone:{2600Hz 25ms, 2900Hz 25ms} 8 times
++     * 200ms OFF, {2600Hz 25ms, 2900Hz 25ms} 16 times, 200ms OFF,
++     * {2600Hz 25ms, 2900Hz 25ms} 8 times, 1000ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_PBX_SLS = 81;
++    /**
++     * CDMA HIGH PBX SLS tone:{1300Hz 25ms, 1450Hz 25ms} 8 times
++     * 200ms OFF, {1300Hz 25ms, 1450Hz 25ms} 16 times, 200ms OFF,
++     * {1300Hz 25ms, 1450Hz 25ms} 8 times, 1000ms OFF, REPEAT....
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_PBX_SLS = 82;
++    /**
++     * CDMA HIGH PBX X S4 tone: {3700Hz 25ms 4000Hz 25ms} 8 times,
++     * 200ms OFF, {3700Hz 25ms 4000Hz 25ms} 8 times, 200ms OFF,
++     * {3700Hz 25ms 4000Hz 25ms} 8 times, 200ms OFF,
++     * {3700Hz 25ms 4000Hz 25ms} 8 times, 800ms OFF, REPEAT...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_HIGH_PBX_S_X4 = 83;
++    /**
++     * CDMA MED PBX X S4 tone: {2600Hz 25ms 2900Hz 25ms} 8 times,
++     * 200ms OFF, {2600Hz 25ms 2900Hz 25ms} 8 times, 200ms OFF,
++     * {2600Hz 25ms 2900Hz 25ms} 8 times, 200ms OFF,
++     * {2600Hz 25ms 2900Hz 25ms} 8 times, 800ms OFF, REPEAT...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_MED_PBX_S_X4 = 84;
++    /**
++     * CDMA LOW PBX X S4 tone: {1300Hz 25ms 1450Hz 25ms} 8 times,
++     * 200ms OFF, {1300Hz 25ms 1450Hz 25ms} 8 times, 200ms OFF,
++     * {1300Hz 25ms 1450Hz 25ms} 8 times, 200ms OFF,
++     * {1300Hz 25ms 1450Hz 25ms} 8 times, 800ms OFF, REPEAT...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_LOW_PBX_S_X4 = 85;
++    /**
++     * CDMA Alert Network Lite tone: 1109Hz 62ms ON, 784Hz 62ms ON, 740Hz 62ms ON
++     * 622Hz 62ms ON, 1109Hz 62ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_ALERT_NETWORK_LITE = 86;
++    /**
++     * CDMA Alert Auto Redial tone: {1245Hz 62ms ON, 659Hz 62ms ON} 3 times,
++     * 1245 62ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_ALERT_AUTOREDIAL_LITE = 87;
++    /**
++     * CDMA One Min Beep tone: 1150Hz+770Hz 400ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_ONE_MIN_BEEP = 88;
++    /**
++     *
++     * CDMA KEYPAD Volume key lite tone: 941Hz+1477Hz 120ms ON
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_KEYPAD_VOLUME_KEY_LITE = 89;
++    /**
++     * CDMA PRESSHOLDKEY LITE tone: 587Hz 375ms ON, 1175Hz 125ms ON
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_PRESSHOLDKEY_LITE = 90;
++    /**
++     * CDMA ALERT INCALL LITE tone: 587Hz 62ms, 784 62ms, 831Hz 62ms,
++     * 784Hz 62ms, 1109 62ms, 784Hz 62ms, 831Hz 62ms, 784Hz 62ms
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_ALERT_INCALL_LITE = 91;
++    /**
++     * CDMA EMERGENCY RINGBACK tone: {941Hz 125ms ON, 10ms OFF} 3times
++     * 4990ms OFF, REPEAT...
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_EMERGENCY_RINGBACK = 92;
++    /**
++     * CDMA ALERT CALL GUARD tone: {1319Hz 125ms ON, 125ms OFF} 3 times
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_ALERT_CALL_GUARD = 93;
++    /**
++     * CDMA SOFT ERROR LITE  tone: 1047Hz 125ms ON, 370Hz 125ms
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_SOFT_ERROR_LITE = 94;
++    /**
++     * CDMA CALLDROP LITE tone: 1480Hz 125ms, 1397Hz 125ms, 784Hz 125ms
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_CALLDROP_LITE = 95;
++    /**
++     * CDMA_NETWORK_BUSY_ONE_SHOT tone: 425Hz 500ms ON, 500ms OFF.
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_NETWORK_BUSY_ONE_SHOT = 96;
++    /**
++     * CDMA_ABBR_ALERT tone: 1150Hz+770Hz 400ms ON
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int    TONE_CDMA_ABBR_ALERT = 97;
++    /**
++     * CDMA_SIGNAL_OFF - silent tone
++     *
++     * @see #ToneGenerator(int, int)
++     */
++    public static final int TONE_CDMA_SIGNAL_OFF = 98;
++
++    /** Maximum volume, for use with {@link #ToneGenerator(int,int)} */
++    public static final int MAX_VOLUME = 100;
++    /** Minimum volume setting, for use with {@link #ToneGenerator(int,int)} */
++    public static final int MIN_VOLUME = 0;
++	
++    public static final int TCT_TONE_CALL_WAITING_LATAM = 99;
++
++	//added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin
++    /**
++     * TONE_CMAS - tone: 853Hz+960Hz 2000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 1000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 1000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 2000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 1000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 1000ms ON as defined in ATIS-TIA-J-STD-100
++     *
++     * @see #ToneGenerator(int, int)
++     * @hide
++     */
++    public static final int TONE_CMAS = 100;
++    //added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end
++
++    /**
++     * ToneGenerator class contructor specifying output stream type and volume.
++     *
++     * @param streamType The streame type used for tone playback (e.g. STREAM_MUSIC).
++     * @param volume     The volume of the tone, given in percentage of maximum volume (from 0-100).
++     *
++     */
++    public ToneGenerator(int streamType, int volume) {
++        native_setup(streamType, volume);
++    }
++
++    /**
++     * This method starts the playback of a tone of the specified type.
++     * only one tone can play at a time: if a tone is playing while this method is called,
++     * this tone is stopped and replaced by the one requested.
++     * @param toneType   The type of tone generated chosen from the following list:
++     * <ul>
++     * <li>{@link #TONE_DTMF_0}
++     * <li>{@link #TONE_DTMF_1}
++     * <li>{@link #TONE_DTMF_2}
++     * <li>{@link #TONE_DTMF_3}
++     * <li>{@link #TONE_DTMF_4}
++     * <li>{@link #TONE_DTMF_5}
++     * <li>{@link #TONE_DTMF_6}
++     * <li>{@link #TONE_DTMF_7}
++     * <li>{@link #TONE_DTMF_8}
++     * <li>{@link #TONE_DTMF_9}
++     * <li>{@link #TONE_DTMF_A}
++     * <li>{@link #TONE_DTMF_B}
++     * <li>{@link #TONE_DTMF_C}
++     * <li>{@link #TONE_DTMF_D}
++     * <li>{@link #TONE_SUP_DIAL}
++     * <li>{@link #TONE_SUP_BUSY}
++     * <li>{@link #TONE_SUP_CONGESTION}
++     * <li>{@link #TONE_SUP_RADIO_ACK}
++     * <li>{@link #TONE_SUP_RADIO_NOTAVAIL}
++     * <li>{@link #TONE_SUP_ERROR}
++     * <li>{@link #TONE_SUP_CALL_WAITING}
++     * <li>{@link #TONE_SUP_RINGTONE}
++     * <li>{@link #TONE_PROP_BEEP}
++     * <li>{@link #TONE_PROP_ACK}
++     * <li>{@link #TONE_PROP_NACK}
++     * <li>{@link #TONE_PROP_PROMPT}
++     * <li>{@link #TONE_PROP_BEEP2}
++     * <li>{@link #TONE_SUP_INTERCEPT}
++     * <li>{@link #TONE_SUP_INTERCEPT_ABBREV}
++     * <li>{@link #TONE_SUP_CONGESTION_ABBREV}
++     * <li>{@link #TONE_SUP_CONFIRM}
++     * <li>{@link #TONE_SUP_PIP}
++     * <li>{@link #TONE_CDMA_DIAL_TONE_LITE}
++     * <li>{@link #TONE_CDMA_NETWORK_USA_RINGBACK}
++     * <li>{@link #TONE_CDMA_INTERCEPT}
++     * <li>{@link #TONE_CDMA_ABBR_INTERCEPT}
++     * <li>{@link #TONE_CDMA_REORDER}
++     * <li>{@link #TONE_CDMA_ABBR_REORDER}
++     * <li>{@link #TONE_CDMA_NETWORK_BUSY}
++     * <li>{@link #TONE_CDMA_CONFIRM}
++     * <li>{@link #TONE_CDMA_ANSWER}
++     * <li>{@link #TONE_CDMA_NETWORK_CALLWAITING}
++     * <li>{@link #TONE_CDMA_PIP}
++     * <li>{@link #TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL}
++     * <li>{@link #TONE_CDMA_CALL_SIGNAL_ISDN_INTERGROUP}
++     * <li>{@link #TONE_CDMA_CALL_SIGNAL_ISDN_SP_PRI}
++     * <li>{@link #TONE_CDMA_CALL_SIGNAL_ISDN_PAT3}
++     * <li>{@link #TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING}
++     * <li>{@link #TONE_CDMA_CALL_SIGNAL_ISDN_PAT5}
++     * <li>{@link #TONE_CDMA_CALL_SIGNAL_ISDN_PAT6}
++     * <li>{@link #TONE_CDMA_CALL_SIGNAL_ISDN_PAT7}
++     * <li>{@link #TONE_CDMA_HIGH_L}
++     * <li>{@link #TONE_CDMA_MED_L}
++     * <li>{@link #TONE_CDMA_LOW_L}
++     * <li>{@link #TONE_CDMA_HIGH_SS}
++     * <li>{@link #TONE_CDMA_MED_SS}
++     * <li>{@link #TONE_CDMA_LOW_SS}
++     * <li>{@link #TONE_CDMA_HIGH_SSL}
++     * <li>{@link #TONE_CDMA_MED_SSL}
++     * <li>{@link #TONE_CDMA_LOW_SSL}
++     * <li>{@link #TONE_CDMA_HIGH_SS_2}
++     * <li>{@link #TONE_CDMA_MED_SS_2}
++     * <li>{@link #TONE_CDMA_LOW_SS_2}
++     * <li>{@link #TONE_CDMA_HIGH_SLS}
++     * <li>{@link #TONE_CDMA_MED_SLS}
++     * <li>{@link #TONE_CDMA_LOW_SLS}
++     * <li>{@link #TONE_CDMA_HIGH_S_X4}
++     * <li>{@link #TONE_CDMA_MED_S_X4}
++     * <li>{@link #TONE_CDMA_LOW_S_X4}
++     * <li>{@link #TONE_CDMA_HIGH_PBX_L}
++     * <li>{@link #TONE_CDMA_MED_PBX_L}
++     * <li>{@link #TONE_CDMA_LOW_PBX_L}
++     * <li>{@link #TONE_CDMA_HIGH_PBX_SS}
++     * <li>{@link #TONE_CDMA_MED_PBX_SS}
++     * <li>{@link #TONE_CDMA_LOW_PBX_SS}
++     * <li>{@link #TONE_CDMA_HIGH_PBX_SSL}
++     * <li>{@link #TONE_CDMA_MED_PBX_SSL}
++     * <li>{@link #TONE_CDMA_LOW_PBX_SSL}
++     * <li>{@link #TONE_CDMA_HIGH_PBX_SLS}
++     * <li>{@link #TONE_CDMA_MED_PBX_SLS}
++     * <li>{@link #TONE_CDMA_LOW_PBX_SLS}
++     * <li>{@link #TONE_CDMA_HIGH_PBX_S_X4}
++     * <li>{@link #TONE_CDMA_MED_PBX_S_X4}
++     * <li>{@link #TONE_CDMA_LOW_PBX_S_X4}
++     * <li>{@link #TONE_CDMA_ALERT_NETWORK_LITE}
++     * <li>{@link #TONE_CDMA_ALERT_AUTOREDIAL_LITE}
++     * <li>{@link #TONE_CDMA_ONE_MIN_BEEP}
++     * <li>{@link #TONE_CDMA_KEYPAD_VOLUME_KEY_LITE}
++     * <li>{@link #TONE_CDMA_PRESSHOLDKEY_LITE}
++     * <li>{@link #TONE_CDMA_ALERT_INCALL_LITE}
++     * <li>{@link #TONE_CDMA_EMERGENCY_RINGBACK}
++     * <li>{@link #TONE_CDMA_ALERT_CALL_GUARD}
++     * <li>{@link #TONE_CDMA_SOFT_ERROR_LITE}
++     * <li>{@link #TONE_CDMA_CALLDROP_LITE}
++     * <li>{@link #TONE_CDMA_NETWORK_BUSY_ONE_SHOT}
++     * <li>{@link #TONE_CDMA_ABBR_ALERT}
++     * <li>{@link #TONE_CDMA_SIGNAL_OFF}
++     * </ul>
++     * @see #ToneGenerator(int, int)
++    */
++    public boolean startTone(int toneType) {
++        return startTone(toneType, -1);
++    }
++
++    /**
++     * This method starts the playback of a tone of the specified type for the specified duration.
++     * @param toneType   The type of tone generated @see {@link #startTone(int)}.
++     * @param durationMs  The tone duration in milliseconds. If the tone is limited in time by definition,
++     * the actual duration will be the minimum of durationMs and the defined tone duration. Setting durationMs to -1,
++     * is equivalent to calling {@link #startTone(int)}.
++    */
++    public native boolean startTone(int toneType, int durationMs);
++
++    /**
++     * This method stops the tone currently playing playback.
++     * @see #ToneGenerator(int, int)
++     */
++    public native void stopTone();
++
++    /**
++     * Releases resources associated with this ToneGenerator object. It is good
++     * practice to call this method when you're done using the ToneGenerator.
++     */
++    public native void release();
++
++    private native final void native_setup(int streamType, int volume);
++
++    private native final void native_finalize();
++
++    /**
++    * Returns the audio session ID.
++    *
++    * @return the ID of the audio session this ToneGenerator belongs to or 0 if an error
++    * occured.
++    */
++    public native final int getAudioSessionId();
++
++    @Override
++    protected void finalize() { native_finalize(); }
++
++    @SuppressWarnings("unused")
++    private long mNativeContext; // accessed by native methods
++}
+
+Property changes on: vendor/branch/5058I_HK/frameworks/base/media/java/android/media/ToneGenerator.java
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

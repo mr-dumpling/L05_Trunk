@@ -1,0 +1,270 @@
+Index: vendor/mediatek/proprietary/packages/apps/FactoryMode/AndroidManifest.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FactoryMode/AndroidManifest.xml	(revision 1064)
++++ vendor/mediatek/proprietary/packages/apps/FactoryMode/AndroidManifest.xml	(revision 1065)
+@@ -50,7 +50,17 @@
+ 
+         <service android:name=".wifi.wifiStateListener" />
+         <service android:name=".BatteryLogService" />
++        <service android:name=".FactoryModeBootCompleteServer"
++             android:exported="false"/>
+         <receiver
++            android:name=".FactoryModeBootupReceiver"
++            android:exported="true" >
++            <intent-filter>
++                <action android:name="android.intent.action.BOOT_COMPLETED" />
++            </intent-filter>
++        </receiver>
++
++        <receiver
+             android:name=".FactoryModeReceiver">
+             <intent-filter>
+                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+Index: vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootupReceiver.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootupReceiver.java	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootupReceiver.java	(revision 1065)
+@@ -0,0 +1,59 @@
++package com.mediatek.factorymode;
++
++
++import android.content.BroadcastReceiver;
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.Intent;
++import android.os.Environment;
++import android.os.storage.StorageManager;
++import android.util.Log;
++
++import android.app.ActivityManager;
++import android.app.Activity;
++import android.app.PendingIntent;
++import android.content.IntentFilter;
++import android.os.Binder;
++import android.os.StatFs;
++import android.os.SystemClock;
++import android.os.SystemProperties;
++import android.os.Handler;
++import android.os.Message;
++import android.telephony.TelephonyManager;
++import android.text.format.Time;
++
++import com.mediatek.storage.StorageManagerEx;
++
++import java.io.File;
++import java.io.FileDescriptor;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.PrintWriter;
++import java.io.BufferedReader;
++import java.io.BufferedWriter;
++import java.io.FileReader;
++import java.io.FileWriter;
++import java.io.FileNotFoundException;
++import android.os.SystemProperties;
++import android.os.IBinder;
++import android.os.ServiceManager;
++
++public class FactoryModeBootupReceiver extends BroadcastReceiver {
++    private final static String TAG = "FactoryModeBootupReceiver";
++    
++    static final String BOOTCOMPLETED_ACTION = "android.intent.action.BOOT_COMPLETED";
++    
++    @Override
++    public void onReceive(Context context,Intent intent){
++
++        String action = intent.getAction();
++        Log.d(TAG, "---BOOTCOMPLETED_ACTION onReceive action="+action);
++
++       if(action.equals(BOOTCOMPLETED_ACTION)){
++            Log.d(TAG, "---BOOTCOMPLETED_ACTION");
++            Intent newIntent = new Intent(context, FactoryModeBootCompleteServer.class);
++            context.startService(newIntent);
++       }
++    }
++
++}
+Index: vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootCompleteServer.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootCompleteServer.java	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/FactoryMode/src/com/mediatek/factorymode/FactoryModeBootCompleteServer.java	(revision 1065)
+@@ -0,0 +1,179 @@
++package com.mediatek.factorymode;
++
++import android.app.Service;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.content.SharedPreferences;
++import android.os.IBinder;
++import android.util.Log;
++
++import java.io.File;
++import java.io.FileDescriptor;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.PrintWriter;
++import java.io.BufferedReader;
++import java.io.BufferedWriter;
++import java.io.FileReader;
++import java.io.FileWriter;
++import java.io.FileNotFoundException;
++import android.os.SystemProperties;
++import android.os.IBinder;
++import android.os.ServiceManager;
++
++public class FactoryModeBootCompleteServer extends Service {
++    private final static String TAG = "FactoryModeBootCompleteServer";
++	private static final int PRODUCT_INFO_NVRAM_LID = 59;
++	private static final int SWR_INFO_NV_POS = 600; 
++    private String SWR_INFO_STRING = "ro.build.swr.id"; 
++    private static final int BT_NVRAM_ID = 1;
++    private static final int WIFI_NVRAM_ID = 53;
++    private byte[] mProductInfoBuff = null;
++	private static final int BT_NVRAM_POS = 309;
++	private static final int BT_LENGTH = 6;
++	private static final int WIFI_NVRAM_POS = 315;
++	private static final int WIFI_LENGTH = 6;    
++    @Override
++    public void onCreate() {
++        super.onCreate();
++    }
++
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++    }
++
++    @Override
++    public IBinder onBind(Intent intent) {
++        return null;
++    }
++
++    @Override
++    public int onStartCommand(Intent intent, int flags, int startId) {
++        Log.d(TAG, "---BootCompleteServer onStartCommand---");
++        readProductInfo();
++        setSWRInfoToNV();
++        readBTAddrFromNvram();
++        readWifiMACFromNvram();
++        
++        stopSelf();
++        return START_NOT_STICKY;
++    }
++
++    private void readProductInfo(){
++        IBinder binder = ServiceManager.getService("NvRAMAgent");
++        NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++
++        try{
++            mProductInfoBuff = agent.readFile(PRODUCT_INFO_NVRAM_LID);
++        }catch(Exception e){
++            e.printStackTrace();
++        }        
++
++    }
++
++    private void readWifiMACFromNvram(){
++        byte[] buff = null;
++        boolean isNvramNull = true;
++        IBinder binder = ServiceManager.getService("NvRAMAgent");
++        NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++        
++        try{
++            buff = agent.readFile(WIFI_NVRAM_ID);
++        }catch(Exception e){
++            e.printStackTrace();
++        } 
++
++        for (int i = 0; i < WIFI_LENGTH; i++) {
++            if(mProductInfoBuff[WIFI_NVRAM_POS+i] !=(byte)0){
++                isNvramNull = false;
++                break;
++            }
++        }
++
++        for(int i = 0; i < WIFI_LENGTH && !isNvramNull; i++){
++            buff[i+4] = mProductInfoBuff[WIFI_NVRAM_POS+i];
++            Log.d(TAG, "---buff["+i+4+"]="+buff[i+4]);    
++        }
++
++        if(!isNvramNull){
++            try{
++                agent.writeFile(WIFI_NVRAM_ID,buff);
++            }catch(Exception e){
++                e.printStackTrace();
++                return ;
++            }  
++        }
++
++    }
++
++    private void readBTAddrFromNvram(){
++        byte[] buff = null;
++        IBinder binder = ServiceManager.getService("NvRAMAgent");
++        NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++        boolean isNvramNull = true;
++
++        try{
++            buff = agent.readFile(BT_NVRAM_ID);
++        }catch(Exception e){
++            e.printStackTrace();
++        }
++
++        for (int i = 0; i < BT_LENGTH; i++) {
++            if(mProductInfoBuff[BT_NVRAM_POS+i] !=(byte)0){
++                isNvramNull = false;
++                break;
++            }
++        }
++
++        for (int i = 0; i < BT_LENGTH && !isNvramNull; i++) {
++            buff[i] = mProductInfoBuff[BT_NVRAM_POS+i];
++        }
++
++        if(!isNvramNull){
++            try{
++                agent.writeFile(BT_NVRAM_ID,buff);
++            }catch(Exception e){
++                e.printStackTrace();
++                return ;
++            }  
++        }
++        
++    }
++
++    private void setSWRInfoToNV(){
++        if(mProductInfoBuff == null){
++            Log.d(TAG, "===mProductInfoBuff == null=");
++            return;
++        }
++        
++        IBinder binder = ServiceManager.getService("NvRAMAgent");
++        NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
++ 
++        Log.d(TAG, "===setSWRInfoToNV  buff[SWR_INFO_NV_POS]="+mProductInfoBuff[SWR_INFO_NV_POS]);
++        
++        if(/*mProductInfoBuff[SWR_INFO_NV_POS] == (byte)0*/true){
++            String swrInfo = SystemProperties.get(SWR_INFO_STRING, "unknow");
++            String swrInfoEx = "SWR:"+swrInfo+"End";        
++            byte[] swrByte = swrInfoEx.getBytes(); 
++            Log.d(TAG, "swrInfo="+swrInfo+",swrInfoEx="+swrInfoEx);
++
++            for(int i = 0; i < swrByte.length; i++)
++            {
++                mProductInfoBuff[SWR_INFO_NV_POS + i] = swrByte[i];
++                Log.d(TAG, "buff="+mProductInfoBuff[SWR_INFO_NV_POS + i]);
++            }
++
++            try 
++            {
++                agent.writeFile(PRODUCT_INFO_NVRAM_LID,mProductInfoBuff);
++            }catch(Exception e){
++                e.printStackTrace();
++                return ;
++            }            
++            
++        }
++        
++    }
++
++}

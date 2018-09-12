@@ -1,0 +1,62 @@
+Index: packages/apps/Settings/src/com/android/settings/SettingsActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 4341)
++++ packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 4342)
+@@ -153,6 +153,9 @@
+ import java.util.List;
+ import java.util.Set;
+ 
++import android.net.NetworkInfo;
++import android.net.wifi.WifiManager;
++
+ public class SettingsActivity extends SettingsDrawerActivity
+         implements PreferenceManager.OnPreferenceTreeClickListener,
+         PreferenceFragment.OnPreferenceStartFragmentCallback,
+@@ -443,6 +446,25 @@
+         }
+     };
+ 
++	private final BroadcastReceiver mWifiConnectedReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            String action = intent.getAction();
++            if (action.equals(WifiManager.NETWORK_STATE_CHANGED_ACTION)){
++				 NetworkInfo info = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
++				 Button btn = (Button)findViewById(R.id.next_button_boot);
++             if (info.getState().equals(NetworkInfo.State.DISCONNECTED)) {
++                 btn.setText(R.string.skip_label);
++             }
++             
++             if(info.getState().equals(NetworkInfo.State.CONNECTING)){
++                btn.setText(R.string.next_label);
++             }
++                
++            }
++        }
++    };
++	
+     private final DynamicIndexableContentMonitor mDynamicIndexableContentMonitor =
+             new DynamicIndexableContentMonitor();
+ 
+@@ -938,6 +960,8 @@
+         registerReceiver(mBatteryInfoReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+         registerReceiver(mUserAddRemoveReceiver, new IntentFilter(Intent.ACTION_USER_ADDED));
+         registerReceiver(mUserAddRemoveReceiver, new IntentFilter(Intent.ACTION_USER_REMOVED));
++        if(mFromBootWizard)
++		    registerReceiver(mWifiConnectedReceiver, new IntentFilter(WifiManager.NETWORK_STATE_CHANGED_ACTION));
+ 
+         mDynamicIndexableContentMonitor.register(this, LOADER_ID_INDEXABLE_CONTENT_MONITOR);
+ 
+Index: packages/apps/Settings/res/layout/settings_main_prefs.xml
+===================================================================
+--- packages/apps/Settings/res/layout/settings_main_prefs.xml	(revision 4341)
++++ packages/apps/Settings/res/layout/settings_main_prefs.xml	(revision 4342)
+@@ -82,7 +82,7 @@
+                     android:layout_height="wrap_content"
+                     android:layout_margin="5dip"
+                     android:visibility="gone"
+-                    android:text="@*android:string/next_button_label"
++                    android:text="@*android:string/skip_button_label"
+                     />
+ 
+         </LinearLayout>

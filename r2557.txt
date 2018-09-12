@@ -1,0 +1,2019 @@
+Index: packages/services/Telephony/AndroidManifest.xml
+===================================================================
+--- packages/services/Telephony/AndroidManifest.xml	(revision 2556)
++++ packages/services/Telephony/AndroidManifest.xml	(revision 2557)
+@@ -579,6 +579,14 @@
+                 <category android:name="android.intent.category.DEFAULT" />
+             </intent-filter>
+         </activity>
++		
++		<!-- added by lei.shi for task1149499 at 2015.12.14 begin -->
++        <receiver android:name=".TurnOffScreenReceiver">
++            <intent-filter>
++                <action android:name="com.android.mms.intent.action.ACTION_TURN_OFF_SCREEN" />
++            </intent-filter>
++        </receiver>
++        <!-- added by lei.shi for task1149499 at 2015.12.14 end -->
+ 
+         <activity android:label="Sip Settings"
+                   android:name="com.android.services.telephony.sip.SipSettings"
+Index: packages/services/Telephony/src/com/android/phone/TurnOffScreenReceiver.java
+===================================================================
+--- packages/services/Telephony/src/com/android/phone/TurnOffScreenReceiver.java	(revision 0)
++++ packages/services/Telephony/src/com/android/phone/TurnOffScreenReceiver.java	(revision 2557)
+@@ -0,0 +1,33 @@
++/** This file create by lei.shi for task1149499 at 2015.12.14 */
++
++package com.android.phone;
++
++import android.content.Context;
++import android.content.Intent;
++import android.os.PowerManager;
++import android.os.SystemClock;
++import android.util.Log;
++import android.content.BroadcastReceiver;
++
++public class TurnOffScreenReceiver extends BroadcastReceiver {
++    private String LOG_TAG = "TurnOffScreenReceiver";
++
++    private String TURN_OFF_SCREEN = "com.android.mms.intent.action.ACTION_TURN_OFF_SCREEN";
++
++    private PowerManager pm;
++
++    public void turnOffScreen(Context context) {
++        pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
++        pm.goToSleep(SystemClock.uptimeMillis());
++    }
++
++    @Override
++    public void onReceive(Context context, Intent intent) {
++        Log.v(LOG_TAG, "onReceive");
++        String action = intent.getAction();
++        if (TURN_OFF_SCREEN.equals(action)) {
++            turnOffScreen(context);
++            Log.v(LOG_TAG, "TURN_OFF_SCREEN");
++        }
++    }
++}
+\ No newline at end of file
+Index: vendor/branch/5058T/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/branch/5058T/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 0)
++++ vendor/branch/5058T/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Copyright (C) 2011 The Android Open Source Project Licensed under the
++    Apache License, Version 2.0 (the "License"); you may not use this file
++    except in compliance with the License. You may obtain a copy of the
++    License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
++    applicable law or agreed to in writing, software distributed under the
++    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
++    CONDITIONS OF ANY KIND, either express or implied. See the License for
++    the specific language governing permissions and limitations under the
++    License.
++-->
++<resources
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <bool name="isTablet">false</bool>
++    <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
++</resources>
+Index: vendor/branch/5058T/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058T/frameworks/base/core/res/res/values/config.xml	(revision 2556)
++++ vendor/branch/5058T/frameworks/base/core/res/res/values/config.xml	(revision 2557)
+@@ -2655,4 +2655,6 @@
+ 
+     <!-- An array of packages for which notifications cannot be blocked. -->
+     <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
++	
++	<bool name="def_cb_channel_50_behaviour_brazil">false</bool>
+ </resources>
+Index: vendor/branch/5058A_Telcel/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A_Telcel/frameworks/base/core/res/res/values/config.xml	(revision 2556)
++++ vendor/branch/5058A_Telcel/frameworks/base/core/res/res/values/config.xml	(revision 2557)
+@@ -2655,4 +2655,6 @@
+ 
+     <!-- An array of packages for which notifications cannot be blocked. -->
+     <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
++	
++	<bool name="def_cb_channel_50_behaviour_brazil">false</bool>
+ </resources>
+Index: vendor/branch/5058A_Telcel/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A_Telcel/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 0)
++++ vendor/branch/5058A_Telcel/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Copyright (C) 2011 The Android Open Source Project Licensed under the
++    Apache License, Version 2.0 (the "License"); you may not use this file
++    except in compliance with the License. You may obtain a copy of the
++    License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
++    applicable law or agreed to in writing, software distributed under the
++    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
++    CONDITIONS OF ANY KIND, either express or implied. See the License for
++    the specific language governing permissions and limitations under the
++    License.
++-->
++<resources
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <bool name="isTablet">false</bool>
++    <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
++</resources>
+Index: vendor/branch/5058I/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/branch/5058I/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 0)
++++ vendor/branch/5058I/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Copyright (C) 2011 The Android Open Source Project Licensed under the
++    Apache License, Version 2.0 (the "License"); you may not use this file
++    except in compliance with the License. You may obtain a copy of the
++    License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
++    applicable law or agreed to in writing, software distributed under the
++    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
++    CONDITIONS OF ANY KIND, either express or implied. See the License for
++    the specific language governing permissions and limitations under the
++    License.
++-->
++<resources
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <bool name="isTablet">false</bool>
++    <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
++</resources>
+Index: vendor/branch/5058I/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058I/frameworks/base/core/res/res/values/config.xml	(revision 2556)
++++ vendor/branch/5058I/frameworks/base/core/res/res/values/config.xml	(revision 2557)
+@@ -2655,4 +2655,6 @@
+ 
+     <!-- An array of packages for which notifications cannot be blocked. -->
+     <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
++	
++	<bool name="def_cb_channel_50_behaviour_brazil">false</bool>
+ </resources>
+Index: vendor/branch/5058Y/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/branch/5058Y/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 0)
++++ vendor/branch/5058Y/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Copyright (C) 2011 The Android Open Source Project Licensed under the
++    Apache License, Version 2.0 (the "License"); you may not use this file
++    except in compliance with the License. You may obtain a copy of the
++    License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
++    applicable law or agreed to in writing, software distributed under the
++    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
++    CONDITIONS OF ANY KIND, either express or implied. See the License for
++    the specific language governing permissions and limitations under the
++    License.
++-->
++<resources
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <bool name="isTablet">false</bool>
++    <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
++</resources>
+Index: vendor/branch/5058Y/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058Y/frameworks/base/core/res/res/values/config.xml	(revision 2556)
++++ vendor/branch/5058Y/frameworks/base/core/res/res/values/config.xml	(revision 2557)
+@@ -2655,4 +2655,6 @@
+ 
+     <!-- An array of packages for which notifications cannot be blocked. -->
+     <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
++	
++	<bool name="def_cb_channel_50_behaviour_brazil">false</bool>
+ </resources>
+Index: vendor/branch/5058A_BRIGHTSTAR/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A_BRIGHTSTAR/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 0)
++++ vendor/branch/5058A_BRIGHTSTAR/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Copyright (C) 2011 The Android Open Source Project Licensed under the
++    Apache License, Version 2.0 (the "License"); you may not use this file
++    except in compliance with the License. You may obtain a copy of the
++    License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
++    applicable law or agreed to in writing, software distributed under the
++    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
++    CONDITIONS OF ANY KIND, either express or implied. See the License for
++    the specific language governing permissions and limitations under the
++    License.
++-->
++<resources
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <bool name="isTablet">false</bool>
++    <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
++</resources>
+Index: vendor/branch/5058J/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058J/frameworks/base/core/res/res/values/config.xml	(revision 2556)
++++ vendor/branch/5058J/frameworks/base/core/res/res/values/config.xml	(revision 2557)
+@@ -2655,4 +2655,6 @@
+ 
+     <!-- An array of packages for which notifications cannot be blocked. -->
+     <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
++	
++	<bool name="def_cb_channel_50_behaviour_brazil">false</bool>
+ </resources>
+Index: vendor/branch/5058J/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/branch/5058J/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 0)
++++ vendor/branch/5058J/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Copyright (C) 2011 The Android Open Source Project Licensed under the
++    Apache License, Version 2.0 (the "License"); you may not use this file
++    except in compliance with the License. You may obtain a copy of the
++    License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
++    applicable law or agreed to in writing, software distributed under the
++    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
++    CONDITIONS OF ANY KIND, either express or implied. See the License for
++    the specific language governing permissions and limitations under the
++    License.
++-->
++<resources
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <bool name="isTablet">false</bool>
++    <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
++</resources>
+Index: vendor/branch/5058A/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 0)
++++ vendor/branch/5058A/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Copyright (C) 2011 The Android Open Source Project Licensed under the
++    Apache License, Version 2.0 (the "License"); you may not use this file
++    except in compliance with the License. You may obtain a copy of the
++    License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
++    applicable law or agreed to in writing, software distributed under the
++    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
++    CONDITIONS OF ANY KIND, either express or implied. See the License for
++    the specific language governing permissions and limitations under the
++    License.
++-->
++<resources
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <bool name="isTablet">false</bool>
++    <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">true</bool>
++</resources>
+Index: vendor/branch/5058A/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A/frameworks/base/core/res/res/values/config.xml	(revision 2556)
++++ vendor/branch/5058A/frameworks/base/core/res/res/values/config.xml	(revision 2557)
+@@ -2655,4 +2655,6 @@
+ 
+     <!-- An array of packages for which notifications cannot be blocked. -->
+     <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
++	
++	<bool name="def_cb_channel_50_behaviour_brazil">true</bool>
+ </resources>
+Index: vendor/branch/5058A_Claro/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A_Claro/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 0)
++++ vendor/branch/5058A_Claro/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Copyright (C) 2011 The Android Open Source Project Licensed under the
++    Apache License, Version 2.0 (the "License"); you may not use this file
++    except in compliance with the License. You may obtain a copy of the
++    License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
++    applicable law or agreed to in writing, software distributed under the
++    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
++    CONDITIONS OF ANY KIND, either express or implied. See the License for
++    the specific language governing permissions and limitations under the
++    License.
++-->
++<resources
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <bool name="isTablet">false</bool>
++    <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
++</resources>
+Index: vendor/branch/980CN1/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/980CN1/frameworks/base/core/res/res/values/config.xml	(revision 2556)
++++ vendor/branch/980CN1/frameworks/base/core/res/res/values/config.xml	(revision 2557)
+@@ -2655,4 +2655,6 @@
+ 
+     <!-- An array of packages for which notifications cannot be blocked. -->
+     <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
++	
++	<bool name="def_cb_channel_50_behaviour_brazil">false</bool>
+ </resources>
+Index: vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 0)
++++ vendor/branch/980CN1/vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Copyright (C) 2011 The Android Open Source Project Licensed under the
++    Apache License, Version 2.0 (the "License"); you may not use this file
++    except in compliance with the License. You may obtain a copy of the
++    License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
++    applicable law or agreed to in writing, software distributed under the
++    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
++    CONDITIONS OF ANY KIND, either express or implied. See the License for
++    the specific language governing permissions and limitations under the
++    License.
++-->
++<resources
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <bool name="isTablet">false</bool>
++    <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
++</resources>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/AndroidManifest.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/AndroidManifest.xml	(revision 2556)
++++ vendor/mediatek/proprietary/packages/apps/Mms/AndroidManifest.xml	(revision 2557)
+@@ -91,6 +91,10 @@
+     <uses-permission android:name="com.cmcc.ccs.WRITE_CCS_MESSAGE"/>
+     <uses-permission android:name="com.cmcc.ccs.READ_PROFILE" />
+     <uses-permission android:name="com.cmcc.ccs.WRITE_PROFILE" />
++	
++	<!-- add lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin -->
++    <uses-permission android:name="android.permission.DEVICE_POWER" />
++    <!-- add lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end -->
+ 
+     <application android:name="MmsApp"
+             android:label="@string/app_label"
+@@ -795,5 +799,12 @@
+                 android:name="android.support.FILE_PROVIDER_PATHS"
+                 android:resource="@xml/file_paths" />
+         </provider>
++		
++		<!-- add lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin -->
++        <activity android:name="com.mediatek.cb.cbmsg.ImmCbmessageActivity"
++            android:theme="@android:style/Theme.Translucent"
++            android:excludeFromRecents="true">
++        </activity>
++        <!-- add lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end -->
+     </application>
+ </manifest>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessagingNotification.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessagingNotification.java	(revision 2556)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessagingNotification.java	(revision 2557)
+@@ -113,6 +113,8 @@
+     private static final int COLUMN_CB_BODY    = 3;
+     //add this for cmcc dir ui mode
+     private static final int COLUMN_CB_ID      = 4;
++	
++	public static AlertNotification alertNotification = null; // added by lei.shi for task1149499 at 2015.12.14
+ 
+     private static final String NEW_INCOMING_SM_CONSTRAINT = "(" + "seen" + " = 0)";
+ 
+@@ -490,4 +492,58 @@
+     public static boolean isFailedToDownload(Intent intent) {
+         return (intent != null) && intent.getBooleanExtra("failed_download_flag", false);
+     }
++	
++	// added by lei.shi for task1149499 at 2015.12.14 begin
++    public static AlertNotification getAlertNotification() {
++        return alertNotification;
++    }
++
++    public static void updateNotificationPopup(Context context, Boolean warningAlert) {
++
++        if (warningAlert) {
++            // it is chile operator custom cb ringtone
++            if (alertNotification != null) {
++                alertNotification.stop();                
++            }
++            alertNotification = new AlertNotification(context);
++            alertNotification.startNotification();
++            return;
++        }
++
++        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
++        // if cb ring is disabled do not play sound.
++        boolean cbRingToneEnable = sp.getBoolean("pref_key_enable_cb_ringtone", false);
++        boolean cbVibrateEnable = sp.getBoolean("pref_key_enable_cb_vibrate", false);
++        MmsLog.i(TAG, "CBMessagingNotification_updateNotificationPopup_cbRingToneEnable: "
++                + cbRingToneEnable);
++        MmsLog.i(TAG, "CBMessagingNotification_updateNotificationPopup_cbVibrateEnable: "
++                + cbVibrateEnable);
++
++        Notification notification = new Notification();
++
++        if (cbRingToneEnable) {
++            String ringtoneStr = sp.getString("pref_key_cb_ringtone", null);
++            Uri ringtone = TextUtils.isEmpty(ringtoneStr) ? null : Uri.parse(ringtoneStr);
++            MmsLog.i(TAG, "CBMessagingNotification_updateNotificationPopup_ringtone: " + ringtone);
++            notification.defaults |= Notification.DEFAULT_SOUND;
++            notification.sound = ringtone;
++        }
++
++        if (cbVibrateEnable) {
++            notification.defaults |= Notification.DEFAULT_VIBRATE;
++        }
++        boolean cbLedEnable = sp.getBoolean("pref_key_enable_cb_led", false);
++        MmsLog.i(TAG, "CBMessagingNotification_updateNotificationPopup_cbLedEnable: " + cbLedEnable);
++        if (cbLedEnable) {
++            notification.flags |= Notification.FLAG_SHOW_LIGHTS;
++            notification.ledARGB = 0xffff0000;
++            notification.ledOnMS = 500;
++            notification.ledOffMS = 2000;
++        }
++
++        NotificationManager nm = (NotificationManager) context
++                .getSystemService(Context.NOTIFICATION_SERVICE);
++        nm.notify(NOTIFICATION_ID, notification);
++    }
++   // added by lei.shi for task1149499 at 2015.12.14 end
+ }
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/ImmCbmessageActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/ImmCbmessageActivity.java	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/ImmCbmessageActivity.java	(revision 2557)
+@@ -0,0 +1,374 @@
++/** This file create by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 */
++
++package com.mediatek.cb.cbmsg;
++
++import java.text.SimpleDateFormat;
++import java.util.Date;
++import com.mediatek.cb.cbmsg.AlertNotification;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.ContentResolver;
++import android.content.ContentUris;
++import android.content.ContentValues;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.SharedPreferences;
++import android.content.DialogInterface.OnClickListener;
++import android.content.Intent;
++import android.database.Cursor;
++import android.net.Uri;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Message;
++import android.os.PowerManager;
++import android.os.SystemClock;
++import android.preference.PreferenceManager;
++import android.provider.Telephony;
++import android.provider.Telephony.Sms;
++import android.provider.Telephony.Sms.Inbox;
++import android.telephony.SmsCbMessage;
++import android.telephony.SmsMessage;
++import android.telephony.SubscriptionManager;
++import android.text.Spannable;
++import android.text.SpannableStringBuilder;
++import android.text.TextUtils;
++import android.text.style.ForegroundColorSpan;
++import android.util.AttributeSet;
++import android.util.Log;
++import android.util.Config;
++import android.view.LayoutInflater;
++import android.view.Window;
++import android.widget.ImageView;
++import android.widget.LinearLayout;
++import android.widget.RelativeLayout;
++import android.widget.TextView;
++import com.android.internal.telephony.Phone;
++import com.android.mms.MmsApp;
++import com.android.mms.R;
++import com.mediatek.cb.cbmsg.CbMessage;
++import com.mediatek.cb.cbmsg.CbMessageReceiverService;
++import com.mediatek.cb.cbmsg.CbMessagingNotification;
++import com.android.mms.transaction.SmsReceiverService;
++import com.android.mms.transaction.MessagingNotification;
++
++import android.database.sqlite.SqliteWrapper;
++
++import android.telephony.SubscriptionInfo;
++import com.android.mms.util.Recycler;
++import com.android.mms.util.FeatureOption;
++import com.android.mms.util.MmsLog;
++
++import android.app.KeyguardManager;
++import android.view.WindowManager;
++
++/**
++ * Display a class-zero SMS message to the user. Wait for the user to dismiss
++ * it.
++ */
++public class ImmCbmessageActivity extends Activity {
++    private static final String TAG = "ImmCbmessageActivity";
++    private static final int ON_AUTO_DISMISS = 1;
++    private static final Uri MESSAGE_URI = Telephony.SmsCb.CONTENT_URI;
++
++    private KeyguardManager.KeyguardLock mKeyguardLock;
++
++    private Handler handler = new Handler();
++    private Runnable runnable = new Runnable() {
++        public void run() {
++            Intent turnOffScreen = new Intent(
++                    "com.android.mms.intent.action.ACTION_TURN_OFF_SCREEN");
++            sendBroadcast(turnOffScreen);
++            Log.v(TAG, "sendBroadcast turnOffScreen");
++        }
++    };
++
++    /** Default timer to dismiss the dialog. */
++    private static final long DEFAULT_TIMER = 5 * 60 * 1000;
++
++    /** To remember the exact time when the timer should fire. */
++    private static final String TIMER_FIRE = "timer_fire";
++
++    private SmsCbMessage mMessages = null;
++    private int mMsgLen = 0;
++
++    /** id of current cb message */
++    private String mKeyId = null;
++
++    /** The timer to dismiss the dialog automatically. */
++    private long mTimerSet = 0;
++    private AlertDialog mDialog = null;
++    private AlertNotification alertNotification;
++
++    private Handler mHandler = new Handler() {
++        @Override
++        public void handleMessage(Message msg) {
++            // Do not handle an invalid message.
++            if (msg.what == ON_AUTO_DISMISS) {
++                if (mDialog != null) {
++                    mDialog.dismiss();
++                }
++                finish();
++            }
++        }
++    };
++
++    @Override
++    protected void onCreate(Bundle icicle) {
++        super.onCreate(icicle);
++        requestWindowFeature(Window.FEATURE_NO_TITLE);
++        getWindow().setBackgroundDrawableResource(
++                R.drawable.class_zero_background);
++
++        final Window win = getWindow();
++
++        win.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
++                | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
++                | WindowManager.LayoutParams.TYPE_TOP_MOST);
++
++        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
++        boolean poweronScreenEnable = sp.getBoolean("pref_key_enable_power_on_screen", false);
++        MmsLog.i(TAG, "poweronScreenEnable: " + poweronScreenEnable);
++        if (poweronScreenEnable) {
++            try {
++                KeyguardManager keym = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
++                mKeyguardLock = keym.newKeyguardLock("ImmCbmessageActivity");
++                mKeyguardLock.disableKeyguard();
++
++            } catch (SecurityException e) {
++                Log.e(TAG, "SecurityException: " + e.getMessage());
++            } catch (Exception e) {
++                Log.e(TAG, "Exception: " + e.getMessage());
++            }
++        }
++
++        Intent intent = getIntent();
++        Bundle extras = intent.getExtras();
++        if (null == extras) {
++            MmsLog.e(MmsApp.TXN_TAG,
++                    "Intents.getMessagesFromIntent return null !!");
++            return;
++        }
++        mMessages = (SmsCbMessage) extras.get("message");
++        if (null == mMessages) {
++            MmsLog.e(MmsApp.TXN_TAG,
++                    "received SMS_CB_RECEIVED_ACTION with no extras!");
++            return;
++        }
++        int subId = intent.getIntExtra("subId",
++                SubscriptionManager.INVALID_SUBSCRIPTION_ID);
++        mKeyId = intent.getStringExtra("key_id");
++
++        int channelId = mMessages.getServiceCategory();
++        String address = "";
++        address = CbMessage.getCBChannelName(subId, channelId);
++        String title = "From" + " " + address + "(" + channelId + ")";
++        String message = mMessages.getMessageBody();
++        long now = SystemClock.uptimeMillis();
++
++        LayoutInflater inflater = LayoutInflater.from(this);
++
++        LinearLayout customTitle = (LinearLayout) inflater.inflate(R.layout.cb_customize_title,
++                null, false);
++        TextView titleView = new TextView(this);
++        TextView dateView = new TextView(this);
++        titleView = (TextView) customTitle.findViewById(R.id.cb_alert_title);
++        dateView = (TextView) customTitle.findViewById(R.id.cb_alert_timestamp);
++        SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss  dd-MM-yyyy");
++        titleView.setText(getResources().getString(R.string.title_imm_cb_dialog));
++        dateView.setText(df.format(new Date()));
++
++        ImmCbmessageView immCbView = (ImmCbmessageView) inflater.inflate(
++                R.layout.imm_cb_message_view_gemini, null, false);
++        immCbView.bind(message, subId);
++
++        if (intent.getBooleanExtra("showWarning", false)) {
++            immCbView.bind(message);
++            mDialog = new AlertDialog.Builder(this)
++                    .setCustomTitle(customTitle)
++                    .setNeutralButton(getResources().getString(R.string.hide_imm_cb_dialog),
++                            mHideListener)
++                    .setCancelable(false).setView(immCbView).show();
++        } else {
++            mDialog = new AlertDialog.Builder(this).setTitle(title)
++                    .setNeutralButton(android.R.string.ok, mOkListener)
++                    .setCancelable(false).setView(immCbView).show();
++        }
++
++        mTimerSet = now + DEFAULT_TIMER;
++        if (icicle != null) {
++            mTimerSet = icicle.getLong(TIMER_FIRE, mTimerSet);
++        }
++
++        boolean cbPopupAndToneVibrateForChile919And921 = getResources()
++                .getBoolean(R.bool.def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile);
++        if (cbPopupAndToneVibrateForChile919And921) {
++            handler.postDelayed(runnable, 1000 * 10);
++        }
++    }
++
++    private final OnClickListener mOkListener = new OnClickListener() {
++        public void onClick(DialogInterface dialog, int whichButton) {
++            if (null != mDialog) {
++                mDialog.dismiss();
++            }
++            // no need to cancel the notification
++            // cancelImmCBMessageNotification();
++            updateReadStatus(1, 1);// mark seen and read
++            finish();
++        }
++    };
++
++    private final OnClickListener mHideListener = new OnClickListener() {
++        public void onClick(DialogInterface dialog, int whichButton) {
++            alertNotification = CbMessagingNotification.getAlertNotification();
++            if(alertNotification != null){
++                alertNotification.stop();
++            }
++            if (null != mDialog) {
++                mDialog.dismiss();
++            }
++
++            boolean cbPopupAndToneVibrateForChile919And921 = getResources()
++                    .getBoolean(R.bool.def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile);
++            if (cbPopupAndToneVibrateForChile919And921) {
++                handler.removeCallbacks(runnable);
++            }
++
++            // no need to cancel the notification
++            updateReadStatus(1, 1);// mark seen and read
++            finish();
++        }
++    };
++
++    @Override
++    protected void onStart() {
++        super.onStart();
++ 	// deleted by lei.shi for defect303205 at 2.15.06.03 begin
++        /*long now = SystemClock.uptimeMillis();
++        // TODO to be decide whether should activate the auto close mechanizm.
++        if (mTimerSet <= now) {
++            // Save the message if the timer already expired.
++            mHandler.sendEmptyMessage(ON_AUTO_DISMISS);
++        } else {
++            mHandler.sendEmptyMessageAtTime(ON_AUTO_DISMISS, mTimerSet);
++            if (Config.DEBUG) {
++                Log.d(TAG, "onRestart time = " + Long.toString(mTimerSet) + " " + this.toString());
++            }
++        }*/
++	// deleted by lei.shi for defect303205 at 2.15.06.03 end
++    }
++
++    @Override
++    protected void onSaveInstanceState(Bundle outState) {
++        super.onSaveInstanceState(outState);
++        outState.putLong(TIMER_FIRE, mTimerSet);
++        if (Config.DEBUG) {
++            Log.d(TAG,
++                     "onSaveInstanceState time = " + Long.toString(mTimerSet) + " "
++                             + this.toString());
++        }
++    }
++
++    @Override
++    protected void onStop() {
++        super.onStop();
++        mHandler.removeMessages(ON_AUTO_DISMISS);
++        if (Config.DEBUG) {
++            Log.d(TAG, "onStop time = " + Long.toString(mTimerSet) + " " + this.toString());
++        }
++    }
++
++    @Override
++    protected void onDestroy() {
++        if (null != mKeyguardLock) {
++            mKeyguardLock.reenableKeyguard();
++        }
++        
++        super.onDestroy();
++    }
++
++    /*
++     * mark the CBmessage status 0, unread, unseen 1, read, seen
++     */
++    private void updateReadStatus(int read, int seen) {
++        if (mMessages == null) {
++            return;
++        }
++        ContentResolver resolver = getContentResolver();
++        ContentValues values = new ContentValues();
++        values.put(Telephony.SmsCb.READ, Integer.valueOf(read)); // mark read
++        values.put(Telephony.Sms.SEEN, Integer.valueOf(seen)); // mark seen
++
++        if (mKeyId != null) {
++            resolver.update(MESSAGE_URI, values, "_id=" + mKeyId, null);
++        }
++    }
++
++}
++
++// add for gemini
++class ImmCbmessageView extends LinearLayout {
++    private static final String TAG = "ClassZeroView";
++
++    private TextView mMessageView;
++
++    private TextView mTimestamp;
++
++    private Context mContext;
++
++    public ImmCbmessageView(Context context) {
++        super(context);
++        mContext = context;
++    }
++
++    public ImmCbmessageView(Context context, AttributeSet attrs) {
++        super(context, attrs);
++        mContext = context;
++    }
++
++    @Override
++    protected void onFinishInflate() {
++        super.onFinishInflate();
++        mMessageView = (TextView) findViewById(R.id.body);
++        mTimestamp = (TextView) findViewById(R.id.wpms_timestamp);
++
++    }
++
++    public void bind(String messageBody) {
++        Log.i(TAG, "Class zero message:" + messageBody + "; Chile operator CB ");
++        mMessageView.setText(messageBody);
++        SpannableStringBuilder buf = new SpannableStringBuilder();
++        mTimestamp.setText("");
++    }
++
++    public void bind(String messageBody, int subId) {
++        Log.i(TAG, "Class zero message:" + messageBody + "; From SIM " + subId);
++        mMessageView.setText(messageBody);
++        SpannableStringBuilder buf = new SpannableStringBuilder();
++        // Add sim info
++        String simInfo = "";
++        SubscriptionInfo subInfo = SubscriptionManager.from(MmsApp.getApplication())
++                .getActiveSubscriptionInfo(subId);
++        Log.i(TAG, "subInfo=" + subInfo);
++        if (null != subInfo) {
++            if ((subInfo.getSimSlotIndex() == SubscriptionManager.SIM_NOT_INSERTED)
++                    || (subInfo.getSimSlotIndex() == SubscriptionManager.INVALID_SUBSCRIPTION_ID)) {
++                Log.i(TAG, "current not insert sim card");
++            } else {
++                simInfo = subInfo.getDisplayName().toString();
++                Log.i(TAG, "simInfo = " + simInfo);
++            }
++        } else {
++            Log.i(TAG, "subInfo is null ");
++        }
++        if (simInfo.length() > 0) {
++            buf.append(" ");
++            buf.append(mContext.getString(R.string.via_without_time_for_recieve));
++            buf.append(" ");
++            buf.append(simInfo);
++        }
++        Log.i(TAG, "buf = " + buf);
++        mTimestamp.setText(buf);
++    }
++}
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/AlertNotification.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/AlertNotification.java	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/AlertNotification.java	(revision 2557)
+@@ -0,0 +1,114 @@
++/** This file create by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 */
++
++package com.mediatek.cb.cbmsg;
++
++import android.content.Context;
++import android.media.ToneGenerator;
++import android.os.Vibrator;
++import android.util.Log;
++import android.media.AudioManager;
++import android.os.Handler;
++import android.os.Looper;
++
++public class AlertNotification {
++    private Context mContext;
++    private AudioNotification mAn;
++    private VibrationNotification mVn;
++
++    private boolean notificating = false;
++    private static Handler mHandler = null;
++    private static final String TAG = "AlertNotification";
++    private static final long[] cadence = {
++            0, 2000, 500, 1000, 500, 1000, 500, 2000, 500, 1000, 500, 1000
++    };
++
++    public AlertNotification(Context c) {
++        mContext = c;
++        mAn = new AudioNotification();
++        mVn = new VibrationNotification();
++    }
++
++    public void startNotification() {
++        synchronized (TAG) {
++            if (mHandler == null)
++                mHandler = new Handler(Looper.getMainLooper());
++        }
++
++        if (notificating == false) {
++            Log.i(TAG, "GGS -> startNotification");
++            notificating = true;
++            mVn.start(mContext);
++            mAn.start();
++        }
++    }
++
++    public void stop() {
++        if (notificating == true) {
++            mAn.stopNotification();
++            mVn.stopNotification();
++            notificating = false;
++        }
++    }
++
++    @Override
++    public void finalize() {
++        Log.v(TAG, "AlertNotification lost reference");
++        stop();
++    }
++
++    private static class VibrationNotification implements Runnable {
++        private Vibrator v;
++        private boolean running = true;
++
++        public void start(Context context) {
++            v = (Vibrator) context.getSystemService(context.VIBRATOR_SERVICE);
++            running = true;
++            run();
++        }
++
++        public void run() {
++            boolean posted = false;
++
++            if (running) {
++                v.vibrate(cadence, -1);
++                posted = mHandler.postDelayed(this, 11000);
++                Log.v(TAG, "context.VIBRATOR_SERVICE run " + posted);
++            }
++        }
++
++        public synchronized void stopNotification() {
++            running = false;
++            v.cancel();
++            mHandler.removeCallbacks(this);
++        }
++    }
++
++    private static class AudioNotification implements Runnable {
++        private ToneGenerator t;
++        boolean running = true;
++
++        public void start() {
++            //t = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 95);
++            t = new ToneGenerator(AudioManager.STREAM_ALARM, 100);
++            running = true;
++            run();
++        }
++
++        public void run() {
++            boolean posted = false;
++
++            if (running) {
++                t.startTone(ToneGenerator.TONE_CMAS);
++                posted = mHandler.postDelayed(this, 11000);
++                Log.v(TAG, "context.AudioNotification run " + posted);
++            }
++        }
++
++        public synchronized void stopNotification() {
++            running = false;
++            mHandler.removeCallbacks(this);
++            t.stopTone();
++            t.release();
++        }
++    }
++}
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessageReceiverService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessageReceiverService.java	(revision 2556)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessageReceiverService.java	(revision 2557)
+@@ -79,6 +79,15 @@
+ 
+ import com.mediatek.mms.ext.IOpCBMessageReceiverServiceExt;
+ import com.mediatek.opmsg.util.OpMessageUtils;
++import android.os.SystemProperties;// added by lei.shi for task927658 at 2015.11.22
++import com.mediatek.cb.cbmsg.ImmCbmessageActivity;//added by lei.shi for task1149499 at 2015.12.14
++//added by lei.shi for task927645 at 2015.11.20 begin
++import android.preference.PreferenceManager;
++import android.content.SharedPreferences;
++import android.os.PowerManager;
++//added by lei.shi for task927645 at 2015.11.20 end
++import android.telephony.TelephonyManager; //added by lei.shi  task927652 at 2015.11.18
++import android.os.SystemProperties;// added by lei.shi for task927658 at 2015.11.22
+ 
+ /**
+  * M:
+@@ -186,7 +195,37 @@
+ 
+         int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                 SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+-
++		
++		// added by lei.shi for task927658 at 2015.11.22 begin
++        if (this.getResources().getBoolean(
++                com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)) {
++            if (message.getServiceCategory() == 50) {
++                MmsLog.e(MmsApp.TXN_TAG,
++                        "#-- Receive 50 channel message. msg : " + message.getMessageBody());
++                int simState = -1;
++                if (SystemProperties.getBoolean("dualsim.ui.support", true)) {
++                    TelephonyManager telephony = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++                    simState = telephony.getSimState(SubscriptionManager.getSlotId(subId));
++                } else {
++                    simState = MmsApp.getApplication().getTelephonyManager().getSimState();
++                }
++                MmsLog.d(MmsApp.TXN_TAG, "#--- subId : " + subId + " Sim state is : " + simState);
++                if (simState != TelephonyManager.SIM_STATE_READY) {
++                    MmsLog.e(MmsApp.TXN_TAG, "#--- Sim state is : " + simState
++                            + " not show in the SPN/PLMN");
++                    return;
++                }
++                Intent channel50Intent = new Intent("com.jrdcom.action.CHANNEL_50_MSG");
++                channel50Intent.putExtra("channel_50_msg", message.getMessageBody());
++                channel50Intent.putExtra(PhoneConstants.SUBSCRIPTION_KEY, subId);
++                sendBroadcast(channel50Intent);
++                MmsLog.e(MmsApp.TXN_TAG,
++                        "#--sendBroadcast(channel50Intent) success- subId : " + subId);
++                return;
++            }
++        }
++        // added by lei.shi for task927658 at 2015.11.22 end
++		
+         // add for op
+         mOpCBMessageReceiverService.handleCBMessageReceived(getApplicationContext());
+ 
+@@ -198,6 +237,62 @@
+         }
+ 
+         if (messageUri != null) {
++        	// added by lei.shi for task927645 at 2015.11.20 begin
++            // added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin
++            boolean isCmasMessage = message.isCmasMessage();
++            boolean isEmergencyMessage = message.isEmergencyMessage();
++            boolean isEtwsMessage = message.isEtwsMessage();
++            MmsLog.i(TAG, "CBMessageReceiverService_handleCBMessage_isCmasMessage: " + isCmasMessage);
++            MmsLog.i(TAG, "CBMessageReceiverService_handleCBMessage_isEmergencyMessage: " + isEmergencyMessage);
++            MmsLog.i(TAG, "CBMessageReceiverService_handleCBMessage_isEtwsMessage: " + isEtwsMessage);
++            boolean isCmasOrEmerOrEtws = isCmasMessage || isEmergencyMessage || isEtwsMessage;
++
++            boolean cbPopupAndToneVibrateForChile919And921 = getResources().getBoolean(
++                    R.bool.def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile);
++            MmsLog.i(TAG, "CBMessageReceiverService_cbPopupAndToneVibrateForChile: " + cbPopupAndToneVibrateForChile919And921);
++            if (cbPopupAndToneVibrateForChile919And921) {
++                int channelId = message.getServiceCategory();
++                MmsLog.i(TAG, "CBMessageReceiverService_handleCBMessage_channelId: " + channelId);
++                if (channelId != 919 && channelId != 921) {
++                    cbPopupAndToneVibrateForChile919And921 = false;
++                }
++            }
++            // added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end
++        	SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
++        	boolean poweronScreenEnable = sp.getBoolean("pref_key_enable_power_on_screen", false);
++        	MmsLog.i(TAG,"CBMessageReceiverService_handleCBMessage_poweronScreenEnable: " + poweronScreenEnable);
++
++            // Screen will be light up 
++        	if (cbPopupAndToneVibrateForChile919And921 || poweronScreenEnable ||isCmasOrEmerOrEtws) { 
++			// modified by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14
++                int screenOffTimeout = android.provider.Settings.System.getInt(
++                        getContentResolver(), android.provider.Settings.System.SCREEN_OFF_TIMEOUT, 10000);
++                MmsLog.i(TAG, "CBMessageReceiverService_handleCBMessage_screenOffTimeout: " + screenOffTimeout);
++                PowerManager pm = (PowerManager) this.getSystemService(Context.POWER_SERVICE);
++                PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK
++                        | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
++                        "CBMessageReceiverService");
++                wl.acquire(screenOffTimeout);
++            }
++            // added by lei.shi for task927645 at 2015.11.20 end
++			// added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin
++            if (cbPopupAndToneVibrateForChile919And921 || isCmasOrEmerOrEtws) {
++                String messageUriStr = messageUri.toString();
++                String keyId = null;
++                int length = messageUriStr.length();
++                if (length > messageUriStr.lastIndexOf("/") + 1) {
++                    keyId = messageUriStr.substring(messageUriStr.lastIndexOf("/") + 1);
++                }
++
++                /* the 'key_id' is only used in ImmCbmessageActivity.java */
++                intent.putExtra("key_id", keyId);
++                intent.putExtra("showWarning", cbPopupAndToneVibrateForChile919And921 || isCmasOrEmerOrEtws);
++                // show dialog to show the cb message
++                displayImmCbMessage(this, intent, subId);
++                CbMessagingNotification.updateNotificationPopup(this, cbPopupAndToneVibrateForChile919And921 || isCmasOrEmerOrEtws);
++                return;
++            }
++            // added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end
+             CbMessagingNotification.updateNewMessageIndicator(subId, this, true);
+         }
+     }
+@@ -240,4 +335,22 @@
+         values.put(Telephony.SmsCb.BODY, body);
+         return values;
+     }
++	
++	// added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin
++    /**
++     * Displays cb message immediately in a pop-up window
++     * with the number from where it received the Notification with
++     * the body of the message
++     *
++     */
++    private void displayImmCbMessage(Context context, Intent intent, int subId) {
++        // Using NEW_TASK here is necessary because we're calling
++        // startActivity from outside an activity.
++        MmsLog.i(TAG, "CBMessageReceiverService start displayImmCbMessage activity.");
++        intent.setClass(context, ImmCbmessageActivity.class).setFlags(
++                Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
++        intent.putExtra("subId", subId);
++        context.startActivity(intent);
++    }
++	// added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end
+ }
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/layout/imm_cb_message_view_gemini.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/layout/imm_cb_message_view_gemini.xml	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/layout/imm_cb_message_view_gemini.xml	(revision 2557)
+@@ -0,0 +1,27 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- This file create by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 -->
++<com.mediatek.cb.cbmsg.ImmCbmessageView
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent" android:layout_height="wrap_content"
++    android:paddingBottom="5dip" android:paddingLeft="20dip"
++    android:paddingRight="20dip" android:orientation="vertical">
++    <ScrollView android:layout_width="match_parent"
++        android:layout_height="wrap_content" android:id="@+id/body_scroll">
++        <LinearLayout android:id="@+id/view_parent"
++            android:layout_width="match_parent" android:layout_height="wrap_content"
++            android:orientation="vertical">
++            <TextView android:id="@+id/body" android:autoLink="all"
++                android:linksClickable="false" android:layout_width="match_parent"
++                android:layout_height="wrap_content" android:textAppearance="?android:attr/textAppearanceMedium"
++                android:singleLine="false" android:layout_alignParentLeft="true"
++                android:layout_marginTop="5dip"
++                android:layout_alignWithParentIfMissing="true" />
++            <TextView android:id="@+id/wpms_timestamp"
++                android:layout_width="wrap_content" android:layout_height="wrap_content"
++                android:linksClickable="false" android:singleLine="true"
++                android:layout_alignBottom="@id/body"
++                android:layout_alignParentLeft="true" android:textAppearance="?android:attr/textAppearanceSmall"
++                android:textSize="18sp" />
++        </LinearLayout>
++    </ScrollView>
++</com.mediatek.cb.cbmsg.ImmCbmessageView>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/layout/cb_customize_title.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/layout/cb_customize_title.xml	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/layout/cb_customize_title.xml	(revision 2557)
+@@ -0,0 +1,26 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- This file create by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 -->
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:orientation="vertical">
++<TextView
++        android:id="@+id/cb_alert_title"
++        android:layout_height="wrap_content"
++        android:layout_width="match_parent"
++        android:layout_marginLeft="20dip"
++        android:layout_marginRight="20dip"
++        android:textSize="25dp"
++        android:gravity="center"
++        android:textAppearance="?android:attr/textAppearanceMedium" />
++    <TextView
++        android:id="@+id/cb_alert_timestamp"
++        android:layout_height="wrap_content"
++        android:layout_width="match_parent"
++        android:layout_marginLeft="20dip"
++        android:layout_marginRight="20dip"
++        android:textSize="15dp"
++        android:gravity="center"
++        android:textAppearance="?android:attr/textAppearanceMedium" />
++</LinearLayout>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2556)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 2557)
+@@ -14,4 +14,5 @@
+     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <bool name="isTablet">false</bool>
+     <bool name="isWVGAScreen">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
+ </resources>
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/values/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/values/strings.xml	(revision 2556)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/values/strings.xml	(revision 2557)
+@@ -841,5 +841,9 @@
+     <string name="banner_sms_promo_title_initial">Messaging is not your SMS app</string>
+     <string name="banner_sms_promo_title_application"><xliff:g id="appName">%s</xliff:g> is your SMS app</string>
+     <string name="banner_sms_promo_message">You can change this in Settings</string>
++	<!-- add lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin -->
++    <string name="hide_imm_cb_dialog">Hide</string>
++    <string name="title_imm_cb_dialog">Emergency Alert</string>
++    <!-- add lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end -->
+ </resources>
+ 
+Index: frameworks/av/media/libmedia/ToneGenerator.cpp
+===================================================================
+--- frameworks/av/media/libmedia/ToneGenerator.cpp	(revision 2556)
++++ frameworks/av/media/libmedia/ToneGenerator.cpp	(revision 2557)
+@@ -707,7 +707,32 @@
+           { .segments = { { .duration = 0, .waveFreq = { 0 }, 0, 0 }},
+           .repeatCnt = 0,
+           .repeatSegment = 0 },                            // TONE_CDMA_SIGNAL_OFF
+-
++		//add by wenping.ye for task731020 begin
++         { .segments = { { .duration = 300, .waveFreq = { 440, 0 }, 0, 0 },
++        		 	 	 { .duration = 100, .waveFreq = { 0 }, 0, 0 },
++        		 	 	 { .duration = 100, .waveFreq = { 440, 0 },  0, 0 },
++                         { .duration = 100, .waveFreq = { 0 }, 0, 0 },
++                         { .duration = 100, .waveFreq = { 440, 0 },  0, 0 },
++                         { .duration = 5600, .waveFreq = { 0 }, 0, 0 }},
++                         .repeatCnt = 3,
++                         .repeatSegment = 0 }, // TCT_TONE_CALL_WAITING_LATAM
++        //add by wenping.ye for task731020 end
++        //added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin
++        { .segments = { { .duration = 2000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 1000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 1000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 2000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 1000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 500, .waveFreq = {0}, 0, 0},
++                        { .duration = 1000, .waveFreq = {853, 960}, 0, 0},
++                        { .duration = 0 , .waveFreq = {0}, 0, 0}},
++         .repeatCnt = 0,
++         .repeatSegment = 0 },                    // TONE_CMAS
++        //added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end
+         { .segments = { { .duration = ToneGenerator::TONEGEN_INF, .waveFreq = { 350, 440, 0 }, 0, 0 },
+                         { .duration = 0 , .waveFreq = { 0 }, 0, 0}},
+           .repeatCnt = ToneGenerator::TONEGEN_INF,
+Index: frameworks/av/include/media/ToneGenerator.h
+===================================================================
+--- frameworks/av/include/media/ToneGenerator.h	(revision 2556)
++++ frameworks/av/include/media/ToneGenerator.h	(revision 2557)
+@@ -148,6 +148,8 @@
+         TONE_CDMA_ABBR_ALERT,
+         TONE_CDMA_SIGNAL_OFF,
+         //CDMA end
++		TCT_TONE_CALL_WAITING_LATAM, //added by wenping.ye for task731020
++		TONE_CMAS,// added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14
+         NUM_TONES,
+         NUM_SUP_TONES = LAST_SUP_TONE-FIRST_SUP_TONE+1
+     };
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 2556)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 2557)
+@@ -2744,4 +2744,7 @@
+   <java-symbol type="drawable" name="face_verify_frame" />
+   <java-symbol type="string" name="fingerprint_acquired_duplicate_finger" />
+   <java-symbol type="string" name="fingerprint_acquired_duplicate_area" />
++  <!-- added by lei.shi for task927658 at 2015.11.24 begin -->
++  <java-symbol type="bool" name="def_cb_channel_50_behaviour_brazil" />
++  <!-- added by lei.shi for task927658 at 2015.11.24 end --> 
+ </resources>
+Index: frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- frameworks/base/core/res/res/values/config.xml	(revision 2556)
++++ frameworks/base/core/res/res/values/config.xml	(revision 2557)
+@@ -2655,4 +2655,6 @@
+ 
+     <!-- An array of packages for which notifications cannot be blocked. -->
+     <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
++	
++	<bool name="def_cb_channel_50_behaviour_brazil">false</bool>
+ </resources>
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/CarrierText.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/CarrierText.java	(revision 2556)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/CarrierText.java	(revision 2557)
+@@ -46,6 +46,15 @@
+ import com.mediatek.keyguard.ext.IOperatorSIMString.SIMChangedTag;
+ import com.mediatek.keyguard.Plugin.KeyguardPluginFactory;
+ 
++//added by lei.shi for task927658 at 2015.11.22 begin
++import android.view.Gravity;
++import android.text.SpannableString;
++import android.text.style.AbsoluteSizeSpan;
++import android.text.style.StyleSpan;
++import com.android.internal.telephony.PhoneConstants;	
++import android.os.SystemProperties;
++//added by lei.shi for task927658 at 2015.11.22 end
++
+ public class CarrierText extends TextView {
+     private static final boolean DEBUG = KeyguardConstants.DEBUG;
+     private static final String TAG = "CarrierText";
+@@ -72,7 +81,43 @@
+     private IOperatorSIMString mIOperatorSIMString;
+     /// M: To changed the plmn  CHINA TELECOM to China Telecom,just for CT feature
+     private ICarrierTextExt mCarrierTextExt;
++	
++	/* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 */
++    private String mvivoPlmn = null;
++    private String mvivoPlmn2 = null;
+ 
++    public void setVivoPlmnText(String vivoPlmn) {
++        mvivoPlmn = vivoPlmn;
++        Log.d(TAG, "set mvivoPlmn = " + mvivoPlmn);
++    }
++    public void setVivoPlmnText2(String vivoPlmn2) {
++        mvivoPlmn2 = vivoPlmn2;
++        Log.d(TAG, "set mvivoPlmn2 = " + mvivoPlmn2);
++    }
++    /* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 */
++
++	//added by lei.shi for task927658 at 2015.11.22 begin
++    private TextView mChannel50TextView;
++    private TextView mChannel50TextView2;
++
++    public void setChannel50TextView(TextView mTextView) {
++        mChannel50TextView = mTextView;
++    }
++    public void setChannel50TextView2(TextView mTextView) {
++        mChannel50TextView2 = mTextView;
++    }
++    public TextView getChannel50TextView() {
++        return mChannel50TextView;
++     }
++    public TextView getChannel50TextView2() {
++        return mChannel50TextView2;
++     }
++    public TextView getSelf() {
++       return this;
++    } 
++    private String mLastChannel50Msg[] ;
++    //added by lei.shi for task927658 at 2015.11.22 end 
++	
+     ///M: fix ALPS02068458, clear carrier text when IPO shut down.
+     private static final String IPO_SHUTDOWN = "android.intent.action.ACTION_SHUTDOWN_IPO";
+     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
+@@ -104,6 +149,57 @@
+         public void onStartedWakingUp() {
+             setSelected(true);
+         };
++		
++		//added by lei.shi for task927658 at 2015.11.22 begin
++		@Override
++		public void onRefreshCarrierInfoForChannel50MSg(CharSequence msg,
++				int phoneId, boolean receiveMsg) {
++			Log.d(TAG, " #--- onRefreshCarrierInfoForChannel50MSg phoneId : "
++				+ phoneId + " channel50Msg : " + msg + " receiveMsg : "+ receiveMsg);
++
++            if (!TextUtils.isEmpty(msg)) {
++                TextView toSetCarrierView = getChannel50TextView();
++                if (PhoneConstants.SIM_ID_2 == phoneId) {
++                    toSetCarrierView = getChannel50TextView2();
++                }
++                String text = mCarrier[phoneId];
++                if (text != null && toSetCarrierView !=null) {
++                    int index = text.indexOf("\n");
++                    Log.d(TAG, " index = " + index);
++                    String part1 = null;
++                    String part2 = null;
++                    if (index != -1) {
++                        part1 = text.substring(0, index);
++                        Log.d(TAG, " part1 = " + part1);
++                    } else {
++                        part1 = text;
++                        Log.d(TAG, " part1 = " + part1);
++                    }
++                    part2 = msg.toString();
++                    mLastChannel50Msg[phoneId]= part2;
++                    Log.d(TAG, " part2 = " + part2);
++                    int start = part1.length() + 1;
++                    int end = part1.length() + part2.length() + 1;
++                    SpannableString tSpan = new SpannableString(part1 + "\n" + part2);
++                    Log.d(TAG, " tSpan = " + tSpan);
++                    tSpan.setSpan(new AbsoluteSizeSpan(15), start, end,
++                            SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
++                    tSpan.setSpan(new StyleSpan(android.graphics.Typeface.NORMAL), start, end,
++                            SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
++                    toSetCarrierView.setSingleLine(false);
++                    Log.d(TAG, "onRefreshCarrierInfoForChannel50MSg : tSpan" + tSpan);
++                    toSetCarrierView.setText(tSpan);
++                }
++            }
++		};
++
++        @Override
++        public void onSetNullCarrierInfoForChannel50MSg(int phoneId) { 
++        	Log.d(TAG, " #--- onSetNullCarrierInfoForChannel50MSg:phoneId = " + phoneId);
++            mLastChannel50Msg[phoneId] = null;
++            updataCarrierTextForChannel50Msg(phoneId);
++        }
++      //added by lei.shi for task927658 at 2015.11.22 end
+     };
+     /**
+      * The status of this lock screen. Primarily used for widgets on LockScreen.
+@@ -128,6 +224,7 @@
+         mNumOfPhone = KeyguardUtils.getNumOfPhone();
+ 
+         mCarrier = new String[mNumOfPhone];
++		mLastChannel50Msg = new String[mNumOfPhone]; //added by lei.shi for task927658 at 2015.11.22
+         mCarrierNeedToShow = new boolean[mNumOfPhone];
+ 
+         mStatusMode = new StatusMode[mNumOfPhone];
+@@ -336,7 +433,78 @@
+                    carrierFinalContent + ", allSimsMissing = " + allSimsMissing) ;
+ 
+         setText(carrierFinalContent);
++		//added by lei.shi for task927658 at 2015.11.22 begin
++		if (mContext.getResources().getBoolean(
++                    com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)) {
++                for (int i = 0; i < mNumOfPhone; i++) {
++                    updataCarrierTextForChannel50Msg(i);
++                }
++            }
++        //added by lei.shi for task927658 at 2015.11.22 end
+     }
++	
++	//added by lei.shi for task927658 at 2015.11.22 begin
++    protected void updataCarrierTextForChannel50Msg(int phoneId) {
++        Log.d(TAG, " #--  updataCarrierTextForChannel50Msg, phoneId = " + phoneId);
++        TextView toSetCarrierView = getChannel50TextView();
++        TextView toSetCarrierView2 = getChannel50TextView2();
++        String text = mCarrier[phoneId];
++        if (PhoneConstants.SIM_ID_1 == phoneId) {
++            if (text != null && toSetCarrierView != null) {
++                if (mLastChannel50Msg[phoneId] != null) {
++                    Log.d(TAG,
++                            " #-- updateCarrierText() - after combination, mLastChannel50Msg[phoneId] = "
++                                    + mLastChannel50Msg[phoneId]);
++                    int start = text.length() + 1;
++                    int end = text.length() + mLastChannel50Msg[phoneId].length() + 1;
++                    SpannableString tSpan = new SpannableString(text + "\n"
++                            + mLastChannel50Msg[phoneId]);
++                    Log.d(TAG, " updataCarrierTextForChannel50Msg() tSpan = " + tSpan);
++                    tSpan.setSpan(new AbsoluteSizeSpan(15), start, end,
++                            SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
++                    tSpan.setSpan(new StyleSpan(android.graphics.Typeface.NORMAL), start, end,
++                            SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
++                    toSetCarrierView.setText(tSpan);
++                } else {
++                    if (SystemProperties.getBoolean("ro.vivo.network.display.style", false)){
++                        if(mvivoPlmn != null){
++                            toSetCarrierView.setText(mvivoPlmn);
++                            Log.d(TAG, "set mvivoPlmn = " + mvivoPlmn);
++                        }
++                    } else {
++                        toSetCarrierView.setText(text);
++                    }
++                }
++            }
++        }
++        if (PhoneConstants.SIM_ID_2 == phoneId) {
++            if (text != null && toSetCarrierView2 != null) {
++                if (mLastChannel50Msg[phoneId] != null) {
++                    Log.d(TAG, " #--  mLastChannel50Msg[phoneId] = "+ mLastChannel50Msg[phoneId]);
++                    int start = text.length() + 1;
++                    int end = text.length() + mLastChannel50Msg[phoneId].length() + 1;
++                    SpannableString tSpan = new SpannableString(text + "\n"
++                            + mLastChannel50Msg[phoneId]);
++                    Log.d(TAG, " updataCarrierTextForChannel50Msg() tSpan = " + tSpan);
++                    tSpan.setSpan(new AbsoluteSizeSpan(15), start, end,
++                            SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
++                    tSpan.setSpan(new StyleSpan(android.graphics.Typeface.NORMAL), start, end,
++                            SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
++                    toSetCarrierView2.setText(tSpan);
++                } else {
++                    if (SystemProperties.getBoolean("ro.vivo.network.display.style", false)){
++                        if(mvivoPlmn2 != null){
++                            toSetCarrierView2.setText(mvivoPlmn2);
++                            Log.d(TAG, "set mvivoPlmn2 =  " + mvivoPlmn2);
++                        }
++                    } else {
++                        toSetCarrierView2.setText(text);
++                    }
++                }
++            }
++        }
++    }
++    //added by lei.shi for task927658 at 2015.11.22 end
+ 
+     @Override
+     protected void onFinishInflate() {
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitorCallback.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitorCallback.java	(revision 2556)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitorCallback.java	(revision 2557)
+@@ -269,4 +269,10 @@
+      * @param dreaming true if the dream's window has been created and is visible
+      */
+     public void onDreamingStateChanged(boolean dreaming) { }
++	
++	//added by lei.shi for task927658 at 2015.11.22 begin
++    public void onRefreshCarrierInfoForChannel50MSg(CharSequence msg, int phoneId, boolean receiveMsg){ }
++
++    public void onSetNullCarrierInfoForChannel50MSg(int phoneId) { }
++    //added by lei.shi for task927658 at 2015.11.22 end
+ }
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 2556)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 2557)
+@@ -91,6 +91,10 @@
+ import java.util.Map.Entry;
+ //M: ALPS02843533 fix index out of bounds exception
+ import java.util.concurrent.CopyOnWriteArrayList;
++//added by lei.shi for task927658 at 2015.11.22 begin
++import com.android.internal.telephony.ITelephony; 
++import android.telephony.ServiceState; 
++//added by lei.shi for task927658 at 2015.11.22 end
+ 
+ /**
+  * Watches for updates that may be interesting to the keyguard, and provides
+@@ -153,6 +157,15 @@
+     private static final int MSG_SCREEN_TURNED_OFF = 332;
+     private static final int MSG_DREAMING_STATE_CHANGED = 333;
+     private static final int MSG_USER_UNLOCKED = 334;
++	
++    //added by lei.shi for task927658 at 2015.11.22 begin
++    private static final int MSG_CHANNEL_50_MSG = 335;
++    private static final int MSG_CHANNEL_50_MSG_SET_NULL = 336;
++    private String mChannel50Msg[]; 
++    private String mChannel50MsgTmp2G_3G[];
++    private int mNewNetWorkClass = 0;
++    private int mOldNetWorkClass = 0;
++    //added by lei.shi for task927658 at 2015.11.22 end
+ 
+     /** Fingerprint state: Not listening to fingerprint. */
+     private static final int FINGERPRINT_STATE_STOPPED = 0;
+@@ -331,6 +344,16 @@
+                 case MSG_USER_UNLOCKED:
+                     handleUserUnlocked();
+                     break;
++				//added by lei.shi for task927658 at 2015.11.22 begin
++                case MSG_CHANNEL_50_MSG:
++                    int phoneId = (int)msg.arg1;
++                    String channel50Msg = (String)msg.obj;
++                    handleChannel50MsgUpdate(channel50Msg, phoneId);
++                    break;
++                case MSG_CHANNEL_50_MSG_SET_NULL:
++                    handleSetChanel50MsgNull((int)msg.arg1);
++                    break;
++                //added by lei.shi for task927658 at 2015.11.22 end
+             }
+         }
+     };
+@@ -770,6 +793,25 @@
+                         + ", slotId=" + simArgs.phoneId + ", subId=" + simArgs.subId
+                         + ", simArgs.simState = " + simArgs.simState);
+                 }
++				// added by lei.shi for task927658 at 2015.11.22 begin
++                if (TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(action)) {
++                    if (context.getResources().getBoolean(
++                            com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)) {
++                        if (IccCardConstants.State.ABSENT == simArgs.simState) {
++                            if (simArgs.phoneId < 0 || simArgs.phoneId >= KeyguardUtils.getNumOfPhone()) {
++                                simArgs.phoneId = 0;
++                            }
++                            mChannel50Msg[simArgs.phoneId] = null;
++                            mChannel50MsgTmp2G_3G[simArgs.phoneId] = null;
++                            Message handlerMsg = mHandler.obtainMessage(MSG_CHANNEL_50_MSG_SET_NULL,
++                                    null);
++                            handlerMsg.arg1 = simArgs.phoneId;
++                            handlerMsg.obj = null;
++                            mHandler.sendMessage(handlerMsg);
++                        }
++                    }
++                }
++                // added by lei.shi for task927658 at 2015.11.22 end
+ 
+                 if (TelephonyIntents.ACTION_UNLOCK_SIM_LOCK.equals(action)) {
+                     /// M: set sim state as UNKNOWN state to trigger SIM lock view again.
+@@ -793,11 +835,62 @@
+                 ///   Although the extra value of AIRPLANE_MODE_CHANGED intent should exist in fact.
+                 boolean state = intent.getBooleanExtra("state", false);
+                 Log.d(TAG, "Receive ACTION_AIRPLANE_MODE_CHANGED, state = " + state);
++				// added by lei.shi for task927658 at 2015.11.22 begin
++                if (mContext.getResources().getBoolean(
++                        com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)) {
++                    if (state) {
++                        Log.d(TAG, "#--- air mode , remove mChannel50Msg.");
++                        for (int i = 0; i < mChannel50Msg.length; i++) {
++                            mChannel50Msg[i] = null;
++                            mChannel50MsgTmp2G_3G[i] = null;
++							Message handlerMsg = mHandler.obtainMessage(MSG_CHANNEL_50_MSG_SET_NULL,
++                                    null);
++                            handlerMsg.arg1 = i;
++                            handlerMsg.obj = null;
++                            mHandler.sendMessage(handlerMsg);
++                        }
++                    }
++                }
++               //added by lei.shi for task927658 at 2015.11.22 end 
+                 Message msg = new Message() ;
+                 msg.what = MSG_AIRPLANE_MODE_UPDATE ;
+                 msg.obj = new Boolean(state) ;
+                 mHandler.sendMessage(msg);
+-            } else if (TelephonyIntents.ACTION_SERVICE_STATE_CHANGED.equals(action)) {
++            }
++			//added by lei.shi for task927658 at 2015.11.22 begin
++            else if ("com.jrdcom.action.CHANNEL_50_MSG".equals(action)) {
++                Log.d(TAG, "#--- received broadcast : com.jrdcom.action.CHANNEL_50_MSG");
++                int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
++                        SubscriptionManager.INVALID_SUBSCRIPTION_ID);
++                Log.d(TAG, "SPN_STRINGS_UPDATED_ACTION, sub Id = " + subId);
++                int phoneId = KeyguardUtils.getPhoneIdUsingSubId(subId);
++                Log.d(TAG, "subId = " + subId + "phoneId = " + phoneId);
++                if (phoneId < 0 || phoneId >= KeyguardUtils.getNumOfPhone()) {
++                    phoneId = 0;
++                }
++                String channel50msg = intent.getStringExtra("channel_50_msg");
++                Message handlerMsg = mHandler.obtainMessage(MSG_CHANNEL_50_MSG,
++                        channel50msg);
++                handlerMsg.arg1 = phoneId;
++                handlerMsg.obj = channel50msg;
++                mHandler.sendMessage(handlerMsg);
++                final ITelephony telephony = ITelephony.Stub.asInterface(ServiceManager
++                                .getService(Context.TELEPHONY_SERVICE));
++                final TelephonyManager tele = TelephonyManager.from(mContext);
++                int netWorkType = -1;
++                int netWorkClass = 0;
++                if (tele != null) {
++                    netWorkType = tele.getNetworkType(subId);
++                    netWorkClass = tele.getNetworkClass(netWorkType);
++                }
++                Log.d(TAG, "#--- service mNetWorkType : " + netWorkType
++                        + ", mNetWorkClass :" + netWorkClass);
++                if (netWorkClass == TelephonyManager.NETWORK_CLASS_2_G) {
++                    mChannel50MsgTmp2G_3G[phoneId] = channel50msg;
++                }
++            } 
++            //added by lei.shi for task927658 at 2015.11.22 end			
++			else if (TelephonyIntents.ACTION_SERVICE_STATE_CHANGED.equals(action)) {
+                 ServiceState serviceState = ServiceState.newFromBundle(intent.getExtras());
+                 int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                         SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+@@ -807,7 +900,73 @@
+                 }
+                 mHandler.sendMessage(
+                         mHandler.obtainMessage(MSG_SERVICE_STATE_CHANGE, subId, 0, serviceState));
+-            }
++				// added by lei.shi for task927658 at 2015.11.22 begin
++                if (mContext.getResources().getBoolean(
++                        com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)) {
++                    Log.d(TAG, "action = TelephonyIntents.ACTION_SERVICE_STATE_CHANGED");
++                    int state = intent.getIntExtra("voiceRegState", -1);
++                    Log.d(TAG, "#--- service state : " + state);
++                    if (ServiceState.STATE_IN_SERVICE != state) {                  
++                        int phoneId = KeyguardUtils.getPhoneIdUsingSubId(subId);
++                        if (phoneId < 0 || phoneId >= KeyguardUtils.getNumOfPhone()) {
++                            phoneId = 0;
++                        }
++                        mChannel50Msg[phoneId] = null;
++                        mChannel50MsgTmp2G_3G[phoneId] = null;
++                        Message handlerMsg = mHandler.obtainMessage(MSG_CHANNEL_50_MSG_SET_NULL,
++                                null);
++                        handlerMsg.arg1 = phoneId;
++                        handlerMsg.obj = null;
++                        mHandler.sendMessage(handlerMsg);
++                    }
++
++                    final ITelephony telephony = ITelephony.Stub.asInterface(ServiceManager
++                            .getService(Context.TELEPHONY_SERVICE));
++                    final TelephonyManager tele = TelephonyManager.from(mContext);
++                    int netWorkType = -1;
++                    if (ServiceState.STATE_IN_SERVICE == state) {
++                        int phoneId = KeyguardUtils.getPhoneIdUsingSubId(subId);
++                        if (phoneId < 0 || phoneId >= KeyguardUtils.getNumOfPhone()) {
++                            phoneId = 0;
++                        }
++                        if (tele != null) {
++                            netWorkType = tele.getNetworkType(subId);
++                            mNewNetWorkClass = tele.getNetworkClass(netWorkType);
++                        }
++                        Log.d(TAG, "#--- service mNewNetWorkClass : " + mNewNetWorkClass
++                                + ", oldNetWorkClass :" + mOldNetWorkClass + "netWorkType : "
++                                + netWorkType);
++                        if (mNewNetWorkClass != mOldNetWorkClass) {
++                            if (mNewNetWorkClass != TelephonyManager.NETWORK_CLASS_2_G) {
++                                mOldNetWorkClass = mNewNetWorkClass;
++                                Log.d(TAG, "#--- set mChannel50Msg[0] = null");
++                                if (mChannel50Msg[phoneId] != null) {
++                                    mChannel50MsgTmp2G_3G[phoneId] = mChannel50Msg[phoneId];
++                                }
++                                mChannel50Msg[phoneId] = null;
++                                Message handlerMsg = mHandler.obtainMessage(
++                                        MSG_CHANNEL_50_MSG_SET_NULL,
++                                        null);
++                                handlerMsg.arg1 = phoneId;
++                                handlerMsg.obj = null;
++                                mHandler.sendMessage(handlerMsg);
++                            } else if (mNewNetWorkClass == TelephonyManager.NETWORK_CLASS_2_G) {
++                                mOldNetWorkClass = mNewNetWorkClass;
++                                if (mChannel50MsgTmp2G_3G[phoneId] != null) {
++                                    String channel50msg = mChannel50MsgTmp2G_3G[phoneId];
++                                    Message handlerMsg = mHandler.obtainMessage(
++                                            MSG_CHANNEL_50_MSG, channel50msg);
++                                    handlerMsg.arg1 = phoneId;
++                                    handlerMsg.obj = channel50msg;
++                                    mHandler.sendMessage(handlerMsg);
++                                    mChannel50MsgTmp2G_3G[phoneId] = null;
++                                }
++                            }
++                        }
++                    }
++                }
++                // added by lei.shi for task927658 at 2015.11.22 end
++            } 
+         }
+     };
+ 
+@@ -1270,6 +1429,14 @@
+ 
+         /// M: ALPS02139605 It always prompt "incorrect SIM PIN code, you have 3 remaining attempt"
+         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
++		
++		//added by lei.shi for task927658 at 2015.11.22 begin
++        if(mContext.getResources().getBoolean(com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)){
++            Log.d(TAG, "#--- filter add action : com.jrdcom.action.CHANNEL_50_MSG");
++            filter.addAction("com.jrdcom.action.CHANNEL_50_MSG");
++            filter.addAction(TelephonyIntents.ACTION_SERVICE_STATE_CHANGED);
++        }
++        //added by lei.shi for task927658 at 2015.11.22 end
+ 
+         context.registerReceiver(mBroadcastReceiver, filter);
+ 
+@@ -1645,7 +1812,32 @@
+         }*/
+     }
+ 
++	//added by lei.shi for task927658 at 2015.11.22 begin
++    private void handleChannel50MsgUpdate(String msg, int phoneId) {
++        if (DEBUG) Log.d(TAG, "#--- handleChannel50MsgUpdate : msg = " + msg + " simId = " + phoneId
++                    + " Callbacks.size =" + mCallbacks.size());
++        mChannel50Msg[phoneId] = msg;
++        mChannel50MsgTmp2G_3G[phoneId] = null;
++        for (int i = 0; i < mCallbacks.size(); i++) {
++            KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
++            Log.d(TAG, "#--- handleChannel50MsgUpdate:cb" + cb);
++            if (cb != null) {
++                cb.onRefreshCarrierInfoForChannel50MSg(msg, phoneId, true);
++                Log.d(TAG, "#--- handleChannel50MsgUpdate true");
++            }
++        }
++    }
+ 
++    private void handleSetChanel50MsgNull(int phoneId) {
++        for (int i = 0; i < mCallbacks.size(); i++) {
++            KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
++            if (cb != null) {
++                cb.onSetNullCarrierInfoForChannel50MSg(phoneId);
++            }
++        }
++    }
++	//added by lei.shi for task927658 at 2015.11.22 end
++
+     /**
+      * Handle {@link #MSG_SIM_STATE_CHANGE}
+      */
+@@ -2349,7 +2541,11 @@
+         if (DEBUG) {
+             Log.d(TAG, "initMembers() - NumOfPhone=" + KeyguardUtils.getNumOfPhone());
+         }
+-
++		
++		//added by lei.shi for task927658 at 2015.11.22 begin
++        mChannel50Msg = new String[KeyguardUtils.getNumOfPhone()];
++        mChannel50MsgTmp2G_3G = new String[KeyguardUtils.getNumOfPhone()];
++        //added by lei.shi for task927658 at 2015.11.22 end
+         // Take a guess at initial SIM state, battery status and PLMN until we get an update
+         for (int i = 0; i < KeyguardUtils.getNumOfPhone(); i++) {
+             mSimStateOfPhoneId.put(i, IccCardConstants.State.UNKNOWN);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardStatusBarView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardStatusBarView.java	(revision 2556)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardStatusBarView.java	(revision 2557)
+@@ -70,6 +70,20 @@
+     private View mSystemIconsContainer;
+ 	private Context mContext;
+ 
++	// added by lei.shi for task927658 at 2015.11.22 begin
++    public void setChannel50TextView(TextView mTextView) {
++        if (mCarrierLabel != null) {
++            mCarrierLabel.setChannel50TextView(mTextView);
++        }
++    }
++	
++    public void setChannel50TextView2(TextView mTextView) {
++        if (mCarrierLabel != null) {
++            mCarrierLabel.setChannel50TextView2(mTextView);
++        }
++    }
++    // added by lei.shi for task927658 at 2015.11.22 end
++	
+     public KeyguardStatusBarView(Context context, AttributeSet attrs) {
+         super(context, attrs);
+ 		mContext=context;
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 2556)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 2557)
+@@ -251,6 +251,14 @@
+ import com.tcl.mie.launcher.lscreen.LScreenFactory;
+ import base.packages.SystemUI.src.com.android.systemui.statusbar.phone.JoyLscreenProxy;
+ //End added by zengjie for joylockscreen task 5429900 on 10/21/17
++//add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 begin
++import android.os.SystemProperties;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.internal.telephony.PhoneConstants;
++import android.text.TextUtils;
++import android.view.Gravity;
++//add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 end
++
+ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
+         DragDownHelper.DragDownCallback, ActivityStarter, OnUnlockMethodChangedListener,
+         HeadsUpManager.OnHeadsUpChangedListener {
+@@ -425,6 +433,15 @@
+     private boolean mKeyguardFadingAway;
+     private long mKeyguardFadingAwayDelay;
+     private long mKeyguardFadingAwayDuration;
++	
++	/* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 */
++    private TextView mvivoPlmnText;
++    private String mvivoPlmn = "";
++    private boolean isShowVivoPlmn = false;
++    private TextView mvivoPlmnText2;
++    private String mvivoPlmn2 = "";
++    private boolean isShowVivoPlmn2 = false;
++    /* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 */
+ 
+     // RemoteInputView to be activated after unlock
+     private View mPendingRemoteInputView;
+@@ -856,6 +873,12 @@
+         mNotificationPanel = (NotificationPanelView) mStatusBarWindow.findViewById(
+                 R.id.notification_panel);
+         mNotificationPanel.setStatusBar(this);
++		
++		/* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 */
++        mvivoPlmnText = (TextView) mStatusBarWindow.findViewById(R.id.systemui_plmn);
++        mvivoPlmnText2 = (TextView) mStatusBarWindow.findViewById(R.id.systemui_plmn2);
++        /* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 */
++		
+         mNotificationPanel.setGroupManager(mGroupManager);
+ 
+         mStatusBarView = (PhoneStatusBarView) mStatusBarWindow.findViewById(R.id.status_bar);
+@@ -943,6 +966,8 @@
+         mDozeScrimController = new DozeScrimController(mScrimController, context);
+ 
+         mKeyguardStatusBar = (KeyguardStatusBarView) mStatusBarWindow.findViewById(R.id.keyguard_header);
++		mKeyguardStatusBar.setChannel50TextView(mvivoPlmnText);//added by lei.shi for task927658 at 2015.11.22
++        mKeyguardStatusBar.setChannel50TextView2(mvivoPlmnText2);//added by lei.shi for task927658 at 2015.11.22
+         mKeyguardStatusView = mStatusBarWindow.findViewById(R.id.keyguard_status_view);
+         mKeyguardBottomArea =
+                 (KeyguardBottomAreaView) mStatusBarWindow.findViewById(R.id.keyguard_bottom_area);
+@@ -1133,6 +1158,14 @@
+         filter.addAction("android.intent.action.NAVIGATION_BAR_TIPS_ANIMATION_FINISH");
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 		filter.addAction("battery_percentage_on_off");
++		//added by lei.shi for task927658 at 2015.11.22 begin
++        if(mContext.getResources().getBoolean(
++                com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)){
++            filter.addAction("com.jrdcom.action.CHANNEL_50_MSG"); 
++            filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
++            filter.addAction(TelephonyIntents.ACTION_SERVICE_STATE_CHANGED);
++        }
++        //added by lei.shi for task927658 at 2015.11.22 end
+         context.registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null, null);
+ 
+         IntentFilter demoFilter = new IntentFilter();
+@@ -3869,6 +3902,27 @@
+             	mBatteryLevel.setVisibility(mState == 1 ? View.VISIBLE : View.GONE);
+             }
+ 			//add by wqq end}
++			/* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 start */
++			else if(Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(action)){
++                 //modified by lei.shi for task927658 at 2015.11.22 begin
++                if (SystemProperties.getBoolean("ro.vivo.network.display.style", false) 
++                        || mContext.getResources().getBoolean(
++                        com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)){ 
++                    updateVivoPlmn();
++                }
++                //modified by lei.shi for task927658 at 2015.11.22 end
++            }
++            /* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 end */
++			//added by lei.shi for for task927658 at 2015.11.22 begin
++            else if ("com.jrdcom.action.CHANNEL_50_MSG".equals(action) 
++                    || TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(action)
++                    || TelephonyIntents.ACTION_SERVICE_STATE_CHANGED.equals(action)){
++                if (mContext.getResources().getBoolean(
++                        com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)){
++                     updateVivoPlmn();
++                 }
++             }
++            //added by lei.shi for task927658 at 2015.11.22 end
+         }
+     };
+ 
+@@ -3896,7 +3950,27 @@
+             }
+         }
+     };
++	
++	private void updateVivoPlmn(){
++        if(isAirplaneModeOn() || mState == StatusBarState.KEYGUARD || mState == StatusBarState.SHADE_LOCKED){
++            mvivoPlmnText.setVisibility(View.GONE);
++            mvivoPlmnText2.setVisibility(View.GONE);
++        } else {
++            mvivoPlmnText.setVisibility(View.VISIBLE);
++            mvivoPlmnText2.setVisibility(View.VISIBLE);
++        }
+ 
++        if (!SystemProperties.getBoolean("dualsim.ui.support", true)) {
++            mvivoPlmnText2.setVisibility(View.GONE);
++            mvivoPlmnText.setGravity(Gravity.CENTER);
++        }
++    }
++	
++	private boolean isAirplaneModeOn() {
++        return Settings.Global.getInt(mContext.getContentResolver(),
++                Settings.Global.AIRPLANE_MODE_ON, 0) != 0;
++    }
++
+     public void resetUserExpandedStates() {
+         ArrayList<Entry> activeNotifications = mNotificationData.getActiveNotifications();
+         final int notificationCount = activeNotifications.size();
+@@ -4808,6 +4882,16 @@
+         mStatusBarWindowManager.setStatusBarState(state);
+         updateReportRejectedTouchVisibility();
+         updateDozing();
++		
++		/* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 */
++        //modified by lei.shi for task927658 at 2015.11.22 begin
++        if (SystemProperties.getBoolean("ro.vivo.network.display.style", false)
++                || mContext.getResources().getBoolean(
++                        com.android.internal.R.bool.def_cb_channel_50_behaviour_brazil)){ 
++            updateVivoPlmn();
++        }
++        //modified by lei.shi for task927658 at 2015.11.22 end
++        /* add by yunpeng.zhou for vivo spn plmn show style for 3g for 731205 */
+     }
+ 
+     @Override
+Index: frameworks/base/packages/SystemUI/res/layout/status_bar_expanded.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/status_bar_expanded.xml	(revision 2556)
++++ frameworks/base/packages/SystemUI/res/layout/status_bar_expanded.xml	(revision 2557)
+@@ -102,4 +102,32 @@
+         android:visibility="gone">
+     </FrameLayout>
+     <!--end-add by zengjie  for task:5429900 -->
++	<!-- modify by yunpeng.zhou for defect 395265 begin -->
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_gravity="bottom|center_horizontal"
++        android:gravity="center"
++        android:orientation="horizontal"
++        android:padding="4dp" >
++
++        <TextView
++            android:id="@+id/systemui_plmn"
++            android:layout_width="0dip"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:gravity="right"
++            android:padding="4dp"
++            />
++
++        <TextView
++            android:id="@+id/systemui_plmn2"
++            android:layout_width="0dip"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:gravity="left"
++            android:padding="4dp"
++            />
++    </LinearLayout>
++    <!-- modify by yunpeng.zhou for defect 395265 end -->
+ </com.android.systemui.statusbar.phone.NotificationPanelView><!-- end of sliding panel -->
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 2556)
++++ frameworks/base/api/test-current.txt	(revision 2557)
+@@ -21921,6 +21921,7 @@
+     method public void stopTone();
+     field public static final int MAX_VOLUME = 100; // 0x64
+     field public static final int MIN_VOLUME = 0; // 0x0
++    field public static final int TCT_TONE_CALL_WAITING_LATAM = 99; // 0x63
+     field public static final int TONE_CDMA_ABBR_ALERT = 97; // 0x61
+     field public static final int TONE_CDMA_ABBR_INTERCEPT = 37; // 0x25
+     field public static final int TONE_CDMA_ABBR_REORDER = 39; // 0x27
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 2556)
++++ frameworks/base/api/current.txt	(revision 2557)
+@@ -21848,6 +21848,7 @@
+     method public void stopTone();
+     field public static final int MAX_VOLUME = 100; // 0x64
+     field public static final int MIN_VOLUME = 0; // 0x0
++    field public static final int TCT_TONE_CALL_WAITING_LATAM = 99; // 0x63
+     field public static final int TONE_CDMA_ABBR_ALERT = 97; // 0x61
+     field public static final int TONE_CDMA_ABBR_INTERCEPT = 37; // 0x25
+     field public static final int TONE_CDMA_ABBR_REORDER = 39; // 0x27
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 2556)
++++ frameworks/base/api/system-current.txt	(revision 2557)
+@@ -23380,6 +23380,7 @@
+     method public void stopTone();
+     field public static final int MAX_VOLUME = 100; // 0x64
+     field public static final int MIN_VOLUME = 0; // 0x0
++    field public static final int TCT_TONE_CALL_WAITING_LATAM = 99; // 0x63
+     field public static final int TONE_CDMA_ABBR_ALERT = 97; // 0x61
+     field public static final int TONE_CDMA_ABBR_INTERCEPT = 37; // 0x25
+     field public static final int TONE_CDMA_ABBR_REORDER = 39; // 0x27
+Index: frameworks/base/media/java/android/media/ToneGenerator.java
+===================================================================
+--- frameworks/base/media/java/android/media/ToneGenerator.java	(revision 2556)
++++ frameworks/base/media/java/android/media/ToneGenerator.java	(revision 2557)
+@@ -733,7 +733,23 @@
+     public static final int MAX_VOLUME = 100;
+     /** Minimum volume setting, for use with {@link #ToneGenerator(int,int)} */
+     public static final int MIN_VOLUME = 0;
++	
++    public static final int TCT_TONE_CALL_WAITING_LATAM = 99;
+ 
++	//added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 begin
++    /**
++     * TONE_CMAS - tone: 853Hz+960Hz 2000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 1000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 1000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 2000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 1000ms ON, 500ms OFF,
++     *                   853Hz+960Hz 1000ms ON as defined in ATIS-TIA-J-STD-100
++     *
++     * @see #ToneGenerator(int, int)
++     * @hide
++     */
++    public static final int TONE_CMAS = 100;
++    //added by lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end
+ 
+     /**
+      * ToneGenerator class contructor specifying output stream type and volume.

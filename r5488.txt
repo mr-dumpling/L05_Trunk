@@ -1,0 +1,29 @@
+Index: packages/apps/Dialer/InCallUI/src/com/android/incallui/ProximitySensor.java
+===================================================================
+--- packages/apps/Dialer/InCallUI/src/com/android/incallui/ProximitySensor.java	(revision 5487)
++++ packages/apps/Dialer/InCallUI/src/com/android/incallui/ProximitySensor.java	(revision 5488)
+@@ -68,6 +68,7 @@
+     private Context mContext;
+     ///M: fix ALPS02535607,add a parameter to record current video state
+     private int mCurVideoState = VideoProfile.STATE_AUDIO_ONLY;
++    private InCallState mCurrentCallState;
+ 
+     public ProximitySensor(Context context, AudioModeProvider audioModeProvider,
+             AccelerometerListener accelerometerListener) {
+@@ -117,6 +118,7 @@
+         // We ignore incoming state because we do not want to enable proximity
+         // sensor during incoming call screen. We check hasLiveCall() because a disconnected call
+         // can also put the in-call screen in the INCALL state.
++        mCurrentCallState = newState;
+         boolean hasOngoingCall = InCallState.INCALL == newState && callList.hasLiveCall();
+         boolean isOffhook = (InCallState.OUTGOING == newState) || hasOngoingCall;
+ 
+@@ -288,7 +290,7 @@
+             ComponentName topActivity = activityManager.getRunningTasks(1).get(0).topActivity;
+ 		
+             /// M: disable Proximity Sensor during VT Call
+-            if (mIsPhoneOffhook && !screenOnImmediately && !isVideoCall /*&& topActivity.getPackageName().equals("com.android.dialer")*/) {
++            if ((mIsPhoneOffhook || InCallState.INCALL == mCurrentCallState) && !screenOnImmediately && !isVideoCall /*&& topActivity.getPackageName().equals("com.android.dialer")*/) {
+                 Log.d(this, "Turning on proximity sensor");
+                 // Phone is in use!  Arrange for the screen to turn off
+                 // automatically when the sensor detects a close object.

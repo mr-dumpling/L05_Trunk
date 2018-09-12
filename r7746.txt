@@ -1,0 +1,86 @@
+Index: vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java	(revision 7745)
++++ vendor/branch/5058A_Cable_Bahamas/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java	(revision 7746)
+@@ -28,6 +28,8 @@
+ import android.os.SystemProperties;
+ import android.telephony.SubscriptionInfo;
+ import android.telephony.TelephonyManager;
++import android.telephony.PhoneStateListener;
++import android.telephony.PreciseDataConnectionState;
+ import android.util.ArraySet;
+ import android.util.AttributeSet;
+ import android.util.Log;
+@@ -114,6 +116,10 @@
+     private boolean mBlockMobile;
+     private boolean mBlockWifi;
+     private boolean mBlockEthernet;
++    private TelephonyManager mPhone;
++    private MobilePhoneStateListener mPhoneStateListener;
++    private String mApnType = "unknow";
++    	private boolean showDataIcon=false;
+ 
+     static final int[] DATA_ACTIVITY = {
+         R.drawable.stat_sys_signal,
+@@ -139,6 +145,9 @@
+ 
+     public SignalClusterView(Context context, AttributeSet attrs, int defStyle) {
+         super(context, attrs, defStyle);
++        mPhone=(TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
++        mPhoneStateListener=new MobilePhoneStateListener();
++        mPhone.listen(mPhoneStateListener, PhoneStateListener.LISTEN_PRECISE_DATA_CONNECTION_STATE | PhoneStateListener.LISTEN_DATA_CONNECTION_STATE);
+ 
+         Resources res = getResources();
+         mMobileSignalGroupEndPadding =
+@@ -781,6 +790,15 @@
+                     mDataActivityInOut.setImageDrawable(null);
+                     mDataActivityInOut.setVisibility(View.GONE);
+                 }
++                if(mApnType.equals("mms")){
++                    if(showDataIcon){
++                        mDataActivityInOut.setImageResource(mDataActivityId);
++                        mDataActivityInOut.setVisibility(View.VISIBLE);
++                    }else{
++                        mDataActivityInOut.setImageDrawable(null);
++                        mDataActivityInOut.setVisibility(View.GONE);
++                    }
++                }
+             } else {
+                 if (mIsAirplaneMode && (mIsWfcEnable && mVolteIcon != 0)) {
+                     /// M:Bug fix for show vowifi icon in flight mode
+@@ -961,5 +979,35 @@
+             }
+         }
+     }
++    
++    class MobilePhoneStateListener extends PhoneStateListener {
++        public MobilePhoneStateListener() {
++            super();
++        }
++        
++        @Override 
++        public void onPreciseDataConnectionStateChanged(PreciseDataConnectionState dataConnectionState){
++            if (DEBUG) {
++                Log.d(TAG, "MobilePhoneStateListener:onPreciseDataConnectionStateChanged() dataConnectionState=" + dataConnectionState);
++            }
++            mApnType = dataConnectionState.getDataConnectionAPNType();
++        }
++        
++        @Override
++        public void onDataConnectionStateChanged(int state, int networkType) {
++            if (DEBUG) {
++                Log.d(TAG, "onDataConnectionStateChanged: dataConnectionState..." );
++            }
++            switch(state){
++                case TelephonyManager.DATA_DISCONNECTED:
++                    showDataIcon = false;
++                    break;
++                case TelephonyManager.DATA_CONNECTED:
++                case TelephonyManager.DATA_CONNECTING:
++                    showDataIcon = true;
++                    break;
++            }
++        }
++    }
+ 
+ }

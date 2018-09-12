@@ -1,0 +1,37 @@
+Index: frameworks/base/services/core/java/com/android/server/audio/AudioService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/audio/AudioService.java	(revision 2238)
++++ frameworks/base/services/core/java/com/android/server/audio/AudioService.java	(revision 2239)
+@@ -1245,9 +1245,6 @@
+             if (DEBUG_VOL) Log.d(TAG, "Volume controller suppressed adjustment");
+         }
+ 
+-        if(streamType == AudioManager.STREAM_RING && getRingerModeInternal() == AudioManager.RINGER_MODE_SILENT) {
+-		    direction=AudioManager.ADJUST_LOWER;
+-		}
+         adjustStreamVolume(streamType, direction, flags, callingPackage, caller, uid);
+     }
+ 
+@@ -2217,10 +2214,10 @@
+     }
+ 
+     private void setRingerModeInt(int ringerMode, boolean persist) {
+-        if (DEBUG_VOL) Log.d(TAG, "setRingerModeInt: Ringermode = " + ringerMode
+-                + ", old RingerMode = " + mRingerMode);
++        if (DEBUG_VOL) Log.d(TAG, "dhq setRingerModeInt: Ringermode = " + ringerMode
++                + ", old RingerMode = " + mRingerMode +",persist="+persist);
+         final boolean change;
+-        synchronized(mSettingsLock) {
++       /* synchronized(mSettingsLock) */{
+             change = mRingerMode != ringerMode;
+             mRingerMode = ringerMode;
+         }
+@@ -2232,6 +2229,8 @@
+             sendMsg(mAudioHandler, MSG_PERSIST_RINGER_MODE,
+                     SENDMSG_REPLACE, 0, 0, null, PERSIST_DELAY);
+         }
++		Log.d(TAG, "dhq setRingerModeInt: Ringermode = " + ringerMode
++                + ", old RingerMode = " + mRingerMode +",change="+change);
+         if (change) {
+             // Send sticky broadcast
+             broadcastRingerMode(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION, ringerMode);

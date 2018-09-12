@@ -1,0 +1,872 @@
+Index: external/libvisidon_facebeauty/Android.mk
+===================================================================
+--- external/libvisidon_facebeauty/Android.mk	(revision 0)
++++ external/libvisidon_facebeauty/Android.mk	(revision 6471)
+@@ -0,0 +1,46 @@
++LOCAL_PATH:= $(call my-dir)
++
++include $(CLEAR_VARS)
++
++LOCAL_MODULE_TAGS:= optional
++
++LOCAL_MODULE:= libvisidon_facebeauty
++
++LOCAL_SRC_FILES:=  \
++	VisidonFaceBeauty.cpp 
++
++
++LOCAL_LDLIBS += -L$(SYSROOT)/usr/lib -llog
++
++LOCAL_SHARED_LIBRARIES:= \
++    libutils \
++    libcutils 
++
++
++LOCAL_VISIDON_LIB_ROOT_PATH_32:= $(LOCAL_PATH)/lib
++LOCAL_VISIDON_LIB_ROOT_PATH_64:= $(LOCAL_PATH)/lib64
++
++LOCAL_LDFLAGS_32 += $(LOCAL_VISIDON_LIB_ROOT_PATH_32)/libVDBeautyShotAPI.so
++LOCAL_LDFLAGS_64 += $(LOCAL_VISIDON_LIB_ROOT_PATH_64)/libVDBeautyShotAPI.so
++#LOCAL_LDFLAGS_32 += $(LOCAL_VISIDON_LIB_ROOT_PATH_32)/libVDLowLightAPI.so
++#LOCAL_LDFLAGS_64 += $(LOCAL_VISIDON_LIB_ROOT_PATH_64)/libVDLowLightAPI.so
++#LOCAL_LDFLAGS_32 += $(LOCAL_VISIDON_LIB_ROOT_PATH_32)/libVDSuperPhotoAPI.so
++#LOCAL_LDFLAGS_64 += $(LOCAL_VISIDON_LIB_ROOT_PATH_64)/libVDSuperPhotoAPI.so
++
++$(shell mkdir -p $(TARGET_OUT)/lib)
++$(shell mkdir -p $(TARGET_OUT)/lib64)
++$(shell cp $(LOCAL_VISIDON_LIB_ROOT_PATH_32)/* $(TARGET_OUT)/lib)
++$(shell cp $(LOCAL_VISIDON_LIB_ROOT_PATH_64)/* $(TARGET_OUT)/lib64)
++
++
++
++
++
++LOCAL_C_INCLUDES:= \
++	$(LOCAL_PATH)/include 
++
++#PRODUCT_COPY_FILES += \
++#	$(LOCAL_PATH)/lib/libVDBeautyShotAPI.so:system/lib/libVDBeautyShotAPI.so
++
++include $(BUILD_SHARED_LIBRARY)
++include $(call all-makefiles-under,$(LOCAL_PATH))
+Index: external/libvisidon_facebeauty/lib/libVDBeautyShotAPI.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: external/libvisidon_facebeauty/lib/libVDBeautyShotAPI.so
+===================================================================
+--- external/libvisidon_facebeauty/lib/libVDBeautyShotAPI.so	(revision 0)
++++ external/libvisidon_facebeauty/lib/libVDBeautyShotAPI.so	(revision 6471)
+
+Property changes on: external/libvisidon_facebeauty/lib/libVDBeautyShotAPI.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: external/libvisidon_facebeauty/lib64/libVDBeautyShotAPI.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: external/libvisidon_facebeauty/lib64/libVDBeautyShotAPI.so
+===================================================================
+--- external/libvisidon_facebeauty/lib64/libVDBeautyShotAPI.so	(revision 0)
++++ external/libvisidon_facebeauty/lib64/libVDBeautyShotAPI.so	(revision 6471)
+
+Property changes on: external/libvisidon_facebeauty/lib64/libVDBeautyShotAPI.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: external/libvisidon_facebeauty/include/VisidonFaceBeauty.h
+===================================================================
+--- external/libvisidon_facebeauty/include/VisidonFaceBeauty.h	(revision 0)
++++ external/libvisidon_facebeauty/include/VisidonFaceBeauty.h	(revision 6471)
+@@ -0,0 +1,75 @@
++/*************************************************************************************
++ * 
++ * Description:
++ * 	Defines Visidon FaceBeauty APIs for camera HAL.
++ *
++ * Author : Colin
++ * Date   : 2014-12-9
++ *
++ *************************************************************************************/
++ 
++#ifndef ANDROID_VISIDON_CAMERA_FEATURE_H
++#define ANDROID_VISIDON_CAMERA_FEATURE_H
++
++#include "VDBeautyEngine.h"
++
++#include <pthread.h>
++#include <stdio.h>
++#include <utils/threads.h>
++
++
++namespace android { 
++class VisidonFaceBeauty {
++public:
++    static VisidonFaceBeauty* createInstance();
++    void destroyInstance();
++	
++	int   init();
++    void  deinit();
++    int   initPreviewSize(int width, int height);
++	int   enableFaceBeauty();
++	void  FaceBeauty_doCapture();
++	bool  isCapturing();
++	void  disableFaceBeauty();
++    int   processPreview(void* inputBuffer, long size, int skinSmoothingStrenght, int skinToneAdjustmentStrength);
++    int   processRaw(void* inputBuffer, long size, int width, int height, int skinSmoothingStrenght, int skinToneAdjustmentStrength);
++void setInitBeautyEnd(void* ptr,  bool state);
++bool isVisidonBeautyShotEngine();
++public:
++    VisidonFaceBeauty();
++	~VisidonFaceBeauty();
++
++	bool dumpImg(void* addr, long size, int width, int height);
++
++private:
++
++     int mPreviewWidth;
++     int mPreviewHeight;
++    int defaultPreviewWidth;
++    int defaultPreviewHeight;
++	bool mIsEnabled;
++	bool isCapture;
++
++	pthread_mutex_t mMutex;
++
++	 void* mVisidonBeautyShotEngine;
++	VDBeautyShotData mPreviewInputData;
++
++    class MyThread : public Thread {
++    public:
++        VisidonFaceBeauty& mReceiver;
++        MyThread(VisidonFaceBeauty& receiver);
++    private:
++        virtual bool        threadLoop();
++         ~MyThread();
++         Mutex               mMyLock;    // Thread::mLock is private
++    };
++
++public:
++    sp<MyThread>   mMyThread;
++     bool mIsInitintBeauty;
++
++};
++
++};
++#endif /* ANDROID_VISIDON_CAMERA_FEATURE_H */
+Index: external/libvisidon_facebeauty/include/VDBeautyEngine.h
+===================================================================
+--- external/libvisidon_facebeauty/include/VDBeautyEngine.h	(revision 0)
++++ external/libvisidon_facebeauty/include/VDBeautyEngine.h	(revision 6471)
+@@ -0,0 +1,273 @@
++/** @file VDBeautyEngine.h
++    @brief Contains API for Visidon Face Beautificatiom Algorithms
++
++
++    Copyright (C) 2013-2017 Visidon Oy
++    This file is part of Visidon Beaty Shot SDK
++
++*/
++#ifndef _VDBEAUTYENGINE_H_
++#define _VDBEAUTYENGINE_H_
++
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C"
++{
++#endif
++    /**
++    Max number of filters
++    */
++#define NUMBER_OF_BEAUTYFILTERS MAX_BEAUTY_FILTER
++#define MAX_BEAUTY_SHOT_FACES_IN_TRACK 5
++
++    /**
++    Enumeration for different beauty filters
++    */
++    typedef enum _VDBeautyFilters {
++        SKIN_SMOOTHING=0, /**< Intelligent skin smoothing algorithm*/
++        SPOT_SMOOTHING=1,/**< Adaptive spot and wrinkle removal algorithm (part of SKIN_SMOOTHING)*/
++        FACE_CONTOURING=2, /**< Face contouring algorithm*/
++        TEETH_WHITENING=3,/**< Teeth whitening algorithm*/
++        EYE_SHAPING=4,/**< Eye enlargement algorithm*/
++        CHEEK_BLUSHING=5,/**< Cheek blusher algorithm*/
++        SKIN_TONE_ADJUSTING=6,/**< Skin toning algorithm*/
++        MOUTH_SHAPING=7,/**< Mouth shaping algorithm*/
++        NOSE_SHAPING = 8,/**< Nose shaping algorithm*/
++        EYEBROW_SHAPING=9,/**< Eye-brown shaping algorithm*/
++        FACE_SHAPING=10, /**< Face shaping (thinning) algorithm*/
++        OUT_FOCUS=11, /**< Sharp face area, blurred background */
++        EYE_BRIGHTENING=12, /**< Eye brightening algorithm */
++		LIP_TONING=13, /**< Lip enhancement algorithm */
++        SKIN_COLOR_ADJUSTING=14, /**< Skin color adjustment algorithm (red tone adjustment) */
++		SKIN_COLOR_CHANGE = 15, /**< Skin color changing alogithm */
++        FACE_BOKEH = 16,
++        MAX_BEAUTY_FILTER /**< Keep this entry last */
++    } VDBeautyFilters;
++
++    /**
++    Enumeration for different image formats supported by the engine.
++    */
++    typedef enum _VDBeatyShotImageFormat
++    {
++        YUV_420_NV12=0, /**< YUV420SPNV12 format*/
++        YUV_420_NV21=1, /**< YUV420SPNV21 format*/
++        RGB_888=2,  /**< 24-bit RGB format*/
++        JPEG_COMPRESSED=3, /**< JPEG compressed format*/
++		YUV_YUYV = 4, /**< YUYV format (YUYV...YUYV..YUYV)*/
++		YUV_YV12 = 5, /**< YUV YV12 format */
++        YUV_UYVY = 6, /**< UYVY format (UYVY...UYVY..UYVY)*/
++        YUV_PLANAR = 7, /**< Planar YUV format given with three separate pointers to planes */
++        YUV_NV21_SEPARATED = 8 /**< Same as YUV_420_NV21 except input/output is given with separate pointers to luma (imagePtr) and chroma (imagePtrU) channels. */
++    } VDBeatyShotImageFormat;
++
++
++    /**
++    Enumeration for different memory modes to be used with the GPU processing.
++    Some devices do not support GraphicBuffer memory copying (MEMCPY_GRAPHICBUFFER)
++    and one needs to use read pixels approach (MEMCPY_READPIXELS).
++    */
++    typedef enum _VDBeautyEngineGPUMemoryMode
++    {
++        MEMCPY_READPIXELS=0, /**< Use glReadPixels to reed data from GPU*/
++        MEMCPY_GRAPHICBUFFER=1,/**< Use GraphicBuffer (gralloc) memory copying to read data from GPU*/
++        RENDER_TO_WINDOW=2,/**< Render to window. Do not read data from GPU */
++    } VDBeautyEngineGPUMemoryMode;
++
++    /**
++    Enumeration for different operation modes supported by the engine.
++    */
++    typedef enum _VDBeautyEngineProcessingMode
++    {
++        VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL = 0, /**< Use both preview and still processing and apply face tracking in preview mode.*/
++        VDBEAUTY_REALTIME_AND_STILL = 1,/**< Use both preview and still processing but do not apply face tracking in preview mode (filtering is applied to skin like areas instead of detected face)*/
++        VDBEAUTY_STILL = 2,/**< Use only still image processing*/
++    } VDBeautyEngineProcessingMode;
++
++    /**
++    Structure for face coordinates that may be provided outside beauty engine (i.e. from
++    hardware face tracker).
++    */
++    typedef struct _VDBeautyFace
++    {
++        int left; /**< Left x coordinate of face in the image*/
++        int top; /**< Top y coordinate of face in the image*/
++        int right; /**< Rigt x coordinate of face in the image*/
++        int bottom;/**< Bottom y coordinate of face in the image*/
++        int leftEyeX; /**< Left eye x coordinate if available*/
++        int leftEyeY;/**< Left eye y coordinate if available*/
++        int rightEyeX; /**< Right eye x coordinate if available*/
++        int rightEyeY; /**< Right eye t coordinate if available*/
++		int smile;
++    }VDBeautyFace;
++
++    /**
++    Structure for input/output data to be used with processing functions.
++    */
++    typedef struct _VDBeautyShotData
++    {
++        unsigned char *imagePtr; /**< Pointer to image data (input/output) */
++        unsigned char *imagePtrU; /**< Pointer to image data U plane (input/output) when format is YUV_PLANAR or pointer to UV plane when format is YUV_NV21_SEPARATED  */
++        unsigned char *imagePtrV; /**< Pointer to image data V plane (input/output) when format is YUV_PLANAR. */
++        int imageCols; /**< Image width*/
++        int imageRows;/**< Image height*/
++        int nbrOfFaces; /**< Number of faces in the faces array */
++        VDBeautyFace faces[MAX_BEAUTY_SHOT_FACES_IN_TRACK];
++        int jpegDataSize;/**< Compressed data size in case of JPEG format*/
++        int jpegSavingQuality; /**< JPEG saving quality (0-100)*/
++        unsigned char *outputJpeg; /**< Newly allocated JPEG compressed data in case of JPEG format*/
++        int ouputJpegDataSize; /**< Compressed output data size in case of JPEG format*/
++        VDBeatyShotImageFormat imageFormat; /**< Used image format*/
++        int32_t beautyFilterParams[NUMBER_OF_BEAUTYFILTERS]; /**< Filter strength parameters*/
++        int forceSmoothing; /**< Force face smoothing even though no face is found (apply to skin like regions)*/
++		int colorNoiseReduction; /**< Color noise (chroma) reduction strength (0-10) */
++		int luminanceNoiseReduction; /**< Luminance noise reduction strength (0-10) */
++		int sharpening; /**< Sharpening strength (0-10) */
++		int padRows;	/**< Number of extra rows after valid Y rows before chroma channel. */
++		int padCols;	/**< Number of extra pixels after each row to be ignored. */
++		int stillImageRotation; /**< Defines how still image and preview frame are oriented w.r.t. each other. Supported values are 90 (=preview rotated toward right), 180 (=preview is up-side down), 270 (=preview rotated towards left) */
++		int previewMirrored; /**< Defines if still image and preview frame are mirrored w.r.t. each other. Supported values are 0 (=preview is not mirrored), and 1 (=previw is mirrored). */
++		int skipPreviewIfStillRunning; /**< Skip preview beauty processing if still image processing is on-going. Supported values are 0 (=do not skip = apply normally), and 1 (=skip preview processing if still is running) */
++		int skipPreviewProcessing; /**< Skip preview processing but take the ouput from the frame buffer pipeline to keep same frame dealy as with actual processing */
++    }VDBeautyShotData;
++
++    /**
++    Enumeration for different error codes returend by API functions.
++    */
++    typedef enum _VDBeautyErrorCode
++    {
++        VDBEAUTY_OK=0, /**< Operation ok*/
++        VDBEAUTY_NOK=1, /**< Operation not ok*/
++    } VDBeautyErrorCode;
++
++	/**
++	Initialize Visidon Beauty Shot Engine. This function allocates the resources needed by the engine
++	depending on the operation mode. User needs to provide the current preview image resolution as well as
++	desired opration mode and memory mode to exhange data between CPU and GPU. Engine is initialized to
++	user provided pointer and all later usage is needed to be done by this instance pointer.
++	@param previewCols Preview image widht
++	@param previewRows Preview image height
++	@param processingMode Operation mode, see VDBeautyEngineProcessingMode for mode detail
++	@param gpuMemoryMode Memory copying mode between GPU and CPU, see VDBeautyEngineGPUMemoryMode for mode details
++	@param numberOfCores Number of processing cores to be used by algorithm
++	@param engine Instance of initialized engine. The later API usage is done via this pointer.
++	@return BEAUTY_OK (0) if initialization succeeded, otherwise BEAUTY_NOK
++	*/
++	VDBeautyErrorCode VDInitializeBeautyShotWithCores(int previewCols, int previewRows, VDBeautyEngineProcessingMode processingMode, VDBeautyEngineGPUMemoryMode gpuMemoryMode, int numberOfCores, void ** engine);
++
++
++    /**
++    Initialize Visidon Beauty Shot Engine. This function allocates the resources needed by the engine
++    depending on the operation mode. User needs to provide the current preview image resolution as well as
++    desired opration mode and memory mode to exhange data between CPU and GPU. Engine is initialized to
++    user provided pointer and all later usage is needed to be done by this instance pointer.
++    @param previewCols Preview image widht
++    @param previewRows Preview image height
++    @param processingMode Operation mode, see VDBeautyEngineProcessingMode for mode detail
++    @param gpuMemoryMode Memory copying mode between GPU and CPU, see VDBeautyEngineGPUMemoryMode for mode details
++    @param engine Instance of initialized engine. The later API usage is done via this pointer.
++    @return BEAUTY_OK (0) if initialization succeeded, otherwise BEAUTY_NOK
++    */
++    VDBeautyErrorCode VDInitializeBeautyShot(int previewCols,int previewRows,VDBeautyEngineProcessingMode processingMode, VDBeautyEngineGPUMemoryMode gpuMemoryMode, void ** engine);
++
++	/**
++	Initialize Visidon Beauty Shot Engine to render ouput directly to the window. This function allocates the resources needed by the engine
++	depending on the operation mode. User needs to provide the current preview image resolution as well as
++	desired opration mode and memory mode to exhange data between CPU and GPU. User also provides pointer to the ANativeWindow
++	where the output is put. Engine is initialized to user provided pointer and all later usage is needed to be done by this instance pointer.
++	@param previewCols Preview image widht
++	@param previewRows Preview image height
++	@param processingMode Operation mode, see VDBeautyEngineProcessingMode for mode detail
++	@param gpuMemoryMode Memory copying mode between GPU and CPU, see VDBeautyEngineGPUMemoryMode for mode details
++	@param window void type pointer to ANativeWindow where the output is renderer.
++	@param numberOfCores Number of processing cores to be used by algorithm
++	@param engine Instance of initialized engine. The later API usage is done via this pointer.
++	@return BEAUTY_OK (0) if initialization succeeded, otherwise BEAUTY_NOK
++	*/
++	VDBeautyErrorCode VDInitializeBeautyShotWithWindowAndCores(int previewCols, int previewRows, VDBeautyEngineProcessingMode processingMode, VDBeautyEngineGPUMemoryMode gpuMemoryMode, void* window, int numberOfCores, void ** engine);
++
++	/**
++    Initialize Visidon Beauty Shot Engine to render ouput directly to the window. This function allocates the resources needed by the engine
++    depending on the operation mode. User needs to provide the current preview image resolution as well as
++    desired opration mode and memory mode to exhange data between CPU and GPU. User also provides pointer to the ANativeWindow
++    where the output is put. Engine is initialized to user provided pointer and all later usage is needed to be done by this instance pointer.
++    @param previewCols Preview image widht
++    @param previewRows Preview image height
++    @param processingMode Operation mode, see VDBeautyEngineProcessingMode for mode detail
++    @param gpuMemoryMode Memory copying mode between GPU and CPU, see VDBeautyEngineGPUMemoryMode for mode details
++    @param window void type pointer to ANativeWindow where the output is renderer.
++    @param engine Instance of initialized engine. The later API usage is done via this pointer.
++    @return BEAUTY_OK (0) if initialization succeeded, otherwise BEAUTY_NOK
++    */
++    VDBeautyErrorCode VDInitializeBeautyShotWithWindow(int previewCols,int previewRows, VDBeautyEngineProcessingMode processingMode, VDBeautyEngineGPUMemoryMode gpuMemoryMode, void* window, void ** engine);
++
++    /**
++    Setup window rendering ouput with desired size and orientation. User needs to call this after engine is initialized
++    to window rendering mode for setting up correct preview image orientation and size.
++    @param outWidth Render windows widhth
++    @param outHeight Render windows height
++    @param transformMatrix 4x4 transformation matrix to flip camera preview image in correct orientation in the window
++    @param engine Instance of initialized engine.
++    @return BEAUTY_OK (0) if setup succeeded, otherwise BEAUTY_NOK
++    */
++    VDBeautyErrorCode VDSetupPreviewOutput(int outWidth, int outHeight, float *transformMatrix, int *scissorBox, void *engine);
++
++    /**
++    Release allocaed resources and stop engine.
++    @param engine Instance of engine (pointer to initialized pointer).
++    @return BEAUTY_OK (0) if initialization succeeded, otherwise BEAUTY_NOK
++    */
++    VDBeautyErrorCode VDReleaseBeautyShot(void ** engine);
++
++    /**
++    Apply preview processing to input data. Image format needs to be YUV.
++    @param data Pointer to input data structure
++    @param engine Pointer to instance of initialized engine
++    @return BEAUTY_OK (0) if initialization succeeded, otherwise BEAUTY_NOK
++    */
++    VDBeautyErrorCode VDProcessPreviewFrame(VDBeautyShotData *data, void *engine);
++
++	/**
++	Apply preview processing to input data and make sure output is synchronized with input,
++	so that result is made from this specific frame.
++	@param data Pointer to input data structure
++    @param engine Pointer to instance of initialized engine
++    @return BEAUTY_OK (0) if initialization succeeded, otherwise BEAUTY_NOK
++	*/
++	VDBeautyErrorCode VDProcessPreviewFrame_sync(VDBeautyShotData *data, void *engine);
++
++    /**
++    Apply beautification to captured photo.
++    @param data Pointer to input data structure
++    @param engine Pointer to instance of initialized engine
++    @return BEAUTY_OK (0) if initialization succeeded, otherwise BEAUTY_NOK
++    */
++    VDBeautyErrorCode VDProcessStillImage(VDBeautyShotData *data, void *engine);
++
++	/**
++	* Get beauty shot library version string.
++	* @return Version string
++	**/
++	const char * VDBeautyShot_GetVersion();
++
++	/**
++	* Get latest face tracking result from the preview. Coordinates of the rectange are in original image
++	* coordinate system.
++	* @param faceIndex Face index to be (= 0 -> numberOfFaces (see int VDGetNumberOfBeautyFaces(void *engine);)
++	* @param engine Pointer to instance of initialized engine
++	* @return Latest face coordinates
++	**/
++	VDBeautyFace VDGetBeautyFace(int faceIndex, void *engine);
++
++	/**
++	* Get number of faces currently in track (max number of faces is MAX_BEAUTY_SHOT_FACES_IN_TRACK)
++	* @param engine Pointer to instance of initialized engine
++	* @return Number of faces
++	**/
++	int VDGetNumberOfBeautyFaces(void *engine);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif
+Index: external/libvisidon_facebeauty/VisidonFaceBeauty.cpp
+===================================================================
+--- external/libvisidon_facebeauty/VisidonFaceBeauty.cpp	(revision 0)
++++ external/libvisidon_facebeauty/VisidonFaceBeauty.cpp	(revision 6471)
+@@ -0,0 +1,428 @@
++/*************************************************************************************
++ * 
++ * Description:
++ * 	Defines Visidon FaceBeauty APIs for camera HAL.
++ *
++ * Author : Colin
++ * Date   : 2014-12-9
++ *
++ *************************************************************************************/
++
++#define LOG_TAG "VisidonFaceBeauty"
++
++#include "VisidonFaceBeauty.h"
++
++#include <utils/Log.h>
++#include <utils/threads.h>
++
++#include <cutils/properties.h>
++#include <android/log.h>
++#include <stdlib.h>
++#include <string.h>
++
++#define XLOGI(fmt, args...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, fmt, ##args)
++#define XLOGD(fmt, args...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, fmt, ##args)
++#define XLOGE(fmt, args...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, fmt, ##args) 
++	
++#define PRINTE(...)	    XLOGE(__VA_ARGS__)
++#define PRINTD(...)	    XLOGD(__VA_ARGS__)
++
++//Set the value according to the product
++#define SKIN_TONE_ADJUSTING_VALUE	0
++#define SKIN_SMOOTHING_VALUE		0
++ 
++namespace android {
++static VisidonFaceBeauty* mVisidon = NULL;
++
++VisidonFaceBeauty::
++VisidonFaceBeauty() 
++{
++	mVisidonBeautyShotEngine = NULL;
++	mIsEnabled = false;
++	defaultPreviewWidth = 0;
++	defaultPreviewHeight = 0;
++	mPreviewWidth  = 0;
++	mPreviewHeight = 0;
++	isCapture = false;
++
++	memset(&mPreviewInputData, 0, sizeof(VDBeautyShotData));
++    ALOGE("%s",__func__);
++	mIsInitintBeauty = false;
++	//mIsInitintBeauty = true;
++    //mMyThread = new MyThread(*this);
++   // mMyThread->run("VFaceBeauty");
++
++	pthread_mutex_init(&mMutex, NULL);
++	
++}
++
++VisidonFaceBeauty::
++~VisidonFaceBeauty() 
++{
++
++    if (mMyThread != 0) {
++        ALOGE("%s, release:mMyThread",__func__);
++        mMyThread->requestExit();  // see comment in AudioRecord.h
++        mMyThread->requestExitAndWait();
++        mMyThread.clear();
++    }
++
++	if (mVisidonBeautyShotEngine != NULL) {
++		ALOGE("%s,release BeautyShotEngine",__func__);
++		VDReleaseBeautyShot(&mVisidonBeautyShotEngine);
++		mVisidonBeautyShotEngine = NULL;
++		mIsEnabled = false;
++	}
++	pthread_mutex_destroy(&mMutex);  
++}
++
++VisidonFaceBeauty*
++VisidonFaceBeauty::
++createInstance() 
++{	
++	if(!mVisidon) {
++        mVisidon = new VisidonFaceBeauty();
++    }
++	return mVisidon;
++}
++
++void
++VisidonFaceBeauty::
++destroyInstance() 
++{
++	//delete this;
++}
++
++int
++VisidonFaceBeauty::
++init()
++{
++	int res = 0;
++
++	return res;
++}
++
++void 
++VisidonFaceBeauty::
++deinit()
++{
++	disableFaceBeauty();
++}
++
++int 
++VisidonFaceBeauty::
++initPreviewSize(int width, int height)
++{
++	int ret = 0;
++
++	//pthread_mutex_lock(&mMutex);
++    if(mPreviewWidth != width ||mPreviewHeight != height) {
++        mIsEnabled = false;
++    }
++	
++	if(mPreviewWidth == width && mPreviewHeight == height && mVisidonBeautyShotEngine != NULL){
++		mIsEnabled = true;
++	}
++	
++	mPreviewWidth  = width;
++	mPreviewHeight = height;
++    ALOGE("%s,start Init:mPreviewWidth=%d,mPreviewHeight=%d,mIsEnabled=%d ", __func__,mPreviewWidth,mPreviewHeight,mIsEnabled);
++	
++	//Set preview parameter according to platform.
++	mPreviewInputData.imageCols = width;
++	mPreviewInputData.imageRows = height;
++	mPreviewInputData.imageFormat = YUV_YV12;
++	mPreviewInputData.beautyFilterParams[SKIN_SMOOTHING] = SKIN_SMOOTHING_VALUE;
++	mPreviewInputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = SKIN_TONE_ADJUSTING_VALUE;
++
++	//pthread_mutex_unlock(&mMutex);
++
++	return ret;
++}
++
++int
++VisidonFaceBeauty::
++enableFaceBeauty()
++{
++	int ret = 0;
++	void* ptr = NULL;
++
++    ALOGE("%s, start Init:mIsEnabled=%d,mIsInitintBeauty=%d", __func__,mIsEnabled,mIsInitintBeauty);
++	//pthread_mutex_lock(&mMutex);
++//	PRINTE("rlk_zhanxw enableFaceBeauty");
++	if (mPreviewWidth == 0 || mPreviewHeight == 0 ) {
++		PRINTE("Invalid preview width and height.");
++		//pthread_mutex_unlock(&mMutex);
++
++		return ret;
++	}
++
++	if (mIsInitintBeauty) {
++                 ALOGE("%s,is initing need reture", __func__);
++		//pthread_mutex_unlock(&mMutex);
++		return ret;
++	}
++
++	if (mIsEnabled &&(mPreviewWidth == defaultPreviewWidth && mPreviewHeight == defaultPreviewHeight) ) {
++		ALOGE("%s, VisidonFaceBeauty has enabled.", __func__);
++
++		//pthread_mutex_unlock(&mMutex);
++		return ret;
++	} 
++
++	if (mVisidonBeautyShotEngine != NULL) {
++		ALOGE("%s,start Init:defaultPreviewWidth=%d,defaultPreviewHeight=%d ", __func__,defaultPreviewWidth,defaultPreviewHeight);
++
++		VDReleaseBeautyShot(&mVisidonBeautyShotEngine);
++		mVisidonBeautyShotEngine = NULL;
++	}
++
++/*	VDBeautyErrorCode err = VDInitializeBeautyShot(mPreviewWidth, 
++											mPreviewHeight,
++											VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL,
++							//				MEMCPY_READPIXELS,
++											MEMCPY_GRAPHICBUFFER,
++											&ptr);*/
++    ret = VDInitializeBeautyShot(mPreviewWidth, mPreviewHeight, VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL, MEMCPY_READPIXELS, &ptr);
++
++	
++	if (ptr == NULL) {
++		mVisidonBeautyShotEngine = NULL;
++		ret = -1;
++//		PRINTD("rlk_zhanxw enableFaceBeauty mVisidonBeautyShotEngine = NULL");
++	} else {
++		defaultPreviewWidth = mPreviewWidth;
++		defaultPreviewHeight = mPreviewHeight;
++		mVisidonBeautyShotEngine = ptr;
++		mIsEnabled = true;
++//		PRINTD("rlk_zhanxw enableFaceBeauty mIsEnabled = true");
++	}
++
++//	PRINTD("rlk_zhanxw enableFaceBeauty::ret = %d", ret);
++	//pthread_mutex_unlock(&mMutex);
++    ALOGE("%s,  end Init ret = %d,mIsEnabled=%d",__func__,ret,mIsEnabled);
++
++	return ret;
++}
++
++void
++VisidonFaceBeauty::
++disableFaceBeauty() 
++{
++	//pthread_mutex_lock(&mMutex);
++        ALOGE("%s,mIsInitintBeauty=%d,mIsEnabled=%d",__func__,mIsInitintBeauty,mIsEnabled);
++		mIsEnabled = false;
++	if (mVisidonBeautyShotEngine != NULL && mIsEnabled && !mIsInitintBeauty) {
++		VDReleaseBeautyShot(&mVisidonBeautyShotEngine);
++		mVisidonBeautyShotEngine = NULL;
++		mIsEnabled = false;
++		ALOGE("%s",__func__);
++	}
++	//PRINTD("rlk_zhanxw disableFaceBeauty");
++	//pthread_mutex_unlock(&mMutex);
++}
++
++void
++VisidonFaceBeauty::
++FaceBeauty_doCapture() {
++	isCapture = true;
++}
++
++bool
++VisidonFaceBeauty::
++isCapturing(){
++	return isCapture;
++}
++
++int 
++VisidonFaceBeauty::
++processPreview(void* inputBuffer, long size, int skinSmoothingStrenght, int skinToneAdjustmentStrength)
++{
++	int res = 0;
++	/*
++	if(isCapture){
++		PRINTE("is Capturing,does not need processPreview.");
++		return -1;
++	}
++	*/
++	if((skinSmoothingStrenght <= 0 && skinToneAdjustmentStrength <= 0)){
++		PRINTE("does not need processPreview.");
++		return -1;
++	}
++	
++	if (inputBuffer == NULL || size == 0) {
++		PRINTE(" processPreview unvalid parameters.");
++		return -1;
++	}
++
++	//pthread_mutex_lock(&mMutex);
++
++#if 0 
++	dumpImg(inputBuffer, size, 480, 640);
++#endif
++
++	if (mIsEnabled && mVisidonBeautyShotEngine != NULL) {
++		/*
++        mPreviewInputData.padCols = 0;
++        mPreviewInputData.padRows = 0;
++        mPreviewInputData.luminanceNoiseReduction = 1; //case by case
++        mPreviewInputData.sharpening = 1; //case by case
++        mPreviewInputData.colorNoiseReduction = 1; //case by case
++        mPreviewInputData.forceSmoothing = 1;
++		*/
++		mPreviewInputData.imageFormat = YUV_YV12;
++		mPreviewInputData.imagePtr = (unsigned char*)inputBuffer;
++		skinSmoothingStrenght = skinSmoothingStrenght;
++		mPreviewInputData.beautyFilterParams[SKIN_SMOOTHING] = skinSmoothingStrenght;
++		mPreviewInputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = skinToneAdjustmentStrength;
++		VDBeautyErrorCode err = VDProcessPreviewFrame(&mPreviewInputData, mVisidonBeautyShotEngine);
++        ALOGE("VDProcessPreviewFrame start,SKIN_SMOOTHING = %d,SKIN_TONE_ADJUSTING = %d,format = %d,err=%d",skinSmoothingStrenght,skinToneAdjustmentStrength,mPreviewInputData.imageFormat,err);
++
++		if (err != VDBEAUTY_OK) {
++			PRINTD("Failed to process preview frame.");
++		}
++	}
++#if 0
++	dumpImg(inputBuffer, size, 480, 640);
++#endif
++	//pthread_mutex_unlock(&mMutex);
++	
++	return res;
++}
++
++int 
++VisidonFaceBeauty::
++processRaw(void* inputBuffer, long size, int width, int height, int skinSmoothingStrenght, int skinToneAdjustmentStrength)
++{
++	if((skinSmoothingStrenght == 0 && skinToneAdjustmentStrength == 0)){
++		PRINTE("does not need processRaw.");
++		return -1;
++	}
++	
++	int res = 0;
++	 
++	if (inputBuffer == NULL || size == 0 || width == 0 || height == 0 ) {
++		PRINTE("unvalid parameters.");
++		return -1;
++	}
++
++	
++
++	//pthread_mutex_lock(&mMutex);
++
++#if  0
++	dumpImg(inputBuffer, size, width, height);
++#endif
++
++	if (mIsEnabled && mVisidonBeautyShotEngine != NULL) {
++		VDBeautyShotData inputData;
++		memset(&inputData, 0, sizeof(VDBeautyShotData));
++		inputData.imageCols = width;
++		inputData.imageRows = height;
++		inputData.imageFormat = YUV_YUYV;
++		inputData.imagePtr = (unsigned char*)inputBuffer;
++		inputData.forceSmoothing = 1;
++        inputData.padCols = 0;
++        inputData.padRows = 0;
++        inputData.luminanceNoiseReduction = 1; //case by case
++        inputData.sharpening = 1; //case by case
++        inputData.colorNoiseReduction = 1; //case by case
++        inputData.forceSmoothing = 1;
++        
++		inputData.beautyFilterParams[SKIN_SMOOTHING] = skinSmoothingStrenght;
++		inputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = skinToneAdjustmentStrength*2;
++
++//		PRINTD("Fandy.zhang++ processRaw debug skinSmoothingStrenght=%d, skinToneAdjustmentStrength=%d\n", skinSmoothingStrenght, skinToneAdjustmentStrength);
++		VDBeautyErrorCode err = VDProcessStillImage(&inputData, mVisidonBeautyShotEngine);
++		isCapture = false;
++        ALOGE("%s,Smooth = %d,skintone=%d,size = %ld,cols = %d,rows = %d,err = %d", __func__, skinSmoothingStrenght, skinToneAdjustmentStrength*2,size, width, height, err);
++
++		if (err != VDBEAUTY_OK) {
++			//PRINTE("Failed to process capture frame.");
++			PRINTD("Failed to process capture frame.");
++		}
++	}
++
++	//pthread_mutex_unlock(&mMutex);
++
++	return res;
++}
++
++bool
++VisidonFaceBeauty::
++dumpImg(void* addr, long size, int width, int height)
++{
++	char fileName[64] = {0};
++	FILE* fp = NULL;
++
++	sprintf(fileName, "/sdcard/visidon_%dx%d.yuv", width, height);
++
++	fp = fopen(fileName, "w");
++	if (fp == NULL) {
++        PRINTE("fail to open file to save img: %s", fileName);
++        return false;
++	}
++
++    fwrite(addr, 1, size, fp);
++    fclose(fp);
++
++	return true;
++}
++
++void
++VisidonFaceBeauty::
++setInitBeautyEnd(void* ptr,  bool state){
++	
++	ALOGE("%s, state=%d ,mIsInitintBeauty=%d",__func__,state,mIsInitintBeauty);
++	if (mVisidonBeautyShotEngine != NULL) {
++		VDReleaseBeautyShot(&mVisidonBeautyShotEngine);
++	}
++	
++    if(!state && ptr != NULL) {
++        mIsEnabled = true;
++    }
++	
++    mVisidonBeautyShotEngine = ptr;
++    mIsInitintBeauty = state;
++}
++
++bool
++VisidonFaceBeauty::
++isVisidonBeautyShotEngine(){
++       return mVisidonBeautyShotEngine != NULL;
++}
++
++VisidonFaceBeauty::MyThread::MyThread(VisidonFaceBeauty& receiver)
++    : mReceiver(receiver)
++{
++}
++
++VisidonFaceBeauty::MyThread::~MyThread(){
++}
++
++
++bool
++VisidonFaceBeauty::MyThread::threadLoop(){
++        AutoMutex _l(mMyLock);
++	int ret = 0;
++	void* ptr = NULL;
++    if(mReceiver.isVisidonBeautyShotEngine()) {
++	    ALOGE("%s, run Init retrue",__func__);
++	    mReceiver.mIsInitintBeauty = false;
++	    this->requestExit(); 
++        return true;
++    }
++
++	mReceiver.setInitBeautyEnd(NULL,true);
++   /* ret = VDInitializeBeautyShotWithCores(mPreviewWidth, 
++                                         mPreviewHeight,
++                                         VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL,
++                                         MEMCPY_GRAPHICBUFFER,4,
++                                         &ptr);
++										 */
++    mReceiver.setInitBeautyEnd(ptr,false);
++    ALOGE("%s, run Init end ",__func__);
++    this->requestExit(); 
++    return true;
++}
++};

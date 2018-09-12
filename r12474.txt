@@ -1,0 +1,54 @@
+Index: device/mediatek/common/sepolicy/basic/file_contexts
+===================================================================
+--- device/mediatek/common/sepolicy/basic/file_contexts	(revision 12473)
++++ device/mediatek/common/sepolicy/basic/file_contexts	(revision 12474)
+@@ -41,6 +41,7 @@
+ /data/nfc_socket(/.*)? u:object_r:nfc_socket:s0
+ /data/nvram(/.*)? u:object_r:nvram_data_file:s0
+ /data/cct(/.*)? u:object_r:cct_data_file:s0
++/data/nfc(/.*)? u:object_r:nfc_data_file:s0
+ /data/md3(/.*)? u:object_r:c2k_file:s0
+ /data/mal(/.*)? u:object_r:mal_data_file:s0
+ /data/SF_dump(./*)? u:object_r:sf_bqdump_data_file:s0
+Index: device/mediatek/mt6739/init.mt6739.rc
+===================================================================
+--- device/mediatek/mt6739/init.mt6739.rc	(revision 12473)
++++ device/mediatek/mt6739/init.mt6739.rc	(revision 12474)
+@@ -201,6 +201,10 @@
+ # nfc	
+     chmod 0666 /dev/pn547
+     chown system system /dev/pn547
++	
++	mkdir /data/nfc
++    chown root system /data/nfc
++    chmod 0666 /data/nfc
+ # -----------------------
+ # Add by MTK
+     # SCP log
+Index: external/libnfc-nci/halimpl/pn54x/tml/phTmlNfc_i2c.h
+===================================================================
+--- external/libnfc-nci/halimpl/pn54x/tml/phTmlNfc_i2c.h	(revision 12473)
++++ external/libnfc-nci/halimpl/pn54x/tml/phTmlNfc_i2c.h	(revision 12474)
+@@ -41,7 +41,7 @@
+  * PN544_SET_PWR(1): power on
+  * PN544_SET_PWR(2): reset and power on with firmware download enabled
+  */
+-#define PN544_SET_PWR    _IOW(PN544_MAGIC, 0x01, long)
++#define PN544_SET_PWR    _IOW(PN544_MAGIC, 0x01, unsigned int)
+ 
+ #if(NFC_NXP_ESE == TRUE)
+ NFCSTATUS phTmlNfc_i2c_get_p61_power_state(void *pDevHandle);
+Index: vendor/branch/5058Y/build/target/product/core.mk
+===================================================================
+--- vendor/branch/5058Y/build/target/product/core.mk	(revision 12473)
++++ vendor/branch/5058Y/build/target/product/core.mk	(revision 12474)
+@@ -64,7 +64,8 @@
+     nfc_nci.pn54x.default \
+     NfcNci \
+     Tag \
+-    com.android.nfc_extras
++    com.android.nfc_extras \
++	com.gsma.services.nfc
+ 	
+ PRODUCT_COPY_FILES += \
+ 	#external/libnfc-nci/libpn548ad_fw.so:system/vendor/firmware/libpn548ad_fw.so\

@@ -1,0 +1,2868 @@
+Index: packages/apps/Music/AndroidManifest.xml
+===================================================================
+--- packages/apps/Music/AndroidManifest.xml	(revision 1169)
++++ packages/apps/Music/AndroidManifest.xml	(revision 1170)
+@@ -334,6 +334,10 @@
+                 <category android:name="android.intent.category.DEFAULT" />
+             </intent-filter>
+         </receiver>
+-
++<receiver android:name="com.android.music.FuncToMusicReceiver">
++            <intent-filter >
++                <action android:name="com.android.func_to_music"/>
++            </intent-filter>
++        </receiver>
+     </application>
+ </manifest>
+Index: packages/apps/Music/src/com/android/music/MusicUtils.java
+===================================================================
+--- packages/apps/Music/src/com/android/music/MusicUtils.java	(revision 1169)
++++ packages/apps/Music/src/com/android/music/MusicUtils.java	(revision 1170)
+@@ -87,7 +87,8 @@
+ import android.widget.Toast;
+ 
+ import android.telephony.TelephonyManager;
+-
++import android.os.IBinder;
++import android.content.ComponentName;
+ public class MusicUtils {
+ 
+     private static final String TAG = "MusicUtils";
+@@ -221,7 +222,11 @@
+             mWrappedContext = context;
+         }
+     }
+-
++	 public static  void bindService(final Context context, final long id){
++		Intent musicIntent=new Intent(context, MediaPlaybackService.class);
++		musicIntent.putExtra("id",id);
++		context.startService(musicIntent);
++    }
+     public static ServiceToken bindToService(Activity context) {
+         return bindToService(context, null);
+     }
+Index: packages/apps/Music/src/com/android/music/MusicBrowserActivity.java
+===================================================================
+--- packages/apps/Music/src/com/android/music/MusicBrowserActivity.java	(revision 1169)
++++ packages/apps/Music/src/com/android/music/MusicBrowserActivity.java	(revision 1170)
+@@ -68,7 +68,7 @@
+ import com.mediatek.music.ext.Extensions;
+ import com.mediatek.music.ext.IMusicTrackBrowser;
+ import com.mediatek.music.ext.PluginUtils;
+-
++import android.util.Log;
+ public class MusicBrowserActivity extends TabActivity implements
+ MusicUtils.Defs, ServiceConnection, OnTabChangeListener,
+         ViewPager.OnPageChangeListener {
+@@ -190,6 +190,9 @@
+         mViewPager = (ViewPager) findViewById(R.id.viewpage);
+         mViewPager.setAdapter(new MusicPagerAdapter());
+         mViewPager.setOnPageChangeListener(this);
++		if(getIntent().getAction().equals("func_to_music")){
++            mViewPager.setCurrentItem(3);
++        }
+         //mViewPager.setOffscreenPageLimit(VIEW_PAGER_OFFSCREEN_PAGE_NUM);
+         PDebug.End("MusicBrowserActivity.setAdapter()");
+ 
+@@ -750,6 +753,9 @@
+                 break;
+             case PLAYLIST_INDEX:
+                 intent.setDataAndType(Uri.EMPTY, MediaStore.Audio.Playlists.CONTENT_TYPE);
++				if(getIntent().getAction().equals("func_to_music")){
++					intent.putExtra("func_to_music",true);;
++					}
+                 break;
+             default:
+                 MusicLogUtils.v(TAG, "default");
+Index: packages/apps/Music/src/com/android/music/MediaPlaybackService.java
+===================================================================
+--- packages/apps/Music/src/com/android/music/MediaPlaybackService.java	(revision 1169)
++++ packages/apps/Music/src/com/android/music/MediaPlaybackService.java	(revision 1170)
+@@ -93,7 +93,8 @@
+ import com.mediatek.bluetooth.avrcp.IBTAvrcpMusic;
+ import com.mediatek.bluetooth.avrcp.ServiceAvrcpStub;
+ /// BT AVRCP End @}
+-
++import android.os.RemoteException;
++import java.util.Arrays;
+ /// M: Wifi display {@
+ /// Wifi display @}
+ 
+@@ -1325,9 +1326,109 @@
+         mDelayedStopHandler.removeCallbacksAndMessages(null);
+         Message msg = mDelayedStopHandler.obtainMessage();
+         mDelayedStopHandler.sendMessageDelayed(msg, IDLE_DELAY);
++		long id= intent.getLongExtra("id",-100);
++		
++		if(id!=-100){
++			if(id==-1){
++				playRecentlyAdded();
++			}else if(id==-3){
++				playPodcasts();
++			}else{
++			
++				playPlayList( id,-1);
++			}
++
++		}
++			
+         return START_STICKY;
+     }
+-    
++    private void playPlayList(long id,int position){
++		long [] list = MusicUtils.getSongListForPlaylist(this, id);
++		
++		if (list != null) {
++			long curid = getAudioId();
++            int curpos = getQueuePosition();
++            if (position != -1 && curpos == position && curid == list[position]) {
++                // The selected file is the file that's currently playing;
++                // figure out if we need to restart with a new playlist,
++                // or just launch the playback activity.
++                long [] playlist = getQueue();
++                if (Arrays.equals(list, playlist)) {
++                    // we don't need to set a new list, but we should resume playback if needed
++                    MusicLogUtils.d(TAG, "playAll: same playlist!");
++                    play();
++                    return; // the 'finally' block will still run
++                }
++            }
++            if (position < 0) {
++                position = 0;
++            }
++            open(list,  position);
++            /// M: We use async prepare in service, so it will auto playback after finish
++            /// prepare, need not call play to trigger it.
++            //sService.play();
++        } 
++		
++			
++
++	}
++	private void playPodcasts() {
++			// do a query for all files that are podcasts
++			final String[] ccols = new String[] { MediaStore.Audio.Media._ID};
++			Cursor cursor = MusicUtils.query(this, MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
++					ccols, MediaStore.Audio.Media.IS_PODCAST + "=1",
++					null,
++					/// M: add for chinese sorting
++					MediaStore.Audio.Media.TITLE_PINYIN_KEY);
++	
++			if (cursor == null) {
++				// Todo: show a message
++				/// M: show USB in Using Status Message on Toast.
++				Toast.makeText(getApplicationContext(), getString(R.string.usb_in_using), 0).show();
++				return;
++			}
++			try {
++				int len = cursor.getCount();
++				long [] list = new long[len];
++				for (int i = 0; i < len; i++) {
++					cursor.moveToNext();
++					list[i] = cursor.getLong(0);
++				}
++				 open( list, 0);
++			} catch (SQLiteException ex) {
++			} finally {
++				cursor.close();
++			}
++		}
++    private void playRecentlyAdded() {
++		   // do a query for all songs added in the last X weeks.
++		   int X = MusicUtils.getIntPref(this, "numweeks", 2) * (3600 * 24 * 7);
++		   final String[] ccols = new String[] { MediaStore.Audio.Media._ID};
++		   String where = MediaStore.MediaColumns.DATE_ADDED + ">" + (System.currentTimeMillis() / 1000 - X);
++		   Cursor cursor = MusicUtils.query(this, MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
++				   ccols, where, null,
++				   /// M: add for chinese sorting
++				   MediaStore.Audio.Media.TITLE_PINYIN_KEY);
++	
++		   if (cursor == null) {
++			   // Todo: show a message
++			   /// M: show USB in Using Status Message on Toast.
++			   Toast.makeText(getApplicationContext(), getString(R.string.usb_in_using), 0).show();
++			   return;
++		   }
++		   try {
++			   int len = cursor.getCount();
++			   long [] list = new long[len];
++			   for (int i = 0; i < len; i++) {
++				   cursor.moveToNext();
++				   list[i] = cursor.getLong(0);
++			   }
++			   open( list, 0);
++		   } catch (SQLiteException ex) {
++		   } finally {
++			   cursor.close();
++		   }
++	   }
+     @Override
+     public boolean onUnbind(Intent intent) {
+         mServiceInUse = false;
+Index: packages/apps/Music/src/com/android/music/PlaylistBrowserActivity.java
+===================================================================
+--- packages/apps/Music/src/com/android/music/PlaylistBrowserActivity.java	(revision 1169)
++++ packages/apps/Music/src/com/android/music/PlaylistBrowserActivity.java	(revision 1170)
+@@ -77,8 +77,9 @@
+ import com.mediatek.music.ext.PluginUtils;
+ 
+ import com.android.music.MusicUtils.ServiceToken;
++import android.util.Log;
++import android.provider.Settings;
+ 
+-
+ public class PlaylistBrowserActivity extends ListActivity
+     implements View.OnCreateContextMenuListener, MusicUtils.Defs
+ {
+@@ -611,39 +612,62 @@
+     @Override
+     protected void onListItemClick(ListView l, View v, int position, long id)
+     {
+-        if (mCreateShortcut) {
+-            final Intent shortcut = new Intent();
+-            shortcut.setAction(Intent.ACTION_VIEW);
+-            shortcut.setDataAndType(Uri.EMPTY, "vnd.android.cursor.dir/playlist");
+-            shortcut.putExtra("playlist", String.valueOf(id));
+-            shortcut.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+-
+-            final Intent intent = new Intent();
+-            intent.putExtra(Intent.EXTRA_SHORTCUT_INTENT, shortcut);
+-            intent.putExtra(Intent.EXTRA_SHORTCUT_NAME, ((TextView) v.findViewById(R.id.line1)).getText());
+-            intent.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource.fromContext(
+-                    this, R.drawable.ic_launcher_shortcut_music_playlist));
+-
+-            setResult(RESULT_OK, intent);
+-            finish();
+-            return;
+-        }
+-        if (id == RECENTLY_ADDED_PLAYLIST) {
+-            Intent intent = new Intent(Intent.ACTION_PICK);
+-            intent.setDataAndType(Uri.EMPTY, "vnd.android.cursor.dir/track");
+-            intent.putExtra("playlist", "recentlyadded");
+-            startActivity(intent);
+-        } else if (id == PODCASTS_PLAYLIST) {
+-            Intent intent = new Intent(Intent.ACTION_PICK);
+-            intent.setDataAndType(Uri.EMPTY, "vnd.android.cursor.dir/track");
+-            intent.putExtra("playlist", "podcasts");
+-            startActivity(intent);
+-        } else {
+-            Intent intent = new Intent(Intent.ACTION_EDIT);
+-            intent.setDataAndType(Uri.EMPTY, "vnd.android.cursor.dir/track");
+-            intent.putExtra("playlist", Long.valueOf(id).toString());
+-            startActivity(intent);
+-        }
++        boolean content=getIntent().getBooleanExtra("func_to_music",false);
++        if(content){
++			Log.e("onListItemClick","---------111");
++			String s=id+"";
++			//Settings.System.putString(PlaylistBrowserActivity.this.getContentResolver(),"func_to_music","func");
++            MusicUtils.setLongPref(PlaylistBrowserActivity.this, "play_list_item_id",id);
++             if (id == RECENTLY_ADDED_PLAYLIST) {				
++                    playRecentlyAdded();
++                } else if (id == PODCASTS_PLAYLIST) {
++                    playPodcasts();
++                } else {
++                    MusicUtils.playPlaylist(this, id);
++                }
++			Intent i=new Intent("com.android.music.playlist_id");
++			i.putExtra("id",id);
++			sendBroadcast(i);
++			finish();
++			return;
++        }else{
++	        if (mCreateShortcut) {
++				Log.e("onListItemClick","---------mCreateShortcut");
++	            final Intent shortcut = new Intent();
++	            shortcut.setAction(Intent.ACTION_VIEW);
++	            shortcut.setDataAndType(Uri.EMPTY, "vnd.android.cursor.dir/playlist");
++	            shortcut.putExtra("playlist", String.valueOf(id));
++	            shortcut.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
++	            final Intent intent = new Intent();
++	            intent.putExtra(Intent.EXTRA_SHORTCUT_INTENT, shortcut);
++	            intent.putExtra(Intent.EXTRA_SHORTCUT_NAME, ((TextView) v.findViewById(R.id.line1)).getText());
++	            intent.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource.fromContext(
++	                    this, R.drawable.ic_launcher_shortcut_music_playlist));
++	            setResult(RESULT_OK, intent);
++	            finish();
++	            return;
++	        }
++	        if (id == RECENTLY_ADDED_PLAYLIST) {
++				Log.e("onListItemClick","---------RECENTLY_ADDED_PLAYLIST");
++	            Intent intent = new Intent(Intent.ACTION_PICK);
++	            intent.setDataAndType(Uri.EMPTY, "vnd.android.cursor.dir/track");
++	            intent.putExtra("playlist", "recentlyadded");
++	            startActivity(intent);
++	        } else if (id == PODCASTS_PLAYLIST) {
++	        
++				Log.e("onListItemClick","---------PODCASTS_PLAYLIST");
++	            Intent intent = new Intent(Intent.ACTION_PICK);
++	            intent.setDataAndType(Uri.EMPTY, "vnd.android.cursor.dir/track");
++	            intent.putExtra("playlist", "podcasts");
++	            startActivity(intent);
++	        } else {
++	        	Log.e("onListItemClick","---------");
++	            Intent intent = new Intent(Intent.ACTION_EDIT);
++	            intent.setDataAndType(Uri.EMPTY, "vnd.android.cursor.dir/track");
++	            intent.putExtra("playlist", Long.valueOf(id).toString());
++	            startActivity(intent);
++	        }
++		}
+     }
+ 
+     private void playRecentlyAdded() {
+Index: packages/apps/Music/src/com/android/music/FuncToMusicReceiver.java
+===================================================================
+--- packages/apps/Music/src/com/android/music/FuncToMusicReceiver.java	(revision 0)
++++ packages/apps/Music/src/com/android/music/FuncToMusicReceiver.java	(revision 1170)
+@@ -0,0 +1,27 @@
++package com.android.music;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++
++import android.content.Intent;
++import android.os.Bundle;
++import android.provider.Settings;
++import android.util.Log;
++
++/**
++ * Created by Administrator on 2017/9/25.
++ */
++
++public class FuncToMusicReceiver extends BroadcastReceiver {
++    private final static String FUNC_TO_MUSIC="func_to_music";
++    private final static String PLAY_LIST_ITEM_ID="play_list_item_id";
++	private String TAG="funcToMusic";
++    @Override
++    public void onReceive(Context context, Intent intent) {
++		long id=MusicUtils.getLongPref(context, PLAY_LIST_ITEM_ID,-100);
++			if(id!=-100){
++				MusicUtils.bindService(context,id);
++			}
++        
++    }
++}
+Index: packages/apps/Music
+===================================================================
+--- packages/apps/Music	(revision 1169)
++++ packages/apps/Music	(revision 1170)
+
+Property changes on: packages/apps/Music
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Music:r511
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1169)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1170)
+@@ -114,6 +114,10 @@
+                 <action android:name="android.settings.SETTINGS" />
+                 <category android:name="android.intent.category.DEFAULT" />
+             </intent-filter>
++			<intent-filter android:exported="true">
++			  <category android:name="android.intent.category.DEFAULT" />
++				<action  android:name="com.android.settings.SYSTEMUI_NIGHTMODE" />
++				 </intent-filter>
+             <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                 android:value="true" />
+         </activity>
+@@ -977,7 +981,7 @@
+             <intent-filter android:priority="1">
+                 <action android:name="com.android.settings.DISPLAY_SETTINGS" />
+                 <action android:name="android.settings.DISPLAY_SETTINGS" />
+-                <category android:name="android.intent.category.DEFAULT" />
++                <!--<category android:name="android.intent.category.DEFAULT" />-->
+             </intent-filter>
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+@@ -3402,6 +3406,24 @@
+             <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                        android:value="com.mediatek.settings.sim.SmartCallFwdFragment" />
+         </activity>
++		<receiver android:name="com.android.settings.NightModeReceiver">
++		<intent-filter>
++                <action android:name="com.android.settings.nightmode.open"/>
++		
++            </intent-filter>
++        </receiver>
++		<receiver android:name="com.android.settings.CloseNightMode">
++		<intent-filter>
++                
++				 <action android:name="com.android.settings.nightmode.close"/>
++            </intent-filter>
++        </receiver>
++		<receiver android:name="com.android.settings.BootedReceiver">  
++           <intent-filter android:priority="1000">  
++               <action android:name="android.intent.action.BOOT_COMPLETED"/>  
++			
++           </intent-filter>  
++       </receiver>  
+         <!-- M: @} -->
+ 		<!--add by wqq for RegulatorySafty-->
+ 		<activity android:name="Settings$RegulatorySaftySettingsActivity"
+Index: packages/apps/Settings/res/layout/preference_color_temperature.xml
+===================================================================
+--- packages/apps/Settings/res/layout/preference_color_temperature.xml	(revision 0)
++++ packages/apps/Settings/res/layout/preference_color_temperature.xml	(revision 1170)
+@@ -0,0 +1,94 @@
++<?xml version="1.0" encoding="utf-8"?><!-- Copyright (C) 2014 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++   	android:orientation="vertical"
++    android:gravity="center_vertical"
++    android:paddingStart="?android:attr/listPreferredItemPaddingStart"
++    android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
++    android:clickable="false"
++   >
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginBottom="8dip"
++        android:layout_marginTop="8dip"
++        android:orientation="vertical">
++        <TextView
++        	android:id="@+id/title"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/night_mode_on"
++            android:singleLine="true"
++            
++            android:textAppearance="@android:style/TextAppearance.Material.Subhead"
++            android:textColor="@color/night_mode_on_title"
++            android:ellipsize="marquee"
++            android:fadingEdge="horizontal"/>
++        <TextView
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/color_temperature"
++            android:singleLine="true"
++            android:textAppearance="@android:style/TextAppearance.Material.Subhead"
++            android:textColor="?android:attr/textColorPrimary"
++            android:ellipsize="marquee"
++            android:fadingEdge="horizontal"/>
++        <!-- Preference should place its actual preference widget here. -->
++        <SeekBar
++            android:id="@+id/seek_bar"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="8dip"
++            android:layout_gravity="center_vertical"
++            
++            />
++
++
++    </LinearLayout>
++    <RelativeLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginBottom="8dip"
++        android:layout_marginTop="8dip"
++        >
++
++        <TextView
++            android:id="@+id/less_warm"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_alignParentLeft="true"
++            android:text="@string/less_warm"
++            android:ellipsize="marquee"
++            android:fadingEdge="horizontal"
++            android:singleLine="true"
++            android:textColor="?android:attr/textColorHint" />
++        <TextView
++            android:id="@+id/more_warn"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_alignParentRight="true"
++            android:layout_marginLeft="20dip"
++            android:text="@string/more_warn"
++            android:ellipsize="marquee"
++            android:fadingEdge="horizontal"
++            android:singleLine="true"
++            android:textColor="?android:attr/textColorHint" />
++    </RelativeLayout>
++</LinearLayout>
++
+Index: packages/apps/Settings/res/xml/display_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/display_settings.xml	(revision 1169)
++++ packages/apps/Settings/res/xml/display_settings.xml	(revision 1170)
+@@ -47,7 +47,13 @@
+             android:summary="@string/night_mode_summary"
+             android:entries="@array/night_mode_entries"
+             android:entryValues="@array/night_mode_values" /> -->
+-
++		<PreferenceScreen
++                android:key="night_mode"
++                android:title="@string/night_mode_title"
++                android:summary="@string/night_mode_summary"
++                
++                android:fragment="com.android.settings.NightModeTypeSettings"
++                />
+         <com.android.settingslib.RestrictedPreference
+                 android:key="wallpaper"
+                 android:title="@string/wallpaper_settings_title"
+Index: packages/apps/Settings/res/xml/schedule_plan_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/schedule_plan_settings.xml	(revision 0)
++++ packages/apps/Settings/res/xml/schedule_plan_settings.xml	(revision 1170)
+@@ -0,0 +1,28 @@
++<?xml version="1.0" encoding="utf-8"?>
++<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:settings="http://schemas.android.com/apk/res/com.android.settings"
++    android:title="@string/schedule_plan_title">
++
++    <CheckBoxPreference
++        android:key="sunset2sunrise"
++        android:title="@string/sunset2sunrise_title"
++        settings:keywords="@string/keywords_sunset2sunrise"
++        />
++    <CheckBoxPreference
++        android:key="custom_schedule"
++        android:title="@string/custom_schedule"
++        settings:keywords="@string/keywords_custom_schedule"
++        />
++    <Preference
++        android:key="turn_on_at"
++        android:title="@string/turn_on_at_title"
++        android:summary="@string/turn_on_at_summary"
++        settings:keywords="@string/keywords_turn_on_at"
++        />
++    <Preference
++        android:key="turn_off_at"
++        android:title="@string/turn_off_at_title"
++        android:summary="@string/turn_off_at_summary"
++        settings:keywords="@string/keywords_turn_off_at"
++        />
++</PreferenceScreen>
+\ No newline at end of file
+Index: packages/apps/Settings/res/xml/security_settings_misc.xml
+===================================================================
+--- packages/apps/Settings/res/xml/security_settings_misc.xml	(revision 1169)
++++ packages/apps/Settings/res/xml/security_settings_misc.xml	(revision 1170)
+@@ -33,7 +33,20 @@
+         </Preference>
+ 
+     </PreferenceCategory>
++	
++	<PreferenceCategory android:key="func"
++            android:title="@string/fun_setting_titlte"
++            android:persistent="false">
++		<Preference android:key="fun_setting"
++                android:title="@string/fun_setting_titlte"
++                android:persistent="false">
+ 
++            <intent android:action="android.intent.action.MAIN"
++                    android:targetPackage="com.android.systemui"
++                    android:targetClass="com.android.systemui.funcsetting.FuncSettings"/>
++
++        </Preference>
++	</PreferenceCategory>
+     <PreferenceCategory android:title="@string/security_passwords_title"
+             android:persistent="false">
+ 
+Index: packages/apps/Settings/res/xml/nightmode_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/nightmode_settings.xml	(revision 0)
++++ packages/apps/Settings/res/xml/nightmode_settings.xml	(revision 1170)
+@@ -0,0 +1,42 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2011 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
++ 		xmlns:settings="http://schemas.android.com/apk/res/com.android.settings"
++        android:title="@string/night_mode_title">
++		<SwitchPreference
++        	android:key="automate_schedule"
++        	android:title="@string/automate_schedule_title"
++        	settings:keywords="@string/keywords_display_automate_schedule"
++         />
++    	<PreferenceScreen
++        	android:key="schedule_plan"
++        	android:title="@string/schedule_plan_title"
++        	android:summary="@string/schedule_plan_summary"
++        	settings:keywords="@string/keywords_schedule_plan"
++        	
++        	android:fragment="com.android.settings.SchedulePlanTypeSettings"
++        />
++        <SwitchPreference
++        	android:key="manually_enable"
++       	 	android:title="@string/manually_enable_title"
++        	settings:keywords="@string/keywords_display_manually_enable"
++         />
++       <com.android.settings.ColorTemperaturePreference
++        	android:key="manually"		
++       		android:layout="@layout/preference_color_temperature"  
++         />
++</PreferenceScreen>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1169)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1170)
+@@ -8013,6 +8013,8 @@
+ 	<string name="notifications_color_normal">Normal</string>
+ 	<string name="notifications_color_highlight">Highlighted in colour</string>
+ 	<!-- Add for bug_id 111336 by dongdongli 20171101 end -->
++
++
+     <string name="lock_screen_title">Lock screen</string>
+     <!--add for tcl gesture start-->
+ 	<string name="sensor_touch_category_title">Sensor and touch</string>
+@@ -8029,4 +8031,5 @@
+ 	<string name="three_finger_screenshot_title">Three fingers screenshot</string>
+ 	<string name="three_finger_screenshot_summary">Slide 3 fingers simultaneously in a downwards motion on screen to make screenshot.</string>
+ 	<!--add for tcl gesture end-->
++
+ </resources>
+Index: packages/apps/Settings/res/values/arrays.xml
+===================================================================
+--- packages/apps/Settings/res/values/arrays.xml	(revision 1169)
++++ packages/apps/Settings/res/values/arrays.xml	(revision 1170)
+@@ -1071,5 +1071,16 @@
+         <item>60</item>
+         <item>90</item>
+     </string-array>
+-
++	<string-array name="night_mode_values">
++        <item msgid="6490061470416867723">Small</item>
++        <item msgid="3579015730662088893">Default</item>
++        <item msgid="1678068858001018666">Large</item>
++        <item msgid="490158884605093126">Largest</item>
++    </string-array>
++	<string-array name="night_mode_entries">
++        <item msgid="6490061470416867723">Small</item>
++        <item msgid="3579015730662088893">Default</item>
++        <item msgid="1678068858001018666">Large</item>
++        <item msgid="490158884605093126">Largest</item>
++    </string-array>
+ </resources>
+Index: packages/apps/Settings/res/values/colors.xml
+===================================================================
+--- packages/apps/Settings/res/values/colors.xml	(revision 1169)
++++ packages/apps/Settings/res/values/colors.xml	(revision 1170)
+@@ -137,6 +137,8 @@
+     <color name="navigationbar_color_9">#f9e1e1</color>
+     <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+ 
++	<color name="night_mode_on_title">#479392</color>
++
+     <!-- add by dongdongli 20170817 start { -->
+     <color name="white">#ffffff</color>
+     <color name="teal200">#80cbc4</color>
+Index: packages/apps/Settings
+===================================================================
+--- packages/apps/Settings	(revision 1169)
++++ packages/apps/Settings	(revision 1170)
+
+Property changes on: packages/apps/Settings
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Settings:r511
+Index: packages/apps
+===================================================================
+--- packages/apps	(revision 1169)
++++ packages/apps	(revision 1170)
+
+Property changes on: packages/apps
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps:r511*
+Index: packages
+===================================================================
+--- packages	(revision 1169)
++++ packages	(revision 1170)
+
+Property changes on: packages
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages:r511*
+Index: frameworks/base/packages/SystemUI/AndroidManifest.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 1169)
++++ frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 1170)
+@@ -530,6 +530,23 @@
+                 <action android:name="android.intent.action.SHOW_KEYBOARD_SHORTCUTS" />
+             </intent-filter>
+         </receiver>
++		    <!-- Add func settings -->
++		<activity android:name=".funcsetting.FuncSettings"
++			android:theme="@android:style/Theme.Wallpaper.NoTitleBar">
++			<intent-filter >
++			  
++				<action  android:name="com.android.systemui.SYSTEMUI_FUNC_SETTING" />
++			</intent-filter>
++		</activity>
++		<activity android:name=".funcsetting.AppListActivity" 
++			android:theme="@android:style/Theme.Wallpaper.NoTitleBar"/>
++		<receiver android:name=".funcsetting.ContactsReceiver">
++			<intent-filter >
++				<action android:name="com.android.systemui.funcsettings.contact_uri"/>
++				<action android:name="com.android.music.playlist_id"/>
++			</intent-filter>
++       </receiver>
++
+ 		<!-- added by zengjie for joy lockscreen feature task 5429900 20170927 begin-->
+          <activity android:name="com.tcl.mie.launcher.lscreen.stub.activity.ActivityProxy"
+              android:launchMode="standard"
+@@ -710,6 +727,7 @@
+ 	   <!--add for incoming calls turn to mute -->
+ 	   <service android:name="com.android.systemui.statusbar.phone.SensorFunctionServiceIncall"
+             android:exported="false"/>
++
+     </application>
+ 
+     <!-- Add keyguard usage protected broadcast -->
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/QSTileHost.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/QSTileHost.java	(revision 1169)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/QSTileHost.java	(revision 1170)
+@@ -474,8 +474,6 @@
+         else if (tileSpec.equals("battery")) return new BatteryTile(this);
+         else if (tileSpec.equals("saver")) return new DataSaverTile(this);
+ 		else if (tileSpec.equals("audioprofile"))return new AudioProfileTile(this);
+-        //else if (tileSpec.equals("night")) return new NightDisplayTile(this);
+-
+         /// M: Add extra tiles in quicksetting @{
+         else if (tileSpec.equals("hotknot") && SIMHelper.isMtkHotKnotSupport())
+             return new HotKnotTile(this);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1169)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1170)
+@@ -75,7 +75,38 @@
+ import com.mediatek.keyguard.Plugin.KeyguardPluginFactory;
+ import com.mediatek.keyguard.ext.IEmergencyButtonExt;
+ /// @}
++import android.os.Handler;
++import com.android.systemui.db.AppDB;
++import com.android.systemui.db.DBManager;
++import com.android.systemui.funcsetting.AppUtils;
++import com.android.systemui.funcsetting.AppInfo;
++import com.android.systemui.funcsetting.FuncSettings;
+ 
++
++
++import java.util.ArrayList;
++import android.app.Activity;
++
++import java.util.List;
++import android.os.Bundle;
++import android.util.Log;
++import android.view.View;
++import android.widget.ImageView;
++import android.widget.RelativeLayout;
++import android.widget.LinearLayout;
++import android.provider.Settings;
++import android.hardware.Camera;
++import com.android.systemui.statusbar.policy.FlashlightController;
++import android.graphics.drawable.Drawable;
++import android.content.ComponentName;
++import android.content.Intent;
++import android.content.ContentResolver;
++import android.database.Cursor;
++import android.provider.ContactsContract;
++import android.graphics.BitmapFactory;
++import android.graphics.Bitmap;
++import android.graphics.drawable.BitmapDrawable;
++import android.net.Uri;
+ /**
+  * Implementation for the bottom area of the Keyguard, including camera/phone affordance and status
+  * text.
+@@ -144,17 +175,61 @@
+     private EmergencyButton mEmergencyButton;
+     private IEmergencyButtonExt mEmergencyButtonExt;
+     /// @}
+-
++	//bottom icon
++	private final String DEFAULT_TABLE = "appinfo_default_list";
++	private List<AppInfo> list;
++    private RelativeLayout mFirstLayout;
++	private KeyguardAffordanceView mFirstIcon;
++	private RelativeLayout mSecondLayout;
++	private KeyguardAffordanceView mSecondIcon;
++	private RelativeLayout mThirdLayout;
++	private KeyguardAffordanceView mThirdIcon;
++	private RelativeLayout mFourthLayout;
++	private KeyguardAffordanceView mFourthIcon;
++	private RelativeLayout mFifthLayout;
++	private KeyguardAffordanceView mFifthIcon;
++	private AppDB db;
++	private Context context;
++	private long  mLastTime = 0; 
++    private long mCurTime = 0;
++	private View view;
++	private Context mContext;
++    /// @}
++	private LinearLayout mFuncLayout;
++	private  String packagerName="";
++	private  String cameraAction="";
++	private static final String startCamera="Start the camera";
++	private static final String startCameraSelfie="Take a selfie";
++	private  String cameraIntroduction="";
++	private static final String CAMERA="com.mediatek.camera";
++	private static final String GOOGLE_SEARCH="com.google.android.googlequicksearchbox";
++	private static final String RECORD_VIDEO="com.tct.screenrecorder";
++	private static final String CALCULATOR="com.google.android.calculator";
++	private Drawable mEnable;
++	private Drawable mDisable;
++	private static final String MUSIC="com.alcatel.music5";
++	private static final String TORCH="com.google.torch";
++	private static final String FUNC_SETTINGS="com.android.settings";
++	
++	private int	mTorchIndex=-1;
++	private Camera.Parameters p ;
++	private AppInfo mAppInfo;
++	private String mContactId="";
++	private	String mContactName="";
++	private	String mContactPhone="";
+     public KeyguardBottomAreaView(Context context) {
+         this(context, null);
++		mContext=context;
+     }
+ 
+     public KeyguardBottomAreaView(Context context, AttributeSet attrs) {
+         this(context, attrs, 0);
++		mContext=context;
+     }
+ 
+     public KeyguardBottomAreaView(Context context, AttributeSet attrs, int defStyleAttr) {
+         this(context, attrs, defStyleAttr, 0);
++		mContext=context;
+     }
+ 
+     public KeyguardBottomAreaView(Context context, AttributeSet attrs, int defStyleAttr,
+@@ -163,6 +238,7 @@
+ 
+         /// M: Add for OP customization. @{
+         mEmergencyButtonExt = KeyguardPluginFactory.getEmergencyButtonExt(context);
++		mContext=context;
+         /// @}
+     }
+ 
+@@ -231,8 +307,133 @@
+         mCameraImageView.setOnClickListener(this);
+         mLeftAffordanceView.setOnClickListener(this);
+         initAccessibility();
++		initView();
++	   	initData();
+     }
+-
++public  void initData() {
++		mLeftAffordanceView.setVisibility(View.GONE);
++		mCameraImageView.setVisibility(View.GONE);
++        
++		String func_switch=Settings.System.getString(mContext.getContentResolver(),AppUtils.FUNC_SWITCH);
++		if(func_switch==null){
++			func_switch="false";
++		}
++		if(func_switch.equals("true")){
++			list = getLockIconData();
++			
++			
++        	if(list==null||list.size()==0){
++				mFuncLayout.setVisibility(View.GONE);
++				mPreviewContainer.setVisibility(View.GONE);
++			}else{
++			//list.get(0).setPackerName(TORCH);
++			for (int i = 0; i <list.size() ; i++) {	
++				AppInfo info=list.get(i);
++                if(info.getPackerName().equals(TORCH)){
++					
++					
++					mTorchIndex=i;
++					if(mFlashlightController==null){
++						
++						mFlashlightController=new FlashlightController(mContext);
++					}
++					mEnable=mContext.getDrawable(R.drawable.ic_signal_flashlight_enable);
++					mDisable=mContext.getDrawable(R.drawable.ic_signal_flashlight_disable);
++       		 		
++            		info.setDrawable( mFlashlightController.getState() ? mDisable : mEnable);
++        			
++					mAppInfo=info;
++            	}
++				if(info.getPackerName().equals(AppUtils.CONTACTS)){
++					String url =Settings.System.getString(mContext.getContentResolver(),AppUtils.CONTANCTS_URI);
++					
++					//String url="content://com.android.contacts/contacts/lookup/3176r1-4F4F4B4B/1";
++					if(url!=null&&!url.isEmpty()){
++						getPhoneContacts(Uri.parse(url));
++						if(!mContactId.isEmpty()){
++							info=getContactImage(info,mContactId);
++						}	
++					}
++				}
++        	}
++				initIcon();
++			}
++		}else{
++			mFuncLayout.setVisibility(View.GONE);
++		}
++		
++    }
++	public void initIcon(){
++				mFuncLayout.setVisibility(View.VISIBLE);	
++				mPreviewContainer.setVisibility(View.VISIBLE);
++        		mFirstIcon.setImageDrawable(list.get(0).getDrawable());
++        		mFirstIcon.setOnClickListener(new OnClik(0));
++        		if (list.size() == 2) {
++            		mFifthLayout.setVisibility(View.VISIBLE);
++            		mFifthIcon.setImageDrawable(list.get(1).getDrawable());
++           			mFifthIcon.setOnClickListener(new OnClik(1));
++					mFourthLayout.setVisibility(View.GONE);
++					mSecondLayout.setVisibility(View.GONE);
++           			mThirdLayout.setVisibility(View.GONE);
++        		}
++        		if (list.size() == 3) {
++            		mFourthLayout.setVisibility(View.VISIBLE);
++            		mFifthLayout.setVisibility(View.VISIBLE);
++					mSecondLayout.setVisibility(View.GONE);
++            		mThirdLayout.setVisibility(View.GONE);
++            		mFourthIcon.setImageDrawable(list.get(1).getDrawable());
++            		mFifthIcon.setImageDrawable(list.get(2).getDrawable());
++            		mFourthIcon.setOnClickListener(new OnClik(1));
++            		mFifthIcon.setOnClickListener(new OnClik(2));
++        		}
++        		if (list.size() == 4) {
++            		mSecondLayout.setVisibility(View.VISIBLE);
++            		mFourthLayout.setVisibility(View.VISIBLE);
++            		mFifthLayout.setVisibility(View.VISIBLE);			
++           			mThirdLayout.setVisibility(View.GONE);
++            		mSecondIcon.setImageDrawable(list.get(1).getDrawable());
++            		mFourthIcon.setImageDrawable(list.get(2).getDrawable());
++            		mFifthIcon.setImageDrawable(list.get(3).getDrawable());
++            		mSecondIcon.setOnClickListener(new OnClik(1));
++            		mFourthIcon.setOnClickListener(new OnClik(2));
++            		mFifthIcon.setOnClickListener(new OnClik(3));
++       		 	}
++        		if (list.size() == 5) {
++            		mSecondLayout.setVisibility(View.VISIBLE);
++            		mThirdLayout.setVisibility(View.VISIBLE);
++            		mFourthLayout.setVisibility(View.VISIBLE);
++            		mFifthLayout.setVisibility(View.VISIBLE);
++            		mSecondIcon.setImageDrawable(list.get(1).getDrawable());
++            		mThirdIcon.setImageDrawable(list.get(2).getDrawable());
++            		mFourthIcon.setImageDrawable(list.get(3).getDrawable());
++            		mFifthIcon.setImageDrawable(list.get(4).getDrawable());
++            		mSecondIcon.setOnClickListener(new OnClik(1));
++            		mThirdIcon.setOnClickListener(new OnClik(2));
++            		mFourthIcon.setOnClickListener(new OnClik(3));
++            		mFifthIcon.setOnClickListener(new OnClik(4));
++        		}
++	}
++	private void initView() {
++		   mFuncLayout = (LinearLayout) findViewById(R.id.func_layout);
++		   mFirstLayout = (RelativeLayout) findViewById(R.id.first_layout);
++		   mFirstIcon = (KeyguardAffordanceView) findViewById(R.id.first_icon);
++		   mSecondLayout = (RelativeLayout) findViewById(R.id.second_layout);
++		   mSecondIcon = (KeyguardAffordanceView) findViewById(R.id.second_icon);
++		   mThirdLayout = (RelativeLayout) findViewById(R.id.third_layout);
++		   mThirdIcon = (KeyguardAffordanceView) findViewById(R.id.third_icon);
++		   mFourthLayout = (RelativeLayout) findViewById(R.id.fourth_layout);
++		   mFourthIcon = (KeyguardAffordanceView) findViewById(R.id.fourth_icon);
++		   mFifthLayout = (RelativeLayout) findViewById(R.id.fifth_layout);
++		   mFifthIcon = (KeyguardAffordanceView) findViewById(R.id.fifth_icon);
++	   }
++	
++	   public List<AppInfo> getLockIconData() {
++		   DBManager manager = new DBManager(mContext);
++		   manager.openDatabase();
++		   db = AppDB.getInstance();
++		   list = db.getDefaultApp(DEFAULT_TABLE);
++		   return AppUtils.getAppInfo( mContext, list);
++	   }
+     private void initAccessibility() {
+         mLockIcon.setAccessibilityDelegate(mAccessibilityDelegate);
+         mLeftAffordanceView.setAccessibilityDelegate(mAccessibilityDelegate);
+@@ -313,7 +514,7 @@
+     public void setUserSetupComplete(boolean userSetupComplete) {
+         mUserSetupComplete = userSetupComplete;
+         updateCameraVisibility();
+-        updateLeftAffordanceIcon();
++       // updateLeftAffordanceIcon();
+     }
+ 
+     private Intent getCameraIntent() {
+@@ -346,7 +547,8 @@
+                 && getResources().getBoolean(R.bool.config_keyguardShowCameraAffordance)
+                 && !PhoneStatusBar.sInSuperMode //modified by bing.wang.hz for Task4940849
+                 && mUserSetupComplete;
+-        mCameraImageView.setVisibility(visible ? View.VISIBLE : View.GONE);
++        //mCameraImageView.setVisibility(visible ? View.VISIBLE : View.GONE);
++		 mCameraImageView.setVisibility( View.GONE);
+     }
+ 
+     private void updateLeftAffordanceIcon() {
+@@ -362,7 +564,8 @@
+             drawableId = R.drawable.ic_phone_24dp;
+             contentDescription = R.string.accessibility_phone_button;
+         }
+-        mLeftAffordanceView.setVisibility(visible ? View.VISIBLE : View.GONE);
++       // mLeftAffordanceView.setVisibility(visible ? View.VISIBLE : View.GONE);
++		mLeftAffordanceView.setVisibility(View.GONE);
+         mLeftAffordanceView.setImageDrawable(mContext.getDrawable(drawableId));
+         mLeftAffordanceView.setContentDescription(mContext.getString(contentDescription));
+     }
+@@ -412,7 +615,7 @@
+ 
+     @Override
+     public boolean onLongClick(View v) {
+-        handleTrustCircleClick();
++        //handleTrustCircleClick();
+         return true;
+     }
+ 
+@@ -755,7 +958,7 @@
+     }
+ 
+     public void updateLeftAffordance() {
+-        updateLeftAffordanceIcon();
++        //updateLeftAffordanceIcon();
+         updateLeftPreview();
+     }
+ 
+@@ -771,4 +974,150 @@
+         mEmergencyButtonExt.setEmergencyButtonVisibility(mEmergencyButton, alpha);
+     }
+     /// @}
++	public void startApp(String packageName){
++        Intent intent = new Intent(packageName)
++				.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
++        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++        AsyncTask.execute(new Runnable() {
++            @Override
++            public void run() {
++                mContext.startActivityAsUser(intent,
++                        new UserHandle(UserHandle.USER_CURRENT));
++            }
++        });
++    }
++	public void startApp(Context mContext,String packageName){
++		mActivityStarter.startActivity(AppUtils.startApp(mContext,packagerName),false,new ActivityStarter.Callback() {
++			@Override
++			public void onActivityStarted(int resultCode) {
++				//unbindCameraPrewarmService(isSuccessfulLaunch(resultCode));
++			}
++		});
++	}
++	class OnClik implements View.OnClickListener {
++        int index;
++        public OnClik(int index) {
++            this.index = index;
++        }
++        @Override
++        public void onClick(View v) {
++            if (view == null) {
++                view = v;
++            } else {
++                if (v.getId() != view.getId()) {
++                    view = v;
++                    mLastTime = System.currentTimeMillis();
++                } else {
++                    if (System.currentTimeMillis() - mLastTime > 1000) {
++                        mLastTime = System.currentTimeMillis();
++                    } else {
++                   
++                        packagerName = list.get(index).getPackerName();
++						
++                        if (packagerName.equals(CAMERA)) {
++                            cameraIntroduction = list.get(index).getIntroduction();
++                            if (cameraIntroduction.equals(startCamera)) {
++                                launchCamera(CAMERA_LAUNCH_SOURCE_AFFORDANCE);
++                            } else if (cameraIntroduction.equals(startCameraSelfie)) {
++                                launchCamera(CAMERA_LAUNCH_SOURCE_AFFORDANCE);						
++                            }
++                        } else if (packagerName.equals(GOOGLE_SEARCH)) {
++                            launchVoiceAssist();
++                        } else if (packagerName.equals(RECORD_VIDEO)) {
++                            launchCamera(CAMERA_LAUNCH_SOURCE_AFFORDANCE);
++                        }else if (packagerName.equals(CALCULATOR)) {
++                            startApp(packagerName);
++                        }else if(packagerName.equals(MUSIC)){
++                        	String playMusic =Settings.System.getString(mContext.getContentResolver(),AppUtils.FUNC_TO_MUSIC);
++							if(playMusic!=null){
++								
++								Intent i=new Intent("com.android.func_to_music");
++								mContext.sendBroadcast(i);
++							}else{
++								
++								AppUtils.startMusicApp(mContext,mActivityStarter);
++							}
++							
++        				}else if(packagerName.equals(TORCH)){							
++							mFlashlightController.setState(!mFlashlightController.getState());
++							changeTorchMode(mFlashlightController.getState());
++							mAppInfo.setDrawable( mFlashlightController.getState() ? mDisable : mEnable);						
++							initIcon();	
++        				}else if(packagerName.equals(FUNC_SETTINGS)){
++        					String introduction = list.get(index).getIntroduction();
++        					if(introduction.equals("Edit Func settings")){
++								Intent intent=new Intent(mContext,FuncSettings.class);
++        						mContext.startActivity(intent);
++							}else{
++								startApp(mContext,packagerName);
++							}
++						}else if(packagerName.equals(AppUtils.CONTACTS)){
++							if(mContactPhone.isEmpty()){
++								AppUtils.startContactApp(mContext,mActivityStarter);
++							}else{
++								Intent intent=new Intent(Intent.ACTION_CALL,Uri.parse("tel:" +mContactPhone));
++								mContext.startActivity(intent);
++							}
++
++						}else{
++								startApp(mContext,packagerName);
++																						
++						}
++                    }
++                }
++            }
++        }
++    }
++	private void changeTorchMode(boolean isChecked) {	
++		mFlashlightController.setFlashlight(isChecked);
++
++	} 
++
++	private void getPhoneContacts(Uri uri){ 
++		   ContentResolver cr = mContext.getContentResolver();
++		   
++		   Cursor cursor=cr.query(uri,null,null,null,null);
++		   if(cursor!=null)
++		   {
++			   cursor.moveToFirst();
++			  
++			   int nameFieldColumnIndex=cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME);
++			   mContactName=cursor.getString(nameFieldColumnIndex);
++			   
++			   mContactId = cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts._ID));
++			   Cursor phone = cr.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null,
++					   ContactsContract.CommonDataKinds.Phone.CONTACT_ID + "=" + mContactId, null, null);
++			   if(phone != null){
++				   phone.moveToFirst();
++				   mContactPhone = phone.getString(phone.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER));
++			   }
++			   
++			   phone.close();
++			   cursor.close();
++			   
++		   }
++		  
++	   }
++	private AppInfo getContactImage(AppInfo info,String contactId){
++		ContentResolver cr = mContext.getContentResolver();
++		Cursor dataCursor = cr.query(ContactsContract.Data.CONTENT_URI,
++				  new String[]{"data15"},
++				  ContactsContract.Data.CONTACT_ID + "=?" + " AND "
++						  + ContactsContract.Data.MIMETYPE + "='" + ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE + "'",
++				  new String[]{String.valueOf(contactId)}, null);
++				   if (dataCursor != null) {
++						if (dataCursor.getCount() > 0) {
++							   dataCursor.moveToFirst();
++							   byte[] bytes = dataCursor.getBlob(dataCursor.getColumnIndex("data15"));
++						   if (bytes != null) {
++							   Bitmap photo = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
++							   if (photo != null) 
++							   	info.setDrawable(new BitmapDrawable(photo));
++						   }
++					   }
++					   dataCursor.close();
++				   }
++		return info;		   
++
++	}
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java	(revision 1169)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java	(revision 1170)
+@@ -67,6 +67,7 @@
+ import com.android.systemui.statusbar.stack.StackStateAnimator;
+ 
+ import java.util.List;
++import com.android.systemui.keyguard.KeyguardViewMediator;
+ //add by dongdongli 20170831 start {
+ import android.os.Handler;
+ import android.os.Message;
+@@ -225,6 +226,7 @@
+     private boolean mLaunchingAffordance;
+     private FalsingManager mFalsingManager;
+     private String mLastCameraLaunchSource = KeyguardBottomAreaView.CAMERA_LAUNCH_SOURCE_AFFORDANCE;
++	
+ 	//add by dongdongli 20170831 start {
+ 	private static final int MESSAGE_HIDE_LOCKICON = 0x0001;	
+ 	
+@@ -287,6 +289,7 @@
+         mNotificationStackScroller.setOverscrollTopChangedListener(this);
+         mNotificationStackScroller.setOnEmptySpaceClickListener(this);
+         mKeyguardBottomArea = (KeyguardBottomAreaView) findViewById(R.id.keyguard_bottom_area);
++		KeyguardViewMediator.mKeyguardBottomArea=mKeyguardBottomArea;
+         mQsNavbarScrim = findViewById(R.id.qs_navbar_scrim);
+         mAfforanceHelper = new KeyguardAffordanceHelper(this, getContext());
+         mKeyguardBottomArea.setAffordanceHelper(mAfforanceHelper);
+@@ -804,6 +807,7 @@
+ 		//show lockicon when user touch the panel 
+ 		mTimeCountThread.reset();
+ 		if (event.getAction() == MotionEvent.ACTION_DOWN) {
++
+ 			// add for joylockscreen
+ 			lastMotionEventPos = new MotionEventPos(event.getRawX(),event.getRawY());
+             // add for joylockscreen
+@@ -814,6 +818,7 @@
+             }
+         }
+ 		//add end }
++
+ 		// add for joylockscreen
+ 		if (event.getAction() == MotionEvent.ACTION_UP) {
+                  //x ���ƶ����ߵ����ĵ���¼�
+@@ -828,6 +833,7 @@
+ 		}
+ 		// add for joylockscreen
+ 		
++
+         if (mBlockTouches || mQsContainer.isCustomizing()) {
+             return false;
+         }
+@@ -2490,6 +2496,7 @@
+     public void setGroupManager(NotificationGroupManager groupManager) {
+         mGroupManager = groupManager;
+     }
++	
+ 	// add by dongdongli 20170831 start {
+ 	// the time count thread (2s)
+ 	private class TimeCountThread extends Thread {
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightController.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightController.java	(revision 1169)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightController.java	(revision 1170)
+@@ -57,7 +57,7 @@
+ 
+     private String mCameraId;
+     private boolean mTorchAvailable;
+-
++	private boolean mState=false;
+     public FlashlightController(Context context) {
+         mContext = context;
+         mCameraManager = (CameraManager) mContext.getSystemService(Context.CAMERA_SERVICE);
+@@ -78,7 +78,12 @@
+             mCameraManager.registerTorchCallback(mTorchCallback, mHandler);
+         }
+     }
+-
++	public void setState(Boolean state){
++		mState=state;
++	}
++	public Boolean getState(){
++		return mState;
++	}
+     public void setFlashlight(boolean enabled) {
+         boolean pendingError = false;
+         synchronized (this) {
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/keyguard/KeyguardViewMediator.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/keyguard/KeyguardViewMediator.java	(revision 1169)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/keyguard/KeyguardViewMediator.java	(revision 1170)
+@@ -82,6 +82,7 @@
+ import com.android.systemui.SystemUI;
+ import com.android.systemui.SystemUIFactory;
+ import com.android.systemui.classifier.FalsingManager;
++
+ import com.android.systemui.statusbar.phone.FingerprintUnlockController;
+ import com.android.systemui.statusbar.phone.PhoneStatusBar;
+ import com.android.systemui.statusbar.phone.ScrimController;
+@@ -98,9 +99,10 @@
+ import java.io.FileDescriptor;
+ import java.io.PrintWriter;
+ import java.util.ArrayList;
+-
+ import com.android.systemui.statusbar.phone.KeyguardBottomAreaView;
+ import com.android.systemui.statusbar.phone.NotificationPanelView;
++import com.android.systemui.statusbar.phone.KeyguardBottomAreaView;
++import com.android.systemui.statusbar.phone.NotificationPanelView;
+ 
+ //Begin added by zengjie for joylockscreen task 5429900 on 10/21/17
+ import com.tcl.mie.launcher.lscreen.LScreen;
+@@ -368,7 +370,7 @@
+     private IKeyguardDrawnCallback mDrawnCallback;
+ 
+     private boolean mIsPerUserLock;
+-
++	public static KeyguardBottomAreaView mKeyguardBottomArea ;
+     KeyguardUpdateMonitorCallback mUpdateCallback = new KeyguardUpdateMonitorCallback() {
+ 
+         @Override
+@@ -2036,6 +2038,7 @@
+             mHideAnimationRun = false;
+             updateActivityLockScreenState();
+             adjustStatusBarLocked();
++			adjustBottomAreaView();
+             userActivity();
+ 
+             /// M: [ALPS02382470] Need to hide the Notification Panel View
+@@ -2070,7 +2073,19 @@
+         }
+         Trace.endSection();
+     }
+-
++	public void adjustBottomAreaView(){
++		if(mKeyguardBottomArea!=null){
++			mKeyguardBottomArea.initData();
++			Log.e("adjustBottomAreaView","true");
++		}else{Log.e("adjustBottomAreaView","false");
++			//mKeyguardBottomArea=NotificationPanelView.getKeyguardBottomAreaView();
++			//if(mKeyguardBottomArea!=null){
++			//Log.e("adjustBottomAreaView","true");
++			//}else{Log.e("adjustBottomAreaView","false");
++			//mKeyguardBottomArea=NotificationPanelView.getKeyguardBottomAreaView();
++			//}
++		}
++	}
+     private final Runnable mKeyguardGoingAwayRunnable = new Runnable() {
+         @Override
+         public void run() {
+@@ -2250,6 +2265,7 @@
+             if (DEBUG) Log.d(TAG, "handleReset");
+             mStatusBarKeyguardViewManager.reset();
+             adjustStatusBarLocked();
++			updateActivityLockScreenState();
+         }
+     }
+ 
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/FlashlightTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/FlashlightTile.java	(revision 1169)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/FlashlightTile.java	(revision 1170)
+@@ -101,6 +101,7 @@
+     @Override
+     protected void handleUpdateState(BooleanState state, Object arg) {
+         state.label = mHost.getContext().getString(R.string.quick_settings_flashlight_label);
++		mFlashlightController.setState(state.value);
+         if (!mFlashlightController.isAvailable()) {
+             Drawable icon = mHost.getContext().getDrawable(R.drawable.ic_signal_flashlight_disable)
+                     .mutate();
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java	(revision 1169)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java	(revision 1170)
+@@ -26,23 +26,38 @@
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ import com.android.systemui.R;
+ import com.android.systemui.qs.QSTile;
+-
++import android.content.ContentResolver;
++import com.mediatek.pq.PictureQuality;
++import android.content.ComponentName;
+ public class NightDisplayTile extends QSTile<QSTile.BooleanState>
+         implements NightDisplayController.Callback {
+-
+-    private NightDisplayController mController;
++	public static final String NIGHT_MODE_SPEC = "night";
++	private final String ACTIVITY_PATH="com.android.settings.Settings";
++	private final String PACKAGE_NAME="com.android.settings";
++	private final String SYSTEMUI_NIGHTMODE="com.android.settings.SYSTEMUI_NIGHTMODE";
++    private final String NIGHT_MODE_SWITCH="night_mode_switch";
++	private int mIndex;
++    private String mCurrentValue;
++	private boolean mCustomEnabled;
++    private String[] mValues;
++    private CharSequence[] mValueTitles;
++	private ContentResolver mContentResolver;
++	
++	
++	private NightDisplayController mController;
+     private boolean mIsListening;
+ 
+     public NightDisplayTile(Host host) {
+         super(host);
++		mContentResolver = mContext.getContentResolver();	
+         mController = new NightDisplayController(mContext, ActivityManager.getCurrentUser());
+     }
+-
++	/*
+     @Override
+     public boolean isAvailable() {
+         return NightDisplayController.isAvailable(mContext);
+     }
+-
++	*/
+     @Override
+     public BooleanState newTileState() {
+         return new BooleanState();
+@@ -50,9 +65,25 @@
+ 
+     @Override
+     protected void handleClick() {
+-        final boolean activated = !mState.value;
+-        MetricsLogger.action(mContext, getMetricsCategory(), activated);
+-        mController.setActivated(activated);
++        //final boolean activated = !mState.value;
++       // MetricsLogger.action(mContext, getMetricsCategory(), activated);
++       // mController.setActivated(activated);
++	   refreshState();
++		 String nightModeSwitch= Settings.System.getString(mContentResolver,NIGHT_MODE_SWITCH);
++		 
++		 if(nightModeSwitch!=null&&!nightModeSwitch.equals("")){
++		 	if(nightModeSwitch.equals("true")){
++				Settings.System.putString(mContentResolver,NIGHT_MODE_SWITCH,"false");
++				PictureQuality.enableBlueLight(false);
++			}else{
++			 	Settings.System.putString(mContentResolver,NIGHT_MODE_SWITCH,"true");
++			 	PictureQuality.enableBlueLight(true);
++
++		 	}			
++		 }else{
++		 	 Settings.System.putString(mContentResolver,NIGHT_MODE_SWITCH,"true");
++			 PictureQuality.enableBlueLight(true);
++		 }
+     }
+ 
+     @Override
+@@ -73,7 +104,7 @@
+ 
+     @Override
+     protected void handleUpdateState(BooleanState state, Object arg) {
+-        final boolean isActivated = mController.isActivated();
++        final boolean isActivated = PictureQuality.isBlueLightEnabled();
+         state.value = isActivated;
+         state.label = mContext.getString(R.string.quick_settings_night_display_label);
+         state.icon = ResourceIcon.get(isActivated ? R.drawable.ic_qs_night_display_on
+@@ -92,8 +123,14 @@
+ 
+     @Override
+     public Intent getLongClickIntent() {
+-        return new Intent(Settings.ACTION_NIGHT_DISPLAY_SETTINGS);
+-    }
++        //return new Intent(Settings.ACTION_NIGHT_DISPLAY_SETTINGS);
++		Intent intent = new Intent();  
++		 ComponentName cn=new ComponentName(PACKAGE_NAME, ACTIVITY_PATH);    
++		 intent.setComponent(cn); 
++		 intent.setAction(SYSTEMUI_NIGHTMODE);
++		
++         return intent;
++	}
+ 
+     @Override
+     protected void setListening(boolean listening) {
+@@ -102,7 +139,7 @@
+             mController.setListener(this);
+             refreshState();
+         } else {
+-            mController.setListener(null);
++            mController.setListener(this);
+         }
+     }
+ 
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/db/DBManager.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/db/DBManager.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/db/DBManager.java	(revision 1170)
+@@ -0,0 +1,49 @@
++/*
++ * Copyright (c) 2017. 
++ */
++
++package com.android.systemui.db;
++
++import android.content.Context;
++import android.database.sqlite.SQLiteDatabase;
++
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++
++
++public class DBManager {
++    public static final String DB_NAME = "app_info_db.db"; 
++    public static final String DB_PATH = "/data/data/com.android.systemui/database/";
++    private Context context;
++   public DBManager(Context context) {
++        this.context = context;
++    }
++    public  boolean openDatabase() {
++        boolean b = false;
++        if (!(new File(DB_PATH + DB_NAME).exists())) {
++            File file = new File(DB_PATH);
++            if (!(file.exists())) {
++                file.mkdir();
++            }
++            try {
++                InputStream is = context.getAssets().open(DB_NAME);
++                OutputStream os = new FileOutputStream(DB_PATH + DB_NAME);
++                byte[] buffer = new byte[1024];
++                while ((is.read(buffer)) > 0) {
++                    os.write(buffer);
++                }
++                os.flush();
++                os.close();
++                is.close();
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++            b = true;
++        }
++        return b;
++
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/db/AppDB.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/db/AppDB.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/db/AppDB.java	(revision 1170)
+@@ -0,0 +1,122 @@
++package com.android.systemui.db;
++
++import android.content.ContentValues;
++import android.content.Context;
++import android.database.Cursor;
++import android.database.sqlite.SQLiteDatabase;
++
++import com.android.systemui.funcsetting.AppInfo;
++import com.android.systemui.funcsetting.AppUtils;
++
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * Created by Administrator on 2017/9/1.
++ */
++public class AppDB {
++    private static AppDB db;
++    private static SQLiteDatabase sqLiteDatabase;
++    public final int DEFAULT_APPS = 1;
++    public final int APPS = 3;
++    public final String DEFAULT_APPS_TABLE = "appinfo_default_list";
++    public final String APPS_TABLE = "appinfo_list";
++    public final String APP_DB_NAME = "app_info_db";
++    private static final String DB_PATH = "/data/data/com.android.systemui/database/app_info_db.db";
++
++    public static AppDB getInstance() {
++        if (db == null) {
++//            synchronized (AppDB.class) {
++//                if (db == null) {
++                    db = new AppDB();
++                    sqLiteDatabase = SQLiteDatabase.openDatabase(DB_PATH, null, SQLiteDatabase.OPEN_READWRITE);
++//                }
++            }
++
++//        }
++        return db;
++    }
++
++    public ArrayList<AppInfo> getDefaultApp(String table) {
++        return getAllApp(table);
++    }
++
++    public ArrayList<AppInfo> getApp(String table) {
++        return getAllApp(table);
++    }
++
++    private ArrayList<AppInfo> getAllApp(String table) {
++        ArrayList<AppInfo> list = new ArrayList<AppInfo>();
++
++        Cursor cursor = null;
++        try {
++
++            String sql = "select * from " + table + "  package_name";
++            cursor = sqLiteDatabase.rawQuery(sql, null);
++            while (cursor.moveToNext()) {
++                AppInfo appInfo = new AppInfo();
++                appInfo.setPackerName(cursor.getString(cursor.getColumnIndex("package_name")));
++                appInfo.setIntroduction(cursor.getString(cursor.getColumnIndex("introduction")));
++                appInfo.setIndex(cursor.getInt(cursor.getColumnIndex("index")));
++                list.add(appInfo);
++            }
++            cursor.close();
++        } catch (Exception e) {
++            e.printStackTrace();
++        } finally {
++            return list;
++        }
++    }
++
++    /**
++
++     */
++    public void delete() {
++        sqLiteDatabase.execSQL("delete  from " + DEFAULT_APPS_TABLE);
++
++        sqLiteDatabase.execSQL("delete  from " + APPS_TABLE);
++
++    }
++
++    public void addAll(List<AppInfo> list) {
++        for (AppInfo info : list) {
++            if (info.getIndex() == DEFAULT_APPS || info.getIndex() == APPS ) {
++                if (sqLiteDatabase .isOpen()) {
++                    sqLiteDatabase = SQLiteDatabase.openDatabase(DB_PATH, null, SQLiteDatabase.OPEN_READWRITE);
++                }
++
++                String sq="";
++                if (info.getIndex() == DEFAULT_APPS) {
++                     sq="INSERT INTO "+DEFAULT_APPS_TABLE+" VALUES ('"+info.getIntroduction()+"','"+info.getIndex()+"','"+ info.getPackerName()+"', '"+info.getAppName()+"')";
++
++                } else if (info.getIndex() == APPS) {
++                     sq="INSERT INTO "+APPS_TABLE+" VALUES ('"+info.getIntroduction()+"','"+info.getIndex()+"','"+ info.getPackerName()+"', '"+info.getAppName()+"')";
++
++                }
++                sqLiteDatabase.execSQL(sq);
++            }
++        }
++
++
++    }
++
++    public void add(AppInfo info) {
++        ContentValues values = new ContentValues();
++        values.put("package_name", info.getPackerName());
++        values.put("index", info.getIndex());
++        values.put("introduction", info.getIntroduction().isEmpty());
++        if (sqLiteDatabase == null) {
++            sqLiteDatabase = SQLiteDatabase.openDatabase(DB_PATH, null, SQLiteDatabase.OPEN_READWRITE);
++        }
++        if (info.getIndex() == DEFAULT_APPS) {
++            sqLiteDatabase.insert(DEFAULT_APPS_TABLE, null, values);
++        } else if (info.getIndex() == APPS) {
++            sqLiteDatabase.insert(APPS_TABLE, null, values);
++        }
++
++    }
++    public void closeDB(){
++        sqLiteDatabase.close();
++        db=null;
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/tuner/TunerActivity.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/tuner/TunerActivity.java	(revision 1169)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/tuner/TunerActivity.java	(revision 1170)
+@@ -39,10 +39,13 @@
+             final String action = getIntent().getAction();
+             boolean showDemoMode = action != null && action.equals(
+                     "com.android.settings.action.DEMO_MODE");
+-            final PreferenceFragment fragment = showDemoMode ? new DemoModeFragment()
+-                    : new TunerFragment();
+-            getFragmentManager().beginTransaction().replace(R.id.content_frame,
+-                    fragment, TAG_TUNER).commit();
++             /* final PreferenceFragment fragment = showNightMode ? new NightModeFragment()
++                    : showDemoMode ? new DemoModeFragment()
++                    : new TunerFragment();*/
++			
++			//final PreferenceFragment fragment =  new NightModeFragment();
++            //getFragmentManager().beginTransaction().replace(R.id.content_frame,
++               //     fragment, TAG_TUNER).commit();
+         }
+     }
+ 
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 1170)
+@@ -0,0 +1,242 @@
++package com.android.systemui.funcsetting;
++
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.content.pm.ApplicationInfo;
++import android.content.pm.PackageInfo;
++import android.content.pm.PackageManager;
++import android.content.pm.ResolveInfo;
++import android.graphics.drawable.Drawable;
++import android.os.Handler;
++import android.os.Message;
++import android.util.Log;
++import android.widget.Toast;
++import com.android.systemui.R;
++import com.android.systemui.statusbar.phone.ActivityStarter;
++import android.content.ComponentName;
++import android.content.Intent;
++
++import java.util.ArrayList;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Set;
++
++/**
++ * Created by Administrator on 2017/9/1.
++ */
++public class AppUtils {
++    public static final String DEFAULT_APPS_TITLE = "Shortcut on lock screen";
++    public static final String APPS_TITLE = "Available shortcut";
++	public static final String CONTANCTS_URI = "contacts_uri";
++	public static final String CONTACTS="com.android.contacts";
++	public static final String MUSIC = "com.android.music";
++	public static final String FUNC_SWITCH = "func_switch";
++	public static final String TORCH="com.google.torch";
++    public static final int DEFAULT_APPS_TITLE_INDEX = 0;
++    public static final int DEFAULT_APPS = 1;
++    public static final int APPS_TITLE_INDEX = 2;
++    public static final int APPS = 3;
++    public static final int FOOTER_INDEX = 4;
++    public static final int APPS_LIST = 5;
++	public final static String FUNC_TO_MUSIC="func_to_music";
++	public static void startMusicApp(Context mContext){		
++        String packagerName="com.android.music";
++		String activityPath="com.android.music.MusicBrowserActivity";
++		String action="func_to_music";
++        Intent intent = new Intent();
++        intent.setAction(action);
++        ComponentName cn=new ComponentName(packagerName, activityPath);
++		intent.setComponent(cn); 
++        mContext.startActivity(intent);
++    }
++	public static void startMusicApp(Context mContext,ActivityStarter mActivityStarter){
++			String packagerName="com.android.music";
++			String activityPath="com.android.music.MusicBrowserActivity";
++			String action="func_to_music";
++			Intent intent = new Intent();
++			intent.setAction(action);
++			ComponentName cn=new ComponentName(packagerName, activityPath);
++			intent.setComponent(cn);
++			mActivityStarter.startActivity(intent,false,new ActivityStarter.Callback() {
++				@Override
++				public void onActivityStarted(int resultCode) {
++					//unbindCameraPrewarmService(isSuccessfulLaunch(resultCode));
++				}
++			});
++		}
++	public static void startContactApp(Context mContext,ActivityStarter mActivityStarter){
++        String packagerName="com.android.contacts";
++        String activityPath="com.android.contacts.activities.ContactSelectionActivity";
++        String action="android.intent.action.CREATE_SHORTCUT";
++        Intent intent = new Intent();
++        intent.setAction(action);
++        ComponentName cn=new ComponentName(packagerName, activityPath);
++        intent.setComponent(cn);
++        mActivityStarter.startActivity(intent,false,new ActivityStarter.Callback() {
++            @Override
++            public void onActivityStarted(int resultCode) {
++                //unbindCameraPrewarmService(isSuccessfulLaunch(resultCode));
++            }
++        });
++    }
++	public static void startContactApp(Context mContext){		
++        String packagerName="com.android.contacts";
++        String activityPath="com.android.contacts.activities.ContactSelectionActivity";
++        String action="android.intent.action.CREATE_SHORTCUT";
++        Intent intent = new Intent();
++        intent.setAction(action);
++        ComponentName cn=new ComponentName(packagerName, activityPath);
++		intent.setComponent(cn); 
++        mContext.startActivity(intent);
++    }
++    public static List<AppInfo> getAppInfo(Context context, List<AppInfo> list) {
++        for (AppInfo info : list) {
++            if (info.getIndex() == APPS || info.getIndex() == DEFAULT_APPS|| info.getIndex() == APPS_LIST) {
++                PackageManager pm = context.getPackageManager();
++                try {
++					if(info.getPackerName().equals(TORCH)){
++						info.setDrawable(context.getDrawable(R.drawable.ic_signal_flashlight_disable));
++						info.setAppName(context.getString(R.string.torch_text));
++						
++					}else{
++                    	ApplicationInfo licationInfo = pm.getApplicationInfo(info.getPackerName(), PackageManager.GET_META_DATA | PackageManager.GET_SHARED_LIBRARY_FILES);
++                    	info.setDrawable(licationInfo.loadIcon(pm));
++                    	info.setAppName(licationInfo.loadLabel(pm).toString());
++						}
++                } catch (PackageManager.NameNotFoundException e) {
++                    e.printStackTrace();
++                    Log.e("NameNotFoundException", e.toString());
++					//list.remove(info);
++                }
++
++            }
++        }
++        return list;
++    }
++
++    public static AppInfo getAppInfoTitle() {
++        AppInfo info = new AppInfo();
++        info.setPackerName(APPS_TITLE);
++        info.setIndex(APPS_TITLE_INDEX);
++        return info;
++    }
++
++    public static AppInfo getDefaultAppInfoTitle() {
++        AppInfo info = new AppInfo();
++        info.setPackerName(DEFAULT_APPS_TITLE);
++        info.setIndex(DEFAULT_APPS_TITLE_INDEX);
++        return info;
++    }
++    public static AppInfo getFooterView(String footerViewName) {
++        AppInfo info = new AppInfo();
++        info.setPackerName(footerViewName);
++        info.setIndex(FOOTER_INDEX);
++        return info;
++    }
++
++    public static void getAppListData(final Activity activity, final AppsData data, final Handler handler,final int APP_LIST_RESULT) {
++//        final List<PackageInfo> packages = activity.getPackageManager().getInstalledPackages(0);
++        final List<ApplicationInfo> infos = activity.getPackageManager().getInstalledApplications(1);
++        new Thread(){
++            @Override
++            public void run() {
++                super.run();
++                List<ApplicationInfo> applicationInfos=new ArrayList<>();
++               
++                Intent resolveIntent = new Intent(Intent.ACTION_MAIN, null);
++                resolveIntent.addCategory(Intent.CATEGORY_LAUNCHER);
++             
++                List<ResolveInfo>  resolveinfoList = activity.getPackageManager()
++                        .queryIntentActivities(resolveIntent, 0);
++                Set<String> allowPackages=new HashSet();
++                for (ResolveInfo resolveInfo:resolveinfoList){
++                    allowPackages.add(resolveInfo.activityInfo.packageName);
++                }
++                for (ApplicationInfo app:infos) {
++                    if (allowPackages.contains(app.packageName)){
++                        applicationInfos.add(app);
++                    }
++                }
++
++                List<AppInfo> list=new ArrayList<>();
++                for (int j = 0; j < applicationInfos.size(); j++) {
++                    ApplicationInfo info=applicationInfos.get(j);
++                    AppInfo app=new AppInfo();
++                    for (int i = 0; i < data.getList().size(); i++) {
++                        if(info.packageName.equals(data.getList().get(i))) {
++                            app.setContanin(true);
++                            break;
++                        }else{
++                            app.setContanin(false);
++                        }
++
++                    }
++                    app.setPackerName(info.packageName);
++                    app.setIndex(APPS_LIST);
++                    list.add(app);
++                }
++                if(list.size()>0){
++                    list= getAppInfo(activity,list);
++                    Message msg=Message.obtain();
++                    msg.obj=list;
++                    msg.what=APP_LIST_RESULT;
++                    handler.sendMessage(msg);
++                }
++            }
++        }.start();
++    }
++    public static void showDialog(final Context context, String content){
++        AlertDialog.Builder dialog=new AlertDialog.Builder(context,R.style.Theme_AppCompat_Light_Dialog_Alert_Self);
++        dialog.setMessage(content);
++        dialog.setPositiveButton("go to it", new DialogInterface.OnClickListener() {
++            @Override
++            public void onClick(DialogInterface dialog, int which) {
++            }
++        });
++
++        dialog.setCancelable(false);
++        dialog.show();
++    }
++    public  static Intent startApp(Context context,String packagename) {
++		Intent intent=null;
++
++        PackageInfo packageinfo = null;
++        try {
++            packageinfo = context.getPackageManager().getPackageInfo(packagename, 0);
++        } catch (PackageManager.NameNotFoundException e) {
++            e.printStackTrace();
++        }
++        if (packageinfo == null) {
++            return intent;
++        }
++
++        Intent resolveIntent = new Intent(Intent.ACTION_MAIN, null);
++        resolveIntent.addCategory(Intent.CATEGORY_LAUNCHER);
++        resolveIntent.setPackage(packageinfo.packageName);
++
++        List<ResolveInfo> resolveinfoList =context. getPackageManager()
++                .queryIntentActivities(resolveIntent, 0);
++
++        ResolveInfo resolveinfo = resolveinfoList.iterator().next();
++        if (resolveinfo != null) {
++         
++            String packageName = resolveinfo.activityInfo.packageName;
++            String className = resolveinfo.activityInfo.name;
++            
++             intent= new Intent(Intent.ACTION_MAIN);
++            intent.addCategory(Intent.CATEGORY_LAUNCHER);
++
++           
++            ComponentName cn = new ComponentName(packageName, className);
++
++            intent.setComponent(cn);
++            
++        }
++		return intent;
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/ItemTouchHelperAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/ItemTouchHelperAdapter.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/ItemTouchHelperAdapter.java	(revision 1170)
+@@ -0,0 +1,17 @@
++package com.android.systemui.funcsetting;
++
++
++import android.support.v7.widget.RecyclerView;
++
++/**
++ * Created by Administrator on 2017/8/29.
++ */
++public interface ItemTouchHelperAdapter {
++    
++   void onItemMove(int fromPosition, int toPosition);
++
++   
++    void onItemDissmiss(int position) ;
++  
++    void onItemSelect(RecyclerView.ViewHolder viewHolder);
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/ContactsReceiver.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/ContactsReceiver.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/ContactsReceiver.java	(revision 1170)
+@@ -0,0 +1,33 @@
++package com.android.systemui.funcsetting;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++
++import android.content.Intent;
++
++import android.os.Bundle;
++import android.provider.Settings;
++
++import android.util.Log;
++
++/**
++ * Created by Administrator on 2017/9/25.
++ */
++
++public class ContactsReceiver extends BroadcastReceiver {
++
++
++    @Override
++    public void onReceive(Context context, Intent intent) {
++        if ("com.android.systemui.funcsettings.contact_uri".equals(intent.getAction()))
++        {
++        	String url= intent.getStringExtra("url");
++			Settings.System.putString(context.getContentResolver(),AppUtils.CONTANCTS_URI,url);
++        }
++		if ("com.android.music.playlist_id".equals(intent.getAction()))
++        {
++        	long id=intent.getLongExtra("id",-100);
++			Settings.System.putString(context.getContentResolver(),AppUtils.FUNC_TO_MUSIC,id+"");
++        }
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 1170)
+@@ -0,0 +1,202 @@
++package com.android.systemui.funcsetting;
++
++
++import android.content.Context;
++import android.content.Intent;
++import android.os.Bundle;
++import android.support.v7.widget.RecyclerView;
++import android.util.Log;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.ImageView;
++import android.widget.RelativeLayout;
++import android.widget.TextView;
++import android.widget.Toast;
++import com.android.systemui.R;
++import android.view.Gravity;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.List;
++
++/**
++ * Created by Administrator on 2017/8/29.
++ */
++public class FuncListAdapter extends RecyclerView.Adapter<FuncListAdapter.AppInfoHodler> implements ItemTouchHelperAdapter {
++    public List<AppInfo> data;
++    private Context mContext;
++
++    public FuncListAdapter(Context context, List<AppInfo> data) {
++        this.data = data;
++        mContext = context;
++    }
++	public List<AppInfo> getData() {
++		  return data;
++	  }
++
++    @Override
++    public int getItemViewType(int position) {
++
++        return data.get(position).getIndex();
++    }
++
++    @Override
++    public AppInfoHodler onCreateViewHolder(ViewGroup parent, int viewType) {
++        View view = null;
++        if (viewType == AppUtils.DEFAULT_APPS_TITLE_INDEX || viewType == AppUtils.APPS_TITLE_INDEX || viewType == AppUtils.FOOTER_INDEX) {
++            view = LayoutInflater.from(mContext).inflate(R.layout.func_item_title, parent, false);
++        } else if (viewType == AppUtils.DEFAULT_APPS) {
++            view = LayoutInflater.from(mContext).inflate(R.layout.func_default_item, parent, false);
++        } else if (viewType == AppUtils.APPS) {
++            view = LayoutInflater.from(mContext).inflate(R.layout.func_app_item, parent, false);
++        }
++        return new AppInfoHodler(view, viewType);
++    }
++
++    @Override
++    public void onBindViewHolder(final AppInfoHodler holder, final int position) {
++        final int viewType = getItemViewType(position);
++        final AppInfo info = data.get(position);
++        if (viewType == AppUtils.DEFAULT_APPS_TITLE_INDEX || viewType == AppUtils.APPS_TITLE_INDEX ||
++                viewType == AppUtils.FOOTER_INDEX) {
++            holder.title.setText(info.getPackerName());
++            if (viewType == AppUtils.FOOTER_INDEX) {
++                holder.title.setOnClickListener(new View.OnClickListener() {
++                    @Override
++                    public void onClick(View v) {
++                        List<String> list=new ArrayList<String>();
++                        for (AppInfo info:data) {
++                            list.add(info.getPackerName());
++                        }
++                        Intent intent = new Intent(mContext, AppListActivity.class);
++                        AppsData appsData=new AppsData();
++                        appsData.setList(list);
++                        Bundle bundle=new Bundle();
++                        bundle.putSerializable("app",appsData);
++                        intent.putExtras(bundle);
++                        mContext.startActivity(intent);
++                    }
++                });
++            }
++        } else {
++            holder.app_name.setText(info.getAppName());
++            holder.app_icon.setImageDrawable(info.getDrawable());
++            if (viewType == AppUtils.DEFAULT_APPS) {
++                holder.right_icon.setImageResource(R.mipmap.remove);
++            } else if (viewType == AppUtils.APPS) {
++                holder.right_icon.setImageResource(R.mipmap.add);
++            }
++            holder.right_icon.setOnClickListener(new View.OnClickListener() {
++                @Override
++                public void onClick(View v) {
++                   
++                    if (viewType == AppUtils.DEFAULT_APPS) {
++                        if (FuncSettings.defaultNum > 1) {
++                            
++                            deleteData(position);
++                        } else {
++                           String msg=mContext.getResources().getString(R.string.func_remove_all);
++                            AppUtils.showDialog(mContext,msg);
++                        }
++                    } else if (viewType == AppUtils.APPS) {
++                        if (FuncSettings.defaultNum == 5) {
++                           String msg=mContext.getResources().getString(R.string.func_max_num);
++                            AppUtils.showDialog(mContext,msg);
++                        } else {
++                            
++                            addData(position);
++                        }
++                    }
++                    
++                }
++            });
++			holder.item.setOnClickListener(new View.OnClickListener() {
++				@Override
++                public void onClick(View v) {
++                if(viewType == AppUtils.DEFAULT_APPS||viewType == AppUtils.APPS){
++					Log.i("content",info.getPackerName());
++
++				}
++                	if (viewType == AppUtils.DEFAULT_APPS) {
++						if(info.getPackerName().equals(AppUtils.CONTACTS)){
++							AppUtils.startContactApp(mContext);
++						}else if(info.getPackerName().equals(AppUtils.MUSIC)){
++							AppUtils.startMusicApp(mContext);
++						}
++                	}
++				}
++			});
++        }
++
++    }
++
++    @Override
++    public int getItemCount() {
++        return data.size();
++    }
++
++    @Override
++    public void onItemMove(int fromPosition, int toPosition) {
++        if (data.get(fromPosition).getIndex() == AppUtils.DEFAULT_APPS &&
++                data.get(toPosition).getIndex() == AppUtils.DEFAULT_APPS) {
++            if (fromPosition < data.size() && toPosition < data.size()) {
++                Collections.swap(data, fromPosition, toPosition);
++                notifyItemMoved(fromPosition, toPosition);
++            }
++            Log.e("dissmiss","------------"+fromPosition);
++        }
++    }
++
++    @Override
++    public void onItemDissmiss(int position) {
++    }
++
++    @Override
++    public void onItemSelect(RecyclerView.ViewHolder viewHolder) {
++
++    }
++
++
++    public void deleteData(int pos) {
++        AppInfo info = data.get(pos);
++        info.setIndex(AppUtils.APPS);
++        data.remove(pos);
++        data.add(data.size() - 1, info);
++        FuncSettings.defaultNum--;
++        notifyDataSetChanged();
++    }
++
++    public void addData(int pos) {
++        AppInfo info = data.get(pos);
++        info.setIndex(AppUtils.DEFAULT_APPS);
++        data.remove(pos);
++        data.add(FuncSettings.defaultNum + 1, info);
++        FuncSettings.defaultNum++;
++        notifyDataSetChanged();
++    }
++
++    public class AppInfoHodler extends RecyclerView.ViewHolder {
++        public TextView title;
++        public TextView app_name;
++        public ImageView app_icon;
++        public ImageView right_icon;
++        public RelativeLayout item;
++
++        public AppInfoHodler(View itemView, int viewType) {
++            super(itemView);
++            if (viewType == AppUtils.DEFAULT_APPS_TITLE_INDEX || viewType == AppUtils.APPS_TITLE_INDEX
++                    || viewType == AppUtils.FOOTER_INDEX) {
++                title = (TextView) itemView.findViewById(R.id.title);
++				if( viewType == AppUtils.FOOTER_INDEX){
++					title.setGravity(Gravity.CENTER);}
++            } else {
++                app_name = (TextView) itemView.findViewById(R.id.app_name);
++                right_icon = (ImageView) itemView.findViewById(R.id.right_icon);
++                app_icon = (ImageView) itemView.findViewById(R.id.app_icon);
++                item = (RelativeLayout) itemView.findViewById(R.id.item);
++            }
++
++        }
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/SimpleItemTouchHelperCallback.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/SimpleItemTouchHelperCallback.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/SimpleItemTouchHelperCallback.java	(revision 1170)
+@@ -0,0 +1,60 @@
++package com.android.systemui.funcsetting;
++
++
++import android.support.v7.widget.RecyclerView;
++import android.support.v7.widget.helper.ItemTouchHelper;
++import android.util.Log;
++
++/**
++ * Created by Administrator on 2017/8/29.
++ */
++public class SimpleItemTouchHelperCallback extends ItemTouchHelper.Callback {
++    private FuncListAdapter mAdapter;
++
++    public SimpleItemTouchHelperCallback(FuncListAdapter adapter){
++        mAdapter = adapter;
++    }
++
++    @Override
++    public boolean isLongPressDragEnabled()
++    {
++        return true;
++    }
++
++    @Override
++    public boolean isItemViewSwipeEnabled()
++    {
++        return false; 
++    }
++
++    @Override
++    public int getMovementFlags(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder) {
++        int dragFlags = ItemTouchHelper.UP | ItemTouchHelper.DOWN;
++        int swipeFlags = ItemTouchHelper.ACTION_STATE_IDLE;
++		int index=mAdapter.getData().get(viewHolder.getAdapterPosition()).getIndex();
++        if(index!=AppUtils.DEFAULT_APPS){
++            dragFlags=0;
++        }
++        return makeMovementFlags(dragFlags,0);
++    }
++
++    @Override
++    public void onSelectedChanged(RecyclerView.ViewHolder viewHolder, int actionState) {
++        super.onSelectedChanged(viewHolder, actionState);
++        if (actionState == ItemTouchHelper.ACTION_STATE_IDLE) {
++
++        
++                mAdapter.onItemSelect(viewHolder);
++        }
++    }
++
++    @Override
++    public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, RecyclerView.ViewHolder target) {
++        mAdapter.onItemMove(viewHolder.getAdapterPosition(),target.getAdapterPosition());
++        return true;
++    }
++    @Override
++    public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
++//       mAdapter.onItemDissmiss(viewHolder.getAdapterPosition());
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListActivity.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListActivity.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListActivity.java	(revision 1170)
+@@ -0,0 +1,170 @@
++package com.android.systemui.funcsetting;
++
++import android.app.Activity;
++
++import android.app.ProgressDialog;
++import android.os.Handler;
++import android.os.Message;
++import android.support.v4.view.MenuItemCompat;
++import android.support.v7.app.ActionBar;
++import android.support.v7.app.AppCompatActivity;
++import android.os.Bundle;
++import android.support.v7.widget.LinearLayoutManager;
++import android.support.v7.widget.RecyclerView;
++import android.support.v7.widget.SearchView;
++import android.util.Log;
++import android.view.Menu;
++import android.view.MenuItem;
++import android.widget.Toast;
++import android.text.Editable;
++import android.text.TextWatcher;
++
++import java.util.ArrayList;
++import java.util.List;
++import com.android.systemui.R;
++
++import android.widget.EditText;
++import android.widget.ImageView;
++import android.widget.TextView;
++import android.view.View;
++
++public class AppListActivity extends Activity {
++	private ImageView mSearchBtn;
++	private EditText mSearch;
++ 	private TextView mTitle;
++    private ImageView mBackBtn;
++    private boolean isShowTitle=true;
++    private String searchContent="";
++    private final int APP_LIST_RESULT = 100;
++    private RecyclerView mAppsRecycler;
++    private AppsData appsData;
++    private List<AppInfo> list;
++    private List<AppInfo> searchList;
++    private AppListAdapter adapter;
++    private Handler handler = new Handler() {
++        @Override
++        public void handleMessage(Message msg) {
++            super.handleMessage(msg);
++            if (msg.what == APP_LIST_RESULT) {
++                list = (List<AppInfo>) msg.obj;
++                dialog.dismiss();
++                adapter = new AppListAdapter(AppListActivity.this, list);
++                mAppsRecycler.setAdapter(adapter);
++            }
++        }
++    };
++    private ProgressDialog dialog;
++
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setTitle("Func shortcuts");
++
++        setContentView(R.layout.activity_app_list);
++       // ActionBar actionBar = getSupportActionBar();
++       // actionBar.setDisplayHomeAsUpEnabled(true);
++        appsData = (AppsData) getIntent().getExtras().getSerializable("app");
++        initView();
++        initData();
++    }
++
++
++    private void initView() {
++        mAppsRecycler = (RecyclerView) findViewById(R.id.apps_recycler);
++        mAppsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
++		mBackBtn = (ImageView) findViewById(R.id.back_btn);
++        mTitle = (TextView) findViewById(R.id.title);
++        mSearch = (EditText) findViewById(R.id.search_edit);
++        mSearchBtn = (ImageView) findViewById(R.id.search_btn);
++		initListener();
++    }
++	private void initListener() {
++		   mBackBtn.setOnClickListener(new View.OnClickListener() {
++			   @Override
++			   public void onClick(View v) {
++				   finish();
++			   }
++		   });
++		   mSearchBtn.setOnClickListener(new View.OnClickListener() {
++			   @Override
++			   public void onClick(View v) {
++				   if(isShowTitle){
++					   mTitle.setVisibility(View.GONE);
++					   mSearch.setVisibility(View.VISIBLE);
++					   isShowTitle=false;
++				   }else{
++					   if(!searchContent.isEmpty()){
++						   searchData();
++						   searchContent="";
++					   }else{
++                        adapter.updateData(list);
++                    }
++				   }
++			   }
++		   });
++		   mSearch.addTextChangedListener(new TextWatcher() {
++			   @Override
++			   public void beforeTextChanged(CharSequence s, int start, int count, int after) {
++	
++			   }
++	
++			   @Override
++			   public void onTextChanged(CharSequence s, int start, int before, int count) {
++	
++			   }
++	
++			   @Override
++			   public void afterTextChanged(Editable s) {
++				     searchContent = s.toString();
++                Log.e("search",searchContent);
++				if(!searchContent.isEmpty())
++				   searchData();
++				else
++                    adapter.updateData(list);
++			   }
++		   });
++	   }
++	   public void searchData(){
++		   if (list != null && list.size() > 0) {
++			   if (searchList == null) {
++				   searchList = new ArrayList<AppInfo>();
++			   }
++			   if (searchList.size() > 0) {
++				   searchList.clear();
++			   }
++			   for (AppInfo info : list) {
++				   if (info.getPackerName().contains(searchContent) ||
++						   info.getAppName().contains(searchContent)
++						   || info.getIntroduction().contains(searchContent)) {
++					   searchList.add(info);
++				   }
++	
++			   }
++			   if (searchList.size() > 0 && adapter != null) {
++				   adapter.updateData(searchList);
++			   }else{
++				   Toast.makeText(AppListActivity.this,"no search",0).show();
++			   }
++		   }
++	   }
++
++    private void initData() {
++        dialog = new ProgressDialog(this);
++        dialog.setCancelable(false);
++        dialog.show();
++        AppUtils.getAppListData(this, appsData, handler, APP_LIST_RESULT);
++    }
++
++    @Override
++    public boolean onOptionsItemSelected(MenuItem item) {
++        switch (item.getItemId()) {
++            case android.R.id.home:
++                finish();
++                return true;
++            default:
++                return super.onOptionsItemSelected(item);
++        }
++
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppInfo.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppInfo.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppInfo.java	(revision 1170)
+@@ -0,0 +1,94 @@
++package com.android.systemui.funcsetting;
++
++import android.graphics.drawable.Drawable;
++
++import java.io.Serializable;
++
++/**
++ * Created by Administrator on 2017/9/1.
++ *
++ */
++public class AppInfo implements Serializable{
++    private int icon;
++    private boolean isContanin;
++
++    public boolean isContanin() {
++        return isContanin;
++    }
++
++    public void setContanin(boolean contanin) {
++        isContanin = contanin;
++    }
++
++    private String appName;
++    private Drawable drawable;
++    private String  packerName;
++    private int rightIcon;
++    /*0default apps title 1:default apps 2:apps title 3:apps */
++    private int index;
++    public String getIntroduction() {
++        if(introduction==null){
++            introduction="";
++        }
++        return introduction;
++    }
++
++    public void setIntroduction(String introduction) {
++        this.introduction = introduction;
++    }
++
++    private String introduction;
++
++    public Drawable getDrawable() {
++        return drawable;
++    }
++
++    public void setDrawable(Drawable drawable) {
++        this.drawable = drawable;
++    }
++
++    public String getPackerName() {
++        return packerName;
++    }
++
++    public void setPackerName(String packerName) {
++        this.packerName = packerName;
++    }
++
++    public int getIcon() {
++        return icon;
++
++    }
++
++    public void setIcon(int icon) {
++        this.icon = icon;
++    }
++
++    public String getAppName() {
++        if(appName==null)
++            appName="";
++        return appName;
++    }
++
++    public void setAppName(String appName) {
++        this.appName = appName;
++    }
++
++    public int getRightIcon() {
++        return rightIcon;
++    }
++
++    public void setRightIcon(int rightIcon) {
++        this.rightIcon = rightIcon;
++    }
++
++    public int getIndex() {
++        return index;
++    }
++
++    public void setIndex(int index) {
++        this.index = index;
++    }
++
++
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 1170)
+@@ -0,0 +1,145 @@
++package com.android.systemui.funcsetting;
++
++
++import android.app.Activity;
++
++
++import android.os.Bundle;
++import android.support.v7.widget.LinearLayoutManager;
++import android.support.v7.widget.RecyclerView;
++import android.support.v7.widget.helper.ItemTouchHelper;
++import android.view.View;
++import android.widget.CompoundButton;
++import android.widget.Switch;
++import android.widget.TextView;
++import com.android.systemui.R;
++
++import com.android.systemui.db.AppDB;
++import com.android.systemui.db.DBManager;
++
++import java.util.ArrayList;
++import java.util.List;
++import android.provider.Settings;
++import android.support.v7.widget.SwitchCompat;
++
++
++
++/**
++ * Func Setting List
++ */
++public class FuncSettings extends Activity {
++    private final String DEFAULT_TABLE = "appinfo_default_list";
++    private final String TABLE = "appinfo_list";
++    public static int defaultNum=0;
++    private Switch mSwitch;
++    private TextView switchOff;
++	private TextView mFuncSwitch;
++    private RecyclerView funcSettingList;
++    private List<AppInfo> list;
++    private AppDB db;
++    private FuncListAdapter adapter;
++	private View switchBar;
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.activity_func_setting);
++        initView();
++        initListener();
++        initData();
++    }
++
++    private void initData() {
++        list = new ArrayList<>();
++        DBManager manager = new DBManager(this);
++        manager.openDatabase();
++        adapter = new FuncListAdapter(this, getData());
++        funcSettingList.setAdapter(adapter);
++        ItemTouchHelper.Callback callback = new SimpleItemTouchHelperCallback(adapter);
++        ItemTouchHelper touchHelper = new ItemTouchHelper(callback);  
++        touchHelper.attachToRecyclerView(funcSettingList);
++    }
++
++    private void initListener() {
++		
++        
++        mSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
++            @Override
++            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
++                if (isChecked) {
++                    mFuncSwitch.setText("on");
++                    funcSettingList.setVisibility(View.VISIBLE);
++                    switchOff.setVisibility(View.GONE);
++					Settings.System.putString(getContentResolver(),AppUtils.FUNC_SWITCH,"true");
++                } else {
++                    mFuncSwitch.setText("off");
++                    funcSettingList.setVisibility(View.GONE);
++                    switchOff.setVisibility(View.VISIBLE);
++					Settings.System.putString(getContentResolver(),AppUtils.FUNC_SWITCH,"false");
++                }
++            }
++        });
++    }
++
++    private void initView() {
++        //setTitle("Func shortcuts");
++        //ActionBar actionBar=getSupportActionBar();
++       // actionBar.setDisplayHomeAsUpEnabled(true);
++        
++        mSwitch = (Switch) findViewById(R.id.func_setting_switch);
++        switchOff = (TextView) findViewById(R.id.switch_off);
++		mFuncSwitch= (TextView) findViewById(R.id.func_switch);
++
++        mSwitch.setThumbResource(R.drawable.thumb_selector);  
++ 
++        funcSettingList = (RecyclerView) findViewById(R.id.func_setting_recycler);
++        funcSettingList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
++		String func_switch=Settings.System.getString(getContentResolver(),AppUtils.FUNC_SWITCH);
++		if(func_switch==null){
++			func_switch="false";}
++		if(func_switch.equals("true")){
++			mFuncSwitch.setText("on");
++			mSwitch.setChecked(true);
++			funcSettingList.setVisibility(View.VISIBLE);
++			switchOff.setVisibility(View.GONE);
++		
++		}else{
++			mFuncSwitch.setText("off");
++			mSwitch.setChecked(false);
++			funcSettingList.setVisibility(View.GONE);
++			switchOff.setVisibility(View.VISIBLE);
++			
++		}
++       
++    }
++    public List<AppInfo> getData(){
++        db = AppDB.getInstance();
++        list.clear();
++        list.add(AppUtils.getDefaultAppInfoTitle());
++        list.addAll(db.getDefaultApp(DEFAULT_TABLE));
++        defaultNum= list.size()-1;
++        list.add(AppUtils.getAppInfoTitle());
++        list.addAll(db.getApp(TABLE));	
++        list.add(AppUtils.getFooterView(getResources().getString(R.string.func_add_app)));
++        list =AppUtils.getAppInfo(this, list);
++        return list;
++    }
++    @Override
++    protected void onRestart() {
++        super.onRestart();
++        list=getData();
++        adapter.notifyDataSetChanged();
++    }
++
++    @Override
++    protected void onPause() {
++        super.onPause();
++        if(list!=null&&list.size()!=0&&db!=null){
++            db.delete();
++            db.addAll(list);
++           // db.closeDB();
++        }
++    }
++
++
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListAdapter.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListAdapter.java	(revision 1170)
+@@ -0,0 +1,81 @@
++package com.android.systemui.funcsetting;
++
++
++import android.content.Context;
++import android.graphics.Color;
++import android.support.v7.widget.RecyclerView;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.ImageView;
++import android.widget.RelativeLayout;
++import android.widget.TextView;
++import com.android.systemui.R;
++import android.util.Log;
++
++import java.util.List;
++
++/**
++ * Created by Administrator on 2017/9/4.
++ */
++public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppInfoHodler> {
++    private List<AppInfo> data;
++    private Context mContext;
++
++    public AppListAdapter(Context context, List<AppInfo> data) {
++        this.data = data;
++        mContext = context;
++    }
++
++    @Override
++    public AppListAdapter.AppInfoHodler onCreateViewHolder(ViewGroup parent, int viewType) {
++        View view = LayoutInflater.from(mContext).inflate(R.layout.func_app_item, parent, false);
++        return new AppInfoHodler(view, viewType);
++    }
++
++    @Override
++    public void onBindViewHolder(AppListAdapter.AppInfoHodler holder, int position) {
++        final AppInfo info = data.get(position);
++        holder.app_name.setText(info.getAppName());
++        holder.app_icon.setImageDrawable(info.getDrawable());
++        holder.right_icon.setImageResource(R.mipmap.add);
++        if(info.isContanin()){
++            holder.app_name.setTextColor(Color.GRAY);
++        }else{
++            holder.app_name.setTextColor(Color.BLACK);
++        }
++		holder.item.setOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                Log.i("content",info.getPackerName());
++            }
++        });
++    }
++
++    @Override
++    public int getItemCount() {
++        return data.size();
++    }
++    public void updateData(List<AppInfo> list){
++        data= list;
++        notifyDataSetChanged();
++    }
++    public class AppInfoHodler extends RecyclerView.ViewHolder {
++        public TextView title;
++        public TextView app_name;
++        public ImageView app_icon;
++        public ImageView right_icon;
++        public RelativeLayout item;
++
++        public AppInfoHodler(View itemView, int viewType) {
++            super(itemView);
++
++            app_name = (TextView) itemView.findViewById(R.id.app_name);
++            right_icon = (ImageView) itemView.findViewById(R.id.right_icon);
++            app_icon = (ImageView) itemView.findViewById(R.id.app_icon);
++            item = (RelativeLayout) itemView.findViewById(R.id.item);
++
++
++        }
++    }
++}
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppsData.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppsData.java	(revision 0)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppsData.java	(revision 1170)
+@@ -0,0 +1,23 @@
++package com.android.systemui.funcsetting;
++
++
++import java.io.Serializable;
++import java.util.List;
++import java.util.prefs.Preferences;
++
++/**
++ * Created by Administrator on 2017/9/4.
++ */
++public class AppsData implements Serializable {
++    public List<String> getList() {
++        return list;
++    }
++
++    public void setList(List<String> list) {
++        this.list = list;
++    }
++
++    private List<String> list;
++
++
++}
+Index: frameworks/base/packages/SystemUI/res/drawable/thumb_selector.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable/thumb_selector.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable/thumb_selector.xml	(revision 1170)
+@@ -0,0 +1,20 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2016 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<selector xmlns:android="http://schemas.android.com/apk/res/android">  
++
++<item android:drawable="@drawable/thumb_on" android:state_checked="true"/>  
++<item android:drawable="@drawable/thumb_off"/>  
++</selector>
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_off.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_off.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_off.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_off.png	(revision 1170)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_off.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_on.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_on.png
+===================================================================
+--- frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_on.png	(revision 0)
++++ frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_on.png	(revision 1170)
+
+Property changes on: frameworks/base/packages/SystemUI/res/drawable-hdpi/thumb_on.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: frameworks
+===================================================================
+--- frameworks	(revision 1169)
++++ frameworks	(revision 1170)
+
+Property changes on: frameworks
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks:r511

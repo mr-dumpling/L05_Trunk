@@ -1,0 +1,41 @@
+Index: vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/deviceinfo/ImeiInformation.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/deviceinfo/ImeiInformation.java	(revision 15148)
++++ vendor/branch/5058Y_ALIE/packages/apps/Settings/src/com/android/settings/deviceinfo/ImeiInformation.java	(revision 15149)
+@@ -35,6 +35,7 @@
+ import com.android.settings.R;
+ import com.mediatek.settings.UtilsExt;
+ import com.android.settings.SettingsPreferenceFragment;
++import android.os.SystemProperties;
+ 
+ public class ImeiInformation extends SettingsPreferenceFragment {
+ 
+@@ -76,6 +77,10 @@
+         final Phone phone = PhoneFactory.getPhone(phoneId);
+ 
+         if (phone != null) {
++            String sv=SystemProperties.get("ro.def.software.version");
++            if(sv != null && sv.length()>2){
++                sv = sv.substring(sv.length()-2);
++            }
+             if (phone.getPhoneType() == TelephonyManager.PHONE_TYPE_CDMA) {
+                 setSummaryText(KEY_MEID_NUMBER, phone.getMeid());
+                 setSummaryText(KEY_MIN_NUMBER, phone.getCdmaMin());
+@@ -90,7 +95,7 @@
+                     // Show ICC ID and IMEI for LTE device
+                     setSummaryText(KEY_ICC_ID, phone.getIccSerialNumber());
+                     setSummaryTextAsDigit(KEY_IMEI, phone.getImei());
+-                    setSummaryTextAsDigit(KEY_IMEI_SV, phone.getDeviceSvn());
++                    setSummaryText(KEY_IMEI_SV, sv);
+                 } else {
+                     // device is not GSM/UMTS, do not display GSM/UMTS features
+                     // check Null in case no specified preference in overlay xml
+@@ -100,7 +105,7 @@
+                 }
+             } else {
+                 setSummaryTextAsDigit(KEY_IMEI, phone.getImei());
+-                setSummaryTextAsDigit(KEY_IMEI_SV, phone.getDeviceSvn());
++                setSummaryText(KEY_IMEI_SV, sv);
+                 // device is not CDMA, do not display CDMA features
+                 // check Null in case no specified preference in overlay xml
+                 removePreferenceFromScreen(KEY_PRL_VERSION);

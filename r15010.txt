@@ -1,0 +1,58 @@
+Index: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/BootCmpReceiver.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/BootCmpReceiver.java	(revision 15009)
++++ vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/BootCmpReceiver.java	(revision 15010)
+@@ -124,6 +124,11 @@
+                 } else {
+                     processDupSimContacts(context);
+                 }
++				
++				// [START] add for Preset service number
++				presetServiceNumber(context);
++				// [END]
++				
+             } else if (ACTION_REFRESH_SIM_CONTACT.equals(action)) {
+                 /// Add for ALPS02383518, when BootCmpReceiver received
+                 // PHB_CHANGED intent but has no READ_PHONE permission,
+@@ -183,6 +188,14 @@
+             startSimService(context, subId, SimServiceUtils.SERVICE_WORK_REMOVE);
+         }
+     }
++	
++	/**
++	 * when boot complete,preset the service number directly.
++	 */
++ private void presetServiceNumber(Context context) {
++     Log.d(TAG, "presetServiceNumber");
++     startSimService(context, -1, SimServiceUtils.SERVICE_WORK_IMPORT_PRESET_CONTACTS);
++ }
+ 
+     /**
+      * fix for [PHB Status Refatoring] ALPS01003520
+Index: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimServiceUtils.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimServiceUtils.java	(revision 15009)
++++ vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimServiceUtils.java	(revision 15010)
+@@ -69,6 +69,7 @@
+     public static final int SERVICE_WORK_REMOVE = 2;
+     public static final int SERVICE_WORK_EDIT = 3;
+     public static final int SERVICE_WORK_DELETE = 4;
++	public static final int SERVICE_WORK_IMPORT_PRESET_CONTACTS = 5;
+     public static final int SERVICE_WORK_UNKNOWN = -1;
+     public static final int SERVICE_IDLE = 0;
+     public static final int SERVICE_FORCE_REMOVE_SUB_ID = -20;
+Index: vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimProcessorManager.java
+===================================================================
+--- vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimProcessorManager.java	(revision 15009)
++++ vendor/branch/5058A_Bitel_Peru/packages/apps/Contacts/SimProcessor/src/com/mediatek/simprocessor/SimProcessorManager.java	(revision 15010)
+@@ -167,7 +167,9 @@
+             processor = new SimImportProcessor(context, subId, intent, listener);
+         } else if (workType == SimServiceUtils.SERVICE_WORK_REMOVE) {
+             processor = new SimRemoveProcessor(context, subId, intent, listener);
+-        }
++        }else if (workType == SimServiceUtils.SERVICE_WORK_IMPORT_PRESET_CONTACTS) {
++			processor = new PresetContactsImportProcessor(context, subId, intent, listener);
++}
+ 
+         return processor;
+     }

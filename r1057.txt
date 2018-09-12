@@ -1,0 +1,700 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1056)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1057)
+@@ -1704,6 +1704,7 @@
+         </activity>
+ 
+         <activity android:name=".fingerprint.FingerprintSettings" android:exported="false"/>
++		<activity android:name=".fingerprint.FingerPrintManagerSettings" android:exported="false"/>
+         <activity android:name=".fingerprint.FingerprintEnrollFindSensor" android:exported="false"/>
+         <activity android:name=".fingerprint.FingerprintEnrollEnrolling" android:exported="false"/>
+         <activity android:name=".fingerprint.FingerprintEnrollFinish" android:exported="false"/>
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerPrintManagerSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerPrintManagerSettings.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerPrintManagerSettings.java	(revision 1057)
+@@ -0,0 +1,128 @@
++package com.android.settings.fingerprint;
++
++
++import android.os.Bundle;
++import android.view.Menu;
++import android.view.MenuItem;
++import com.android.settings.R;
++import com.android.settings.SettingsPreferenceFragment;
++import android.content.ComponentName;
++import com.android.settings.SubSettings;
++import android.provider.Settings;
++import android.content.Context;
++import android.content.Intent;
++import android.util.Log;
++import android.support.v14.preference.SwitchPreference;
++import android.support.v7.preference.DropDownPreference;
++import android.support.v7.preference.ListPreference;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.Preference.OnPreferenceChangeListener;
++import java.util.List;
++
++import android.hardware.fingerprint.Fingerprint;
++import android.hardware.fingerprint.FingerprintManager;
++import com.android.internal.logging.MetricsLogger;
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++import android.provider.Settings;
++
++
++public class FingerPrintManagerSettings extends SubSettings {
++	private static final String TAG = "FingerPrintManagerSettings";
++	
++	 @Override
++    public void onCreate(Bundle savedInstanceState) {//-->Activity
++        super.onCreate(savedInstanceState);
++        CharSequence msg = getText(R.string.security_settings_fingerprint_preference_title);
++        setTitle(msg); 
++		
++    }
++	
++	@Override
++    public Intent getIntent() {
++        Intent modIntent = new Intent(super.getIntent());
++        modIntent.putExtra(EXTRA_SHOW_FRAGMENT, FingerprintManagerSettingsFragment.class.getName());
++        return modIntent;
++    }
++
++   @Override
++    protected boolean isValidFragment(String fragmentName) {
++        if (FingerprintManagerSettingsFragment.class.getName().equals(fragmentName)) return true;
++        return false;
++    }
++
++	
++	public static class FingerprintManagerSettingsFragment extends SettingsPreferenceFragment
++        implements OnPreferenceChangeListener {
++			
++		private static final String KEY_FINGERPRINT_MANAGER = "fingerprint_manager";
++		private static final String KEY_FINGERPRINT_TAKE_PHOTO = "fingerprint_take_photo_or_video";
++		private static final int DEVICE_FINGEPRINT_SWITCH_OPEN=1;
++		private static final int DEVICE_FINGEPRINT_SWITCH_CLOSE=0;
++		private SwitchPreference mTakePhotoePreference;
++		private Preference mFingerprintManager;	
++		private Intent mIntent;
++		private int mUserId;
++		private static Context mContext;
++		@Override
++        protected int getMetricsCategory() {
++            return MetricsEvent.FINGERPRINT;
++        }
++
++        @Override
++        public void onCreate(Bundle savedInstanceState) {
++            super.onCreate(savedInstanceState);
++			mContext=getActivity();
++		    mIntent=getIntent();
++			mUserId=mIntent.getIntExtra(Intent.EXTRA_USER_ID,0);
++           addPreferencesFromResource(R.xml.security_settings_fingerprint_manager);
++		   if(mFingerprintManager==null){
++				mFingerprintManager = (Preference) findPreference(KEY_FINGERPRINT_MANAGER);
++				mFingerprintManager.setOnPreferenceChangeListener(this);
++			}
++			if(mTakePhotoePreference==null){
++				mTakePhotoePreference = (SwitchPreference) findPreference(KEY_FINGERPRINT_TAKE_PHOTO);
++				mTakePhotoePreference.setChecked(Settings.System.getInt(mContext.getContentResolver(),
++                        Settings.System.FP_CAMERA, 0)==1);
++				mTakePhotoePreference.setOnPreferenceChangeListener(this);
++			}
++        }	
++		
++		@Override
++		public boolean onPreferenceTreeClick(Preference preference) {
++			if(preference == mFingerprintManager){
++				FingerprintManager fpm = (FingerprintManager) preference.getContext().getSystemService(Context.FINGERPRINT_SERVICE);
++        		if (fpm == null || !fpm.isHardwareDetected()) {
++            		Log.v(TAG, "No fingerprint hardware detected!!");
++            		return false;
++       		 	}
++				final List<Fingerprint> items = fpm.getEnrolledFingerprints(mUserId);
++        		final int fingerprintCount = items != null ? items.size() : 0;
++				String clazz=fingerprintCount>0 ? FingerprintSettings.class.getName() : FingerprintEnrollIntroduction.class.getName();
++				Intent intent = new Intent();
++                intent.setClassName("com.android.settings", clazz);
++                intent.putExtra(Intent.EXTRA_USER_ID, mUserId);
++                preference.getContext().startActivity(intent);
++			}
++			return true;
++		}
++	
++		@Override
++		public boolean onPreferenceChange(Preference preference, Object objValue) {
++			final String key = preference.getKey();
++			if (preference == mTakePhotoePreference) {
++                boolean onOrOff = (Boolean) objValue;
++            	Settings.System.putInt(preference.getContext().getContentResolver(),
++                        Settings.System.FP_CAMERA, onOrOff ? DEVICE_FINGEPRINT_SWITCH_OPEN: DEVICE_FINGEPRINT_SWITCH_CLOSE);
++			}
++			return true;
++		}
++	}
++	
++	
++	@Override
++	protected void onResume() {
++		// TODO Auto-generated method stub
++			super.onResume();
++	}
++	
++}
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 1056)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 1057)
+@@ -45,6 +45,10 @@
+ import android.support.v7.preference.PreferenceGroup;
+ import android.support.v7.preference.PreferenceScreen;
+ import android.support.v7.preference.PreferenceViewHolder;
++import android.support.v7.preference.PreferenceCategory;
++import android.support.v14.preference.SwitchPreference;
++
++
+ import android.text.Annotation;
+ import android.text.SpannableString;
+ import android.text.SpannableStringBuilder;
+@@ -60,7 +64,10 @@
+ import android.widget.EditText;
+ import android.widget.TextView;
+ import android.widget.Toast;
++import android.widget.ImageView;
++import android.content.SharedPreferences;
+ 
++
+ import com.android.internal.logging.MetricsLogger;
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ import com.android.settings.ChooseLockGeneric;
+@@ -73,6 +80,9 @@
+ import com.android.settingslib.RestrictedLockUtils;
+ 
+ import java.util.List;
++import com.android.settingslib.RestrictedPreference;
++import android.content.SharedPreferences.Editor;
++import android.provider.Settings;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+ 
+@@ -127,12 +137,12 @@
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
+-        CharSequence msg = getText(R.string.security_settings_fingerprint_preference_title);
++        CharSequence msg = getText(R.string.fingerprint_manage_category_title);
+         setTitle(msg);
+     }
+ 
+     public static class FingerprintSettingsFragment extends SettingsPreferenceFragment
+-        implements OnPreferenceChangeListener {
++        implements OnPreferenceChangeListener,FingerprintPreference.OnGearClickListener{
+         private static final int MAX_RETRY_ATTEMPTS = 20;
+         private static final int RESET_HIGHLIGHT_DELAY_MS = 500;
+ 
+@@ -143,6 +153,12 @@
+                 "fingerprint_enable_keyguard_toggle";
+         private static final String KEY_LAUNCHED_CONFIRM = "launched_confirm";
+ 
++		private static final String KEY_FINGERPRINTS_ITEM_CATEGORY ="fingerprint_add_item_category";
++		private static final String KEY_FINGERPRINTS_FUNCTIONS_CATEGORY ="fingerprint_manager_category";
++		private static final String KEY_FINGERPRINTS_UNCLOCK_DEVICE ="fingerprint_unlock_device";
++		private static final String KEY_FINGERPRINTS_LAUNCHER_SHORTCUTS ="fingerprint_luncher_shortcuts";
++		public static final String KEY_BATTERY_PERCENTAGE = "function_switch";
++
+         private static final int MSG_REFRESH_FINGERPRINT_TEMPLATES = 1000;
+         private static final int MSG_FINGER_AUTH_SUCCESS = 1001;
+         private static final int MSG_FINGER_AUTH_FAIL = 1002;
+@@ -163,7 +179,13 @@
+         private boolean mLaunchedConfirm;
+         private Drawable mHighlightDrawable;
+         private int mUserId;
+-
++		private PreferenceGroup mFingerprintsCategory;
++		private PreferenceGroup mFunctionsCategory;
++		public static SwitchPreference mUnclockPreference;
++		public static SwitchPreference mFunctionShortcut;
++		static SharedPreferences mFuncPreference ;
++    	Editor mEditor;
++		
+         private AuthenticationCallback mAuthCallback = new AuthenticationCallback() {
+             @Override
+             public void onAuthenticationSucceeded(AuthenticationResult result) {
+@@ -212,6 +234,7 @@
+                         removeFingerprintPreference(msg.arg1);
+                         updateAddPreference();
+                         retryFingerprint();
++						mFingerprintsCategory.setTitle(reNameFingerprintsCategory());
+                     break;
+                     case MSG_FINGER_AUTH_SUCCESS:
+                         mFingerprintCancel = null;
+@@ -321,7 +344,7 @@
+             String name = genKey(fingerprintId);
+             Preference prefToRemove = findPreference(name);
+             if (prefToRemove != null) {
+-                if (!getPreferenceScreen().removePreference(prefToRemove)) {
++                if (!mFingerprintsCategory.removePreference(prefToRemove)) {
+                     Log.w(TAG, "Failed to remove preference with key " + name);
+                 }
+             } else {
+@@ -342,11 +365,23 @@
+             }
+             addPreferencesFromResource(R.xml.security_settings_fingerprint);
+             root = getPreferenceScreen();
+-            addFingerprintItemPreferences(root);
++
++			mFingerprintsCategory = (PreferenceGroup)root.findPreference(KEY_FINGERPRINTS_ITEM_CATEGORY);
++			mFingerprintsCategory.setTitle(reNameFingerprintsCategory());
++            addFingerprintItemPreferences(mFingerprintsCategory);
++
+             setPreferenceScreen(root);
+             return root;
+         }
+ 
++		private String reNameFingerprintsCategory(){
++			String title="Fingerprints"+"("+mFingerprintManager.getEnrolledFingerprints(mUserId).size()+
++				"/"+getContext().getResources().getInteger(
++                    com.android.internal.R.integer.config_fingerprintMaxTemplatesPerUser)+")";
++			return title;
++		}
++
++		
+         private void addFingerprintItemPreferences(PreferenceGroup root) {
+             root.removeAll();
+             final List<Fingerprint> items = mFingerprintManager.getEnrolledFingerprints(mUserId);
+@@ -355,6 +390,7 @@
+                 final Fingerprint item = items.get(i);
+                 FingerprintPreference pref = new FingerprintPreference(root.getContext());
+                 pref.setKey(genKey(item.getFingerId()));
++				pref.setSummary("None");
+                 pref.setTitle(item.getName());
+                 pref.setFingerprint(item);
+                 pref.setPersistent(false);
+@@ -371,6 +407,20 @@
+             updateAddPreference();
+         }
+ 
++		private void updateGearButton(PreferenceGroup category,boolean flag){
++			final List<Fingerprint> items = mFingerprintManager.getEnrolledFingerprints(mUserId);
++            final int fingerprintCount = items.size();
++			for(int i=0;i<fingerprintCount;i++){
++				final Fingerprint item = items.get(i);
++				FingerprintPreference pref=(FingerprintPreference)category.findPreference(genKey(item.getFingerId()));
++				ImageView view=(ImageView)pref.getView().findViewById(R.id.settings_button);
++				view.setEnabled(flag);
++			}
++			mEditor.putBoolean("mState", flag);
++			mEditor.commit();
++		}
++
++		
+         private void updateAddPreference() {
+             /* Disable preference if too many fingerprints added */
+             final int max = getContext().getResources().getInteger(
+@@ -393,6 +443,18 @@
+             // Make sure we reload the preference hierarchy since fingerprints may be added,
+             // deleted or renamed.
+             updatePreferences();
++			
++			PreferenceScreen root = getPreferenceScreen();
++			mFuncPreference= root.getContext().getSharedPreferences("FunctionSwitch", 0);            
++			mEditor = mFuncPreference.edit();
++			mFunctionsCategory=(PreferenceGroup)root.findPreference(KEY_FINGERPRINTS_FUNCTIONS_CATEGORY);
++			mUnclockPreference=(SwitchPreference)mFunctionsCategory.findPreference(KEY_FINGERPRINTS_UNCLOCK_DEVICE);
++			mUnclockPreference.setChecked(false);
++			mUnclockPreference.setOnPreferenceChangeListener(this);
++			mFunctionShortcut=(SwitchPreference)mFunctionsCategory.findPreference(KEY_FINGERPRINTS_LAUNCHER_SHORTCUTS);
++			mFunctionShortcut.setChecked(mFuncPreference.getBoolean("mState", false));
++			mFunctionShortcut.setOnPreferenceChangeListener(this);
++			
+         }
+ 
+         private void updatePreferences() {
+@@ -447,7 +509,14 @@
+             final String key = preference.getKey();
+             if (KEY_FINGERPRINT_ENABLE_KEYGUARD_TOGGLE.equals(key)) {
+                 // TODO
+-            } else {
++            }else if(preference == mUnclockPreference){
++				/*boolean onOrOff = (Boolean) value;
++            	Settings.System.putInt(preference.getContext().getContentResolver(),
++                        Settings.System.FP_CAMERA, onOrOff);*/
++			}else if(preference == mFunctionShortcut){
++				boolean auto = (Boolean) value;
++				updateGearButton(mFingerprintsCategory,auto);
++			}else {
+                 Log.v(TAG, "Unknown key:" + key);
+             }
+             return result;
+@@ -531,7 +600,7 @@
+             long challenge = mFingerprintManager.preEnroll();
+             ChooseLockSettingsHelper helper = new ChooseLockSettingsHelper(getActivity(), this);
+             if (!helper.launchConfirmationActivity(CONFIRM_REQUEST,
+-                    getString(R.string.security_settings_fingerprint_preference_title),
++                    getString(R.string.fingerprint_manage_category_title),
+                     null, null, challenge, mUserId)) {
+                 intent.setClassName("com.android.settings", ChooseLockGeneric.class.getName());
+                 intent.putExtra(ChooseLockGeneric.ChooseLockGenericFragment.MINIMUM_QUALITY_KEY,
+@@ -708,26 +777,45 @@
+                 return alertDialog;
+             }
+         }
++
++		@Override
++    	public void onGearClick(FingerprintPreference p) {
++        	/*if (KEY_UNLOCK_SET_OR_CHANGE.equals(p.getKey())) {
++            			startFragment(this, SecuritySubSettings.class.getName(), 0, 0, null);
++        		}*/
++    	}
++		private void updateFingerprintGear(FingerprintPreference pref){
++		 View gear=pref.getView().findViewById(R.id.settings_button);
++			if(mFunctionShortcut.isChecked()){
++				gear.setEnabled(true);
++			}else{
++				gear.setEnabled(false);
++			}
++		}
+     }
+ 
+-    public static class FingerprintPreference extends Preference {
++    public static class FingerprintPreference extends Preference implements View.OnClickListener {
+         private Fingerprint mFingerprint;
+         private View mView;
+-
++		private OnGearClickListener mOnGearClickListener;
+         public FingerprintPreference(Context context, AttributeSet attrs, int defStyleAttr,
+                 int defStyleRes) {
+             super(context, attrs, defStyleAttr, defStyleRes);
++			setWidgetLayoutResource(R.layout.fingerprintspreference_widget_settings);
+         }
+         public FingerprintPreference(Context context, AttributeSet attrs, int defStyleAttr) {
+             super(context, attrs, defStyleAttr);
++			setWidgetLayoutResource(R.layout.fingerprintspreference_widget_settings);
+         }
+ 
+         public FingerprintPreference(Context context, AttributeSet attrs) {
+             super(context, attrs);
++			setWidgetLayoutResource(R.layout.fingerprintspreference_widget_settings);
+         }
+ 
+         public FingerprintPreference(Context context) {
+             super(context);
++			setWidgetLayoutResource(R.layout.fingerprintspreference_widget_settings);
+         }
+ 
+         public View getView() { return mView; }
+@@ -742,9 +830,30 @@
+ 
+         @Override
+         public void onBindViewHolder(PreferenceViewHolder view) {
+-            super.onBindViewHolder(view);
++        	super.onBindViewHolder(view);
++        	final View gear = view.findViewById(R.id.settings_button);
++			gear.setOnClickListener(this);
++			FingerprintSettings.FingerprintSettingsFragment fingerprint=new FingerprintSettings.FingerprintSettingsFragment();
++			gear.setEnabled(fingerprint.mFuncPreference.getBoolean("mState", false));
+             mView = view.itemView;
+         }
++
++		public void setOnGearClickListener(OnGearClickListener l) {
++			mOnGearClickListener = l;
++			notifyChanged();
++		}
++		
++		@Override
++		public void onClick(View v) {
++			if (v.getId() == R.id.settings_button) {
++				if (mOnGearClickListener != null) {
++					mOnGearClickListener.onGearClick(this);
++					}        
++				}
++			}
++		public interface OnGearClickListener {
++			void onGearClick(FingerprintPreference p);
++		}
+     };
+ 
+     private static class LearnMoreSpan extends URLSpan {
+@@ -844,7 +953,7 @@
+         } else {
+             fingerprintPreference.setSummary(
+                     R.string.security_settings_fingerprint_preference_summary_none);
+-            clazz = FingerprintEnrollIntroduction.class.getName();
++            clazz = FingerPrintManagerSettings.class.getName();
+         }
+         fingerprintPreference.setOnPreferenceClickListener(new OnPreferenceClickListener() {
+             @Override
+Index: packages/apps/Settings/res/xml/security_settings_fingerprint.xml
+===================================================================
+--- packages/apps/Settings/res/xml/security_settings_fingerprint.xml	(revision 1056)
++++ packages/apps/Settings/res/xml/security_settings_fingerprint.xml	(revision 1057)
+@@ -16,5 +16,27 @@
+ 
+ <PreferenceScreen
+     xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:title="@string/security_settings_fingerprint_preference_title"/>
++    android:title="@string/security_settings_fingerprint_preference_title">
++	
++	<PreferenceCategory
++        android:key="fingerprint_add_item_category"
++        android:title="@string/fingerprint_item_categoty">
++		
++	</PreferenceCategory>
++	
++	<PreferenceCategory
++        android:key="fingerprint_manager_category"
++        android:title="@string/fingerprint_function_categoty">
+ 
++		<SwitchPreference
++			android:key="fingerprint_unlock_device"
++			android:title="@string/fingerprint_unlock_device_title"
++			android:summary="@string/fingerprint_unlock_device_summary" />
++		<SwitchPreference
++			android:key="fingerprint_luncher_shortcuts"
++			android:title="@string/fingerprint_luncher_shortcuts_title"
++			android:summary="@string/fingerprint_luncher_shortcuts_summary" />
++
++    </PreferenceCategory>
++</PreferenceScreen>
++
+Index: packages/apps/Settings/res/xml/security_settings_fingerprint_manager.xml
+===================================================================
+--- packages/apps/Settings/res/xml/security_settings_fingerprint_manager.xml	(revision 0)
++++ packages/apps/Settings/res/xml/security_settings_fingerprint_manager.xml	(revision 1057)
+@@ -0,0 +1,35 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2010 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
++                  xmlns:settings="http://schemas.android.com/apk/res/com.android.settings"
++                  android:title="@string/security_settings_fingerprint_preference_title">
++	<PreferenceScreen
++                android:key="fingerprint_manager"
++                android:title="@string/fingerprint_manage_category_title"
++                />
++    <PreferenceCategory
++        android:key="fingerprint_manager_category"
++        android:title="@string/fingerprint_manager_category_title">
++
++		<SwitchPreference
++			android:key="fingerprint_take_photo_or_video"
++			android:title="@string/fingerprint_manager_take_photo_title"
++			android:summary="@string/fingerprint_manager_take_photo_summary" />
++
++    </PreferenceCategory>
++
++</PreferenceScreen>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1056)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1057)
+@@ -728,13 +728,23 @@
+ 
+     <!-- Fingerprint enrollment and settings --><skip />
+     <!-- Title shown for menu item that launches fingerprint settings or enrollment [CHAR LIMIT=22] -->
+-    <string name="security_settings_fingerprint_preference_title">Fingerprint</string>
++    <string name="security_settings_fingerprint_preference_title">Fingerprint sensor</string>
++	<string name="fingerprint_manager_category_title">On long press</string>
++	<string name="fingerprint_manager_take_photo_title">Take photo/video</string>
++	<string name="fingerprint_manager_take_photo_summary">Touch the fingerprint sensor to take photo/vedio while in camera</string>
++	<string name="add_fingerprint_preference_title">Fingerprints</string>
+     <!-- Fingerprint managment category title - configuration options for managing enrolled fingerprints [CHAR LIMIT=22] -->
+     <string name="fingerprint_manage_category_title">Manage fingerprints</string>
+     <!-- Fingerprint category title - configuration options for managing fingerprint enrollment [CHAR LIMIT=22] -->
+     <string name="fingerprint_usage_category_title">Use fingerprint for</string>
++	<string name="fingerprint_item_categoty">Fingerprints</string>
+     <!-- Preference to add another fingerprint -->
+     <string name="fingerprint_add_title">Add fingerprint</string>
++	<string name="fingerprint_function_categoty">Fingerprint functions</string>
++	<string name="fingerprint_unlock_device_title">Unclock device</string>
++	<string name="fingerprint_unlock_device_summary">Use fingerprint to unlock your device</string>
++	<string name="fingerprint_luncher_shortcuts_title">Quick launcher Func shortcuts</string>
++	<string name="fingerprint_luncher_shortcuts_summary">Use unique fingerprints to launcher relevant Func shortcuts immediately from lock screen </string>
+     <!-- switch for allowing fingerprint to be used for keyguard -->
+     <string name="fingerprint_enable_keyguard_toggle_title">screen lock</string>
+     <!-- Message showing the current number of fingerprints set up. Shown for a menu item that launches fingerprint settings or enrollment. -->
+@@ -779,10 +789,9 @@
+     <!-- Button for going to the previous screen or step [CHAR LIMIT=20] -->
+     <string name="go_back_button_label">Go back</string>
+     <!-- Introduction title shown in fingerprint enrollment dialog to locate the sensor [CHAR LIMIT=29] -->
+-    <string name="security_settings_fingerprint_enroll_find_sensor_title">Find the sensor</string>
++    <string name="security_settings_fingerprint_enroll_find_sensor_title">Finding your fingerprint sensor</string>
+     <!-- Message shown in fingerprint enrollment dialog to locate the sensor -->
+-    <string name="security_settings_fingerprint_enroll_find_sensor_message">
+-        Locate the fingerprint sensor on the back of your phone.</string>
++    <string name="security_settings_fingerprint_enroll_find_sensor_message">It\u2019s located at...</string>
+     <!-- Content description of graphic that shows where the fingerprint of the device is [CHAR LIMIT=NONE] -->
+     <string name="security_settings_fingerprint_enroll_find_sensor_content_description">Illustration with device and fingerprint sensor location</string>
+     <!-- Label text shown in fingerprint dialog for renaming a fingerprint template [CHAR LIMIT=22] -->
+@@ -792,11 +801,11 @@
+     <!-- Button text shown in fingerprint dialog that allows the user to delete the fingerprint template [CHAR LIMIT=22] -->
+     <string name="security_settings_fingerprint_enroll_dialog_delete">Delete</string>
+     <!-- Title shown in fingerprint enrollment dialog to begin enrollment [CHAR LIMIT=29]-->
+-    <string name="security_settings_fingerprint_enroll_start_title">Let\u2019s start</string>
++    <string name="security_settings_fingerprint_enroll_start_title">Let\u2019s start!</string>
+     <!-- Message shown in fingerprint enrollment dialog to begin enrollment [CHAR LIMIT=NONE] -->
+     <string name="security_settings_fingerprint_enroll_start_message">Put your finger on the sensor and lift after you feel a vibration</string>
+     <!-- Title shown in fingerprint enrollment dialog to repeat touching the fingerprint sensor [CHAR LIMIT=29] -->
+-    <string name="security_settings_fingerprint_enroll_repeat_title">Keep going</string>
++    <string name="security_settings_fingerprint_enroll_repeat_title">Great! Now repeat</string>
+     <!-- Message shown in fingerprint enrollment dialog to repeat touching the fingerprint sensor [CHAR LIMIT=NONE] -->
+     <string name="security_settings_fingerprint_enroll_repeat_message">Move your finger slightly to add all the different parts of your fingerprint</string>
+     <!-- Title shown in fingerprint enrollment dialog once enrollment is completed [CHAR LIMIT=29] -->
+@@ -829,7 +838,7 @@
+     <!-- Button text shown at the end of enrollment that allows the user to add another fingerprint -->
+     <string name="fingerprint_enroll_button_add">Add another</string>
+     <!-- Button text shown at the end of enrollment that allows the user to move to the next step -->
+-    <string name="fingerprint_enroll_button_next">Next</string>
++    <string name="fingerprint_enroll_button_next">Got It</string>
+     <!-- Text shown in fingerprint settings explaining what the fingerprint can be used for. [CHAR LIMIT=NONE] -->
+     <string name="security_settings_fingerprint_enroll_disclaimer">In addition to unlocking your phone, you can also use your fingerprint to authorize purchases and app access. <annotation id="url">Learn more</annotation></string>
+     <!-- Text shown in fingerprint settings explaining what the fingerprint can be used for in the case unlocking is disabled [CHAR LIMIT=NONE] -->
+Index: packages/apps/Settings/res/layout/fingerprintspreference_widget_settings.xml
+===================================================================
+--- packages/apps/Settings/res/layout/fingerprintspreference_widget_settings.xml	(revision 0)
++++ packages/apps/Settings/res/layout/fingerprintspreference_widget_settings.xml	(revision 1057)
+@@ -0,0 +1,33 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2011 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="wrap_content"
++    android:layout_height="wrap_content"
++    android:gravity="center_vertical"
++    android:paddingEnd="?android:attr/scrollbarSize">
++
++    <!-- Settings button -->
++    <ImageView
++        android:id="@+id/settings_button"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_gravity="center_vertical"
++        android:padding="8dip"
++        android:background="?android:attr/selectableItemBackground"
++        android:src="@drawable/fingerprints_gearbutton_selector"
++        android:contentDescription="@string/settings_button" />
++
++</LinearLayout>
+Index: packages/apps/Settings/res/drawable-xhdpi/ic_sysbar_quicksettings.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/Settings/res/drawable-xhdpi/ic_sysbar_quicksettings.png
+===================================================================
+--- packages/apps/Settings/res/drawable-xhdpi/ic_sysbar_quicksettings.png	(revision 0)
++++ packages/apps/Settings/res/drawable-xhdpi/ic_sysbar_quicksettings.png	(revision 1057)
+
+Property changes on: packages/apps/Settings/res/drawable-xhdpi/ic_sysbar_quicksettings.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/Settings/res/drawable-hdpi/ic_sysbar_quicksettings.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/Settings/res/drawable-hdpi/ic_sysbar_quicksettings.png
+===================================================================
+--- packages/apps/Settings/res/drawable-hdpi/ic_sysbar_quicksettings.png	(revision 0)
++++ packages/apps/Settings/res/drawable-hdpi/ic_sysbar_quicksettings.png	(revision 1057)
+
+Property changes on: packages/apps/Settings/res/drawable-hdpi/ic_sysbar_quicksettings.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/Settings/res/drawable/fingerprints_gearbutton_selector.xml
+===================================================================
+--- packages/apps/Settings/res/drawable/fingerprints_gearbutton_selector.xml	(revision 0)
++++ packages/apps/Settings/res/drawable/fingerprints_gearbutton_selector.xml	(revision 1057)
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="utf-8"?>
++<selector xmlns:android="http://schemas.android.com/apk/res/android" >
++    <item  android:state_enabled="true"
++        	android:drawable="@drawable/ic_sysbar_quicksettings"/>
++    <item  android:state_enabled="false"
++        	android:drawable="@drawable/ic_appwidget_settings_brightness_full_holo"/>
++
++</selector>
+Index: frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- frameworks/base/core/java/android/provider/Settings.java	(revision 1056)
++++ frameworks/base/core/java/android/provider/Settings.java	(revision 1057)
+@@ -3866,6 +3866,12 @@
+          */
+         public static final String BG_POWER_SAVING_ENABLE = "background_power_saving_enable";
+ 
++		/*
++		*add for take photo/video by touch fingerprint sensor
++		*
++		*/
++		public static final String FP_CAMERA = "fp_camera";
++	   
+         /**
+          * Enable fast boot? true = yes false = no
+          * @hide
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1056)
++++ frameworks/base/api/test-current.txt	(revision 1057)
+@@ -32728,6 +32728,7 @@
+     field public static final java.lang.String DTMF_TONE_WHEN_DIALING = "dtmf_tone";
+     field public static final java.lang.String END_BUTTON_BEHAVIOR = "end_button_behavior";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
++    field public static final java.lang.String FP_CAMERA = "fp_camera";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1056)
++++ frameworks/base/api/current.txt	(revision 1057)
+@@ -32648,6 +32648,7 @@
+     field public static final java.lang.String DTMF_TONE_WHEN_DIALING = "dtmf_tone";
+     field public static final java.lang.String END_BUTTON_BEHAVIOR = "end_button_behavior";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
++    field public static final java.lang.String FP_CAMERA = "fp_camera";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1056)
++++ frameworks/base/api/system-current.txt	(revision 1057)
+@@ -35407,6 +35407,7 @@
+     field public static final java.lang.String DTMF_TONE_WHEN_DIALING = "dtmf_tone";
+     field public static final java.lang.String END_BUTTON_BEHAVIOR = "end_button_behavior";
+     field public static final java.lang.String FONT_SCALE = "font_scale";
++    field public static final java.lang.String FP_CAMERA = "fp_camera";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";

@@ -1,0 +1,100 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java	(revision 5554)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java	(revision 5555)
+@@ -47,6 +47,7 @@
+ import android.os.Environment;
+ import android.os.Process;
+ import android.provider.MediaStore;
++import android.provider.Settings;
+ import android.util.DisplayMetrics;
+ import android.util.Log;
+ import android.view.Display;
+@@ -801,45 +802,53 @@
+ 
+             @Override
+             public void onAnimationStart(Animator animation) {
+-                mScreenshotSave.setVisibility(View.VISIBLE);
+                 mBackgroundView.setAlpha(0.9f);
+-                mScreenshotSave.setOnClickListener(new View.OnClickListener() {
+-                    @Override
+-                    public void onClick(View view) {
+-                        anim.end();
+-                    }
+-                });
+-                mScreenshotShare.setVisibility(View.VISIBLE);
+-                mScreenshotShare.setOnClickListener(new View.OnClickListener() {
+-                    @Override
+-                    public void onClick(View view) {
+-                        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+-                        shareIntent.setType("image/png");
+-                        shareIntent.putExtra(Intent.EXTRA_STREAM, mScreenshotUri);
+-                        Intent chooser = Intent.createChooser(shareIntent, r.getString(R.string.Share_screen_shot));
+-                        if (shareIntent.resolveActivity(mContext.getPackageManager()) != null) {
++                boolean setup = Settings.Global.getInt(mContext.getContentResolver(),
++                        Settings.Global.DEVICE_PROVISIONED, 0) == 0;
++                if (setup) {
++                    mScreenshotSave.setVisibility(View.GONE);
++                    mScreenshotShare.setVisibility(View.GONE);
++                    mScreenshotCrop.setVisibility(View.GONE);
++                } else {
++                    mScreenshotSave.setVisibility(View.VISIBLE);
++                    mScreenshotSave.setOnClickListener(new View.OnClickListener() {
++                        @Override
++                        public void onClick(View view) {
+                             anim.end();
+-                            mContext.startActivity(chooser);
+                         }
+-                    }
+-                });
+-                mScreenshotCrop.setVisibility(View.VISIBLE);
+-                mScreenshotCrop.setOnClickListener(new View.OnClickListener() {
+-                    @Override
+-                    public void onClick(View view) {
+-                        //ͼ��򿪽ӿ�
++                    });
++                    mScreenshotShare.setVisibility(View.VISIBLE);
++                    mScreenshotShare.setOnClickListener(new View.OnClickListener() {
++                        @Override
++                        public void onClick(View view) {
++                            Intent shareIntent = new Intent(Intent.ACTION_SEND);
++                            shareIntent.setType("image/png");
++                            shareIntent.putExtra(Intent.EXTRA_STREAM, mScreenshotUri);
++                            Intent chooser = Intent.createChooser(shareIntent, r.getString(R.string.Share_screen_shot));
++                            if (shareIntent.resolveActivity(mContext.getPackageManager()) != null) {
++                                anim.end();
++                                mContext.startActivity(chooser);
++                            }
++                        }
++                    });
++                    mScreenshotCrop.setVisibility(View.VISIBLE);
++                    mScreenshotCrop.setOnClickListener(new View.OnClickListener() {
++                        @Override
++                        public void onClick(View view) {
++                            //ͼ��򿪽ӿ�
+ 
+-                        Intent intent = new Intent(Intent.ACTION_EDIT);
+-                        intent.setDataAndType(mScreenshotUri, "image/*");
+-                        // outUri: where to save your new image. It could be null.
+-                        intent.putExtra(MediaStore.EXTRA_OUTPUT, mScreenshotUri);
+-                        intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+-                        if (intent.resolveActivity(mContext.getPackageManager()) != null) {
+-                            anim.end();
+-                            mContext.startActivity(intent);
++                            Intent intent = new Intent(Intent.ACTION_EDIT);
++                            intent.setDataAndType(mScreenshotUri, "image/*");
++                            // outUri: where to save your new image. It could be null.
++                            intent.putExtra(MediaStore.EXTRA_OUTPUT, mScreenshotUri);
++                            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
++                            if (intent.resolveActivity(mContext.getPackageManager()) != null) {
++                                anim.end();
++                                mContext.startActivity(intent);
++                            }
+                         }
+-                    }
+-                });
++                    });
++                }
+             }
+ 
+             @Override

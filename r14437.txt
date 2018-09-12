@@ -1,0 +1,70 @@
+Index: vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 14436)
++++ vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 14437)
+@@ -54,6 +54,7 @@
+ import android.content.IntentFilter;
+ import android.content.DialogInterface.OnKeyListener;
+ import android.content.pm.PackageManager.NameNotFoundException;
++import android.provider.Settings.System;
+ import android.database.ContentObserver;
+ import android.net.Uri;
+ import android.os.AsyncResult;
+@@ -213,6 +214,7 @@
+         } else {
+             // Reset the toggle
+             mButtonDataRoam.setChecked(false);
++			Settings.System.putInt(this.getContentResolver(),"def_roam_state_with_expection_apn",1);
+         }
+     }
+ 
+@@ -323,6 +325,7 @@
+             if (TelephonyUtils.isHotSwapHanppened(
+                     mActiveSubInfos, PhoneUtils.getActiveSubInfoList())) {
+                 log("onSubscriptionsChanged:hot swap hanppened");
++				Settings.System.putInt(MobileNetworkSettings.this.getContentResolver(),"def_roam_state_with_expection_apn",0);
+                 dissmissDialog(mButtonPreferredNetworkMode);
+                 dissmissDialog(mButtonEnabledNetworks);
+                 finish();
+@@ -566,6 +569,7 @@
+                 Settings.Global.getUriFor(Settings.Global.ENHANCED_4G_MODE_ENABLED_SIM2),
+                 true, mContentObserver);
+         if (DBG) log("onCreate:-");
++		
+     }
+ 
+     @Override
+@@ -631,6 +635,16 @@
+         // Set UI state in onResume because a user could go home, launch some
+         // app to change this setting's backend, and re-launch this settings app
+         // and the UI state would be inconsistent with actual state
++		String mNumeric = mTelephonyManager.getSimOperator();
++		log("mNumeric="+mNumeric+" def_roam_state:"+Settings.System.getInt(this.getContentResolver(),"def_roam_state_with_expection_apn",0));		
++		if (Settings.System.getInt(this.getContentResolver(),"def_roam_state_with_expection_apn",0) == 0) {
++			mPhone.setDataRoamingEnabled(false);
++			log("===setDataRoamingEnabled(false)===");
++			if (!TextUtils.isEmpty(mNumeric) && ("23430".equals(mNumeric) || "23433".equals(mNumeric))) {			
++				mPhone.setDataRoamingEnabled(true);
++				log("===mPhone.getDataRoamingEnabled()==="+mPhone.getDataRoamingEnabled());
++			}			
++		}
+         mButtonDataRoam.setChecked(mPhone.getDataRoamingEnabled());
+ 
+         if (getPreferenceScreen().findPreference(BUTTON_PREFERED_NETWORK_MODE) != null
+@@ -1184,6 +1198,7 @@
+             if (DBG) {
+                 log("onPreferenceTreeClick: preference == mButtonDataRoam.");
+             }
++			Settings.System.putInt(this.getContentResolver(),"def_roam_state_with_expection_apn",1);
+             //normally called on the toggle click
+             if (!mButtonDataRoam.isChecked()) {
+                 // First confirm with a warning dialog about charges
+@@ -1208,7 +1223,7 @@
+                         .setOnDismissListener(this);
+                 /// @}
+             } else {
+-                mPhone.setDataRoamingEnabled(false);
++                mPhone.setDataRoamingEnabled(false);				
+             }
+             return true;
+         }

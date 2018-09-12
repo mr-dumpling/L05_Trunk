@@ -1,0 +1,822 @@
+Index: packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java
+===================================================================
+--- packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 2109)
++++ packages/apps/Email/src/com/android/email/activity/setup/AccountSettingsFragment.java	(revision 2110)
+@@ -82,6 +82,8 @@
+ import java.util.HashMap;
+ import java.util.Map;
+ 
++import android.accounts.AccountManager;
++
+ /**
+  * Fragment containing the main logic for account settings.  This also calls out to other
+  * fragments for server settings.
+@@ -124,6 +126,10 @@
+ 
+     private static final String SAVESTATE_SYNC_INTERVALS = "savestate_sync_intervals";
+     private static final String SAVESTATE_SYNC_INTERVAL_STRINGS = "savestate_sync_interval_strings";
++	
++	// add by dongdongli for remove account 20171127 start{
++	private static final String PREFERENCE_REMOVE_ACCOUNT = "remove_account";
++	// add by dongdongli for remove account 20171127 end }
+ 
+     /// M: MTK OOF Feature
+     private static final String PREFERENCE_OOF_SETTINGS = "account_oof_settings";
+@@ -992,6 +998,21 @@
+                 serverCategory.removePreference(prefOutgoing);
+             }
+         }
++		
++		//add by dongdongli for remove account 20171127 start {
++		final Preference prefRemoveAccount = findPreference(PREFERENCE_REMOVE_ACCOUNT);
++		prefRemoveAccount.setOnPreferenceClickListener(
++                new Preference.OnPreferenceClickListener() {
++                    @Override
++                    public boolean onPreferenceClick(Preference preference) {
++                        final android.accounts.Account androidAcct = new android.accounts.Account(
++								mAccount.mEmailAddress, mServiceInfo.accountType);
++							boolean result = AccountManager.get(getActivity())
++                                .removeAccountExplicitly(androidAcct);
++                        return true;
++                    }
++                });
++		//add by dongdongli for remove account 20171127 end }
+ 
+         final CheckBoxPreference syncContacts =
+                 (CheckBoxPreference) findPreference(PREFERENCE_SYNC_CONTACTS);
+Index: packages/apps/Email/res/xml/account_settings_preferences.xml
+===================================================================
+--- packages/apps/Email/res/xml/account_settings_preferences.xml	(revision 2109)
++++ packages/apps/Email/res/xml/account_settings_preferences.xml	(revision 2110)
+@@ -178,5 +178,10 @@
+             android:title="@string/account_settings_retry_label"
+             android:summary="@string/account_settings_retry_summary" />
+     </PreferenceCategory>
++		
++	<Preference
++		android:key="remove_account"
++		android:title="@string/account_settings_remove_account_label"
++		android:textColor="#FF0000" />
+ 
+ </PreferenceScreen>
+Index: packages/apps/Email/res/values-bn-rBD/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-bn-rBD/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-bn-rBD/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"কিছুই উপলব্ধ নয়"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"ফোল্ডার সিঙ্ক সেটিংস"</string>
++    <string name="account_settings_remove_account_label">"অ্যাকাউন্ট সরান"</string>
+ </resources>
+Index: packages/apps/Email/res/values-hr/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-hr/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-hr/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Nema dostupnih"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Postavke za sinkronizaciju mape"</string>
++    <string name="account_settings_remove_account_label">"Izbriši račun"</string>
+ </resources>
+Index: packages/apps/Email/res/values-en-rGB/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-en-rGB/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-en-rGB/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"None available"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Folder sync settings"</string>
++    <string name="account_settings_remove_account_label">"Remove account"</string>
+ </resources>
+Index: packages/apps/Email/res/values-pl/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-pl/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-pl/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Brak dostępnych"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Ustawienia synchronizacji folderu"</string>
++    <string name="account_settings_remove_account_label">"Usuń konto"</string>
+ </resources>
+Index: packages/apps/Email/res/values-th/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-th/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-th/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"ไม่มีที่ใช้ได้"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"การตั้งค่าการซิงค์โฟลเดอร์"</string>
++    <string name="account_settings_remove_account_label">"นำบัญชีออก"</string>
+ </resources>
+Index: packages/apps/Email/res/values-hu/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-hu/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-hu/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Egyik sem érhető el"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Mappaszinkronizálási beállítások"</string>
++    <string name="account_settings_remove_account_label">"Fiók törlése"</string>
+ </resources>
+Index: packages/apps/Email/res/values-uz-rUZ/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-uz-rUZ/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-uz-rUZ/strings.xml	(revision 2110)
+@@ -244,4 +244,5 @@
+     <skip />
+     <!-- no translation found for folder_sync_settings_pref_title (349478353401667107) -->
+     <skip />
++    <string name="account_settings_remove_account_label">"Hisobni olib tashlash"</string>
+ </resources>
+Index: packages/apps/Email/res/values-lt/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-lt/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-lt/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Pasiekiamų nėra"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Aplanko sinchronizavimo nustatymai"</string>
++    <string name="account_settings_remove_account_label">"Pašalinti paskyrą"</string>
+ </resources>
+Index: packages/apps/Email/res/values-tl/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-tl/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-tl/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Walang available"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Mga setting ng pag-sync sa folder"</string>
++    <string name="account_settings_remove_account_label">"Alisin ang account"</string>
+ </resources>
+Index: packages/apps/Email/res/values-lv/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-lv/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-lv/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Nav pieejamas"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Mapju sinhronizācijas iestatījumi"</string>
++    <string name="account_settings_remove_account_label">"Noņemt kontu"</string>
+ </resources>
+Index: packages/apps/Email/res/values-pt/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-pt/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-pt/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Nenhuma disponível"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Configurações de sincronização de pastas"</string>
++    <string name="account_settings_remove_account_label">"Remover conta"</string>
+ </resources>
+Index: packages/apps/Email/res/values-tr/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-tr/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-tr/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Hiçbiri kullanılamıyor"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Klasör senkronizasyon ayarları"</string>
++    <string name="account_settings_remove_account_label">"Hesabı kaldır"</string>
+ </resources>
+Index: packages/apps/Email/res/values-af/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-af/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-af/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Geen beskikbaar nie"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Vouersinkronisasie-instellings"</string>
++    <string name="account_settings_remove_account_label">"Verwyder rekening"</string>
+ </resources>
+Index: packages/apps/Email/res/values-lo-rLA/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-lo-rLA/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-lo-rLA/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"ບໍ່​ມີ​ອັນ​ໃດ​ທີ່​ສາ​ມາດ​ໃຊ້​ໄດ້"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"​ການ​ຕັ້ງ​ຄ່າ​ການ​ຊິ້ງ​ໂຟນ​ເດີ"</string>
++    <string name="account_settings_remove_account_label">"ລຶບບັນຊີອອກ"</string>
+ </resources>
+Index: packages/apps/Email/res/values-gl-rES/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-gl-rES/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-gl-rES/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ningunha dispoñible"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Configuración de sincronización de cartafoles"</string>
++    <string name="account_settings_remove_account_label">"Eliminar conta"</string>
+ </resources>
+Index: packages/apps/Email/res/values-am/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-am/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-am/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"ምንም አይገኝም"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"የአቃፊ ማመሳሰል ቅንብሮች"</string>
++    <string name="account_settings_remove_account_label">"መለያ አስወግድ"</string>
+ </resources>
+Index: packages/apps/Email/res/values-kn-rIN/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-kn-rIN/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-kn-rIN/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"ಯಾವುದೂ ಲಭ್ಯವಿಲ್ಲ"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"ಫೋಲ್ಡರ್ ಸಿಂಕ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು"</string>
++    <string name="account_settings_remove_account_label">"ಖಾತೆ ತೆಗೆದುಹಾಕು"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ne-rNP/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ne-rNP/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ne-rNP/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"कुनै पनि उपलब्ध छैनन्"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"फोल्डर सिङ्क सेटिङहरू"</string>
++    <string name="account_settings_remove_account_label">"खाता हटाउनुहोस्"</string>
+ </resources>
+Index: packages/apps/Email/res/values-el/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-el/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-el/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Δεν υπάρχουν διαθέσιμα"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Ρυθμίσεις συγχρονισμού φακέλων"</string>
++    <string name="account_settings_remove_account_label">"Κατάργηση λογαριασμού"</string>
+ </resources>
+Index: packages/apps/Email/res/values-gu-rIN/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-gu-rIN/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-gu-rIN/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"કંઈપણ ઉપલબ્ધ નથી"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"ફોલ્ડર સમન્વયન સેટિંગ્સ"</string>
++    <string name="account_settings_remove_account_label">"એકાઉન્ટ દૂર કરો"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ar/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ar/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ar/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"غير متوفر"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"إعدادات مزامنة المجلدات"</string>
++    <string name="account_settings_remove_account_label">"إزالة الحساب"</string>
+ </resources>
+Index: packages/apps/Email/res/values-in/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-in/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-in/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Tak satu pun tersedia"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Setelan sinkronisasi folder"</string>
++    <string name="account_settings_remove_account_label">"Hapus akun"</string>
+ </resources>
+Index: packages/apps/Email/res/values-es/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-es/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-es/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ninguna disponible"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Ajustes de sincronización de la carpeta"</string>
++    <string name="account_settings_remove_account_label">"Quitar cuenta"</string>
+ </resources>
+Index: packages/apps/Email/res/values-fr-rCA/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-fr-rCA/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-fr-rCA/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Aucun réponse rapide"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Paramètres de synchronisation de dossier"</string>
++    <string name="account_settings_remove_account_label">"Supprimer le compte"</string>
+ </resources>
+Index: packages/apps/Email/res/values-it/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-it/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-it/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Nessuna disponibile"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Impostazioni di sincronizzazione cartella"</string>
++    <string name="account_settings_remove_account_label">"Rimuovi account"</string>
+ </resources>
+Index: packages/apps/Email/res/values-uk/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-uk/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-uk/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Немає"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Налаштування синхронізації папок"</string>
++    <string name="account_settings_remove_account_label">"Видалити"</string>
+ </resources>
+Index: packages/apps/Email/res/values-iw/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-iw/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-iw/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"אף אחד לא זמין"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"הגדרות של סנכרון תיקיות"</string>
++    <string name="account_settings_remove_account_label">"הסר חשבון"</string>
+ </resources>
+Index: packages/apps/Email/res/values-fa/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-fa/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-fa/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"در دسترس نیست"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"تنظیمات همگام‌سازی پوشه"</string>
++    <string name="account_settings_remove_account_label">"حذف کردن حساب"</string>
+ </resources>
+Index: packages/apps/Email/res/values-pt-rPT/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-pt-rPT/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-pt-rPT/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Nenhuma disponível"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Definições de sincronização da pasta"</string>
++    <string name="account_settings_remove_account_label">"Remover conta"</string>
+ </resources>
+Index: packages/apps/Email/res/values-bg/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-bg/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-bg/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Няма налични"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Настройки за синхронизиране на папките"</string>
++    <string name="account_settings_remove_account_label">"Премахване на профила"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ja/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ja/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ja/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"クイック返信がありません"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"フォルダの同期設定"</string>
++    <string name="account_settings_remove_account_label">"アカウントを削除"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ta-rIN/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ta-rIN/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ta-rIN/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"ஏதுமில்லை"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"கோப்புறை ஒத்திசைவு அமைப்புகள்"</string>
++    <string name="account_settings_remove_account_label">"கணக்கை அகற்று"</string>
+ </resources>
+Index: packages/apps/Email/res/values-hy-rAM/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-hy-rAM/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-hy-rAM/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ոչ մեկը հասանելի չէ"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Պանակի համաժամեցման կարգավորումները"</string>
++     <string name="account_settings_remove_account_label">"Հեռացնել հաշիվը"</string>
+ </resources>
+Index: packages/apps/Email/res/values-fi/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-fi/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-fi/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ei saatavana"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Kansion synkronointiasetukset"</string>
++    <string name="account_settings_remove_account_label">"Poista tili"</string>
+ </resources>
+Index: packages/apps/Email/res/values-te-rIN/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-te-rIN/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-te-rIN/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"ఏదీ అందుబాటులో లేదు"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"ఫోల్డర్ సమకాలీకరణ సెట్టింగ్‌లు"</string>
++    <string name="account_settings_remove_account_label">"ఖాతాను తీసివేయి"</string>
+ </resources>
+Index: packages/apps/Email/res/values-nb/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-nb/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-nb/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ingen tilgjengelige"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Innstillinger for mappesynkronisering"</string>
++    <string name="account_settings_remove_account_label">"Fjern konto"</string>
+ </resources>
+Index: packages/apps/Email/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-zh-rCN/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-zh-rCN/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"没有可供选择的快速回复"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"文件夹同步设置"</string>
++    <string name="account_settings_remove_account_label">"移除帐号"</string>
+ </resources>
+Index: packages/apps/Email/res/values/strings.xml
+===================================================================
+--- packages/apps/Email/res/values/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values/strings.xml	(revision 2110)
+@@ -687,4 +687,6 @@
+ 
+     <!-- Name for preference entry which leads to the per-folder sync settings activity -->
+     <string name="folder_sync_settings_pref_title">Folder sync settings</string>
++	
++	<string name="account_settings_remove_account_label">Remove account</string>
+ </resources>
+Index: packages/apps/Email/res/values-ka-rGE/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ka-rGE/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ka-rGE/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"მიუწვდომელია"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"საქაღალდის სინქრონიზაციის პარამეტრები"</string>
++    <string name="account_settings_remove_account_label">"ანგარიშის წაშლა"</string>
+ </resources>
+Index: packages/apps/Email/res/values-fr/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-fr/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-fr/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Aucune disponible"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Paramètres de synchronisation des dossiers"</string>
++    <string name="account_settings_remove_account_label">"Supprimer le compte"</string>
+ </resources>
+Index: packages/apps/Email/res/values-nl/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-nl/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-nl/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Geen beschikbaar"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Instellingen voor mapsynchronisatie"</string>
++    <string name="account_settings_remove_account_label">"Verwijderen"</string>
+ </resources>
+Index: packages/apps/Email/res/values-vi/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-vi/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-vi/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Không có câu trả lời nào"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Cài đặt đồng bộ hóa thư mục"</string>
++    <string name="account_settings_remove_account_label">"Xóa tài khoản"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ur-rPK/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ur-rPK/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ur-rPK/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"کوئی دستیاب نہیں ہے"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"فولڈر کی مطابقت پذیری کی ترتیبات"</string>
++    <string name="account_settings_remove_account_label">"اکاؤنٹ ہٹائیں"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ro/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ro/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ro/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Niciunul disponibil"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Setări pentru sincronizarea dosarului"</string>
++    <string name="account_settings_remove_account_label">"Eliminați contul"</string>
+ </resources>
+Index: packages/apps/Email/res/values-et-rEE/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-et-rEE/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-et-rEE/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ükski pole saadaval"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Kausta sünkroonimise seaded"</string>
++    <string name="account_settings_remove_account_label">"Eemalda konto"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ca/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ca/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ca/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"No n\'hi ha cap de disponible"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Configuració de la sincronització de carpetes"</string>
++    <string name="account_settings_remove_account_label">"Suprimeix el compte"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ru/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ru/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ru/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ничего не найдено."</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Настройки синхронизации папок"</string>
++    <string name="account_settings_remove_account_label">"Удалить аккаунт"</string>
+ </resources>
+Index: packages/apps/Email/res/values-en-rAU/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-en-rAU/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-en-rAU/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"None available"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Folder sync settings"</string>
++    <string name="account_settings_remove_account_label">"Remove account"</string>
+ </resources>
+Index: packages/apps/Email/res/values-en-rIN/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-en-rIN/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-en-rIN/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"None available"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Folder sync settings"</string>
++    <string name="account_settings_remove_account_label">"Remove account"</string>
+ </resources>
+Index: packages/apps/Email/res/values-km-rKH/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-km-rKH/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-km-rKH/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"មិន​មាន​អាច​ប្រើ​បាន"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"ការ​កំណត់​ការ​ធ្វើ​សម​កាល​កម្ម​ថត"</string>
++    <string name="account_settings_remove_account_label">"លុប​គណនី"</string>
+ </resources>
+Index: packages/apps/Email/res/values-zu/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-zu/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-zu/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Lutho olutholakalayo"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"I-Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Izilungiselelo zokuvumelanisa ifolda"</string>
++    <string name="account_settings_remove_account_label">"Susa i-akhawunti"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ml-rIN/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ml-rIN/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ml-rIN/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"ലഭ്യമായതൊന്നുമില്ല"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"ഫോൾഡർ സമന്വയ ക്രമീകരണങ്ങൾ"</string>
++    <string name="account_settings_remove_account_label">"നീക്കംചെയ്യുക"</string>
+ </resources>
+Index: packages/apps/Email/res/values-mk-rMK/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-mk-rMK/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-mk-rMK/strings.xml	(revision 2110)
+@@ -244,4 +244,5 @@
+     <skip />
+     <!-- no translation found for folder_sync_settings_pref_title (349478353401667107) -->
+     <skip />
++    <string name="account_settings_remove_account_label">"Отстрани сметка"</string>
+ </resources>
+Index: packages/apps/Email/res/values-eu-rES/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-eu-rES/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-eu-rES/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ez dago bat ere erabilgarri"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Karpetak sinkronizatzeko ezarpenak"</string>
++    <string name="account_settings_remove_account_label">"Kendu kontua"</string>
+ </resources>
+Index: packages/apps/Email/res/values-zh-rHK/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-zh-rHK/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-zh-rHK/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"沒有可用的回應"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"資料夾同步處理設定"</string>
++    <string name="account_settings_remove_account_label">"移除帳戶"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ky-rKG/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ky-rKG/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ky-rKG/strings.xml	(revision 2110)
+@@ -319,4 +319,5 @@
+     <skip />
+     <!-- no translation found for folder_sync_settings_pref_title (349478353401667107) -->
+     <skip />
++    <string name="account_settings_remove_account_label">"Каттоо эсебин алып салуу"</string>
+ </resources>
+Index: packages/apps/Email/res/values-az-rAZ/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-az-rAZ/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-az-rAZ/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Heç biri əlçatan deyil"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Qovluq sinx ayarları"</string>
++    <string name="account_settings_remove_account_label">"Hesabı sil"</string>
+ </resources>
+Index: packages/apps/Email/res/values-mn-rMN/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-mn-rMN/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-mn-rMN/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Байхгүй"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Фолдер синк тохиргоо"</string>
++    <string name="account_settings_remove_account_label">"Акаунтыг арилгах"</string>
+ </resources>
+Index: packages/apps/Email/res/values-mr-rIN/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-mr-rIN/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-mr-rIN/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"काहीही उपलब्ध नाही"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"फोल्डर संकालन सेटिंग्ज"</string>
++    <string name="account_settings_remove_account_label">"खाते काढा"</string>
+ </resources>
+Index: packages/apps/Email/res/values-cs/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-cs/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-cs/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Žádná není k dispozici"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Nastavení synchronizace složek"</string>
++    <string name="account_settings_remove_account_label">"Odebrat účet"</string>
+ </resources>
+Index: packages/apps/Email/res/values-is-rIS/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-is-rIS/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-is-rIS/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ekkert í boði"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Valkostir möppusamstillingar"</string>
++    <string name="account_settings_remove_account_label">"Fjarlægja reikning"</string>
+ </resources>
+Index: packages/apps/Email/res/values-kk-rKZ/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-kk-rKZ/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-kk-rKZ/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ешбірі қол жетімді емес"</string>
+     <string name="gmail_name">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title">Қалтаны синхрондау параметрлері</string>
++    <string name="account_settings_remove_account_label">"Есептік жазбаны алу"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ko/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ko/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ko/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"선택 가능한 항목 없음"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"폴더 동기화 설정"</string>
++    <string name="account_settings_remove_account_label">"계정 삭제"</string>
+ </resources>
+Index: packages/apps/Email/res/values-sk/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-sk/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-sk/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"K dispozícii nie je žiadna odpoveď"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Nastavenia synchronizácie priečinka"</string>
++    <string name="account_settings_remove_account_label">"Odstrániť účet"</string>
+ </resources>
+Index: packages/apps/Email/res/values-es-rUS/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-es-rUS/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-es-rUS/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ninguna disponible"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Configuración de la sincronización de carpetas"</string>
++    <string name="account_settings_remove_account_label">"Eliminar cuenta"</string>
+ </resources>
+Index: packages/apps/Email/res/values-my-rMM/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-my-rMM/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-my-rMM/strings.xml	(revision 2110)
+@@ -242,4 +242,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"တစ်ခုမှ မရှိ"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"ဂျီမေးလ်"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"ဖိုလ်ဒါ စင့်က် ဆက်တင်များ"</string>
++    <string name="account_settings_remove_account_label">"အကောင့်ကို ဖယ်ရှားရန်"</string>
+ </resources>
+Index: packages/apps/Email/res/values-sl/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-sl/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-sl/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Na voljo ni hitrih odgovorov"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Nastavitve sinhronizacije za mapo"</string>
++    <string name="account_settings_remove_account_label">"Odstrani račun"</string>
+ </resources>
+Index: packages/apps/Email/res/values-da/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-da/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-da/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Ingen er tilgængelige"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Indstillinger for mappesynkronisering"</string>
++    <string name="account_settings_remove_account_label">"Fjern konto"</string>
+ </resources>
+Index: packages/apps/Email/res/values-ms-rMY/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-ms-rMY/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-ms-rMY/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Tiada respons tersedia"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Tetapan penyegerakan folder"</string>
++    <string name="account_settings_remove_account_label">"Alih keluar akaun"</string>
+ </resources>
+Index: packages/apps/Email/res/values-sr/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-sr/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-sr/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Нема доступних"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Подешавања синхронизације директоријума"</string>
++    <string name="account_settings_remove_account_label">"Уклони налог"</string>
+ </resources>
+Index: packages/apps/Email/res/values-de/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-de/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-de/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Keine verfügbar"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Synchronisierungseinstellungen für Ordner"</string>
++    <string name="account_settings_remove_account_label">"Konto entfernen"</string>
+ </resources>
+Index: packages/apps/Email/res/values-sv/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-sv/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-sv/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Inga tillgängliga"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Iinställningar för mappsynkronisering"</string>
++    <string name="account_settings_remove_account_label">"Ta bort konto"</string>
+ </resources>
+Index: packages/apps/Email/res/values-sw/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-sw/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-sw/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"Hakuna yanayopatikana"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"Mipangilio ya kusawazisha folda"</string>
++    <string name="account_settings_remove_account_label">"Ondoa akaunti"</string>
+ </resources>
+Index: packages/apps/Email/res/values-zh-rTW/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-zh-rTW/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-zh-rTW/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"沒有可用的回應"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"資料夾同步處理設定"</string>
++    <string name="account_settings_remove_account_label">"移除帳戶"</string>
+ </resources>
+Index: packages/apps/Email/res/values-hi/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-hi/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-hi/strings.xml	(revision 2110)
+@@ -241,4 +241,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"कोई भी उपलब्ध नहीं"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"फ़ोल्डर समन्वयन सेटिंग"</string>
++    <string name="account_settings_remove_account_label">"खाता हटाएं"</string>
+ </resources>
+Index: packages/apps/Email/res/values-si-rLK/strings.xml
+===================================================================
+--- packages/apps/Email/res/values-si-rLK/strings.xml	(revision 2109)
++++ packages/apps/Email/res/values-si-rLK/strings.xml	(revision 2110)
+@@ -239,4 +239,5 @@
+     <string name="no_quick_responses" msgid="8716297053803961304">"කිසිවක් ලබාගත නොහැක"</string>
+     <string name="gmail_name" msgid="2099786953868369991">"Gmail"</string>
+     <string name="folder_sync_settings_pref_title" msgid="349478353401667107">"ෆෝල්ඩර සමමුහුර්ත සැකසීම්"</string>
++    <string name="account_settings_remove_account_label">"ගිණුම ඉවත් කරන්න"</string>
+ </resources>

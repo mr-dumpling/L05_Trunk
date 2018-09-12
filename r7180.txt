@@ -1,0 +1,28 @@
+Index: vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/hardware/ril/gsm/mtk-ril/ril_callbacks.c
+===================================================================
+--- vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/hardware/ril/gsm/mtk-ril/ril_callbacks.c	(revision 7179)
++++ vendor/branch/5058J_Brazil_OpenMarket/vendor/mediatek/proprietary/hardware/ril/gsm/mtk-ril/ril_callbacks.c	(revision 7180)
+@@ -90,6 +90,9 @@
+ #define PROPERTY_FD_SCREEN_OFF_TIMER    "persist.radio.fd.off.counter"
+ #define PROPERTY_FD_SCREEN_OFF_R8_TIMER    "persist.radio.fd.off.r8.counter"
+ #define PROPERTY_FD_ON_ONLY_R8_NETWORK  "persist.radio.fd.on.only.r8"
++#define PROPERTY_FD_R8_LEGACY_OFF  "persist.radio.fd.r8.legacy.off"
++#define DEFAULT_FD_R8_LEGACY_OFF  "0"
++
+ #define PROPERTY_RIL_FD_MODE    "ril.fd.mode"
+ /* FD related timer: units: 0.1 sec */
+ #define DEFAULT_FD_SCREEN_ON_TIMER "150"
+@@ -1831,6 +1834,13 @@
+             if (atoi(property_value) == 1) {
+                 at_send_command("AT+EPCT=0,4194304", NULL, pChannel);
+             }
++            //add begin
++            property_get(PROPERTY_FD_R8_LEGACY_OFF, property_value, DEFAULT_FD_R8_LEGACY_OFF);
++            LOGD("%s = %s", PROPERTY_FD_R8_LEGACY_OFF, property_value);
++            if (atoi(property_value) == 1) {
++                at_send_command("AT+EPCT=0,8388608", NULL, getDefaultChannelCtx(rid));
++            }
++            //add end
+ 
+             /* [Step#03] Enable FD Mechanism MD: after finishing to set FD related default timer to modem */
+             at_send_command("AT+EFD=1", NULL, pChannel);

@@ -1,0 +1,49 @@
+Index: vendor/branch/5058A_Claro/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java
+===================================================================
+--- vendor/branch/5058A_Claro/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 8747)
++++ vendor/branch/5058A_Claro/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 8748)
+@@ -675,9 +675,14 @@
+         }
+ 
+         public void updateTxRxSum() {
++            this.txPkts = TrafficStats.getMobileTxPackets();
++            this.rxPkts = TrafficStats.getMobileRxPackets();
++        }
++        public void updateTcpTxRxSum() {
+             this.txPkts = TrafficStats.getMobileTcpTxPackets();
+             this.rxPkts = TrafficStats.getMobileTcpRxPackets();
+         }
++        
+     }
+ 
+     private void onActionIntentReconnectAlarm(Intent intent) {
+@@ -6619,7 +6624,13 @@
+ 
+         TxRxSum preTxRxSum = new TxRxSum(mTxPkts, mRxPkts);
+         TxRxSum curTxRxSum = new TxRxSum();
+-        curTxRxSum.updateTxRxSum();
++        String strOperatorNumeric =
++        TelephonyManager.getDefault().getSimOperatorNumericForPhone(mPhone.getPhoneId());
++        if (TextUtils.equals(strOperatorNumeric, "732101")) {
++            curTxRxSum.updateTxRxSum();
++        } else {
++            curTxRxSum.updateTcpTxRxSum();
++        }
+         mTxPkts = curTxRxSum.txPkts;
+         mRxPkts = curTxRxSum.rxPkts;
+ 
+@@ -6822,7 +6833,13 @@
+         long sent, received;
+ 
+         TxRxSum preTxRxSum = new TxRxSum(mDataStallTxRxSum);
+-        mDataStallTxRxSum.updateTxRxSum();
++        String strOperatorNumeric =
++        TelephonyManager.getDefault().getSimOperatorNumericForPhone(mPhone.getPhoneId());
++        if (TextUtils.equals(strOperatorNumeric, "732101")) {
++            mDataStallTxRxSum.updateTxRxSum();
++        } else {
++            mDataStallTxRxSum.updateTcpTxRxSum();
++        }
+ 
+         if (VDBG_STALL) {
+             log("updateDataStallInfo: mDataStallTxRxSum=" + mDataStallTxRxSum +

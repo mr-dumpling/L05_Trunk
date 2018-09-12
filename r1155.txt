@@ -1,0 +1,262 @@
+Index: frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java	(revision 1154)
++++ frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java	(revision 1155)
+@@ -5526,36 +5526,45 @@
+                             if (!ri.activityInfo.name.equals(ai.name)) {
+                                 continue;
+                             }
+-
+-                            if (removeMatches) {
+-                                pir.removeFilter(pa);
+-                                changed = true;
+-                                if (DEBUG_PREFERRED) {
+-                                    Slog.v(TAG, "Removing match " + pa.mPref.mComponent);
+-                                }
+-                                break;
+-                            }
+-
++							//modify by wqq start{
++							if(!(intent.getAction() != null && intent.getAction().equals(intent.ACTION_MAIN) && intent.getCategories()!=null &&
++									   intent.getCategories().contains(intent.CATEGORY_HOME))) {	   
++										Log.d(TAG,"Home");		
++							}else {
++                            	if (removeMatches) {
++                                	pir.removeFilter(pa);
++                                	changed = true;
++                                	if (DEBUG_PREFERRED) {
++                                    	Slog.v(TAG, "Removing match " + pa.mPref.mComponent);
++                                	}
++                                	break;
++                            	}
++							}
++							//modify by wqq end}
+                             // Okay we found a previously set preferred or last chosen app.
+                             // If the result set is different from when this
+                             // was created, we need to clear it and re-ask the
+                             // user their preference, if we're looking for an "always" type entry.
+                             if (always && !pa.mPref.sameSet(query)) {
+-                                Slog.i(TAG, "Result set changed, dropping preferred activity for "
+-                                        + intent + " type " + resolvedType);
+-                                if (DEBUG_PREFERRED) {
+-                                    Slog.v(TAG, "Removing preferred activity since set changed "
+-                                            + pa.mPref.mComponent);
+-                                }
+-                                pir.removeFilter(pa);
+-                                // Re-add the filter as a "last chosen" entry (!always)
+-                                PreferredActivity lastChosen = new PreferredActivity(
+-                                        pa, pa.mPref.mMatch, null, pa.mPref.mComponent, false);
+-                                pir.addFilter(lastChosen);
+-                                changed = true;
+-                                return null;
+-                            }
+-
++								//mofify by wqq start{
++								if(!(intent.getAction() != null && intent.getAction().equals(intent.ACTION_MAIN) && intent.getCategories()!=null && 
++                  						intent.getCategories().contains(intent.CATEGORY_HOME))){
++                                	Slog.i(TAG, "Result set changed, dropping preferred activity for "
++                                        	+ intent + " type " + resolvedType);
++                                	if (DEBUG_PREFERRED) {
++                                    	Slog.v(TAG, "Removing preferred activity since set changed "
++                                            	+ pa.mPref.mComponent);
++                               	 	}
++                                	pir.removeFilter(pa);
++                                	// Re-add the filter as a "last chosen" entry (!always)
++                                	PreferredActivity lastChosen = new PreferredActivity(
++                                        	pa, pa.mPref.mMatch, null, pa.mPref.mComponent, false);
++                                	pir.addFilter(lastChosen);
++                                	changed = true;
++                                	return null;
++                           		 }
++								//modify by wqq end}
++							}
+                             // Yay! Either the set matched or we're looking for the last chosen
+                             if (DEBUG_PREFERRED || debug) Slog.v(TAG, "Returning preferred activity: "
+                                     + ri.activityInfo.packageName + "/" + ri.activityInfo.name);
+Index: frameworks/base/core/java/com/android/internal/app/ResolverActivity.java
+===================================================================
+--- frameworks/base/core/java/com/android/internal/app/ResolverActivity.java	(revision 1154)
++++ frameworks/base/core/java/com/android/internal/app/ResolverActivity.java	(revision 1155)
+@@ -82,6 +82,7 @@
+ import java.util.List;
+ import java.util.Objects;
+ import java.util.Set;
++import android.os.SystemProperties;//add
+ 
+ import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
+ import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;
+@@ -924,6 +925,8 @@
+         mAlwaysUseOption = alwaysUseOption;
+ 
+         int count = mAdapter.getUnfilteredCount();
++		//add by wqq for set default Launcher
++		setupDefaultLauncher();
+         if (count == 1 && mAdapter.getOtherProfile() == null) {
+             // Only one target, so we're a candidate to auto-launch!
+             final TargetInfo target = mAdapter.targetInfoForPosition(0, false);
+@@ -1294,7 +1297,22 @@
+         public float getScore(DisplayResolveInfo target) {
+             return mResolverComparator.getScore(target.getResolvedComponentName());
+         }
+-
++		/**
++		*
++		*add by wqq
++		**/
++		public int getDefaultHomePosition(String packageName){
++            for (int i = 0; i < mBaseResolveList.size(); i++) {
++                ResolveInfo info = mBaseResolveList.get(i);
++                if (DEBUG)
++                Log.w(TAG,"getDefaultHomePosition " + info.activityInfo.packageName);
++                if (info.activityInfo.packageName.equals(packageName)) {
++                   return i;
++                }
++            }
++            return -1;
++        }
++		
+         private void rebuildList() {
+             List<ResolvedComponentInfo> currentResolveList = null;
+ 
+@@ -1917,4 +1935,33 @@
+             }
+         }
+     }
++	/*
++	*
++	*wqq add
++	*/
++    private static final String DEFAULT_HOME = "persist.sys.default.home";
++    private void setupDefaultLauncher() {
++        String first = "";
++        try{
++            first =  SystemProperties.get(DEFAULT_HOME);
++        }catch(Exception e){
++            Log.w(TAG,"exception error get DEFAULT_HOME");
++        }
++        if (!TextUtils.isEmpty(first)) {
++            return;
++        }
++        int position = mAdapter.getDefaultHomePosition("com.tct.launcher");
++        if (position == -1) {
++            if (DEBUG)
++            Log.w(TAG,"not find default Home");
++            return;
++        }
++        try{
++            SystemProperties.set(DEFAULT_HOME,DEFAULT_HOME);
++        }catch(Exception e){
++            Log.w(TAG,"exception error set DEFAULT_HOME");
++        }
++        startSelected(position, true, true);
++        dismiss();
++    }
+ }
+Index: packages/apps/Provision/AndroidManifest.xml
+===================================================================
+--- packages/apps/Provision/AndroidManifest.xml	(revision 1154)
++++ packages/apps/Provision/AndroidManifest.xml	(revision 1155)
+@@ -22,7 +22,8 @@
+     <!-- For miscellaneous settings -->
+     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+-
++    <!--add by wqq for boot default Joylauncher-->
++    <uses-permission android:name="android.permission.SET_PREFERRED_APPLICATIONS"/>
+     <application>
+         <activity android:name="DefaultActivity"
+                 android:excludeFromRecents="true">
+Index: packages/apps/Provision/src/com/android/provision/DefaultActivity.java
+===================================================================
+--- packages/apps/Provision/src/com/android/provision/DefaultActivity.java	(revision 1154)
++++ packages/apps/Provision/src/com/android/provision/DefaultActivity.java	(revision 1155)
+@@ -21,12 +21,18 @@
+ import android.content.pm.PackageManager;
+ import android.os.Bundle;
+ import android.provider.Settings;
+-
++ //add wqq start{
++import android.content.Intent;  
++import android.content.IntentFilter;    
++import android.content.pm.ResolveInfo;     
++import android.util.Log;  
++import java.util.List;
++//add by wqq end}
+ /**
+  * Application that sets the provisioned bit, like SetupWizard does.
+  */
+ public class DefaultActivity extends Activity {
+-
++	private  static final String TAG="DefaultActivity";
+     @Override
+     protected void onCreate(Bundle icicle) {
+         super.onCreate(icicle);
+@@ -34,7 +40,8 @@
+         // Add a persistent setting to allow other apps to know the device has been provisioned.
+         Settings.Global.putInt(getContentResolver(), Settings.Global.DEVICE_PROVISIONED, 1);
+         Settings.Secure.putInt(getContentResolver(), Settings.Secure.USER_SETUP_COMPLETE, 1);
+-
++		//add by wqq for set Defaulte Launcher
++		setupDefaultLauncher();
+         // remove this activity from the package manager.
+         PackageManager pm = getPackageManager();
+         ComponentName name = new ComponentName(this, DefaultActivity.class);
+@@ -44,5 +51,58 @@
+         // terminate the activity.
+         finish();
+     }
++	
++	/*
++	*add by wqq for boot default JoyLauncher
++	*
++	**/
++	private void setupDefaultLauncher() {  
++        // remove this activity from the package manager.  
++        PackageManager pm = this.getPackageManager();  
++  
++        String examplePackageName = "com.tct.launcher"; //package name
++        String exampleActivityName = "com.tct.launcher.Launcher"; //name
++  
++        ComponentName defaultLauncher = null;  
++  
++        Intent intent = new Intent(Intent.ACTION_MAIN);  
++        intent.addCategory(Intent.CATEGORY_HOME);  
++  
++        List<ResolveInfo> resolveInfoList =  
++                pm.queryIntentActivities(intent, 0);  
++        if (resolveInfoList != null) {  
++            int size = resolveInfoList.size();  
++            for (int j = 0; j < size; ) {  
++                final ResolveInfo r = resolveInfoList.get(j);  
++                if (!r.activityInfo.packageName.equals(examplePackageName)) {  
++                    resolveInfoList.remove(j);  
++                    size -= 1;  
++                } else {  
++                    j++;  
++                }  
++            }  
++            ComponentName[] set = new ComponentName[size];  
++            defaultLauncher = new ComponentName(examplePackageName, exampleActivityName);  
++            int defaultMatch = 0;  
++            for (int i = 0; i < size; i++) {  
++                final ResolveInfo resolveInfo =  
++                        resolveInfoList.get(i);  
++                Log.d(TAG, resolveInfo.toString());  
++                set[i] = new  
++                        ComponentName(resolveInfo.activityInfo.packageName, resolveInfo.activityInfo.name);  
++                if (defaultLauncher.getClassName().equals(resolveInfo.activityInfo.name)) {  
++                    defaultMatch = resolveInfo.match;  
++                }  
++            }  
++            Log.d(TAG, "defaultMatch =" + Integer.toHexString(defaultMatch));  
++            IntentFilter filter = new IntentFilter();  
++            filter.addAction(Intent.ACTION_MAIN);  
++            filter.addCategory(Intent.CATEGORY_HOME);  
++            filter.addCategory(Intent.CATEGORY_DEFAULT);  
++  
++            pm.clearPackagePreferredActivities(defaultLauncher.getPackageName());  
++            pm.addPreferredActivity(filter, defaultMatch, set, defaultLauncher);  
++        }  
++    }  
+ }
+ 

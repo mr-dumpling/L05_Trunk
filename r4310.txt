@@ -1,0 +1,109 @@
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 4309)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 4310)
+@@ -21984,6 +21984,31 @@
+         
+         return bRet;
+     }
++    
++    private static final String[] MY_ACTIVITY_LIST = new String[] {
++        "com.android.mmi.tpone.TpOne",
++        "com.android.mmi.tptwo.TpTwo",
++        "com.android.mmi.lcdblack.LcdBlack",
++        "com.android.mmi.lcdgraylevel.LcdGraylevel",
++        "com.android.mmi.lcdgreychart.LcdGreychart",
++        "com.android.mmi.lcdmirergb.LcdMireRGB",
++        "com.android.mmi.lcdwhite.LcdWhite",
++        "com.android.mmi.backlight.Backlight"
++    };
++    
++    private boolean needHideNavigationbar(ActivityRecord act) {
++        boolean bRet = false;
++        if(act != null && act.realActivity != null) {
++            String className = act.realActivity.getClassName();
++            for(int i = 0; i < MY_ACTIVITY_LIST.length; i++) {
++                if(MY_ACTIVITY_LIST[i].equals(className)) {
++                    bRet = true;
++                    break;
++                }
++            }
++        }
++        return bRet;
++    }
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     
+     private final ActivityRecord resumedAppLocked() {
+@@ -22015,7 +22040,8 @@
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+         if(act != null) {
+             if(!pkg.equals("com.google.android.packageinstaller")) {
+-                String str = (needHideNail(pkg) ? 1 : 0) + ";" + (act.mActivityType==ActivityRecord.HOME_ACTIVITY_TYPE ? 1 : 0);
++                String str = (needHideNail(pkg) ? 1 : 0) + ";" + (act.mActivityType==ActivityRecord.HOME_ACTIVITY_TYPE ? 1 : 0) + ";" + 
++                            (needHideNavigationbar(act) ? 1 : 0);
+                 if(mLastStatus == null || !str.equals(mLastStatus)) {
+                     Settings.System.putString(mContext.getContentResolver(),"tct_top_package_name", str);
+                     mLastStatus = str;
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 4309)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 4310)
+@@ -5618,6 +5618,7 @@
+     private boolean mNavigationBarViewIsAdded = false;
+     protected int mPreviousUserId = 0;
+     private boolean mCameraOpened = false;
++    private boolean mIsInMMITestHideNavigationBar = false;
+     
+     @Override
+     public void showNavigationBar() {
+@@ -5626,6 +5627,11 @@
+             return;
+         }
+         
++        if(mIsInMMITestHideNavigationBar) {
++            Log.d(TAG, "showNavigationBar: mIsInMMITestHideNavigationBar == true, do nothing!");
++            return;
++        }
++        
+         mHandler.removeCallbacks(mShowNavigationBar);
+         
+         createNavigationBarView(mContext);
+@@ -5748,12 +5754,15 @@
+                 }
+                 mNavigationBarView.setAlpha(alpha);
+             }
++            
++            Settings.Global.putStringForUser(mContext.getContentResolver(), Settings.Global.POLICY_CONTROL, 
++                                            isFixed ? "" : "immersive.navigation=-com.android.systemui,*", mCurrentUserId);
++            
++            mHandler.removeCallbacks(mShowNavigationBar);
++            cancelAutohide();
++        } else {
++            mHandler.postDelayed(mShowNavigationBar, 100);
+         }
+-        Settings.Global.putStringForUser(mContext.getContentResolver(), Settings.Global.POLICY_CONTROL, 
+-                                            isFixed ? "" : "immersive.navigation=-com.android.systemui,*", mCurrentUserId);
+-        
+-        mHandler.removeCallbacks(mShowNavigationBar);
+-        cancelAutohide();
+     }
+     private boolean checkNavigationBarFixed() {
+         boolean isFixed = Settings.Secure.getIntForUser(mContext.getContentResolver(), 
+@@ -5832,7 +5841,17 @@
+                     resetNavigationBar();
+                     */
+                     setNavigationBarLayout(true, true);
++                    
++                    if("1".equals(flags[2])) {
++                        mIsInMMITestHideNavigationBar = true;
++                        if(mNavigationBarView != null) {
++                            hideNavigationBar();
++                        }
++                    } else {
++                        mIsInMMITestHideNavigationBar = false;
++                    }
+                 } else {
++                    mIsInMMITestHideNavigationBar = false;
+                     if(mCameraOpened) {
+                         mCameraOpened = false;
+                         /*

@@ -1,0 +1,36 @@
+Index: ov_check.sh
+===================================================================
+--- ov_check.sh	(revision 15442)
++++ ov_check.sh	(revision 15443)
+@@ -7,6 +7,7 @@
+ 
+ $BRANCH="vendor/branch";
+ $MODIFY_FLAG = "M       ";
++$MM_FLAG = "MM      ";
+ $revision = $ARGV[0];
+ $pre_rev = ($revision - 1);
+ @modify_list = {};
+@@ -32,19 +33,20 @@
+ 	$pre_rev = ($ARGV[0]-1);
+ 	$revision = $ARGV[$idx_to];
+ }
+-print "PATH = [$svn_path], revision = [".($pre_rev+1).",$revision]\n";
++print "PATH = [$svn_path] \nrevision = [".($pre_rev+1).",$revision]\n";
+ #print "prev,next revision: [$pre_rev:$revision]\n";
+ 
+ $cmd_list = "svn diff -r $pre_rev:$revision --summarize $svn_path";
+-#print "$cmd_list\n";
++print "CMD = [$cmd_list]\n";
+ @ar_list = `$cmd_list`;
+ #print "ar_list = \n".@ar_list;
+ 
+ 
+ foreach $m_file (@ar_list){
+-	if($m_file =~ m/$MODIFY_FLAG/){
++	if(($m_file =~ m/$MODIFY_FLAG/) || ($m_file =~ m/$MM_FLAG/)){
+ 		chomp($m_file);
+ 		$m_file =~ s/$MODIFY_FLAG//g;
++		$m_file =~ s/$MM_FLAG//g;
+ 		$m_file =~ s/$svn_path\///g;
+ 		push @modify_list, $m_file;
+ 		if(getCmdParam("-src") > 0){

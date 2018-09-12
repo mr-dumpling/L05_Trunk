@@ -1,0 +1,76 @@
+Index: packages/apps/Settings/src/com/android/settings/sim/SimDialogActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/sim/SimDialogActivity.java	(revision 1260)
++++ packages/apps/Settings/src/com/android/settings/sim/SimDialogActivity.java	(revision 1261)
+@@ -73,6 +73,7 @@
+     public static final int CALLS_PICK = 1;
+     public static final int SMS_PICK = 2;
+     public static final int PREFERRED_PICK = 3;
++    private boolean mSwitchInfoFlag = false;
+ 
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+@@ -293,7 +294,27 @@
+                                             .sendToTarget();
+                                     /// @}
+                                 } else {
+-                                    setDefaultDataSubId(context, targetSub);
++                                    int defaultId = SubscriptionManager.getDefaultDataSubscriptionId();
++                                    if (targetSub != defaultId) {
++                                        mSwitchInfoFlag = true;
++                                        AlertDialog.Builder builder = new AlertDialog.Builder(context);
++                                        builder.setMessage(R.string.switch_sim_data_message);
++                                        builder.setPositiveButton(R.string.switch_sim_button, new DialogInterface.OnClickListener() {
++                                            @Override
++                                            public void onClick(DialogInterface dialog, int which) {
++                                                setDefaultDataSubId(context, targetSub);
++                                                finish();
++                                            }
++                                        });
++                                        builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
++                                            @Override
++                                            public void onCancel(DialogInterface dialog) {
++                                                finish();
++                                            }
++                                        });
++                                        builder.create();
++                                        builder.show();
++                                    }
+                                 }
+                                 break;
+                             case CALLS_PICK:
+@@ -344,7 +365,9 @@
+                         }
+                         /// M: Add dismiss dialog before finish to void screen flash.
+                         dismissSimDialog();
+-                        finish();
++                        if (!mSwitchInfoFlag) {
++                            finish();
++                        }
+                     }
+                 };
+ 
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1260)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1261)
+@@ -3331,4 +3331,6 @@
+ 	<string name="notifications_color_normal">通知背景正常</string>
+ 	<string name="notifications_color_highlight">通知背景高亮</string>
+ 	<!-- Add for bug_id 111336 by dongdongli 20171101 end -->
++    <string name="switch_sim_data_message">需要重新搜索网络</string>
++    <string name="switch_sim_button">确定</string>
+ </resources>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1260)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1261)
+@@ -8046,5 +8046,7 @@
+ 
+     <string name="reset_attention">Erase all data and reset to factory defaults? Your device will restart to perform a factory reset. This action can not be undone.</string>
+     <string name="reset_confirm">RESET</string>
+-    <string name="reset_cancel">CANCEL</string>	   
++    <string name="reset_cancel">CANCEL</string>
++    <string name="switch_sim_data_message">Need to research the network</string>
++    <string name="switch_sim_button">Ok</string>
+ </resources>

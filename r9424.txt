@@ -1,0 +1,112 @@
+Index: vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 9423)
++++ vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/uicc/SIMRecords.java	(revision 9424)
+@@ -2574,6 +2574,20 @@
+         //    mTelephonyManager.setSimOperatorNameForPhone(
+         //            mParentApp.getPhoneId(), getServiceProviderName());
+         //}
++        String subIMSI1 = mImsi.substring(0, 8);
++        String subIMSI2 = mImsi.substring(0, 7);
++        int phoneId= mParentApp.getPhoneId();
++        if ("23207718".equals(subIMSI1) || "2320776".equals(subIMSI2) || "23207799".equals(subIMSI1)) {
++            String operatorNameFromEfPnn = getFirstFullNameInEfPnn();
++            if (!operatorNameFromEfPnn.equals("")) {
++                android.provider.Settings.Global.putString(mContext.getContentResolver(),
++                     android.provider.Settings.Global.SIM_NAME_VENTOCOM + phoneId, operatorNameFromEfPnn);
++                log("setSpnFromPnn: operatorNameFromEfPnn " + operatorNameFromEfPnn + " phoneId = " + phoneId);
++            }
++        } else {
++            android.provider.Settings.Global.putString(mContext.getContentResolver(),
++                    android.provider.Settings.Global.SIM_NAME_VENTOCOM + phoneId, "");
++        }
+         if (TextUtils.isEmpty(getServiceProviderName()) && mSpnOverride.containsCarrier(carrier)) {
+             mTelephonyManager.setSimOperatorNameForPhone(
+                     mParentApp.getPhoneId(), mSpnOverride.getSpn(carrier));
+Index: vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/SubscriptionInfoUpdater.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/SubscriptionInfoUpdater.java	(revision 9423)
++++ vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/SubscriptionInfoUpdater.java	(revision 9424)
+@@ -830,9 +830,14 @@
+                 String simNumeric = tm.getSimOperatorNumeric(subId);
+                 String simMvnoName = SpnOverride.getInstance().lookupOperatorNameForDisplayName(
+                         subId, simNumeric, true, mContext);
++                int phoneId = SubscriptionManager.getPhoneId(subId);
++                String simPnnName = Settings.Global.getString(mContext.getContentResolver(), 
++                        Settings.Global.SIM_NAME_VENTOCOM + phoneId);
+                 logd("[handleSimLoaded]- simNumeric: " + simNumeric +
+-                            ", simMvnoName: " + simMvnoName);
+-                if (!TextUtils.isEmpty(simMvnoName)) {
++                            ", simMvnoName: " + simMvnoName + " ,simPnnName: " + simPnnName);
++                if(!TextUtils.isEmpty(simPnnName)) {
++                    nameToSet = simPnnName;
++                } else if (!TextUtils.isEmpty(simMvnoName)) {
+                     nameToSet = simMvnoName;
+                 } else {
+                     if (!TextUtils.isEmpty(simCarrierName)) {
+Index: vendor/branch/5058I_ALWE/frameworks/base/core/java/android/provider/Settings.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/base/core/java/android/provider/Settings.java	(revision 9423)
++++ vendor/branch/5058I_ALWE/frameworks/base/core/java/android/provider/Settings.java	(revision 9424)
+@@ -1875,6 +1875,7 @@
+             MOVED_TO_GLOBAL.add(Settings.Global.AUTO_TIME_GPS);
+             MOVED_TO_GLOBAL.add(Settings.Global.ACM_ENABLED);
+             MOVED_TO_GLOBAL.add(Settings.Global.MSIM_MODE_SETTING);
++            MOVED_TO_GLOBAL.add(Settings.Global.SIM_NAME_VENTOCOM);
+         }
+ 
+         private static final Validator sBooleanValidator =
+@@ -3908,6 +3909,11 @@
+         public static final String AUTO_TIME_GPS = Global.AUTO_TIME_GPS;
+ 
+         /**
++         * @hide
++         */
++        public static final String SIM_NAME_VENTOCOM = Global.SIM_NAME_VENTOCOM;
++
++        /**
+          * restore this vaule for MTK shut animation
+          * @hide
+          */
+@@ -10406,6 +10412,13 @@
+         public static final String AUTO_TIME_GPS = "auto_time_gps";
+ 
+         /**
++         * To record sim name of ventocom
++         *
++         * @hide
++         */
++        public static final String SIM_NAME_VENTOCOM = "sim_name_ventocom";
++
++        /**
+          * Whether ACM is enabled.
+          *
+          * @hide
+Index: vendor/branch/5058I_ALWE/frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 9423)
++++ vendor/branch/5058I_ALWE/frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java	(revision 9424)
+@@ -2643,6 +2643,9 @@
+             loadStringSetting(stmt, Settings.Global.AIRPLANE_MODE_RADIOS,
+                     R.string.def_airplane_mode_radios);
+ 
++            loadStringSetting(stmt, Settings.Global.SIM_NAME_VENTOCOM,
++                    R.string.def_sim_name_ventocom);
++
+             loadStringSetting(stmt, Settings.Global.AIRPLANE_MODE_TOGGLEABLE_RADIOS,
+                     R.string.airplane_mode_toggleable_radios);
+ 
+Index: vendor/branch/5058I_ALWE/frameworks/base/packages/SettingsProvider/res/values/defaults.xml
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/base/packages/SettingsProvider/res/values/defaults.xml	(revision 9423)
++++ vendor/branch/5058I_ALWE/frameworks/base/packages/SettingsProvider/res/values/defaults.xml	(revision 9424)
+@@ -57,6 +57,9 @@
+ 
+     <bool name="def_backup_enabled">false</bool>
+     <string name="def_backup_transport" translatable="false">android/com.android.internal.backup.LocalTransport</string>
++	
++	<!-- Default value for ventocom sim name-->
++	<string name="def_sim_name_ventocom">""</string>
+ 
+     <!-- Default value for whether or not to pulse the notification LED when there is a
+          pending notification -->

@@ -1,0 +1,895 @@
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/client/Android.mk
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/client/Android.mk	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/client/Android.mk	(revision 6477)
+@@ -132,6 +132,7 @@
+ LOCAL_SHARED_LIBRARIES += libJpgEncPipe
+ LOCAL_SHARED_LIBRARIES += libcam.exif
+ LOCAL_SHARED_LIBRARIES += libcameracustom
++LOCAL_SHARED_LIBRARIES += libvisidon_facebeauty
+ #
+ ifeq "'1'" "$(strip $(MTKCAM_HAVE_GRALLOC_EXTRA))"
+ LOCAL_SHARED_LIBRARIES += libgralloc_extra
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Android.mk
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Android.mk	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Android.mk	(revision 6477)
+@@ -210,6 +210,7 @@
+ LOCAL_SHARED_LIBRARIES += libcam.halsensor
+ #
+ LOCAL_SHARED_LIBRARIES += libcam.iopipe
++LOCAL_SHARED_LIBRARIES += libvisidon_facebeauty
+ 
+ LOCAL_SHARED_LIBRARIES += libcam.utils.cpuctrl
+ #
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/Android.mk
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/Android.mk	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/Android.mk	(revision 6477)
+@@ -57,7 +57,7 @@
+ LOCAL_C_INCLUDES +=$(TOP)/$(MTK_MTKCAM_PLATFORM)/include
+ LOCAL_C_INCLUDES +=$(TOP)/$(MTKCAM_C_INCLUDES)
+ LOCAL_C_INCLUDES +=$(TOP)/$(MTKCAM_C_INCLUDES)/..
+-
++LOCAL_C_INCLUDES +=$(TOP)/external/libvisidon_facebeauty/include
+ LOCAL_C_INCLUDES += $(TOP)/$(MTK_PATH_SOURCE)/hardware/mtkcam/ext/include
+ #
+ LOCAL_C_INCLUDES += $(MY_ADAPTER_C_INCLUDES_PATH)/inc/Scenario
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/NormalShot.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/NormalShot.cpp	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/NormalShot.cpp	(revision 6477)
+@@ -59,6 +59,7 @@
+ #include "NormalShot.h"
+ //
+ #include <mtkcam/hwutils/CamManager.h>
++#include <VisidonFaceBeauty.h>
+ using namespace NSCam::Utils;
+ //
+ using namespace android;
+@@ -263,6 +264,11 @@
+                                                                             , &isMfbShot,mParamsMgr
+                                                                             );
+     //
++	if(mParamsMgr->getVisidonMode()&&(mParamsMgr->getVisidonModeSkin()>0 || mParamsMgr->getVisidonModeTone()>0)){
++		VisidonFaceBeauty *mpVisidon = NULL; 
++        mpVisidon = VisidonFaceBeauty::createInstance();
++		mpVisidon->FaceBeauty_doCapture();
++	}
+     MUINT32 nrtype = queryCapNRType( getCaptureIso(), isMfbShot);
+     //
+     pSingleShot->init();
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/Android.mk
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/Android.mk	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/Android.mk	(revision 6477)
+@@ -57,7 +57,7 @@
+ LOCAL_C_INCLUDES +=$(TOP)/$(MTK_MTKCAM_PLATFORM)/include
+ LOCAL_C_INCLUDES +=$(TOP)/$(MTKCAM_C_INCLUDES)
+ LOCAL_C_INCLUDES +=$(TOP)/$(MTKCAM_C_INCLUDES)/..
+-
++LOCAL_C_INCLUDES +=$(TOP)/external/libvisidon_facebeauty/include
+ LOCAL_C_INCLUDES += $(TOP)/$(MTK_PATH_SOURCE)/hardware/mtkcam/ext/include
+ #
+ LOCAL_C_INCLUDES += $(MY_ADAPTER_C_INCLUDES_PATH)/inc/Scenario
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/CapBufShot.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/CapBufShot.cpp	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/CapBufShot/CapBufShot.cpp	(revision 6477)
+@@ -57,6 +57,7 @@
+ #include "ImpShot.h"
+ #include "CapBufShot.h"
+ //
++#include <VisidonFaceBeauty.h>
+ using namespace android;
+ using namespace NSShot;
+ 
+@@ -272,6 +273,11 @@
+     MBOOL ret = MTRUE;
+     NSCamShot::ISingleShot *pSingleShot =
+         NSCamShot::ISingleShot::createInstance(static_cast<EShotMode>(mu4ShotMode), "CapBufShot", mpParamsMgr);
++	if(mpParamsMgr->getVisidonMode()&&(mpParamsMgr->getVisidonModeSkin()>0 || mpParamsMgr->getVisidonModeTone()>0)){
++		VisidonFaceBeauty *mpVisidon = NULL; 
++        mpVisidon = VisidonFaceBeauty::createInstance();
++		mpVisidon->FaceBeauty_doCapture();
++	}
+     //
+     MUINT32 nrtype = queryCapNRType( getPreviewIso() );
+     //
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/Android.mk
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/Android.mk	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/Android.mk	(revision 6477)
+@@ -99,6 +99,7 @@
+ LOCAL_SHARED_LIBRARIES += libcam_hwutils
+ #
+ LOCAL_SHARED_LIBRARIES += libimageio_plat_drv
++LOCAL_SHARED_LIBRARIES += libvisidon_facebeauty
+ #
+ #ifneq ($(BUILD_MTK_LDVT),true)
+     LOCAL_SHARED_LIBRARIES += libcam_utils
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/inc/JpegCodec.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/inc/JpegCodec.h	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/inc/JpegCodec.h	(revision 6477)
+@@ -72,131 +72,8 @@
+ namespace NSIoPipe {
+ namespace NSSImager {
+ ////////////////////////////////////////////////////////////////////////////////
+-/**
+-    Max number of filters
+-    */
+-#define NUMBER_OF_BEAUTYFILTERS MAX_BEAUTY_FILTER
+-#define MAX_BEAUTY_SHOT_FACES_IN_TRACK 5
+ 
+-    /**
+-    Enumeration for different beauty filters
+-    */
+-    typedef enum _VDBeautyFilters {
+-        SKIN_SMOOTHING=0, /**< Intelligent skin smoothing algorithm*/
+-        SPOT_SMOOTHING=1,/**< Adaptive spot and wrinkle removal algorithm (part of SKIN_SMOOTHING)*/
+-        FACE_CONTOURING=2, /**< Face contouring algorithm*/
+-        TEETH_WHITENING=3,/**< Teeth whitening algorithm*/
+-        EYE_SHAPING=4,/**< Eye enlargement algorithm*/
+-        CHEEK_BLUSHING=5,/**< Cheek blusher algorithm*/
+-        SKIN_TONE_ADJUSTING=6,/**< Skin toning algorithm*/
+-        MOUTH_SHAPING=7,/**< Mouth shaping algorithm*/
+-        NOSE_SHAPING = 8,/**< Nose shaping algorithm*/
+-        EYEBROW_SHAPING=9,/**< Eye-brown shaping algorithm*/
+-        FACE_SHAPING=10, /**< Face shaping (thinning) algorithm*/
+-        OUT_FOCUS=11, /**< Sharp face area, blurred background */
+-        EYE_BRIGHTENING=12, /**< Eye brightening algorithm */
+-		LIP_TONING=13, /**< Lip enhancement algorithm */
+-        SKIN_COLOR_ADJUSTING=14, /**< Skin color adjustment algorithm (red tone adjustment) */
+-		SKIN_COLOR_CHANGE = 15, /**< Skin color changing alogithm */
+-        FACE_BOKEH = 16,
+-        MAX_BEAUTY_FILTER /**< Keep this entry last */
+-    } VDBeautyFilters;
+ 
+-    /**
+-    Enumeration for different image formats supported by the engine.
+-    */
+-    typedef enum _VDBeatyShotImageFormat
+-    {
+-        YUV_420_NV12=0, /**< YUV420SPNV12 format*/
+-        YUV_420_NV21=1, /**< YUV420SPNV21 format*/
+-        RGB_888=2,  /**< 24-bit RGB format*/
+-        JPEG_COMPRESSED=3, /**< JPEG compressed format*/
+-		YUV_YUYV = 4, /**< YUYV format (YUYV...YUYV..YUYV)*/
+-		YUV_YV12 = 5, /**< YUV YV12 format */
+-        YUV_UYVY = 6, /**< UYVY format (UYVY...UYVY..UYVY)*/
+-        YUV_PLANAR = 7, /**< Planar YUV format given with three separate pointers to planes */
+-        YUV_NV21_SEPARATED = 8 /**< Same as YUV_420_NV21 except input/output is given with separate pointers to luma (imagePtr) and chroma (imagePtrU) channels. */
+-    } VDBeatyShotImageFormat;
+-
+-
+-    /**
+-    Enumeration for different memory modes to be used with the GPU processing.
+-    Some devices do not support GraphicBuffer memory copying (MEMCPY_GRAPHICBUFFER)
+-    and one needs to use read pixels approach (MEMCPY_READPIXELS).
+-    */
+-    typedef enum _VDBeautyEngineGPUMemoryMode
+-    {
+-        MEMCPY_READPIXELS=0, /**< Use glReadPixels to reed data from GPU*/
+-        MEMCPY_GRAPHICBUFFER=1,/**< Use GraphicBuffer (gralloc) memory copying to read data from GPU*/
+-        RENDER_TO_WINDOW=2,/**< Render to window. Do not read data from GPU */
+-    } VDBeautyEngineGPUMemoryMode;
+-
+-    /**
+-    Enumeration for different operation modes supported by the engine.
+-    */
+-    typedef enum _VDBeautyEngineProcessingMode
+-    {
+-        VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL = 0, /**< Use both preview and still processing and apply face tracking in preview mode.*/
+-        VDBEAUTY_REALTIME_AND_STILL = 1,/**< Use both preview and still processing but do not apply face tracking in preview mode (filtering is applied to skin like areas instead of detected face)*/
+-        VDBEAUTY_STILL = 2,/**< Use only still image processing*/
+-    } VDBeautyEngineProcessingMode;
+-
+-    /**
+-    Structure for face coordinates that may be provided outside beauty engine (i.e. from
+-    hardware face tracker).
+-    */
+-    typedef struct _VDBeautyFace
+-    {
+-        int left; /**< Left x coordinate of face in the image*/
+-        int top; /**< Top y coordinate of face in the image*/
+-        int right; /**< Rigt x coordinate of face in the image*/
+-        int bottom;/**< Bottom y coordinate of face in the image*/
+-        int leftEyeX; /**< Left eye x coordinate if available*/
+-        int leftEyeY;/**< Left eye y coordinate if available*/
+-        int rightEyeX; /**< Right eye x coordinate if available*/
+-        int rightEyeY; /**< Right eye t coordinate if available*/
+-		int smile;
+-    }VDBeautyFace;
+-
+-    /**
+-    Structure for input/output data to be used with processing functions.
+-    */
+-    typedef struct _VDBeautyShotData
+-    {
+-        unsigned char *imagePtr; /**< Pointer to image data (input/output) */
+-        unsigned char *imagePtrU; /**< Pointer to image data U plane (input/output) when format is YUV_PLANAR or pointer to UV plane when format is YUV_NV21_SEPARATED  */
+-        unsigned char *imagePtrV; /**< Pointer to image data V plane (input/output) when format is YUV_PLANAR. */
+-        int imageCols; /**< Image width*/
+-        int imageRows;/**< Image height*/
+-        int nbrOfFaces; /**< Number of faces in the faces array */
+-        VDBeautyFace faces[MAX_BEAUTY_SHOT_FACES_IN_TRACK];
+-        int jpegDataSize;/**< Compressed data size in case of JPEG format*/
+-        int jpegSavingQuality; /**< JPEG saving quality (0-100)*/
+-        unsigned char *outputJpeg; /**< Newly allocated JPEG compressed data in case of JPEG format*/
+-        int ouputJpegDataSize; /**< Compressed output data size in case of JPEG format*/
+-        VDBeatyShotImageFormat imageFormat; /**< Used image format*/
+-        int32_t beautyFilterParams[NUMBER_OF_BEAUTYFILTERS]; /**< Filter strength parameters*/
+-        int forceSmoothing; /**< Force face smoothing even though no face is found (apply to skin like regions)*/
+-		int colorNoiseReduction; /**< Color noise (chroma) reduction strength (0-10) */
+-		int luminanceNoiseReduction; /**< Luminance noise reduction strength (0-10) */
+-		int sharpening; /**< Sharpening strength (0-10) */
+-		int padRows;	/**< Number of extra rows after valid Y rows before chroma channel. */
+-		int padCols;	/**< Number of extra pixels after each row to be ignored. */
+-		int stillImageRotation; /**< Defines how still image and preview frame are oriented w.r.t. each other. Supported values are 90 (=preview rotated toward right), 180 (=preview is up-side down), 270 (=preview rotated towards left) */
+-		int previewMirrored; /**< Defines if still image and preview frame are mirrored w.r.t. each other. Supported values are 0 (=preview is not mirrored), and 1 (=previw is mirrored). */
+-		int skipPreviewIfStillRunning; /**< Skip preview beauty processing if still image processing is on-going. Supported values are 0 (=do not skip = apply normally), and 1 (=skip preview processing if still is running) */
+-		int skipPreviewProcessing; /**< Skip preview processing but take the ouput from the frame buffer pipeline to keep same frame dealy as with actual processing */
+-    }VDBeautyShotData;
+-
+-    /**
+-    Enumeration for different error codes returend by API functions.
+-    */
+-    typedef enum _VDBeautyErrorCode
+-    {
+-        VDBEAUTY_OK=0, /**< Operation ok*/
+-        VDBEAUTY_NOK=1, /**< Operation not ok*/
+-    } VDBeautyErrorCode;
+-
+ /*******************************************************************************
+ * Interface of Image Transform
+ ********************************************************************************/
+@@ -203,18 +80,8 @@
+ class JpegCodec
+ {
+ public:  ////    Constructor/Destructor.
+-    void releaseBeautyShotEngine();    
+-    void applyStillShotBeautification(unsigned char *yuv, int cols, int rows, 
+-								int skinSmoothingStrenght, 
+-								int skinToneAdjustmentStrength);
+-    void *mVisidonBeautyShotEngine;
+-	void *libVisidon;
+-	VDBeautyErrorCode (*Link_VDInitializeBeautyShot)(int previewCols,int previewRows,VDBeautyEngineProcessingMode processingMode, VDBeautyEngineGPUMemoryMode gpuMemoryMode, void ** engine);
+-	VDBeautyErrorCode (*Link_VDReleaseBeautyShot)(void ** engine);
+-	VDBeautyErrorCode (*Link_VDProcessStillImage)(VDBeautyShotData *data, void *engine);
+-    void initializeBeautyShotEngine();  
+-    JpegCodec(sp<IParamsManager>  pParamsMgr);
+-	void declareBeautyShotEngine();
++
++	JpegCodec(sp<IParamsManager>  pParamsMgr);
+     JpegCodec();
+     virtual         ~JpegCodec() {}
+ 
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/JpegCodec.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/JpegCodec.cpp	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/JpegCodec.cpp	(revision 6477)
+@@ -89,10 +89,11 @@
+ using namespace NSCam::Utils::Format;
+ //
+ #include "./inc/JpegCodec.h"
++#include <VisidonFaceBeauty.h>
+ 
+ #define MEDIA_PATH "/sdcard/"
+-#include <dlfcn.h>
+ 
++
+ #define CHECK_OBJECT(x)  { if (x == NULL) { MY_LOGE("Null %s Object", #x); return MFALSE;}}
+ /*******************************************************************************
+ *
+@@ -107,117 +108,7 @@
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+-void
+ JpegCodec::
+-declareBeautyShotEngine(){
+-    libVisidon = :: dlopen("libVDBeautyShotAPI.so",RTLD_NOW);
+-    if(libVisidon==NULL){
+-		MY_LOGD("declareBeautyShotEngine dlopen error:%s",dlerror());
+-		return;
+-	}
+-
+-    *(void **)&Link_VDInitializeBeautyShot = dlsym(libVisidon,"VDInitializeBeautyShot");
+-	if(!Link_VDInitializeBeautyShot){
+-		MY_LOGD(" Link_VDInitializeBeautyShot open error=%s",dlerror());
+-		return;
+-	}
+-
+-    *(void **)&Link_VDReleaseBeautyShot = dlsym(libVisidon,"VDReleaseBeautyShot");
+-	if(!Link_VDReleaseBeautyShot){
+-		MY_LOGD(" Link_VDReleaseBeautyShot open error=%s",dlerror());
+-		return;
+-	}
+-	
+-	*(void **)&Link_VDProcessStillImage = dlsym(libVisidon,"VDProcessStillImage");
+-	if(!Link_VDProcessStillImage){
+-		MY_LOGD(" Link_VDProcessStillImage open error=%s",dlerror());
+-		return;
+-	}
+-}
+-void
+-JpegCodec::
+-initializeBeautyShotEngine()
+-{
+-    if(!mParamsMgr->getVisidonMode() || libVisidon==NULL || !Link_VDInitializeBeautyShot){
+-		MY_LOGD(" initializeBeautyShotEngine  return directly");
+-		return;
+-	}
+-
+-    int ret = 0;
+-	if(mVisidonBeautyShotEngine!=NULL) {
+-		// Release beauty engine					
+-		MY_LOGD("%s:  Releasing beauty shot engine", __FUNCTION__);
+-		VDBeautyErrorCode err = Link_VDReleaseBeautyShot(&mVisidonBeautyShotEngine);
+-		mVisidonBeautyShotEngine  = NULL;			
+-	}
+-
+-    int cols = 0;		
+-	int rows = 0;	
+-	mParamsMgr->getPreviewSize(&cols, &rows);
+-    void *ptr;
+-    VDBeautyErrorCode err = Link_VDInitializeBeautyShot(cols, rows, VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL, MEMCPY_READPIXELS, &ptr);
+-	if(err != VDBEAUTY_OK) {					
+-		ret = 1;					
+-		mVisidonBeautyShotEngine = NULL;			
+-	}else {			
+-		mVisidonBeautyShotEngine = ptr; 				
+-		MY_LOGD("%s:  Initialized engine ptr = %p\n", __FUNCTION__, mVisidonBeautyShotEngine); 		
+-	}
+-
+-    return ;	
+-}
+-
+-void 
+-JpegCodec::
+-releaseBeautyShotEngine() {
+-    if(!mParamsMgr->getVisidonMode() || libVisidon==NULL || !Link_VDReleaseBeautyShot){
+-		MY_LOGD(" releaseBeautyShotEngine return directly");
+-		return;
+-	}
+-    		
+-	if(mVisidonBeautyShotEngine!=NULL ) {
+-		// Release beauty engine        			
+-		MY_LOGD("%s:  Releasing beauty shot engine", __FUNCTION__);        			
+-		VDBeautyErrorCode err = Link_VDReleaseBeautyShot(&mVisidonBeautyShotEngine);       			
+-		mVisidonBeautyShotEngine  = NULL;    		
+-		}		
+-	return ;	
+-}
+-
+-void 
+-JpegCodec:: 
+-applyStillShotBeautification(unsigned char *yuv, int cols, int rows, 
+-	int skinSmoothingStrenght, int skinToneAdjustmentStrength) {
+-		if(!mParamsMgr->getVisidonMode() || libVisidon==NULL || !Link_VDProcessStillImage){
+-			MY_LOGD(" applyStillShotBeautification  return directly");
+-			return ;
+-		}
+-		MY_LOGD("%s: applyStillShotBeautification STARTTING", __FUNCTION__);    
+-
+-		if(mVisidonBeautyShotEngine != NULL) {
+-			VDBeautyShotData inputData;    
+-			memset(&inputData,0,sizeof(VDBeautyShotData));
+-			if(mParamsMgr->getInt("rotation") == 0 || mParamsMgr->getInt("rotation") == 180){
+-				mParamsMgr->getPictureSize(&inputData.imageCols,&inputData.imageRows); 
+-			}else{
+-				mParamsMgr->getPictureSize(&inputData.imageRows,&inputData.imageCols); 
+-			}
+-			inputData.stillImageRotation = 270 - mParamsMgr->getInt("rotation");  
+-			inputData.imageFormat = YUV_YUYV; 
+-			inputData.imagePtr = yuv;
+-			inputData.beautyFilterParams[SKIN_SMOOTHING] = mParamsMgr->getVisidonModeSkin();      
+-			inputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = mParamsMgr->getVisidonModeTone();; 		     
+-			MY_LOGD("%s: CALLING Link_VDProcessStillImage (cols = %d, rows = %d, dataptr = %p, engineptr = %p,skin=%d,tone=%d)",
+-				__FUNCTION__, inputData.imageCols, inputData.imageRows,
+-				inputData.imagePtr, mVisidonBeautyShotEngine,inputData.beautyFilterParams[SKIN_SMOOTHING],inputData.beautyFilterParams[SKIN_TONE_ADJUSTING]);   
+-			VDBeautyErrorCode err = Link_VDProcessStillImage(&inputData, mVisidonBeautyShotEngine); 
+-			MY_LOGD("CALLING Link_VDProcessStillImage return err=%d",err);
+-			if(err == VDBEAUTY_OK) 
+-				return ;
+-		}
+-		return ;
+-}
+-JpegCodec::
+ JpegCodec(
+ )
+     : mi4ErrorCode(0)
+@@ -226,8 +117,6 @@
+     property_get("debug.camera.dump", value, "0");
+     mu4DumpFlag = ::atoi(value);
+ 	mParamsMgr = NULL;
+-	mVisidonBeautyShotEngine = NULL;
+-	libVisidon =NULL;
+ }
+ 
+ JpegCodec::
+@@ -235,9 +124,6 @@
+     : mi4ErrorCode(0),
+ 	  mParamsMgr(pParamsMgr)
+ {
+-	mVisidonBeautyShotEngine = NULL;
+-	libVisidon =NULL;
+-
+     char value[PROPERTY_VALUE_MAX] = {'\0'};
+     property_get("debug.camera.dump", value, "0");
+     mu4DumpFlag = ::atoi(value);
+@@ -352,16 +238,21 @@
+ )
+ {
+     FUNCTION_LOG_START;
+-    //MtkCamUtils::CamProfile profile("encode", "JpegCodec");
+-    
+-	if ( mParamsMgr!=NULL && mParamsMgr->getVisidonMode() && pSrcBufInfo->getImgSize().w > 640) {		
+-		declareBeautyShotEngine();
+-		initializeBeautyShotEngine();
+-		unsigned char *p = (unsigned char *)pSrcBufInfo->getBufVA(0);
+-		applyStillShotBeautification(p,0,0,0,0);
+-		releaseBeautyShotEngine();
+-	}
+-		
++    //MtkCamUtils::CamProfile profile("encode", "JpegCodec");	
++	if (pSrcBufInfo->getImgSize().w > 640)          //Don't process if the jpeg is thumbnail.
++    {
++        if (mParamsMgr!=NULL && mParamsMgr->getVisidonMode())
++        {
++            VisidonFaceBeauty *mpVisidon = NULL; 
++            mpVisidon = VisidonFaceBeauty::createInstance();
++             int mPWidth =0; 
++             int mPHeight =0;
++              mParamsMgr->getPreviewSize(&mPWidth,&mPHeight);
++			  mpVisidon->initPreviewSize(mPWidth,mPHeight);		      
++			  mpVisidon->enableFaceBeauty();
++              mpVisidon->processRaw((void*)pSrcBufInfo->getBufVA(0),pSrcBufInfo->getBufSizeInBytes(0),pSrcBufInfo->getImgSize().w,pSrcBufInfo->getImgSize().h,mParamsMgr->getVisidonModeSkin(),mParamsMgr->getVisidonModeTone());	  
++        }
++    }
+     MBOOL ret = MTRUE;
+ #ifdef JPEG_HAL_SUPPORT
+     JpgEncHal* pJpgEncoder = new JpgEncHal();
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/Android.mk
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/Android.mk	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/Android.mk	(revision 6477)
+@@ -59,6 +59,7 @@
+ LOCAL_C_INCLUDES += $(MTKCAM_C_INCLUDES)
+ LOCAL_C_INCLUDES += $(TOP)/$(MTK_PATH_SOURCE)/hardware/gralloc_extra/include
+ LOCAL_C_INCLUDES += $(TOP)/$(MTK_PATH_SOURCE)/hardware/mtkcam/ext/include
++LOCAL_C_INCLUDES += $(TOP)/external/libvisidon_facebeauty/include
+ 
+ LOCAL_C_INCLUDES +=$(TOP)/$(MTK_MTKCAM_PLATFORM)/include
+ LOCAL_C_INCLUDES +=$(TOP)/$(MTKCAM_C_INCLUDES)
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/arm64-v8a/libVDBeautyShotAPI.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/armeabi-v7a/libVDBeautyShotAPI.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.BufOps.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.BufOps.cpp	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.BufOps.cpp	(revision 6477)
+@@ -120,6 +120,13 @@
+         if  ( ! isDisplayEnabled() )
+         {
+             MY_LOGI("Display disabled");
++          if (mpVisidon)
++          {
++             MY_LOGI("Visidon :DisplayClient onThreadLoop");
++             mpVisidon->disableFaceBeauty();
++             mpVisidon->destroyInstance();
++             mpVisidon = NULL;
++          }
+             break;
+         }
+ 
+@@ -430,7 +437,6 @@
+                 (_msDuration_buffer_timestamp <= 0), "time inversion!(%lld)", _msDuration_buffer_timestamp
+             );
+             //
+-            applyPreviewBeautification((unsigned char *)pStreamImgBuf->getVirAddr(),-1,-1);
+             if(mpExtImgProc != NULL)
+             {
+                 if(mpExtImgProc->getImgMask() & ExtImgProc::BufType_Display)
+@@ -455,6 +461,19 @@
+                 pStreamImgBuf->setNeedDisplayRotation(true);
+             else
+                 pStreamImgBuf->setNeedDisplayRotation(false);
++            if (mpVisidon ){
++			    int skinSmoothingStrenght = mpParamsMgr->getVisidonModeSkin();
++				int skinToneAdjustmentStrength = mpParamsMgr->getVisidonModeTone();
++				
++				if(skinSmoothingStrenght != 0 || skinToneAdjustmentStrength != 0){
++				    int mFBWidth = pStreamImgBuf->getImgWidth();
++					int mFBHeight = pStreamImgBuf->getImgHeight(); 
++					int retValue = 0; 
++				    mpVisidon->initPreviewSize(mFBWidth,mFBHeight);
++				    mpVisidon->enableFaceBeauty();
++					retValue = mpVisidon->processPreview(pStreamImgBuf->getVirAddr(), pStreamImgBuf->getBufSize(), skinSmoothingStrenght,skinToneAdjustmentStrength);
++				}
++			}
+             //
+             enquePrvOps(pStreamImgBuf);
+         }
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.cpp	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.cpp	(revision 6477)
+@@ -40,10 +40,10 @@
+ #include <cutils/properties.h>
+ #include "DisplayClient.h"
+ using namespace NSDisplayClient;
+-using namespace std;
++
+ //
+ 
+-#include <dlfcn.h>
++
+ /******************************************************************************
+ *
+ *******************************************************************************/
+@@ -108,6 +108,7 @@
+     //
+     , mpExtImgProc(NULL)
+     //
++    , mpVisidon(NULL)
+     , mi4Orientation(0)
+     //
+     ,mFirstFrameBlack(false)
+@@ -118,113 +119,8 @@
+     char cLogLevel[PROPERTY_VALUE_MAX] = {'\0'};
+     ::property_get("debug.camera.display.loglevel", cLogLevel, "1");
+     miLogLevel = ::atoi(cLogLevel);
+-    libVisidon = NULL;
+-	mVisidonBeautyShotEngine = NULL;
+-	Link_VDProcessPreviewFrame = NULL;
+     MY_LOGD("- debug.camera.display.loglevel=%s", cLogLevel);
+ }
+-
+-void
+-DisplayClient::
+-declareBeautyShotEngine(){
+-MY_LOGD("%s: STARTTING", __FUNCTION__);  
+-    libVisidon = :: dlopen("libVDBeautyShotAPI.so",RTLD_NOW);
+-	
+-	if(libVisidon==NULL){
+-		MY_LOGD("declareBeautyShotEngine dlopen error=%s",dlerror());
+-		return;
+-	}
+-    *(void **)&Link_VDInitializeBeautyShot = dlsym(libVisidon,"VDInitializeBeautyShot");
+-	if(!Link_VDInitializeBeautyShot){
+-		MY_LOGD("Link_VDInitializeBeautyShot open error=%s",dlerror());
+-		return;
+-	}
+-
+-    *(void **)&Link_VDReleaseBeautyShot = dlsym(libVisidon,"VDReleaseBeautyShot");
+-	if(!Link_VDReleaseBeautyShot){
+-		MY_LOGD("Link_VDReleaseBeautyShot open error=%s",dlerror());
+-		return;
+-	}
+-	
+-	*(void **)&Link_VDProcessPreviewFrame = dlsym(libVisidon,"VDProcessPreviewFrame");
+-	if(!Link_VDProcessPreviewFrame){
+-		MY_LOGD("Link_VDProcessPreviewFrame open error=%s",dlerror());
+-		return;
+-	}
+-    MY_LOGD("declareBeautyShotEngine dlopen success");
+-}
+-
+-void
+-DisplayClient::
+-initializeBeautyShotEngine()
+-{
+-    MY_LOGD("%s: STARTTING", __FUNCTION__);  
+-
+-    if(!mpParamsMgr->getVisidonMode() || libVisidon==NULL || !Link_VDInitializeBeautyShot) 
+-		return;
+-
+-    int ret = 0;
+-	if(mVisidonBeautyShotEngine!=NULL) {
+-		// Release beauty engine					
+-		MY_LOGD("%s: Releasing beauty shot engine", __FUNCTION__);
+-		VDBeautyErrorCode err = Link_VDReleaseBeautyShot(&mVisidonBeautyShotEngine);
+-		mVisidonBeautyShotEngine  = NULL;			
+-	}
+-
+-    int cols = 0;		
+-	int rows = 0;
+-    mpParamsMgr->getPreviewSize(&cols, &rows);
+-
+-    void *ptr;
+-    VDBeautyErrorCode err = Link_VDInitializeBeautyShot(cols, rows, VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL,MEMCPY_READPIXELS, &ptr);
+-	if(err != VDBEAUTY_OK) {					
+-		ret = 1;					
+-		mVisidonBeautyShotEngine = NULL;			
+-	}else {			
+-		mVisidonBeautyShotEngine = ptr; 				
+-		MY_LOGD("%s: Initialized engine ptr = %p\n", __FUNCTION__, mVisidonBeautyShotEngine); 		
+-	}	 
+-	return ;	
+-}
+-
+-int 
+-DisplayClient:: 
+-applyPreviewBeautification(unsigned char *yuv, int skinSmoothing,int skinTone) {			
+-	if(mpParamsMgr->getVisidonMode() && libVisidon!=NULL && Link_VDProcessPreviewFrame && mVisidonBeautyShotEngine != NULL ) {        
+-		MY_LOGD("%s: applyPreviewBeautification STARTTING", __FUNCTION__);
+-		VDBeautyShotData inputData;  
+-		memset(inputData.faces,0,sizeof(VDBeautyFace)*MAX_BEAUTY_SHOT_FACES_IN_TRACK);				
+-		mpParamsMgr->getPreviewSize(&inputData.imageCols, &inputData.imageRows);   		
+-		inputData.imageFormat = YUV_420_NV21;        
+-		inputData.imagePtr = yuv;
+-		inputData.beautyFilterParams[SKIN_SMOOTHING] = mpParamsMgr->getVisidonModeSkin();
+-		inputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = mpParamsMgr->getVisidonModeTone();
+-		MY_LOGD("getVisidonModeSkin=%d,getVisidonModeTone=%d",mpParamsMgr->getVisidonModeSkin(),mpParamsMgr->getVisidonModeTone());
+-		MY_LOGD("%s: CALLING VDProcessPreviewFrame (cols = %d, rows = %d, dataptr = %p, engineptr = %p)", 
+-			__FUNCTION__, inputData.imageCols, inputData.imageRows, 
+-			inputData.imagePtr, mVisidonBeautyShotEngine);				
+-		VDBeautyErrorCode err = Link_VDProcessPreviewFrame(&inputData, mVisidonBeautyShotEngine);
+-		if(err == VDBEAUTY_OK){            
+-			return 0;    
+-		}else{
+-			initializeBeautyShotEngine();
+-		}
+-    }	
+-	MY_LOGD("%s: end", __FUNCTION__);
+-	return 1;
+-}
+-void 
+-DisplayClient::
+-releaseBeautyShotEngine() {   		
+-	if(mpParamsMgr->getVisidonMode() && libVisidon!= NULL && Link_VDReleaseBeautyShot && mVisidonBeautyShotEngine!=NULL ) {
+-		// Release beauty engine        			
+-		MY_LOGD("%s: Releasing beauty shot engine", __FUNCTION__);        			
+-		VDBeautyErrorCode err = Link_VDReleaseBeautyShot(&mVisidonBeautyShotEngine);       			
+-		mVisidonBeautyShotEngine  = NULL;    		
+-		}		 		
+-	return ;	
+-}
+-
+ /******************************************************************************
+ *
+ *******************************************************************************/
+@@ -242,10 +138,7 @@
+ DisplayClient::
+ init()
+ {
+-    if(mpParamsMgr->getVisidonMode()){
+-		declareBeautyShotEngine();
+-	    initializeBeautyShotEngine();
+-	}
++    
+     bool ret = false;
+     //
+     MY_LOGD("+");
+@@ -254,6 +147,16 @@
+         &&  createImgBufQueue()
+             ;
+     //
++    
++	if(mpParamsMgr->getVisidonMode()){
++		MY_LOGD("init Visidon face beauty");
++	    int mPWidth =0; 
++        int mPHeight =0;
++        mpParamsMgr->getPreviewSize(&mPWidth,&mPHeight);
++	    mpVisidon = VisidonFaceBeauty::createInstance();
++        mpVisidon->initPreviewSize(mPWidth,mPHeight);
++		mpVisidon->enableFaceBeauty();
++	}
+     MY_LOGD("- ret(%d)", ret);
+     return  ret;
+ }
+@@ -266,10 +169,6 @@
+ DisplayClient::
+ uninit()
+ {
+-	releaseBeautyShotEngine();
+-	libVisidon = NULL;
+-	mVisidonBeautyShotEngine = NULL;
+-	Link_VDProcessPreviewFrame = NULL;
+     status_t status = OK;
+     MY_LOGI("+ getStrongCount(%d)", getStrongCount());
+     //
+@@ -682,6 +581,13 @@
+     if  ( ! isDisplayEnabled() )
+     {
+         MY_LOGD("Display is already disabled");
++       if (mpVisidon)
++       {
++           MY_LOGI("Visidon :disableDisplay disable facebeauty");
++           mpVisidon->disableFaceBeauty();
++           mpVisidon->destroyInstance();
++           mpVisidon = NULL;
++       }
+         goto lbExit;
+     }
+     //
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/Android.mk
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/Android.mk	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/Android.mk	(revision 6477)
+@@ -70,6 +70,7 @@
+ LOCAL_C_INCLUDES += $(TOP)/$(MTK_PATH_SOURCE)/hardware/mtkcam/ext/include
+ LOCAL_C_INCLUDES += $(TOP)/$(MTK_PATH_SOURCE)/hardware/mtkcam/include
+ LOCAL_C_INCLUDES += $(TOP)/system/media/camera/include
++LOCAL_C_INCLUDES += $(TOP)/external/libvisidon_facebeauty/include
+ #
+ 
+ #-----------------------------------------------------------
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.h	(revision 6476)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.h	(revision 6477)
+@@ -45,134 +45,12 @@
+ #include <v1/IDisplayClient.h>
+ #include "StreamImgBuf.h"
+ #include "DisplayThread.h"
++#include <v1/IParamsManager.h>
++#include <VisidonFaceBeauty.h>
+ 
+-
+ namespace android {
+ namespace NSDisplayClient {
+-/**
+-    Max number of filters
+-    */
+-#define NUMBER_OF_BEAUTYFILTERS MAX_BEAUTY_FILTER
+-#define MAX_BEAUTY_SHOT_FACES_IN_TRACK 5
+ 
+-    /**
+-    Enumeration for different beauty filters
+-    */
+-    typedef enum _VDBeautyFilters {
+-        SKIN_SMOOTHING=0, /**< Intelligent skin smoothing algorithm*/
+-        SPOT_SMOOTHING=1,/**< Adaptive spot and wrinkle removal algorithm (part of SKIN_SMOOTHING)*/
+-        FACE_CONTOURING=2, /**< Face contouring algorithm*/
+-        TEETH_WHITENING=3,/**< Teeth whitening algorithm*/
+-        EYE_SHAPING=4,/**< Eye enlargement algorithm*/
+-        CHEEK_BLUSHING=5,/**< Cheek blusher algorithm*/
+-        SKIN_TONE_ADJUSTING=6,/**< Skin toning algorithm*/
+-        MOUTH_SHAPING=7,/**< Mouth shaping algorithm*/
+-        NOSE_SHAPING = 8,/**< Nose shaping algorithm*/
+-        EYEBROW_SHAPING=9,/**< Eye-brown shaping algorithm*/
+-        FACE_SHAPING=10, /**< Face shaping (thinning) algorithm*/
+-        OUT_FOCUS=11, /**< Sharp face area, blurred background */
+-        EYE_BRIGHTENING=12, /**< Eye brightening algorithm */
+-		LIP_TONING=13, /**< Lip enhancement algorithm */
+-        SKIN_COLOR_ADJUSTING=14, /**< Skin color adjustment algorithm (red tone adjustment) */
+-		SKIN_COLOR_CHANGE = 15, /**< Skin color changing alogithm */
+-        FACE_BOKEH = 16,
+-        MAX_BEAUTY_FILTER /**< Keep this entry last */
+-    } VDBeautyFilters;
+-
+-    /**
+-    Enumeration for different image formats supported by the engine.
+-    */
+-    typedef enum _VDBeatyShotImageFormat
+-    {
+-        YUV_420_NV12=0, /**< YUV420SPNV12 format*/
+-        YUV_420_NV21=1, /**< YUV420SPNV21 format*/
+-        RGB_888=2,  /**< 24-bit RGB format*/
+-        JPEG_COMPRESSED=3, /**< JPEG compressed format*/
+-		YUV_YUYV = 4, /**< YUYV format (YUYV...YUYV..YUYV)*/
+-		YUV_YV12 = 5, /**< YUV YV12 format */
+-        YUV_UYVY = 6, /**< UYVY format (UYVY...UYVY..UYVY)*/
+-        YUV_PLANAR = 7, /**< Planar YUV format given with three separate pointers to planes */
+-        YUV_NV21_SEPARATED = 8 /**< Same as YUV_420_NV21 except input/output is given with separate pointers to luma (imagePtr) and chroma (imagePtrU) channels. */
+-    } VDBeatyShotImageFormat;
+-
+-
+-    /**
+-    Enumeration for different memory modes to be used with the GPU processing.
+-    Some devices do not support GraphicBuffer memory copying (MEMCPY_GRAPHICBUFFER)
+-    and one needs to use read pixels approach (MEMCPY_READPIXELS).
+-    */
+-    typedef enum _VDBeautyEngineGPUMemoryMode
+-    {
+-        MEMCPY_READPIXELS=0, /**< Use glReadPixels to reed data from GPU*/
+-        MEMCPY_GRAPHICBUFFER=1,/**< Use GraphicBuffer (gralloc) memory copying to read data from GPU*/
+-        RENDER_TO_WINDOW=2,/**< Render to window. Do not read data from GPU */
+-    } VDBeautyEngineGPUMemoryMode;
+-
+-    /**
+-    Enumeration for different operation modes supported by the engine.
+-    */
+-    typedef enum _VDBeautyEngineProcessingMode
+-    {
+-        VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL = 0, /**< Use both preview and still processing and apply face tracking in preview mode.*/
+-        VDBEAUTY_REALTIME_AND_STILL = 1,/**< Use both preview and still processing but do not apply face tracking in preview mode (filtering is applied to skin like areas instead of detected face)*/
+-        VDBEAUTY_STILL = 2,/**< Use only still image processing*/
+-    } VDBeautyEngineProcessingMode;
+-
+-    /**
+-    Structure for face coordinates that may be provided outside beauty engine (i.e. from
+-    hardware face tracker).
+-    */
+-    typedef struct _VDBeautyFace
+-    {
+-        int left; /**< Left x coordinate of face in the image*/
+-        int top; /**< Top y coordinate of face in the image*/
+-        int right; /**< Rigt x coordinate of face in the image*/
+-        int bottom;/**< Bottom y coordinate of face in the image*/
+-        int leftEyeX; /**< Left eye x coordinate if available*/
+-        int leftEyeY;/**< Left eye y coordinate if available*/
+-        int rightEyeX; /**< Right eye x coordinate if available*/
+-        int rightEyeY; /**< Right eye t coordinate if available*/
+-		int smile;
+-    }VDBeautyFace;
+-
+-    /**
+-    Structure for input/output data to be used with processing functions.
+-    */
+-    typedef struct _VDBeautyShotData
+-    {
+-        unsigned char *imagePtr; /**< Pointer to image data (input/output) */
+-        unsigned char *imagePtrU; /**< Pointer to image data U plane (input/output) when format is YUV_PLANAR or pointer to UV plane when format is YUV_NV21_SEPARATED  */
+-        unsigned char *imagePtrV; /**< Pointer to image data V plane (input/output) when format is YUV_PLANAR. */
+-        int imageCols; /**< Image width*/
+-        int imageRows;/**< Image height*/
+-        int nbrOfFaces; /**< Number of faces in the faces array */
+-        VDBeautyFace faces[MAX_BEAUTY_SHOT_FACES_IN_TRACK];
+-        int jpegDataSize;/**< Compressed data size in case of JPEG format*/
+-        int jpegSavingQuality; /**< JPEG saving quality (0-100)*/
+-        unsigned char *outputJpeg; /**< Newly allocated JPEG compressed data in case of JPEG format*/
+-        int ouputJpegDataSize; /**< Compressed output data size in case of JPEG format*/
+-        VDBeatyShotImageFormat imageFormat; /**< Used image format*/
+-        int32_t beautyFilterParams[NUMBER_OF_BEAUTYFILTERS]; /**< Filter strength parameters*/
+-        int forceSmoothing; /**< Force face smoothing even though no face is found (apply to skin like regions)*/
+-		int colorNoiseReduction; /**< Color noise (chroma) reduction strength (0-10) */
+-		int luminanceNoiseReduction; /**< Luminance noise reduction strength (0-10) */
+-		int sharpening; /**< Sharpening strength (0-10) */
+-		int padRows;	/**< Number of extra rows after valid Y rows before chroma channel. */
+-		int padCols;	/**< Number of extra pixels after each row to be ignored. */
+-		int stillImageRotation; /**< Defines how still image and preview frame are oriented w.r.t. each other. Supported values are 90 (=preview rotated toward right), 180 (=preview is up-side down), 270 (=preview rotated towards left) */
+-		int previewMirrored; /**< Defines if still image and preview frame are mirrored w.r.t. each other. Supported values are 0 (=preview is not mirrored), and 1 (=previw is mirrored). */
+-		int skipPreviewIfStillRunning; /**< Skip preview beauty processing if still image processing is on-going. Supported values are 0 (=do not skip = apply normally), and 1 (=skip preview processing if still is running) */
+-		int skipPreviewProcessing; /**< Skip preview processing but take the ouput from the frame buffer pipeline to keep same frame dealy as with actual processing */
+-    }VDBeautyShotData;
+-
+-    /**
+-    Enumeration for different error codes returend by API functions.
+-    */
+-    typedef enum _VDBeautyErrorCode
+-    {
+-        VDBEAUTY_OK=0, /**< Operation ok*/
+-        VDBEAUTY_NOK=1, /**< Operation not ok*/
+-    } VDBeautyErrorCode;
+ /******************************************************************************
+ *
+ *******************************************************************************/
+@@ -412,28 +290,10 @@
+     String8                         ms8DumpImgBufPath;
+     //
+     ExtImgProc*                     mpExtImgProc;
++    VisidonFaceBeauty*              mpVisidon;
+ protected:  ////                    dump
+     void                            dumpImgBuf_If(sp<StreamImgBuf>const& rpImgBuf);
+ 	
+-	public:
+-	void initializeBeautyShotEngine();  
+-	void declareBeautyShotEngine();
+-	// Release beayty engine
+-	void releaseBeautyShotEngine();    
+-	// Process preview frame with beauty engine
+-	int applyPreviewBeautification(unsigned char *yuv, 
+-							int skinSmoothingStrenght, 
+-							int skinToneAdjustmentStrength);
+-	
+-   
+-	// Pointer to beauty engine instance
+-	void *mVisidonBeautyShotEngine;
+-	void *libVisidon;
+-
+-	
+-	VDBeautyErrorCode (*Link_VDInitializeBeautyShot)(int previewCols,int previewRows,VDBeautyEngineProcessingMode processingMode, VDBeautyEngineGPUMemoryMode gpuMemoryMode, void ** engine);
+-	VDBeautyErrorCode (*Link_VDReleaseBeautyShot)(void ** engine);
+-	VDBeautyErrorCode (*Link_VDProcessPreviewFrame)(VDBeautyShotData *data, void *engine);
+ };
+ 
+ 

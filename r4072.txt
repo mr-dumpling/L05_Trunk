@@ -1,0 +1,72 @@
+Index: packages/apps/Settings/src/com/android/settings/notification/VolumeSeekBarPreference.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/VolumeSeekBarPreference.java	(revision 4071)
++++ packages/apps/Settings/src/com/android/settings/notification/VolumeSeekBarPreference.java	(revision 4072)
+@@ -51,7 +51,7 @@
+     private int mIconResId;
+     private int mMuteIconResId;
+     private boolean mStopped;
+-
++    private AudioManager mAudioManager;
+     public VolumeSeekBarPreference(Context context, AttributeSet attrs, int defStyleAttr,
+             int defStyleRes) {
+         super(context, attrs, defStyleAttr, defStyleRes);
+@@ -106,6 +106,7 @@
+ 
+     private void init() {
+         if (mSeekBar == null) return;
++		mAudioManager = getContext().getSystemService(AudioManager.class);
+         final SeekBarVolumizer.Callback sbvc = new SeekBarVolumizer.Callback() {
+             @Override
+             public void onSampleStarting(SeekBarVolumizer sbv) {
+@@ -151,7 +152,18 @@
+ 
+     private void updateIconView() {
+         if (mIconView == null) return;
+-        if (mIconResId != 0) {
++		
++		if(mStream == AudioManager.STREAM_NOTIFICATION && mIconResId != 0){
++			if(mAudioManager.isStreamMute(mStream)){
++				mIconView.setImageResource(mMuteIconResId);
++				return;
++			}else {
++				mIconView.setImageResource(mIconResId);
++				return;
++			}
++		}
++		
++        if (mIconResId != 0 ) {
+             mIconView.setImageResource(mIconResId);
+         } else if (mMuteIconResId != 0 && mMuted && !mZenMuted) {
+             mIconView.setImageResource(mMuteIconResId);
+Index: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 4071)
++++ packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 4072)
+@@ -183,6 +183,7 @@
+        }
+ 		mNotificationPreference =initVolumePreference(KEY_NOTIFICATION_VOLUME, AudioManager.STREAM_NOTIFICATION,
+                             R.drawable.notification_mute);
++		mNotificationPreference.showIcon(R.drawable.notification);
+         // Enable link to CMAS app settings depending on the value in config.xml.
+         boolean isCellBroadcastAppLinkEnabled = this.getResources().getBoolean(
+                 com.android.internal.R.bool.config_cellBroadcastAppLinks);
+@@ -324,8 +325,7 @@
+                 : mRingerMode == AudioManager.RINGER_MODE_VIBRATE || wasRingerModeVibrate()
+                 ? com.android.internal.R.drawable.ic_audio_ring_notif_vibrate
+                 : com.android.internal.R.drawable.ic_audio_ring_notif);
+-        mNotificationPreference.showIcon(mRingerMode == AudioManager.RINGER_MODE_VIBRATE || mRingerMode == AudioManager.RINGER_MODE_SILENT 
+-		    ? R.drawable.notification_mute : R.drawable.notification);
++       
+     }
+ 
+     private boolean wasRingerModeVibrate() {
+@@ -462,7 +462,7 @@
+         }
+         Uri ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(context, type);
+         CharSequence summary = context.getString(com.android.internal.R.string.ringtone_unknown);
+-		//checkDefaultUri(ringtoneUri,context,type);
++	
+         // Is it a silent ringtone?
+          if (ringtoneUri == null){
+         	summary = context.getString(com.android.internal.R.string.ringtone_silent);

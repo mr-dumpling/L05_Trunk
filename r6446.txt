@@ -1,0 +1,62 @@
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 6445)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 6446)
+@@ -210,7 +210,7 @@
+             }
+         }
+ 		
+-		if (CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), message.getServiceCategory())) {
++		if (CellBroadcastReceiverApp.isCellAreaInChile() && CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), message.getServiceCategory()) && isMessageEnabledByUser(cbm)) {
+ 			SystemProperties.set("persist.sys.cmasalert", "1");
+ 		}
+ 
+@@ -319,6 +319,10 @@
+                 CellBroadcastSettings.isFeatureEnabled(this,
+                         CarrierConfigManager.KEY_CARRIER_FORCE_DISABLE_ETWS_CMAS_TEST_BOOL, false);
+ 
++		if (message.getServiceCategory() == 919 && CellBroadcastReceiverApp.isCellAreaInChile()) {
++			return false;
++		}
++						
+         if (message.isEtwsTestMessage()) {
+             return emergencyAlertEnabled &&
+                     !forceDisableEtwsCmasTest &&
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java	(revision 6445)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java	(revision 6446)
+@@ -253,9 +253,15 @@
+ 
+             if (isMtkCmasSupport() && isCmasDefaultChannel(channelId)) {
+                 MmsLog.d(LOG_TAG, "mtk cmas channel disabled");
+-                channel.setEnabled(false);
+-                channel.setSelectable(false);
+-				channel.setSummary(R.string.enable);
++				if (channelId == 919) { 
++					channel.setEnabled(false);
++					channel.setSelectable(false);
++					channel.setSummary(R.string.disable);
++				} else {
++					channel.setEnabled(false);
++					channel.setSelectable(false);
++					channel.setSummary(R.string.enable);
++				}
+                 // skip to set the onclick handler as well
+             } else {
+ 
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 6445)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 6446)
+@@ -377,6 +377,10 @@
+ 		if (message.getServiceCategory() == 4411 && CellBroadcastReceiverApp.isCellAreaInChile()) {
+ 			return true;
+ 		}
++		
++		if (message.getServiceCategory() == 919 && CellBroadcastReceiverApp.isCellAreaInChile()) {
++			return false;
++		}
+ 
+         if (message.isCmasMessage()) {
+             //Log.d(TAG, "in isMessageEnabledByUser , CMASMessageClass " + message.getCmasMessageClass());

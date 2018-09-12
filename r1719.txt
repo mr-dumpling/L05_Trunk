@@ -1,0 +1,3203 @@
+Index: vendor/branch/5058Y/packages/apps/Dialer/src/com/android/dialer/database/DialerDatabaseHelper.java
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Dialer/src/com/android/dialer/database/DialerDatabaseHelper.java	(revision 0)
++++ vendor/branch/5058Y/packages/apps/Dialer/src/com/android/dialer/database/DialerDatabaseHelper.java	(revision 1719)
+@@ -0,0 +1,1225 @@
++/*
++ * Copyright (C) 2013 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.dialer.database;
++
++import android.content.ContentValues;
++import android.content.Context;
++import android.content.SharedPreferences;
++import android.database.Cursor;
++import android.database.DatabaseUtils;
++import android.database.sqlite.SQLiteDatabase;
++import android.database.sqlite.SQLiteException;
++import android.database.sqlite.SQLiteOpenHelper;
++import android.database.sqlite.SQLiteStatement;
++import android.net.Uri;
++import android.os.AsyncTask;
++import android.provider.BaseColumns;
++import android.provider.ContactsContract;
++import android.provider.ContactsContract.CommonDataKinds.Phone;
++import android.provider.ContactsContract.Contacts;
++import android.provider.ContactsContract.Data;
++import android.provider.ContactsContract.Directory;
++import android.text.TextUtils;
++import android.util.Log;
++
++import com.android.contacts.common.util.PermissionsUtil;
++import com.android.contacts.common.util.StopWatch;
++import com.android.dialer.database.FilteredNumberContract.FilteredNumberColumns;
++import com.android.dialer.database.VoicemailArchiveContract.VoicemailArchive;
++import com.android.dialer.R;
++import com.android.dialer.dialpad.SmartDialNameMatcher;
++import com.android.dialer.dialpad.SmartDialPrefix;
++
++import com.google.common.annotations.VisibleForTesting;
++import com.google.common.base.Objects;
++import com.google.common.base.Preconditions;
++import com.google.common.collect.Lists;
++
++import java.util.ArrayList;
++import java.util.HashSet;
++import java.util.Set;
++import java.util.concurrent.atomic.AtomicBoolean;
++import android.provider.Settings;
++
++import java.util.Locale;
++/**
++ * Database helper for smart dial. Designed as a singleton to make sure there is
++ * only one access point to the database. Provides methods to maintain, update,
++ * and query the database.
++ */
++public class DialerDatabaseHelper extends SQLiteOpenHelper {
++    private static final String TAG = "DialerDatabaseHelper";
++    private static final boolean DEBUG = false;
++    private boolean mIsTestInstance = false;
++
++    private static DialerDatabaseHelper sSingleton = null;
++
++    private static final Object mLock = new Object();
++    private static final AtomicBoolean sInUpdate = new AtomicBoolean(false);
++    private final Context mContext;
++	
++	/*Begin, by mzj for smart_dial_sort*/
++    private int mSmartDialSortOrder = -1;
++    private final static int SORT_IN_RUSSIAN = 1;
++    private final static int SORT_IN_ENGLISH = 2;
++    private final static String SMART_DIAL_SORT_ORDER = "smart_dial_sort_order";
++    /*End, by mzj for smart_dial_sort*/
++
++    /**
++     * SmartDial DB version ranges:
++     * <pre>
++     *   0-98   KitKat
++     * </pre>
++     */
++    public static final int DATABASE_VERSION = 10;
++    public static final String DATABASE_NAME = "dialer.db";
++
++    /**
++     * Saves the last update time of smart dial databases to shared preferences.
++     */
++    private static final String DATABASE_LAST_CREATED_SHARED_PREF = "com.android.dialer";
++    private static final String LAST_UPDATED_MILLIS = "last_updated_millis";
++    private static final String DATABASE_VERSION_PROPERTY = "database_version";
++
++    private static final int MAX_ENTRIES = 20;
++
++    public interface Tables {
++        /** Saves a list of numbers to be blocked.*/
++        static final String FILTERED_NUMBER_TABLE = "filtered_numbers_table";
++        /** Saves the necessary smart dial information of all contacts. */
++        static final String SMARTDIAL_TABLE = "smartdial_table";
++        /** Saves all possible prefixes to refer to a contacts.*/
++        static final String PREFIX_TABLE = "prefix_table";
++        /** Saves all archived voicemail information. */
++        static final String VOICEMAIL_ARCHIVE_TABLE = "voicemail_archive_table";
++        /** Database properties for internal use */
++        static final String PROPERTIES = "properties";
++    }
++
++    public static final Uri SMART_DIAL_UPDATED_URI =
++            Uri.parse("content://com.android.dialer/smart_dial_updated");
++
++    public interface SmartDialDbColumns {
++        static final String _ID = "id";
++        static final String DATA_ID = "data_id";
++        static final String NUMBER = "phone_number";
++        static final String CONTACT_ID = "contact_id";
++        static final String LOOKUP_KEY = "lookup_key";
++        static final String DISPLAY_NAME_PRIMARY = "display_name";
++        static final String PHOTO_ID = "photo_id";
++        static final String LAST_TIME_USED = "last_time_used";
++        static final String TIMES_USED = "times_used";
++        static final String STARRED = "starred";
++        static final String IS_SUPER_PRIMARY = "is_super_primary";
++        static final String IN_VISIBLE_GROUP = "in_visible_group";
++        static final String IS_PRIMARY = "is_primary";
++        static final String CARRIER_PRESENCE = "carrier_presence";
++        static final String LAST_SMARTDIAL_UPDATE_TIME = "last_smartdial_update_time";
++		static final String LAUNGAGE = "laungage";//add, by mzj for smart_dial_sort_order
++    }
++
++    public static interface PrefixColumns extends BaseColumns {
++        static final String PREFIX = "prefix";
++        static final String CONTACT_ID = "contact_id";
++    }
++
++    public interface PropertiesColumns {
++        String PROPERTY_KEY = "property_key";
++        String PROPERTY_VALUE = "property_value";
++    }
++
++    /** Query options for querying the contact database.*/
++    public static interface PhoneQuery {
++       static final Uri URI = Phone.CONTENT_URI.buildUpon().
++               appendQueryParameter(ContactsContract.DIRECTORY_PARAM_KEY,
++                       String.valueOf(Directory.DEFAULT)).
++               appendQueryParameter(ContactsContract.REMOVE_DUPLICATE_ENTRIES, "true").
++               build();
++
++       static final String[] PROJECTION = new String[] {
++            Phone._ID,                          // 0
++            Phone.TYPE,                         // 1
++            Phone.LABEL,                        // 2
++            Phone.NUMBER,                       // 3
++            Phone.CONTACT_ID,                   // 4
++            Phone.LOOKUP_KEY,                   // 5
++            Phone.DISPLAY_NAME_PRIMARY,         // 6
++            Phone.PHOTO_ID,                     // 7
++            Data.LAST_TIME_USED,                // 8
++            Data.TIMES_USED,                    // 9
++            Contacts.STARRED,                   // 10
++            Data.IS_SUPER_PRIMARY,              // 11
++            Contacts.IN_VISIBLE_GROUP,          // 12
++            Data.IS_PRIMARY,                    // 13
++            Data.CARRIER_PRESENCE,              // 14
++        };
++
++        static final int PHONE_ID = 0;
++        static final int PHONE_TYPE = 1;
++        static final int PHONE_LABEL = 2;
++        static final int PHONE_NUMBER = 3;
++        static final int PHONE_CONTACT_ID = 4;
++        static final int PHONE_LOOKUP_KEY = 5;
++        static final int PHONE_DISPLAY_NAME = 6;
++        static final int PHONE_PHOTO_ID = 7;
++        static final int PHONE_LAST_TIME_USED = 8;
++        static final int PHONE_TIMES_USED = 9;
++        static final int PHONE_STARRED = 10;
++        static final int PHONE_IS_SUPER_PRIMARY = 11;
++        static final int PHONE_IN_VISIBLE_GROUP = 12;
++        static final int PHONE_IS_PRIMARY = 13;
++        static final int PHONE_CARRIER_PRESENCE = 14;
++		
++		static final int PHONE_IS_LAUNGAGE = 15;//add by mzj for smart_dial_sort_order
++
++        /** Selects only rows that have been updated after a certain time stamp.*/
++        static final String SELECT_UPDATED_CLAUSE =
++                Phone.CONTACT_LAST_UPDATED_TIMESTAMP + " > ?";
++
++        /** Ignores contacts that have an unreasonably long lookup key. These are likely to be
++         * the result of multiple (> 50) merged raw contacts, and are likely to cause
++         * OutOfMemoryExceptions within SQLite, or cause memory allocation problems later on
++         * when iterating through the cursor set (see b/13133579)
++         */
++        static final String SELECT_IGNORE_LOOKUP_KEY_TOO_LONG_CLAUSE =
++                "length(" + Phone.LOOKUP_KEY + ") < 1000";
++
++        static final String SELECTION = SELECT_UPDATED_CLAUSE + " AND " +
++                SELECT_IGNORE_LOOKUP_KEY_TOO_LONG_CLAUSE;
++    }
++
++    /**
++     * Query for all contacts that have been updated since the last time the smart dial database
++     * was updated.
++     */
++    public static interface UpdatedContactQuery {
++        static final Uri URI = ContactsContract.Contacts.CONTENT_URI;
++
++        static final String[] PROJECTION = new String[] {
++                ContactsContract.Contacts._ID  // 0
++        };
++
++        static final int UPDATED_CONTACT_ID = 0;
++
++        static final String SELECT_UPDATED_CLAUSE =
++                ContactsContract.Contacts.CONTACT_LAST_UPDATED_TIMESTAMP + " > ?";
++    }
++
++    /** Query options for querying the deleted contact database.*/
++    public static interface DeleteContactQuery {
++       static final Uri URI = ContactsContract.DeletedContacts.CONTENT_URI;
++
++       static final String[] PROJECTION = new String[] {
++            ContactsContract.DeletedContacts.CONTACT_ID,                          // 0
++            ContactsContract.DeletedContacts.CONTACT_DELETED_TIMESTAMP,           // 1
++        };
++
++        static final int DELETED_CONTACT_ID = 0;
++        static final int DELECTED_TIMESTAMP = 1;
++
++        /** Selects only rows that have been deleted after a certain time stamp.*/
++        public static final String SELECT_UPDATED_CLAUSE =
++                ContactsContract.DeletedContacts.CONTACT_DELETED_TIMESTAMP + " > ?";
++    }
++
++    /**
++     * Gets the sorting order for the smartdial table. This computes a SQL "ORDER BY" argument by
++     * composing contact status and recent contact details together.
++     */
++    private static interface SmartDialSortingOrder {
++        /** Current contacts - those contacted within the last 3 days (in milliseconds) */
++        static final long LAST_TIME_USED_CURRENT_MS = 3L * 24 * 60 * 60 * 1000;
++        /** Recent contacts - those contacted within the last 30 days (in milliseconds) */
++        static final long LAST_TIME_USED_RECENT_MS = 30L * 24 * 60 * 60 * 1000;
++
++        /** Time since last contact. */
++        static final String TIME_SINCE_LAST_USED_MS = "( ?1 - " +
++                Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.LAST_TIME_USED + ")";
++
++        /** Contacts that have been used in the past 3 days rank higher than contacts that have
++         * been used in the past 30 days, which rank higher than contacts that have not been used
++         * in recent 30 days.
++         */
++        static final String SORT_BY_DATA_USAGE =
++                "(CASE WHEN " + TIME_SINCE_LAST_USED_MS + " < " + LAST_TIME_USED_CURRENT_MS +
++                " THEN 0 " +
++                " WHEN " + TIME_SINCE_LAST_USED_MS + " < " + LAST_TIME_USED_RECENT_MS +
++                " THEN 1 " +
++                " ELSE 2 END)";
++
++        /** This sort order is similar to that used by the ContactsProvider when returning a list
++         * of frequently called contacts.
++         */
++        static final String SORT_ORDER =
++				Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.LAUNGAGE + " DESC, "
++				+ Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.STARRED + " DESC, "
++				+ Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.IS_SUPER_PRIMARY + " DESC, "
++				+ SORT_BY_DATA_USAGE + ", "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.TIMES_USED + " DESC, "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.IN_VISIBLE_GROUP + " DESC, "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.DISPLAY_NAME_PRIMARY + ", "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.CONTACT_ID + ", "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.IS_PRIMARY + " DESC";
++
++        static final String SORT_ORDER_ASC =
++				Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.LAUNGAGE + " ASC, "
++				+ Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.STARRED + " DESC, "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.IS_SUPER_PRIMARY + " DESC, "
++                + SORT_BY_DATA_USAGE + ", "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.TIMES_USED + " DESC, "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.IN_VISIBLE_GROUP + " DESC, "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.DISPLAY_NAME_PRIMARY + ", "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.CONTACT_ID + ", "
++                + Tables.SMARTDIAL_TABLE + "." + SmartDialDbColumns.IS_PRIMARY + " DESC";
++    }
++
++    /**
++     * Simple data format for a contact, containing only information needed for showing up in
++     * smart dial interface.
++     */
++    public static class ContactNumber {
++        public final long id;
++        public final long dataId;
++        public final String displayName;
++        public final String phoneNumber;
++        public final String lookupKey;
++        public final long photoId;
++        public final int carrierPresence;
++
++        public ContactNumber(long id, long dataID, String displayName, String phoneNumber,
++                String lookupKey, long photoId, int carrierPresence) {
++            this.dataId = dataID;
++            this.id = id;
++            this.displayName = displayName;
++            this.phoneNumber = phoneNumber;
++            this.lookupKey = lookupKey;
++            this.photoId = photoId;
++            this.carrierPresence = carrierPresence;
++        }
++
++        @Override
++        public int hashCode() {
++            return Objects.hashCode(id, dataId, displayName, phoneNumber, lookupKey, photoId,
++                    carrierPresence);
++        }
++
++        @Override
++        public boolean equals(Object object) {
++            if (this == object) {
++                return true;
++            }
++            if (object instanceof ContactNumber) {
++                final ContactNumber that = (ContactNumber) object;
++                return Objects.equal(this.id, that.id)
++                        && Objects.equal(this.dataId, that.dataId)
++                        && Objects.equal(this.displayName, that.displayName)
++                        && Objects.equal(this.phoneNumber, that.phoneNumber)
++                        && Objects.equal(this.lookupKey, that.lookupKey)
++                        && Objects.equal(this.photoId, that.photoId)
++                        && Objects.equal(this.carrierPresence, that.carrierPresence);
++            }
++            return false;
++        }
++    }
++
++    /**
++     * Data format for finding duplicated contacts.
++     */
++    private class ContactMatch {
++        private final String lookupKey;
++        private final long id;
++
++        public ContactMatch(String lookupKey, long id) {
++            this.lookupKey = lookupKey;
++            this.id = id;
++        }
++
++        @Override
++        public int hashCode() {
++            return Objects.hashCode(lookupKey, id);
++        }
++
++        @Override
++        public boolean equals(Object object) {
++            if (this == object) {
++                return true;
++            }
++            if (object instanceof ContactMatch) {
++                final ContactMatch that = (ContactMatch) object;
++                return Objects.equal(this.lookupKey, that.lookupKey)
++                        && Objects.equal(this.id, that.id);
++            }
++            return false;
++        }
++    }
++
++    /**
++     * Access function to get the singleton instance of DialerDatabaseHelper.
++     */
++    public static synchronized DialerDatabaseHelper getInstance(Context context) {
++        if (DEBUG) {
++            Log.v(TAG, "Getting Instance");
++        }
++        if (sSingleton == null) {
++            // Use application context instead of activity context because this is a singleton,
++            // and we don't want to leak the activity if the activity is not running but the
++            // dialer database helper is still doing work.
++            sSingleton = new DialerDatabaseHelper(context.getApplicationContext(),
++                    DATABASE_NAME);
++        }
++        return sSingleton;
++    }
++
++    /**
++     * Returns a new instance for unit tests. The database will be created in memory.
++     */
++    @VisibleForTesting
++    static DialerDatabaseHelper getNewInstanceForTest(Context context) {
++        return new DialerDatabaseHelper(context, null, true);
++    }
++
++    protected DialerDatabaseHelper(Context context, String databaseName, boolean isTestInstance) {
++        this(context, databaseName, DATABASE_VERSION);
++        mIsTestInstance = isTestInstance;
++    }
++
++    protected DialerDatabaseHelper(Context context, String databaseName) {
++        this(context, databaseName, DATABASE_VERSION);
++    }
++
++    protected DialerDatabaseHelper(Context context, String databaseName, int dbVersion) {
++        super(context, databaseName, null, dbVersion);
++        mContext = Preconditions.checkNotNull(context, "Context must not be null");
++    }
++
++    /**
++     * Creates tables in the database when database is created for the first time.
++     *
++     * @param db The database.
++     */
++    @Override
++    public void onCreate(SQLiteDatabase db) {
++        setupTables(db);
++    }
++
++    private void setupTables(SQLiteDatabase db) {
++        dropTables(db);
++        db.execSQL("CREATE TABLE " + Tables.SMARTDIAL_TABLE + " ("
++                + SmartDialDbColumns._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
++                + SmartDialDbColumns.DATA_ID + " INTEGER, "
++                + SmartDialDbColumns.NUMBER + " TEXT,"
++                + SmartDialDbColumns.CONTACT_ID + " INTEGER,"
++                + SmartDialDbColumns.LOOKUP_KEY + " TEXT,"
++                + SmartDialDbColumns.DISPLAY_NAME_PRIMARY + " TEXT, "
++                + SmartDialDbColumns.PHOTO_ID + " INTEGER, "
++                + SmartDialDbColumns.LAST_SMARTDIAL_UPDATE_TIME + " LONG, "
++				+ SmartDialDbColumns.LAUNGAGE + " TEXT, "
++                + SmartDialDbColumns.LAST_TIME_USED + " LONG, "
++                + SmartDialDbColumns.TIMES_USED + " INTEGER, "
++                + SmartDialDbColumns.STARRED + " INTEGER, "
++                + SmartDialDbColumns.IS_SUPER_PRIMARY + " INTEGER, "
++                + SmartDialDbColumns.IN_VISIBLE_GROUP + " INTEGER, "
++                + SmartDialDbColumns.IS_PRIMARY + " INTEGER, "
++                + SmartDialDbColumns.CARRIER_PRESENCE + " INTEGER NOT NULL DEFAULT 0"
++                + ");");
++
++        db.execSQL("CREATE TABLE " + Tables.PREFIX_TABLE + " ("
++                + PrefixColumns._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
++                + PrefixColumns.PREFIX + " TEXT COLLATE NOCASE, "
++                + PrefixColumns.CONTACT_ID + " INTEGER"
++                + ");");
++
++        db.execSQL("CREATE TABLE " + Tables.PROPERTIES + " ("
++                + PropertiesColumns.PROPERTY_KEY + " TEXT PRIMARY KEY, "
++                + PropertiesColumns.PROPERTY_VALUE + " TEXT "
++                + ");");
++
++        // This will need to also be updated in setupTablesForFilteredNumberTest and onUpgrade.
++        // Hardcoded so we know on glance what columns are updated in setupTables,
++        // and to be able to guarantee the state of the DB at each upgrade step.
++        db.execSQL("CREATE TABLE " + Tables.FILTERED_NUMBER_TABLE + " ("
++                + FilteredNumberColumns._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
++                + FilteredNumberColumns.NORMALIZED_NUMBER + " TEXT UNIQUE,"
++                + FilteredNumberColumns.NUMBER + " TEXT,"
++                + FilteredNumberColumns.COUNTRY_ISO + " TEXT,"
++                + FilteredNumberColumns.TIMES_FILTERED + " INTEGER,"
++                + FilteredNumberColumns.LAST_TIME_FILTERED + " LONG,"
++                + FilteredNumberColumns.CREATION_TIME + " LONG,"
++                + FilteredNumberColumns.TYPE + " INTEGER,"
++                + FilteredNumberColumns.SOURCE + " INTEGER"
++                + ");");
++
++        createVoicemailArchiveTable(db);
++        setProperty(db, DATABASE_VERSION_PROPERTY, String.valueOf(DATABASE_VERSION));
++        if (!mIsTestInstance) {
++            resetSmartDialLastUpdatedTime();
++        }
++    }
++
++    public void dropTables(SQLiteDatabase db) {
++        db.execSQL("DROP TABLE IF EXISTS " + Tables.PREFIX_TABLE);
++        db.execSQL("DROP TABLE IF EXISTS " + Tables.SMARTDIAL_TABLE);
++        db.execSQL("DROP TABLE IF EXISTS " + Tables.PROPERTIES);
++        db.execSQL("DROP TABLE IF EXISTS " + Tables.FILTERED_NUMBER_TABLE);
++        db.execSQL("DROP TABLE IF EXISTS " + Tables.VOICEMAIL_ARCHIVE_TABLE);
++    }
++
++    @Override
++    public void onUpgrade(SQLiteDatabase db, int oldNumber, int newNumber) {
++        // Disregard the old version and new versions provided by SQLiteOpenHelper, we will read
++        // our own from the database.
++
++        int oldVersion;
++
++        oldVersion = getPropertyAsInt(db, DATABASE_VERSION_PROPERTY, 0);
++
++        if (oldVersion == 0) {
++            Log.e(TAG, "Malformed database version..recreating database");
++        }
++
++        if (oldVersion < 4) {
++            setupTables(db);
++            return;
++        }
++
++        if (oldVersion < 7) {
++            db.execSQL("DROP TABLE IF EXISTS " + Tables.FILTERED_NUMBER_TABLE);
++            db.execSQL("CREATE TABLE " + Tables.FILTERED_NUMBER_TABLE + " ("
++                    + FilteredNumberColumns._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
++                    + FilteredNumberColumns.NORMALIZED_NUMBER + " TEXT UNIQUE,"
++                    + FilteredNumberColumns.NUMBER + " TEXT,"
++                    + FilteredNumberColumns.COUNTRY_ISO + " TEXT,"
++                    + FilteredNumberColumns.TIMES_FILTERED + " INTEGER,"
++                    + FilteredNumberColumns.LAST_TIME_FILTERED + " LONG,"
++                    + FilteredNumberColumns.CREATION_TIME + " LONG,"
++                    + FilteredNumberColumns.TYPE + " INTEGER,"
++                    + FilteredNumberColumns.SOURCE + " INTEGER"
++                    + ");");
++            oldVersion = 7;
++        }
++
++        if (oldVersion < 8) {
++            upgradeToVersion8(db);
++            oldVersion = 8;
++        }
++
++        if (oldVersion < 9) {
++            db.execSQL("DROP TABLE IF EXISTS " + Tables.VOICEMAIL_ARCHIVE_TABLE);
++            createVoicemailArchiveTable(db);
++            oldVersion = 9;
++        }
++
++        if (oldVersion != DATABASE_VERSION) {
++            throw new IllegalStateException(
++                    "error upgrading the database to version " + DATABASE_VERSION);
++        }
++
++        setProperty(db, DATABASE_VERSION_PROPERTY, String.valueOf(DATABASE_VERSION));
++    }
++
++    public void upgradeToVersion8(SQLiteDatabase db) {
++        db.execSQL("ALTER TABLE smartdial_table ADD carrier_presence INTEGER NOT NULL DEFAULT 0");
++    }
++
++    /**
++     * Stores a key-value pair in the {@link Tables#PROPERTIES} table.
++     */
++    public void setProperty(String key, String value) {
++        setProperty(getWritableDatabase(), key, value);
++    }
++
++    public void setProperty(SQLiteDatabase db, String key, String value) {
++        final ContentValues values = new ContentValues();
++        values.put(PropertiesColumns.PROPERTY_KEY, key);
++        values.put(PropertiesColumns.PROPERTY_VALUE, value);
++        db.replace(Tables.PROPERTIES, null, values);
++    }
++
++    /**
++     * Returns the value from the {@link Tables#PROPERTIES} table.
++     */
++    public String getProperty(String key, String defaultValue) {
++        return getProperty(getReadableDatabase(), key, defaultValue);
++    }
++
++    public String getProperty(SQLiteDatabase db, String key, String defaultValue) {
++        try {
++            String value = null;
++            final Cursor cursor = db.query(Tables.PROPERTIES,
++                    new String[] {PropertiesColumns.PROPERTY_VALUE},
++                            PropertiesColumns.PROPERTY_KEY + "=?",
++                    new String[] {key}, null, null, null);
++            if (cursor != null) {
++                try {
++                    if (cursor.moveToFirst()) {
++                        value = cursor.getString(0);
++                    }
++                } finally {
++                    cursor.close();
++                }
++            }
++            return value != null ? value : defaultValue;
++        } catch (SQLiteException e) {
++            return defaultValue;
++        }
++    }
++
++    public int getPropertyAsInt(SQLiteDatabase db, String key, int defaultValue) {
++        final String stored = getProperty(db, key, "");
++        try {
++            return Integer.parseInt(stored);
++        } catch (NumberFormatException e) {
++            return defaultValue;
++        }
++    }
++
++    private void resetSmartDialLastUpdatedTime() {
++        final SharedPreferences databaseLastUpdateSharedPref = mContext.getSharedPreferences(
++                DATABASE_LAST_CREATED_SHARED_PREF, Context.MODE_PRIVATE);
++        final SharedPreferences.Editor editor = databaseLastUpdateSharedPref.edit();
++        editor.putLong(LAST_UPDATED_MILLIS, 0);
++        editor.commit();
++    }
++
++    /**
++     * Starts the database upgrade process in the background.
++     */
++    public void startSmartDialUpdateThread() {
++        if (PermissionsUtil.hasContactsPermissions(mContext)) {
++            new SmartDialUpdateAsyncTask().execute();
++        }
++    }
++
++    private class SmartDialUpdateAsyncTask extends AsyncTask {
++        @Override
++        protected Object doInBackground(Object[] objects) {
++            if (DEBUG) {
++                Log.v(TAG, "Updating database");
++            }
++            updateSmartDialDatabase();
++            return null;
++        }
++
++        @Override
++        protected void onCancelled() {
++            if (DEBUG) {
++                Log.v(TAG, "Updating Cancelled");
++            }
++            super.onCancelled();
++        }
++
++        @Override
++        protected void onPostExecute(Object o) {
++            if (DEBUG) {
++                Log.v(TAG, "Updating Finished");
++            }
++            super.onPostExecute(o);
++        }
++    }
++    /**
++     * Removes rows in the smartdial database that matches the contacts that have been deleted
++     * by other apps since last update.
++     *
++     * @param db Database to operate on.
++     * @param deletedContactCursor Cursor containing rows of deleted contacts
++     */
++    @VisibleForTesting
++    void removeDeletedContacts(SQLiteDatabase db, Cursor deletedContactCursor) {
++        if (deletedContactCursor == null) {
++            return;
++        }
++
++        db.beginTransaction();
++        try {
++            while (deletedContactCursor.moveToNext()) {
++                final Long deleteContactId =
++                        deletedContactCursor.getLong(DeleteContactQuery.DELETED_CONTACT_ID);
++                db.delete(Tables.SMARTDIAL_TABLE,
++                        SmartDialDbColumns.CONTACT_ID + "=" + deleteContactId, null);
++                db.delete(Tables.PREFIX_TABLE,
++                        PrefixColumns.CONTACT_ID + "=" + deleteContactId, null);
++            }
++
++            db.setTransactionSuccessful();
++        } finally {
++            deletedContactCursor.close();
++            db.endTransaction();
++        }
++    }
++
++    private Cursor getDeletedContactCursor(String lastUpdateMillis) {
++        return mContext.getContentResolver().query(
++                DeleteContactQuery.URI,
++                DeleteContactQuery.PROJECTION,
++                DeleteContactQuery.SELECT_UPDATED_CLAUSE,
++                new String[] {lastUpdateMillis},
++                null);
++    }
++
++    /**
++     * Removes potentially corrupted entries in the database. These contacts may be added before
++     * the previous instance of the dialer was destroyed for some reason. For data integrity, we
++     * delete all of them.
++
++     * @param db Database pointer to the dialer database.
++     * @param last_update_time Time stamp of last successful update of the dialer database.
++     */
++    private void removePotentiallyCorruptedContacts(SQLiteDatabase db, String last_update_time) {
++        db.delete(Tables.PREFIX_TABLE,
++                PrefixColumns.CONTACT_ID + " IN " +
++                "(SELECT " + SmartDialDbColumns.CONTACT_ID + " FROM " + Tables.SMARTDIAL_TABLE +
++                " WHERE " + SmartDialDbColumns.LAST_SMARTDIAL_UPDATE_TIME + " > " +
++                last_update_time + ")",
++                null);
++        db.delete(Tables.SMARTDIAL_TABLE,
++                SmartDialDbColumns.LAST_SMARTDIAL_UPDATE_TIME + " > " + last_update_time, null);
++    }
++
++    /**
++     * All columns excluding MIME_TYPE, _DATA, ARCHIVED, SERVER_ID, are the same as
++     *  the columns in the {@link android.provider.CallLog.Calls} table.
++     *
++     *  @param db Database pointer to the dialer database.
++     */
++    private void createVoicemailArchiveTable(SQLiteDatabase db) {
++        db.execSQL("CREATE TABLE " + Tables.VOICEMAIL_ARCHIVE_TABLE + " ("
++                + VoicemailArchive._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
++                + VoicemailArchive.NUMBER + " TEXT,"
++                + VoicemailArchive.DATE + " LONG,"
++                + VoicemailArchive.DURATION + " LONG,"
++                + VoicemailArchive.MIME_TYPE + " TEXT,"
++                + VoicemailArchive.COUNTRY_ISO + " TEXT,"
++                + VoicemailArchive._DATA + " TEXT,"
++                + VoicemailArchive.GEOCODED_LOCATION + " TEXT,"
++                + VoicemailArchive.CACHED_NAME + " TEXT,"
++                + VoicemailArchive.CACHED_NUMBER_TYPE + " INTEGER,"
++                + VoicemailArchive.CACHED_NUMBER_LABEL + " TEXT,"
++                + VoicemailArchive.CACHED_LOOKUP_URI + " TEXT,"
++                + VoicemailArchive.CACHED_MATCHED_NUMBER + " TEXT,"
++                + VoicemailArchive.CACHED_NORMALIZED_NUMBER + " TEXT,"
++                + VoicemailArchive.CACHED_PHOTO_ID + " LONG,"
++                + VoicemailArchive.CACHED_FORMATTED_NUMBER + " TEXT,"
++                + VoicemailArchive.ARCHIVED + " INTEGER,"
++                + VoicemailArchive.NUMBER_PRESENTATION + " INTEGER,"
++                + VoicemailArchive.ACCOUNT_COMPONENT_NAME + " TEXT,"
++                + VoicemailArchive.ACCOUNT_ID + " TEXT,"
++                + VoicemailArchive.FEATURES + " INTEGER,"
++                + VoicemailArchive.SERVER_ID + " INTEGER,"
++                + VoicemailArchive.TRANSCRIPTION + " TEXT,"
++                + VoicemailArchive.CACHED_PHOTO_URI + " TEXT"
++                + ");");
++    }
++
++    /**
++     * Removes all entries in the smartdial contact database.
++     */
++    @VisibleForTesting
++    void removeAllContacts(SQLiteDatabase db) {
++        db.delete(Tables.SMARTDIAL_TABLE, null, null);
++        db.delete(Tables.PREFIX_TABLE, null, null);
++    }
++
++    /**
++     * Counts number of rows of the prefix table.
++     */
++    @VisibleForTesting
++    int countPrefixTableRows(SQLiteDatabase db) {
++        return (int)DatabaseUtils.longForQuery(db, "SELECT COUNT(1) FROM " + Tables.PREFIX_TABLE,
++                null);
++    }
++
++    /**
++     * Removes rows in the smartdial database that matches updated contacts.
++     *
++     * @param db Database pointer to the smartdial database
++     * @param updatedContactCursor Cursor pointing to the list of recently updated contacts.
++     */
++    @VisibleForTesting
++    void removeUpdatedContacts(SQLiteDatabase db, Cursor updatedContactCursor) {
++        db.beginTransaction();
++        try {
++            updatedContactCursor.moveToPosition(-1);
++            while (updatedContactCursor.moveToNext()) {
++                final Long contactId =
++                        updatedContactCursor.getLong(UpdatedContactQuery.UPDATED_CONTACT_ID);
++
++                db.delete(Tables.SMARTDIAL_TABLE, SmartDialDbColumns.CONTACT_ID + "=" +
++                        contactId, null);
++                db.delete(Tables.PREFIX_TABLE, PrefixColumns.CONTACT_ID + "=" +
++                        contactId, null);
++            }
++
++            db.setTransactionSuccessful();
++        } finally {
++            db.endTransaction();
++        }
++    }
++
++    /**
++     * Inserts updated contacts as rows to the smartdial table.
++     *
++     * @param db Database pointer to the smartdial database.
++     * @param updatedContactCursor Cursor pointing to the list of recently updated contacts.
++     * @param currentMillis Current time to be recorded in the smartdial table as update timestamp.
++     */
++    @VisibleForTesting
++    protected void insertUpdatedContactsAndNumberPrefix(SQLiteDatabase db,
++            Cursor updatedContactCursor, Long currentMillis) {
++        db.beginTransaction();
++        try {
++            final String sqlInsert = "INSERT INTO " + Tables.SMARTDIAL_TABLE + " (" +
++                    SmartDialDbColumns.DATA_ID + ", " +
++                    SmartDialDbColumns.NUMBER + ", " +
++                    SmartDialDbColumns.CONTACT_ID + ", " +
++                    SmartDialDbColumns.LOOKUP_KEY + ", " +
++                    SmartDialDbColumns.DISPLAY_NAME_PRIMARY + ", " +
++                    SmartDialDbColumns.PHOTO_ID + ", " +
++                    SmartDialDbColumns.LAST_TIME_USED + ", " +
++                    SmartDialDbColumns.TIMES_USED + ", " +
++                    SmartDialDbColumns.STARRED + ", " +
++                    SmartDialDbColumns.IS_SUPER_PRIMARY + ", " +
++                    SmartDialDbColumns.IN_VISIBLE_GROUP+ ", " +
++                    SmartDialDbColumns.IS_PRIMARY + ", " +
++                    SmartDialDbColumns.CARRIER_PRESENCE + ", " +
++                    SmartDialDbColumns.LAST_SMARTDIAL_UPDATE_TIME +", "+
++                    SmartDialDbColumns.LAUNGAGE + ") " +
++                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
++            final SQLiteStatement insert = db.compileStatement(sqlInsert);
++
++            final String numberSqlInsert = "INSERT INTO " + Tables.PREFIX_TABLE + " (" +
++                    PrefixColumns.CONTACT_ID + ", " +
++                    PrefixColumns.PREFIX  + ") " +
++                    " VALUES (?, ?)";
++            final SQLiteStatement numberInsert = db.compileStatement(numberSqlInsert);
++
++            updatedContactCursor.moveToPosition(-1);
++            while (updatedContactCursor.moveToNext()) {
++                insert.clearBindings();
++
++                // Handle string columns which can possibly be null first. In the case of certain
++                // null columns (due to malformed rows possibly inserted by third-party apps
++                // or sync adapters), skip the phone number row.
++                final String number = updatedContactCursor.getString(PhoneQuery.PHONE_NUMBER);
++                if (TextUtils.isEmpty(number)) {
++                    continue;
++                } else {
++                    insert.bindString(2, number);
++                }
++
++                final String lookupKey = updatedContactCursor.getString(
++                        PhoneQuery.PHONE_LOOKUP_KEY);
++                if (TextUtils.isEmpty(lookupKey)) {
++                    continue;
++                } else {
++                    insert.bindString(4, lookupKey);
++                }
++
++                final String displayName = updatedContactCursor.getString(
++                        PhoneQuery.PHONE_DISPLAY_NAME);
++				
++				//add by mzj for smart_dial_sort_order begin
++                final String mlang = Locale.getDefault().getLanguage();
++				//add by mzj for smart_dial_sort_order end
++				
++                if (displayName == null) {
++                    insert.bindString(5, mContext.getResources().getString(R.string.missing_name));
++					insert.bindString(14, mlang);
++                } else {
++                    insert.bindString(5, displayName);
++				//add by mzj for smart_dial_sort_order begin
++					int length = displayName.length();
++                    char ch;
++                    for (int i = 0; i < length; i++) {
++                        ch = displayName.charAt(i);
++                        if((ch >= 'А' && ch <= 'Я') || (ch >= 'а' && ch <= 'я')){
++                            insert.bindString(14, "ru");
++                            break;
++                        }else if((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')){
++                            insert.bindString(14, "en");
++                            break;
++                        }else{
++                            insert.bindString(14, mlang);
++                        }
++                    }
++                }
++				//add by mzj for smart_dial_sort_order end
++                insert.bindLong(1, updatedContactCursor.getLong(PhoneQuery.PHONE_ID));
++                insert.bindLong(3, updatedContactCursor.getLong(PhoneQuery.PHONE_CONTACT_ID));
++                insert.bindLong(6, updatedContactCursor.getLong(PhoneQuery.PHONE_PHOTO_ID));
++                insert.bindLong(7, updatedContactCursor.getLong(PhoneQuery.PHONE_LAST_TIME_USED));
++                insert.bindLong(8, updatedContactCursor.getInt(PhoneQuery.PHONE_TIMES_USED));
++                insert.bindLong(9, updatedContactCursor.getInt(PhoneQuery.PHONE_STARRED));
++                insert.bindLong(10, updatedContactCursor.getInt(PhoneQuery.PHONE_IS_SUPER_PRIMARY));
++                insert.bindLong(11, updatedContactCursor.getInt(PhoneQuery.PHONE_IN_VISIBLE_GROUP));
++                insert.bindLong(12, updatedContactCursor.getInt(PhoneQuery.PHONE_IS_PRIMARY));
++                insert.bindLong(13, updatedContactCursor.getInt(PhoneQuery.PHONE_CARRIER_PRESENCE));
++                insert.bindLong(14, currentMillis);
++                insert.executeInsert();
++                final String contactPhoneNumber =
++                        updatedContactCursor.getString(PhoneQuery.PHONE_NUMBER);
++                final ArrayList<String> numberPrefixes =
++                        SmartDialPrefix.parseToNumberTokens(contactPhoneNumber);
++
++                for (String numberPrefix : numberPrefixes) {
++                    numberInsert.bindLong(1, updatedContactCursor.getLong(
++                            PhoneQuery.PHONE_CONTACT_ID));
++                    numberInsert.bindString(2, numberPrefix);
++                    numberInsert.executeInsert();
++                    numberInsert.clearBindings();
++                }
++            }
++
++            db.setTransactionSuccessful();
++        } finally {
++            db.endTransaction();
++        }
++    }
++
++    /**
++     * Inserts prefixes of contact names to the prefix table.
++     *
++     * @param db Database pointer to the smartdial database.
++     * @param nameCursor Cursor pointing to the list of distinct updated contacts.
++     */
++    @VisibleForTesting
++    void insertNamePrefixes(SQLiteDatabase db, Cursor nameCursor) {
++        final int columnIndexName = nameCursor.getColumnIndex(
++                SmartDialDbColumns.DISPLAY_NAME_PRIMARY);
++        final int columnIndexContactId = nameCursor.getColumnIndex(SmartDialDbColumns.CONTACT_ID);
++
++        db.beginTransaction();
++        try {
++            final String sqlInsert = "INSERT INTO " + Tables.PREFIX_TABLE + " (" +
++                    PrefixColumns.CONTACT_ID + ", " +
++                    PrefixColumns.PREFIX  + ") " +
++                    " VALUES (?, ?)";
++            final SQLiteStatement insert = db.compileStatement(sqlInsert);
++
++            while (nameCursor.moveToNext()) {
++                /** Computes a list of prefixes of a given contact name. */
++                final ArrayList<String> namePrefixes =
++                        SmartDialPrefix.generateNamePrefixes(nameCursor.getString(columnIndexName));
++
++                for (String namePrefix : namePrefixes) {
++                    insert.bindLong(1, nameCursor.getLong(columnIndexContactId));
++                    insert.bindString(2, namePrefix);
++                    insert.executeInsert();
++                    insert.clearBindings();
++                }
++            }
++
++            db.setTransactionSuccessful();
++        } finally {
++            db.endTransaction();
++        }
++    }
++
++    /**
++     * Updates the smart dial and prefix database.
++     * This method queries the Delta API to get changed contacts since last update, and updates the
++     * records in smartdial database and prefix database accordingly.
++     * It also queries the deleted contact database to remove newly deleted contacts since last
++     * update.
++     */
++    public void updateSmartDialDatabase() {
++        final SQLiteDatabase db = getWritableDatabase();
++
++        synchronized(mLock) {
++            if (DEBUG) {
++                Log.v(TAG, "Starting to update database");
++            }
++            final StopWatch stopWatch = DEBUG ? StopWatch.start("Updating databases") : null;
++
++            /** Gets the last update time on the database. */
++            final SharedPreferences databaseLastUpdateSharedPref = mContext.getSharedPreferences(
++                    DATABASE_LAST_CREATED_SHARED_PREF, Context.MODE_PRIVATE);
++            final String lastUpdateMillis = String.valueOf(
++                    databaseLastUpdateSharedPref.getLong(LAST_UPDATED_MILLIS, 0));
++
++            if (DEBUG) {
++                Log.v(TAG, "Last updated at " + lastUpdateMillis);
++            }
++
++            /** Sets the time after querying the database as the current update time. */
++            final Long currentMillis = System.currentTimeMillis();
++
++            if (DEBUG) {
++                stopWatch.lap("Queried the Contacts database");
++            }
++
++            /** Prevents the app from reading the dialer database when updating. */
++            sInUpdate.getAndSet(true);
++
++            /** Removes contacts that have been deleted. */
++            removeDeletedContacts(db, getDeletedContactCursor(lastUpdateMillis));
++            removePotentiallyCorruptedContacts(db, lastUpdateMillis);
++
++            if (DEBUG) {
++                stopWatch.lap("Finished deleting deleted entries");
++            }
++
++            /** If the database did not exist before, jump through deletion as there is nothing
++             * to delete.
++             */
++            if (!lastUpdateMillis.equals("0")) {
++                /** Removes contacts that have been updated. Updated contact information will be
++                 * inserted later. Note that this has to use a separate result set from
++                 * updatePhoneCursor, since it is possible for a contact to be updated (e.g.
++                 * phone number deleted), but have no results show up in updatedPhoneCursor (since
++                 * all of its phone numbers have been deleted).
++                 */
++                final Cursor updatedContactCursor = mContext.getContentResolver().query(
++                        UpdatedContactQuery.URI,
++                        UpdatedContactQuery.PROJECTION,
++                        UpdatedContactQuery.SELECT_UPDATED_CLAUSE,
++                        new String[] {lastUpdateMillis},
++                        null
++                        );
++                if (updatedContactCursor == null) {
++                    Log.e(TAG, "SmartDial query received null for cursor");
++                    return;
++                }
++                try {
++                    removeUpdatedContacts(db, updatedContactCursor);
++                } finally {
++                    updatedContactCursor.close();
++                }
++                if (DEBUG) {
++                    stopWatch.lap("Finished deleting entries belonging to updated contacts");
++                }
++            }
++
++            /** Queries the contact database to get all phone numbers that have been updated since the last
++             * update time.
++             */
++            final Cursor updatedPhoneCursor = mContext.getContentResolver().query(PhoneQuery.URI,
++                    PhoneQuery.PROJECTION, PhoneQuery.SELECTION,
++                    new String[]{lastUpdateMillis}, null);
++            if (updatedPhoneCursor == null) {
++                Log.e(TAG, "SmartDial query received null for cursor");
++                return;
++            }
++
++            try {
++                /** Inserts recently updated phone numbers to the smartdial database.*/
++                insertUpdatedContactsAndNumberPrefix(db, updatedPhoneCursor, currentMillis);
++                if (DEBUG) {
++                    stopWatch.lap("Finished building the smart dial table");
++                }
++            } finally {
++                updatedPhoneCursor.close();
++            }
++
++            /** Gets a list of distinct contacts which have been updated, and adds the name prefixes
++             * of these contacts to the prefix table.
++             */
++            final Cursor nameCursor = db.rawQuery(
++                    "SELECT DISTINCT " +
++                    SmartDialDbColumns.DISPLAY_NAME_PRIMARY + ", " + SmartDialDbColumns.CONTACT_ID +
++                    " FROM " + Tables.SMARTDIAL_TABLE +
++                    " WHERE " + SmartDialDbColumns.LAST_SMARTDIAL_UPDATE_TIME +
++                    " = " + Long.toString(currentMillis),
++                    new String[] {});
++            if (nameCursor != null) {
++                try {
++                    if (DEBUG) {
++                        stopWatch.lap("Queried the smart dial table for contact names");
++                    }
++
++                    /** Inserts prefixes of names into the prefix table.*/
++                    insertNamePrefixes(db, nameCursor);
++                    if (DEBUG) {
++                        stopWatch.lap("Finished building the name prefix table");
++                    }
++                } finally {
++                    nameCursor.close();
++                }
++            }
++
++            /** Creates index on contact_id for fast JOIN operation. */
++            db.execSQL("CREATE INDEX IF NOT EXISTS smartdial_contact_id_index ON " +
++                    Tables.SMARTDIAL_TABLE + " (" + SmartDialDbColumns.CONTACT_ID  + ");");
++            /** Creates index on last_smartdial_update_time for fast SELECT operation. */
++            db.execSQL("CREATE INDEX IF NOT EXISTS smartdial_last_update_index ON " +
++                    Tables.SMARTDIAL_TABLE + " (" +
++                    SmartDialDbColumns.LAST_SMARTDIAL_UPDATE_TIME + ");");
++            /** Creates index on sorting fields for fast sort operation. */
++            db.execSQL("CREATE INDEX IF NOT EXISTS smartdial_sort_index ON " +
++                    Tables.SMARTDIAL_TABLE + " (" +
++                    SmartDialDbColumns.STARRED + ", " +
++                    SmartDialDbColumns.IS_SUPER_PRIMARY + ", " +
++                    SmartDialDbColumns.LAST_TIME_USED + ", " +
++                    SmartDialDbColumns.TIMES_USED + ", " +
++                    SmartDialDbColumns.IN_VISIBLE_GROUP +  ", " +
++                    SmartDialDbColumns.DISPLAY_NAME_PRIMARY + ", " +
++                    SmartDialDbColumns.CONTACT_ID + ", " +
++                    SmartDialDbColumns.IS_PRIMARY +
++                    ");");
++            /** Creates index on prefix for fast SELECT operation. */
++            db.execSQL("CREATE INDEX IF NOT EXISTS nameprefix_index ON " +
++                    Tables.PREFIX_TABLE + " (" + PrefixColumns.PREFIX + ");");
++            /** Creates index on contact_id for fast JOIN operation. */
++            db.execSQL("CREATE INDEX IF NOT EXISTS nameprefix_contact_id_index ON " +
++                    Tables.PREFIX_TABLE + " (" + PrefixColumns.CONTACT_ID + ");");
++
++            if (DEBUG) {
++                stopWatch.lap(TAG + "Finished recreating index");
++            }
++
++            /** Updates the database index statistics.*/
++            db.execSQL("ANALYZE " + Tables.SMARTDIAL_TABLE);
++            db.execSQL("ANALYZE " + Tables.PREFIX_TABLE);
++            db.execSQL("ANALYZE smartdial_contact_id_index");
++            db.execSQL("ANALYZE smartdial_last_update_index");
++            db.execSQL("ANALYZE nameprefix_index");
++            db.execSQL("ANALYZE nameprefix_contact_id_index");
++            if (DEBUG) {
++                stopWatch.stopAndLog(TAG + "Finished updating index stats", 0);
++            }
++
++            sInUpdate.getAndSet(false);
++
++            final SharedPreferences.Editor editor = databaseLastUpdateSharedPref.edit();
++            editor.putLong(LAST_UPDATED_MILLIS, currentMillis);
++            editor.commit();
++
++            // Notify content observers that smart dial database has been updated.
++            mContext.getContentResolver().notifyChange(SMART_DIAL_UPDATED_URI, null, false);
++        }
++    }
++
++    /**
++     * Returns a list of candidate contacts where the query is a prefix of the dialpad index of
++     * the contact's name or phone number.
++     *
++     * @param query The prefix of a contact's dialpad index.
++     * @return A list of top candidate contacts that will be suggested to user to match their input.
++     */
++    public ArrayList<ContactNumber>  getLooseMatches(String query,
++            SmartDialNameMatcher nameMatcher) {
++        final boolean inUpdate = sInUpdate.get();
++        if (inUpdate) {
++            return Lists.newArrayList();
++        }
++
++        final SQLiteDatabase db = getReadableDatabase();
++
++        /** Uses SQL query wildcard '%' to represent prefix matching.*/
++        final String looseQuery = query + "%";
++
++        final ArrayList<ContactNumber> result = Lists.newArrayList();
++
++        final StopWatch stopWatch = DEBUG ? StopWatch.start(":Name Prefix query") : null;
++
++        final String currentTimeStamp = Long.toString(System.currentTimeMillis());
++		
++		/*Begin, by mzj for smart_dial_sort_order*/
++        String orderBy = SmartDialSortingOrder.SORT_ORDER ;
++        mSmartDialSortOrder = Settings.System.getInt(mContext.getContentResolver(), SMART_DIAL_SORT_ORDER,SORT_IN_RUSSIAN);
++        if(mSmartDialSortOrder == SORT_IN_ENGLISH){
++            orderBy = SmartDialSortingOrder.SORT_ORDER_ASC;
++        }
++        /*End, by mzj for smart_dial_sort_order*/
++
++        /** Queries the database to find contacts that have an index matching the query prefix. */
++        final Cursor cursor = db.rawQuery("SELECT " +
++                SmartDialDbColumns.DATA_ID + ", " +
++                SmartDialDbColumns.DISPLAY_NAME_PRIMARY + ", " +
++                SmartDialDbColumns.PHOTO_ID + ", " +
++                SmartDialDbColumns.NUMBER + ", " +
++                SmartDialDbColumns.CONTACT_ID + ", " +
++                SmartDialDbColumns.LOOKUP_KEY + ", " +
++                SmartDialDbColumns.CARRIER_PRESENCE +
++                " FROM " + Tables.SMARTDIAL_TABLE + " WHERE " +
++                SmartDialDbColumns.CONTACT_ID + " IN " +
++                    " (SELECT " + PrefixColumns.CONTACT_ID +
++                    " FROM " + Tables.PREFIX_TABLE +
++                    " WHERE " + Tables.PREFIX_TABLE + "." + PrefixColumns.PREFIX +
++                    " LIKE '" + looseQuery + "')" +
++                " ORDER BY " + orderBy,
++                new String[] {currentTimeStamp});
++        if (cursor == null) {
++            return result;
++        }
++        try {
++            if (DEBUG) {
++                stopWatch.lap("Prefix query completed");
++            }
++
++            /** Gets the column ID from the cursor.*/
++            final int columnDataId = 0;
++            final int columnDisplayNamePrimary = 1;
++            final int columnPhotoId = 2;
++            final int columnNumber = 3;
++            final int columnId = 4;
++            final int columnLookupKey = 5;
++            final int columnCarrierPresence = 6;
++            if (DEBUG) {
++                stopWatch.lap("Found column IDs");
++            }
++
++            final Set<ContactMatch> duplicates = new HashSet<ContactMatch>();
++            int counter = 0;
++            if (DEBUG) {
++                stopWatch.lap("Moved cursor to start");
++            }
++            /** Iterates the cursor to find top contact suggestions without duplication.*/
++            while ((cursor.moveToNext()) && (counter < MAX_ENTRIES)) {
++                final long dataID = cursor.getLong(columnDataId);
++                final String displayName = cursor.getString(columnDisplayNamePrimary);
++                final String phoneNumber = cursor.getString(columnNumber);
++                final long id = cursor.getLong(columnId);
++                final long photoId = cursor.getLong(columnPhotoId);
++                final String lookupKey = cursor.getString(columnLookupKey);
++                final int carrierPresence = cursor.getInt(columnCarrierPresence);
++
++                /** If a contact already exists and another phone number of the contact is being
++                 * processed, skip the second instance.
++                 */
++                final ContactMatch contactMatch = new ContactMatch(lookupKey, id);
++                if (duplicates.contains(contactMatch)) {
++                    continue;
++                }
++
++                /**
++                 * If the contact has either the name or number that matches the query, add to the
++                 * result.
++                 */
++                final boolean nameMatches = nameMatcher.matches(displayName);
++                final boolean numberMatches =
++                        (nameMatcher.matchesNumber(phoneNumber, query) != null);
++                if (nameMatches || numberMatches) {
++                    /** If a contact has not been added, add it to the result and the hash set.*/
++                    duplicates.add(contactMatch);
++                    result.add(new ContactNumber(id, dataID, displayName, phoneNumber, lookupKey,
++                            photoId, carrierPresence));
++                    counter++;
++                    if (DEBUG) {
++                        stopWatch.lap("Added one result: Name: " + displayName);
++                    }
++                }
++            }
++
++            if (DEBUG) {
++                stopWatch.stopAndLog(TAG + "Finished loading cursor", 0);
++            }
++        } finally {
++            cursor.close();
++        }
++        return result;
++    }
++}
+Index: vendor/branch/5058Y/packages/apps/Dialer/src/com/android/dialer/dialpad/LatinSmartDialMap.java
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Dialer/src/com/android/dialer/dialpad/LatinSmartDialMap.java	(revision 0)
++++ vendor/branch/5058Y/packages/apps/Dialer/src/com/android/dialer/dialpad/LatinSmartDialMap.java	(revision 1719)
+@@ -0,0 +1,481 @@
++package com.android.dialer.dialpad;
++
++public class LatinSmartDialMap implements SmartDialMap {
++
++    private static final char[] LATIN_LETTERS_TO_DIGITS = {
++        '2', '2', '2', // A,B,C -> 2
++        '3', '3', '3', // D,E,F -> 3
++        '4', '4', '4', // G,H,I -> 4
++        '5', '5', '5', // J,K,L -> 5
++        '6', '6', '6', // M,N,O -> 6
++        '7', '7', '7', '7', // P,Q,R,S -> 7
++        '8', '8', '8', // T,U,V -> 8
++        '9', '9', '9', '9' // W,X,Y,Z -> 9
++    };
++
++    @Override
++    public boolean isValidDialpadAlphabeticChar(char ch) {
++        return (ch >= 'a' && ch <= 'z');
++    }
++
++    @Override
++    public boolean isValidDialpadNumericChar(char ch) {
++        return (ch >= '0' && ch <= '9');
++    }
++
++    @Override
++    public boolean isValidDialpadCharacter(char ch) {
++        return (isValidDialpadAlphabeticChar(ch) || isValidDialpadNumericChar(ch));
++    }
++
++    /*
++     * The switch statement in this function was generated using the python code:
++     * from unidecode import unidecode
++     * for i in range(192, 564):
++     *     char = unichr(i)
++     *     decoded = unidecode(char)
++     *     # Unicode characters that decompose into multiple characters i.e.
++     *     #  into ss are not supported for now
++     *     if (len(decoded) == 1 and decoded.isalpha()):
++     *         print "case '" + char + "': return '" + unidecode(char) +  "';"
++     *
++     * This gives us a way to map characters containing accents/diacritics to their
++     * alphabetic equivalents. The unidecode library can be found at:
++     * http://pypi.python.org/pypi/Unidecode/0.04.1
++     *
++     * Also remaps all upper case latin characters to their lower case equivalents.
++     */
++    @Override
++    public char normalizeCharacter(char ch) {
++        switch (ch) {
++            case 'À': return 'a';
++            case 'Á': return 'a';
++            case 'Â': return 'a';
++            case 'Ã': return 'a';
++            case 'Ä': return 'a';
++            case 'Å': return 'a';
++            case 'Ç': return 'c';
++            case 'È': return 'e';
++            case 'É': return 'e';
++            case 'Ê': return 'e';
++            case 'Ë': return 'e';
++            case 'Ì': return 'i';
++            case 'Í': return 'i';
++            case 'Î': return 'i';
++            case 'Ï': return 'i';
++            case 'Ð': return 'd';
++            case 'Ñ': return 'n';
++            case 'Ò': return 'o';
++            case 'Ó': return 'o';
++            case 'Ô': return 'o';
++            case 'Õ': return 'o';
++            case 'Ö': return 'o';
++            case '×': return 'x';
++            case 'Ø': return 'o';
++            case 'Ù': return 'u';
++            case 'Ú': return 'u';
++            case 'Û': return 'u';
++            case 'Ü': return 'u';
++            case 'Ý': return 'u';
++            case 'à': return 'a';
++            case 'á': return 'a';
++            case 'â': return 'a';
++            case 'ã': return 'a';
++            case 'ä': return 'a';
++            case 'å': return 'a';
++            case 'ç': return 'c';
++            case 'è': return 'e';
++            case 'é': return 'e';
++            case 'ê': return 'e';
++            case 'ë': return 'e';
++            case 'ì': return 'i';
++            case 'í': return 'i';
++            case 'î': return 'i';
++            case 'ï': return 'i';
++            case 'ð': return 'd';
++            case 'ñ': return 'n';
++            case 'ò': return 'o';
++            case 'ó': return 'o';
++            case 'ô': return 'o';
++            case 'õ': return 'o';
++            case 'ö': return 'o';
++            case 'ø': return 'o';
++            case 'ù': return 'u';
++            case 'ú': return 'u';
++            case 'û': return 'u';
++            case 'ü': return 'u';
++            case 'ý': return 'y';
++            case 'ÿ': return 'y';
++            case 'Ā': return 'a';
++            case 'ā': return 'a';
++            case 'Ă': return 'a';
++            case 'ă': return 'a';
++            case 'Ą': return 'a';
++            case 'ą': return 'a';
++            case 'Ć': return 'c';
++            case 'ć': return 'c';
++            case 'Ĉ': return 'c';
++            case 'ĉ': return 'c';
++            case 'Ċ': return 'c';
++            case 'ċ': return 'c';
++            case 'Č': return 'c';
++            case 'č': return 'c';
++            case 'Ď': return 'd';
++            case 'ď': return 'd';
++            case 'Đ': return 'd';
++            case 'đ': return 'd';
++            case 'Ē': return 'e';
++            case 'ē': return 'e';
++            case 'Ĕ': return 'e';
++            case 'ĕ': return 'e';
++            case 'Ė': return 'e';
++            case 'ė': return 'e';
++            case 'Ę': return 'e';
++            case 'ę': return 'e';
++            case 'Ě': return 'e';
++            case 'ě': return 'e';
++            case 'Ĝ': return 'g';
++            case 'ĝ': return 'g';
++            case 'Ğ': return 'g';
++            case 'ğ': return 'g';
++            case 'Ġ': return 'g';
++            case 'ġ': return 'g';
++            case 'Ģ': return 'g';
++            case 'ģ': return 'g';
++            case 'Ĥ': return 'h';
++            case 'ĥ': return 'h';
++            case 'Ħ': return 'h';
++            case 'ħ': return 'h';
++            case 'Ĩ': return 'i';
++            case 'ĩ': return 'i';
++            case 'Ī': return 'i';
++            case 'ī': return 'i';
++            case 'Ĭ': return 'i';
++            case 'ĭ': return 'i';
++            case 'Į': return 'i';
++            case 'į': return 'i';
++            case 'İ': return 'i';
++            case 'ı': return 'i';
++            case 'Ĵ': return 'j';
++            case 'ĵ': return 'j';
++            case 'Ķ': return 'k';
++            case 'ķ': return 'k';
++            case 'ĸ': return 'k';
++            case 'Ĺ': return 'l';
++            case 'ĺ': return 'l';
++            case 'Ļ': return 'l';
++            case 'ļ': return 'l';
++            case 'Ľ': return 'l';
++            case 'ľ': return 'l';
++            case 'Ŀ': return 'l';
++            case 'ŀ': return 'l';
++            case 'Ł': return 'l';
++            case 'ł': return 'l';
++            case 'Ń': return 'n';
++            case 'ń': return 'n';
++            case 'Ņ': return 'n';
++            case 'ņ': return 'n';
++            case 'Ň': return 'n';
++            case 'ň': return 'n';
++            case 'Ō': return 'o';
++            case 'ō': return 'o';
++            case 'Ŏ': return 'o';
++            case 'ŏ': return 'o';
++            case 'Ő': return 'o';
++            case 'ő': return 'o';
++            case 'Ŕ': return 'r';
++            case 'ŕ': return 'r';
++            case 'Ŗ': return 'r';
++            case 'ŗ': return 'r';
++            case 'Ř': return 'r';
++            case 'ř': return 'r';
++            case 'Ś': return 's';
++            case 'ś': return 's';
++            case 'Ŝ': return 's';
++            case 'ŝ': return 's';
++            case 'Ş': return 's';
++            case 'ş': return 's';
++            case 'Š': return 's';
++            case 'š': return 's';
++            case 'Ţ': return 't';
++            case 'ţ': return 't';
++            case 'Ť': return 't';
++            case 'ť': return 't';
++            case 'Ŧ': return 't';
++            case 'ŧ': return 't';
++            case 'Ũ': return 'u';
++            case 'ũ': return 'u';
++            case 'Ū': return 'u';
++            case 'ū': return 'u';
++            case 'Ŭ': return 'u';
++            case 'ŭ': return 'u';
++            case 'Ů': return 'u';
++            case 'ů': return 'u';
++            case 'Ű': return 'u';
++            case 'ű': return 'u';
++            case 'Ų': return 'u';
++            case 'ų': return 'u';
++            case 'Ŵ': return 'w';
++            case 'ŵ': return 'w';
++            case 'Ŷ': return 'y';
++            case 'ŷ': return 'y';
++            case 'Ÿ': return 'y';
++            case 'Ź': return 'z';
++            case 'ź': return 'z';
++            case 'Ż': return 'z';
++            case 'ż': return 'z';
++            case 'Ž': return 'z';
++            case 'ž': return 'z';
++            case 'ſ': return 's';
++            case 'ƀ': return 'b';
++            case 'Ɓ': return 'b';
++            case 'Ƃ': return 'b';
++            case 'ƃ': return 'b';
++            case 'Ɔ': return 'o';
++            case 'Ƈ': return 'c';
++            case 'ƈ': return 'c';
++            case 'Ɖ': return 'd';
++            case 'Ɗ': return 'd';
++            case 'Ƌ': return 'd';
++            case 'ƌ': return 'd';
++            case 'ƍ': return 'd';
++            case 'Ɛ': return 'e';
++            case 'Ƒ': return 'f';
++            case 'ƒ': return 'f';
++            case 'Ɠ': return 'g';
++            case 'Ɣ': return 'g';
++            case 'Ɩ': return 'i';
++            case 'Ɨ': return 'i';
++            case 'Ƙ': return 'k';
++            case 'ƙ': return 'k';
++            case 'ƚ': return 'l';
++            case 'ƛ': return 'l';
++            case 'Ɯ': return 'w';
++            case 'Ɲ': return 'n';
++            case 'ƞ': return 'n';
++            case 'Ɵ': return 'o';
++            case 'Ơ': return 'o';
++            case 'ơ': return 'o';
++            case 'Ƥ': return 'p';
++            case 'ƥ': return 'p';
++            case 'ƫ': return 't';
++            case 'Ƭ': return 't';
++            case 'ƭ': return 't';
++            case 'Ʈ': return 't';
++            case 'Ư': return 'u';
++            case 'ư': return 'u';
++            case 'Ʊ': return 'y';
++            case 'Ʋ': return 'v';
++            case 'Ƴ': return 'y';
++            case 'ƴ': return 'y';
++            case 'Ƶ': return 'z';
++            case 'ƶ': return 'z';
++            case 'ƿ': return 'w';
++            case 'Ǎ': return 'a';
++            case 'ǎ': return 'a';
++            case 'Ǐ': return 'i';
++            case 'ǐ': return 'i';
++            case 'Ǒ': return 'o';
++            case 'ǒ': return 'o';
++            case 'Ǔ': return 'u';
++            case 'ǔ': return 'u';
++            case 'Ǖ': return 'u';
++            case 'ǖ': return 'u';
++            case 'Ǘ': return 'u';
++            case 'ǘ': return 'u';
++            case 'Ǚ': return 'u';
++            case 'ǚ': return 'u';
++            case 'Ǜ': return 'u';
++            case 'ǜ': return 'u';
++            case 'Ǟ': return 'a';
++            case 'ǟ': return 'a';
++            case 'Ǡ': return 'a';
++            case 'ǡ': return 'a';
++            case 'Ǥ': return 'g';
++            case 'ǥ': return 'g';
++            case 'Ǧ': return 'g';
++            case 'ǧ': return 'g';
++            case 'Ǩ': return 'k';
++            case 'ǩ': return 'k';
++            case 'Ǫ': return 'o';
++            case 'ǫ': return 'o';
++            case 'Ǭ': return 'o';
++            case 'ǭ': return 'o';
++            case 'ǰ': return 'j';
++            case 'ǲ': return 'd';
++            case 'Ǵ': return 'g';
++            case 'ǵ': return 'g';
++            case 'Ƿ': return 'w';
++            case 'Ǹ': return 'n';
++            case 'ǹ': return 'n';
++            case 'Ǻ': return 'a';
++            case 'ǻ': return 'a';
++            case 'Ǿ': return 'o';
++            case 'ǿ': return 'o';
++            case 'Ȁ': return 'a';
++            case 'ȁ': return 'a';
++            case 'Ȃ': return 'a';
++            case 'ȃ': return 'a';
++            case 'Ȅ': return 'e';
++            case 'ȅ': return 'e';
++            case 'Ȇ': return 'e';
++            case 'ȇ': return 'e';
++            case 'Ȉ': return 'i';
++            case 'ȉ': return 'i';
++            case 'Ȋ': return 'i';
++            case 'ȋ': return 'i';
++            case 'Ȍ': return 'o';
++            case 'ȍ': return 'o';
++            case 'Ȏ': return 'o';
++            case 'ȏ': return 'o';
++            case 'Ȑ': return 'r';
++            case 'ȑ': return 'r';
++            case 'Ȓ': return 'r';
++            case 'ȓ': return 'r';
++            case 'Ȕ': return 'u';
++            case 'ȕ': return 'u';
++            case 'Ȗ': return 'u';
++            case 'ȗ': return 'u';
++            case 'Ș': return 's';
++            case 'ș': return 's';
++            case 'Ț': return 't';
++            case 'ț': return 't';
++            case 'Ȝ': return 'y';
++            case 'ȝ': return 'y';
++            case 'Ȟ': return 'h';
++            case 'ȟ': return 'h';
++            case 'Ȥ': return 'z';
++            case 'ȥ': return 'z';
++            case 'Ȧ': return 'a';
++            case 'ȧ': return 'a';
++            case 'Ȩ': return 'e';
++            case 'ȩ': return 'e';
++            case 'Ȫ': return 'o';
++            case 'ȫ': return 'o';
++            case 'Ȭ': return 'o';
++            case 'ȭ': return 'o';
++            case 'Ȯ': return 'o';
++            case 'ȯ': return 'o';
++            case 'Ȱ': return 'o';
++            case 'ȱ': return 'o';
++            case 'Ȳ': return 'y';
++            case 'ȳ': return 'y';
++            case 'A': return 'a';
++            case 'B': return 'b';
++            case 'C': return 'c';
++            case 'D': return 'd';
++            case 'E': return 'e';
++            case 'F': return 'f';
++            case 'G': return 'g';
++            case 'H': return 'h';
++            case 'I': return 'i';
++            case 'J': return 'j';
++            case 'K': return 'k';
++            case 'L': return 'l';
++            case 'M': return 'm';
++            case 'N': return 'n';
++            case 'O': return 'o';
++            case 'P': return 'p';
++            case 'Q': return 'q';
++            case 'R': return 'r';
++            case 'S': return 's';
++            case 'T': return 't';
++            case 'U': return 'u';
++            case 'V': return 'v';
++            case 'W': return 'w';
++            case 'X': return 'x';
++            case 'Y': return 'y';
++            case 'Z': return 'z';
++			
++			/*Begin, by mzj for smart_dial_sort_order*/
++            case 'А': return 'a';
++            case 'а': return 'a';
++            case 'Б': return 'b';
++            case 'б': return 'b';
++            case 'В': return 'b';
++            case 'в': return 'b';
++            case 'Г': return 'c';
++            case 'г': return 'c';
++            case 'Д': return 'd';
++            case 'д': return 'd';
++            case 'Е': return 'e';
++            case 'е': return 'e';
++            case 'Ж': return 'e';
++            case 'ж': return 'e';
++            case 'З': return 'f';
++            case 'з': return 'f';
++            case 'И': return 'g';
++            case 'и': return 'g';
++            case 'Й': return 'h';
++            case 'й': return 'h';
++            case 'К': return 'h';
++            case 'к': return 'h';
++            case 'Л': return 'i';
++            case 'л': return 'i';
++            case 'М': return 'j';
++            case 'м': return 'j';
++            case 'Н': return 'k';
++            case 'н': return 'k';
++            case 'О': return 'k';
++            case 'о': return 'k';
++            case 'П': return 'l';
++            case 'п': return 'l';
++            case 'Р': return 'm';
++            case 'р': return 'm';
++            case 'С': return 'n';
++            case 'с': return 'n';
++            case 'Т': return 'n';
++            case 'т': return 'n';
++            case 'У': return 'o';
++            case 'у': return 'o';
++            case 'Ф': return 'p';
++            case 'ф': return 'p';
++            case 'Х': return 'q';
++            case 'х': return 'q';
++            case 'Ц': return 'r';
++            case 'ц': return 'r';
++            case 'Ч': return 's';
++            case 'ч': return 's';
++            case 'Ш': return 't';
++            case 'ш': return 't';
++            case 'Щ': return 'u';
++            case 'щ': return 'u';
++            case 'Ъ': return 'u';
++            case 'ъ': return 'u';
++            case 'Ы': return 'v';
++            case 'ы': return 'v';
++            case 'Ь': return 'w';
++            case 'ь': return 'w';
++            case 'Э': return 'x';
++            case 'э': return 'x';
++            case 'Ю': return 'y';
++            case 'ю': return 'y';
++            case 'Я': return 'z';
++            case 'я': return 'z';
++            /*End, by mzj for smart_dial_sort_order*/
++			
++            default:
++                return ch;
++        }
++    }
++
++    @Override
++    public byte getDialpadIndex(char ch) {
++        if (ch >= '0' && ch <= '9') {
++            return (byte) (ch - '0');
++        } else if (ch >= 'a' && ch <= 'z') {
++            return (byte) (LATIN_LETTERS_TO_DIGITS[ch - 'a'] - '0');
++        } else {
++            return -1;
++        }
++    }
++
++    @Override
++    public char getDialpadNumericCharacter(char ch) {
++        if (ch >= 'a' && ch <= 'z') {
++            return LATIN_LETTERS_TO_DIGITS[ch - 'a'];
++        }
++        return ch;
++    }
++
++}
+Index: vendor/branch/5058Y/packages/apps/Dialer/src/com/android/dialer/settings/DisplayOptionsSettingsFragment.java
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Dialer/src/com/android/dialer/settings/DisplayOptionsSettingsFragment.java	(revision 0)
++++ vendor/branch/5058Y/packages/apps/Dialer/src/com/android/dialer/settings/DisplayOptionsSettingsFragment.java	(revision 1719)
+@@ -0,0 +1,51 @@
++/*
++ * Copyright (C) 2015 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License
++ */
++
++package com.android.dialer.settings;
++
++import android.os.Bundle;
++import android.preference.PreferenceFragment;
++
++import com.android.dialer.R;
++
++import java.util.Locale;
++import com.android.contacts.common.preference.SmartDialSortPreference;
++import android.preference.Preference;
++
++public class DisplayOptionsSettingsFragment extends PreferenceFragment {
++
++	/*Begin, by fu.zhang for smart_dial_sort*/
++	private String mlang = null ; 
++    /*End, by mzj for smart_dial_sort*/
++	
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        addPreferencesFromResource(R.xml.display_options_settings);
++		
++		/* Begin, by fu.zhang for smart_dial_sort*/
++        //PreferenceCategory displayCategory = (PreferenceCategory) findPreference(CATEGORY_DISPLAY_KEY);
++        mlang = Locale.getDefault().getLanguage();
++        Preference smartDialSortOrder = findPreference("smartDialSortOrder");
++		if(null == smartDialSortOrder){
++			smartDialSortOrder = new SmartDialSortPreference(this.getActivity());
++			smartDialSortOrder.setKey("smartDialSortOrder");
++			smartDialSortOrder.setTitle(R.string.smart_dial_sort_ellipsize);
++			getPreferenceScreen().addPreference(smartDialSortOrder);
++       }
++       /* End, by mzj for smart_dial_sort*/
++    }
++}
+Index: vendor/branch/5058Y/packages/apps/ContactsCommon/src/com/android/contacts/common/preference/ContactsPreferenceActivity.java
+===================================================================
+--- vendor/branch/5058Y/packages/apps/ContactsCommon/src/com/android/contacts/common/preference/ContactsPreferenceActivity.java	(revision 0)
++++ vendor/branch/5058Y/packages/apps/ContactsCommon/src/com/android/contacts/common/preference/ContactsPreferenceActivity.java	(revision 1719)
+@@ -0,0 +1,128 @@
++/*
++ * Copyright (C) 2009 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.contacts.common.preference;
++
++import android.content.Context;
++import android.content.Intent;
++import android.os.Bundle;
++import android.app.ActionBar;
++import android.preference.PreferenceActivity;
++import android.view.MenuItem;
++
++import com.android.contacts.common.R;
++
++import com.mediatek.contacts.eventhandler.GeneralEventHandler;
++import com.mediatek.contacts.util.Log;
++
++/**
++ * Contacts settings.
++ */
++public final class ContactsPreferenceActivity extends PreferenceActivity
++        implements GeneralEventHandler.Listener {
++    private static final String TAG = "ContactsPreferenceActivity";
++    private static final String TAG_ABOUT_CONTACTS = "about_contacts";
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        /// M:ALPS02781385. add handle plug out/in sim event @{
++        Log.d(TAG,"[onCreate]");
++        GeneralEventHandler.getInstance(this).register(this);
++        /// @}
++
++        final ActionBar actionBar = getActionBar();
++        if (actionBar != null) {
++            actionBar.setDisplayOptions(ActionBar.DISPLAY_HOME_AS_UP, ActionBar.DISPLAY_HOME_AS_UP);
++        }
++
++        if (savedInstanceState == null) {
++            getFragmentManager().beginTransaction()
++                    .replace(android.R.id.content, new DisplayOptionsPreferenceFragment())
++                    .commit();
++            setActivityTitle(R.string.activity_title_settings);
++        } else {
++            final AboutPreferenceFragment fragment = (AboutPreferenceFragment) getFragmentManager()
++                    .findFragmentByTag(TAG_ABOUT_CONTACTS);
++            setActivityTitle(fragment == null ?
++                    R.string.activity_title_settings : R.string.setting_about);
++        }
++    }
++
++    public void showAboutFragment() {
++        getFragmentManager().beginTransaction()
++                .replace(android.R.id.content, new AboutPreferenceFragment(), TAG_ABOUT_CONTACTS)
++                .addToBackStack(null)
++                .commit();
++        setActivityTitle(R.string.setting_about);
++    }
++
++    /**
++     * Returns true if there are no preferences to display and therefore the
++     * corresponding menu item can be removed.
++     */
++    public static boolean isEmpty(Context context) {
++        return !context.getResources().getBoolean(R.bool.config_sort_order_user_changeable)
++                && !context.getResources().getBoolean(R.bool.config_display_order_user_changeable)
++                && !context.getResources().getBoolean(
++                        R.bool.config_default_account_user_changeable);
++    }
++
++    @Override
++    public boolean onOptionsItemSelected(MenuItem item) {
++        if (item.getItemId() == android.R.id.home) {
++            onBackPressed();
++            return true;
++        }
++        return false;
++    }
++
++    @Override
++    public void onBackPressed() {
++        if (getFragmentManager().getBackStackEntryCount() > 0) {
++            setActivityTitle(R.string.activity_title_settings);
++            getFragmentManager().popBackStack();
++        } else {
++            super.onBackPressed();
++        }
++    }
++
++    private void setActivityTitle(int res) {
++        final ActionBar actionBar = getActionBar();
++        if (actionBar != null) {
++            actionBar.setTitle(res);
++        }
++    }
++
++    /// M:ALPS02781385. add handle plug out/in sim event @{
++    @Override
++    protected void onDestroy() {
++        super.onDestroy();
++        Log.d(TAG,"[onDestroy] unregister!");
++        GeneralEventHandler.getInstance(this).unRegister(this);
++    }
++
++    @Override
++    public void onReceiveEvent(String eventType, Intent extraData) {
++        Log.d(TAG, "[onReceiveEvent] eventType: " + eventType);
++        if ((GeneralEventHandler.EventType.PHB_STATE_CHANGE_EVENT.equals(eventType))
++                && (!isFinishing())) {
++            Log.i(TAG, "[onReceiveEvent] Phb state change ,finish");
++            finish();
++        }
++    }
++    /// @}
++}
+Index: vendor/branch/5058Y/packages/apps/ContactsCommon/src/com/android/contacts/common/preference/SmartDialSortPreference.java
+===================================================================
+--- vendor/branch/5058Y/packages/apps/ContactsCommon/src/com/android/contacts/common/preference/SmartDialSortPreference.java	(revision 0)
++++ vendor/branch/5058Y/packages/apps/ContactsCommon/src/com/android/contacts/common/preference/SmartDialSortPreference.java	(revision 1719)
+@@ -0,0 +1,92 @@
++/*
++ * Copyright (C) 2010 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package com.android.contacts.common.preference;
++
++import java.util.Locale;
++
++import com.android.contacts.common.R;
++import com.android.contacts.common.preference.ContactsPreferences;
++
++import android.app.AlertDialog.Builder;
++import android.content.Context;
++import android.preference.ListPreference;
++import android.provider.ContactsContract;
++import android.util.AttributeSet;
++
++public class SmartDialSortPreference extends ListPreference{
++
++    private Context mContext;
++    private ContactsPreferences mPreferences;
++
++
++    public SmartDialSortPreference(Context context) {
++        super(context);
++        prepare();
++    }
++
++    public SmartDialSortPreference(Context context, AttributeSet attrs) {
++        super(context, attrs);
++        prepare();
++    }
++
++    private void prepare() {
++        mContext = getContext();
++        mPreferences =new ContactsPreferences(mContext);
++        setEntries(new String[]{
++                mContext.getString(R.string.sort_in_English),
++                mContext.getString(R.string.sort_in_Russian),
++        });
++        setEntryValues(new String[]{
++                String.valueOf(ContactsPreferences.SORT_IN_ENGLISH),
++                String.valueOf(ContactsPreferences.SORT_IN_RUSSIAN),
++        });
++        setValue(String.valueOf(mPreferences.getSmartDialSortOrder()));
++    }
++
++    @Override
++    public CharSequence getSummary() {
++        switch (mPreferences.getSmartDialSortOrder()) {
++            case ContactsPreferences.SORT_IN_ENGLISH:
++                return mContext.getString(R.string.sort_in_English);
++            case ContactsPreferences.SORT_IN_RUSSIAN:
++                return mContext.getString(R.string.sort_in_Russian);
++        }
++        return null;
++    }
++
++    @Override
++    protected boolean shouldPersist() {
++        return false;   // This preference takes care of its own storage
++    }
++
++    @Override
++    protected boolean persistString(String value) {
++        int newValue = Integer.parseInt(value);
++        if (newValue != mPreferences.getSmartDialSortOrder()) {
++            mPreferences.setSmartDialSortOrder(newValue);
++            notifyChanged();
++        }
++        return true;
++    }
++
++    @Override
++    // UX recommendation is not to show cancel button on such lists.
++    protected void onPrepareDialogBuilder(Builder builder) {
++        super.onPrepareDialogBuilder(builder);
++        builder.setNegativeButton(null, null);
++    }
++
++}
+\ No newline at end of file
+Index: vendor/branch/5058Y/packages/apps/ContactsCommon/res/values/strings.xml
+===================================================================
+--- vendor/branch/5058Y/packages/apps/ContactsCommon/res/values/strings.xml	(revision 0)
++++ vendor/branch/5058Y/packages/apps/ContactsCommon/res/values/strings.xml	(revision 1719)
+@@ -0,0 +1,887 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++  ~ Copyright (C) 2012 The Android Open Source Project
++  ~
++  ~ Licensed under the Apache License, Version 2.0 (the "License");
++  ~ you may not use this file except in compliance with the License.
++  ~ You may obtain a copy of the License at
++  ~
++  ~      http://www.apache.org/licenses/LICENSE-2.0
++  ~
++  ~ Unless required by applicable law or agreed to in writing, software
++  ~ distributed under the License is distributed on an "AS IS" BASIS,
++  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  ~ See the License for the specific language governing permissions and
++  ~ limitations under the License
++  -->
++<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++
++    <!-- Toast shown when text is copied to the clipboard [CHAR LIMIT=64] -->
++    <string name="toast_text_copied">Text copied</string>
++    <!-- Option displayed in context menu to copy long pressed item to clipboard [CHAR LIMIT=64] -->
++    <string name="copy_text">Copy to clipboard</string>
++
++    <!-- Action string for calling a custom phone number -->
++    <string name="call_custom">Call
++        <xliff:g id="custom">%s</xliff:g>
++    </string>
++    <!-- Action string for calling a home phone number -->
++    <string name="call_home">Call home</string>
++    <!-- Action string for calling a mobile phone number -->
++    <string name="call_mobile">Call mobile</string>
++    <!-- Action string for calling a work phone number -->
++    <string name="call_work">Call work</string>
++    <!-- Action string for calling a work fax phone number -->
++    <string name="call_fax_work">Call work fax</string>
++    <!-- Action string for calling a home fax phone number -->
++    <string name="call_fax_home">Call home fax</string>
++    <!-- Action string for calling a pager phone number -->
++    <string name="call_pager">Call pager</string>
++    <!-- Action string for calling an other phone number -->
++    <string name="call_other">Call</string>
++    <!-- Action string for calling a callback number -->
++    <string name="call_callback">Call callback</string>
++    <!-- Action string for calling a car phone number -->
++    <string name="call_car">Call car</string>
++    <!-- Action string for calling a company main phone number -->
++    <string name="call_company_main">Call company main</string>
++    <!-- Action string for calling a ISDN phone number -->
++    <string name="call_isdn">Call ISDN</string>
++    <!-- Action string for calling a main phone number -->
++    <string name="call_main">Call main</string>
++    <!-- Action string for calling an other fax phone number -->
++    <string name="call_other_fax">Call fax</string>
++    <!-- Action string for calling a radio phone number -->
++    <string name="call_radio">Call radio</string>
++    <!-- Action string for calling a Telex phone number -->
++    <string name="call_telex">Call telex</string>
++    <!-- Action string for calling a TTY/TDD phone number -->
++    <string name="call_tty_tdd">Call TTY/TDD</string>
++    <!-- Action string for calling a work mobile phone number -->
++    <string name="call_work_mobile">Call work mobile</string>
++    <!-- Action string for calling a work pager phone number -->
++    <string name="call_work_pager">Call work pager</string>
++    <!-- Action string for calling an assistant phone number -->
++    <string name="call_assistant">Call
++        <xliff:g id="assistant">%s</xliff:g>
++    </string>
++    <!-- Action string for calling a MMS phone number -->
++    <string name="call_mms">Call MMS</string>
++    <!-- Action string for calling a contact by shortcut -->
++    <string name="call_by_shortcut"><xliff:g id="contact_name">%s</xliff:g> (Call)</string>
++
++    <!-- Action string for sending an SMS to a custom phone number -->
++    <string name="sms_custom">Text
++        <xliff:g id="custom">%s</xliff:g>
++    </string>
++    <!-- Action string for sending an SMS to a home phone number -->
++    <string name="sms_home">Text home</string>
++    <!-- Action string for sending an SMS to a mobile phone number -->
++    <string name="sms_mobile">Text mobile</string>
++    <!-- Action string for sending an SMS to a work phone number -->
++    <string name="sms_work">Text work</string>
++    <!-- Action string for sending an SMS to a work fax phone number -->
++    <string name="sms_fax_work">Text work fax</string>
++    <!-- Action string for sending an SMS to a home fax phone number -->
++    <string name="sms_fax_home">Text home fax</string>
++    <!-- Action string for sending an SMS to a pager phone number -->
++    <string name="sms_pager">Text pager</string>
++    <!-- Action string for sending an SMS to an other phone number -->
++    <string name="sms_other">Text</string>
++    <!-- Action string for sending an SMS to a callback number -->
++    <string name="sms_callback">Text callback</string>
++    <!-- Action string for sending an SMS to a car phone number -->
++    <string name="sms_car">Text car</string>
++    <!-- Action string for sending an SMS to a company main phone number -->
++    <string name="sms_company_main">Text company main</string>
++    <!-- Action string for sending an SMS to a ISDN phone number -->
++    <string name="sms_isdn">Text ISDN</string>
++    <!-- Action string for sending an SMS to a main phone number -->
++    <string name="sms_main">Text main</string>
++    <!-- Action string for sending an SMS to an other fax phone number -->
++    <string name="sms_other_fax">Text fax</string>
++    <!-- Action string for sending an SMS to a radio phone number -->
++    <string name="sms_radio">Text radio</string>
++    <!-- Action string for sending an SMS to a Telex phone number -->
++    <string name="sms_telex">Text telex</string>
++    <!-- Action string for sending an SMS to a TTY/TDD phone number -->
++    <string name="sms_tty_tdd">Text TTY/TDD</string>
++    <!-- Action string for sending an SMS to a work mobile phone number -->
++    <string name="sms_work_mobile">Text work mobile</string>
++    <!-- Action string for sending an SMS to a work pager phone number -->
++    <string name="sms_work_pager">Text work pager</string>
++    <!-- Action string for sending an SMS to an assistant phone number -->
++    <string name="sms_assistant">Text
++        <xliff:g id="assistant">%s</xliff:g>
++    </string>
++    <!-- Action string for sending an SMS to a MMS phone number -->
++    <string name="sms_mms">Text MMS</string>
++    <!-- Action string for sending an SMS to a contact by shortcut -->
++    <string name="sms_by_shortcut"><xliff:g id="contact_name">%s</xliff:g> (Message)</string>
++
++    <!-- Description string for an action button to initiate a video call. -->
++    <string name="description_video_call">Make video call</string>
++
++    <!-- Title of the confirmation dialog for clearing frequents. [CHAR LIMIT=37] -->
++    <string name="clearFrequentsConfirmation_title">Clear frequently contacted?</string>
++
++    <!-- Confirmation dialog for clearing frequents. [CHAR LIMIT=NONE] -->
++    <string name="clearFrequentsConfirmation">You\'ll clear the frequently contacted list in the
++        Contacts and Phone apps, and force email apps to learn your addressing preferences from
++        scratch.
++    </string>
++
++    <!-- Title of the "Clearing frequently contacted" progress-dialog [CHAR LIMIT=35] -->
++    <string name="clearFrequentsProgress_title">Clearing frequently contacted\u2026</string>
++
++    <!--  Used to display as default status when the contact is available for chat [CHAR LIMIT=19] -->
++    <string name="status_available">Available</string>
++
++    <!--  Used to display as default status when the contact is away or idle for chat [CHAR LIMIT=19] -->
++    <string name="status_away">Away</string>
++
++    <!--  Used to display as default status when the contact is busy or Do not disturb for chat [CHAR LIMIT=19] -->
++    <string name="status_busy">Busy</string>
++
++    <!-- Directory partition name (also exists in contacts) -->
++    <string name="contactsList">Contacts</string>
++
++    <!-- The name of the invisible local contact directory -->
++    <string name="local_invisible_directory">Other</string>
++
++    <!-- The label in section header in the contact list for a contact directory [CHAR LIMIT=128] -->
++    <string name="directory_search_label">Directory</string>
++
++    <!-- The label in section header in the contact list for a work contact directory [CHAR LIMIT=128] -->
++    <string name="directory_search_label_work">Work directory</string>
++
++    <!-- The label in section header in the contact list for a local contacts [CHAR LIMIT=128] -->
++    <string name="local_search_label">All contacts</string>
++
++    <!-- String describing the text on the header of the profile contact in the contacts list
++         This may be programatically capitalized. [CHAR LIMIT=20] -->
++    <string name="user_profile_contacts_list_header" msgid="9154761216179882405">Me</string>
++
++    <!-- Title shown in the search result activity of contacts app while searching.  [CHAR LIMIT=20]
++         (also in contacts) -->
++    <string name="search_results_searching">Searching\u2026</string>
++
++    <!-- Displayed at the top of search results indicating that more contacts were found than shown [CHAR LIMIT=64] -->
++    <string name="foundTooManyContacts">More than <xliff:g id="count">%d</xliff:g> found.</string>
++
++    <!-- Displayed at the top of the contacts showing the zero total number of contacts found when "Only contacts with phones" not selected. [CHAR LIMIT=30]
++         (also in contacts) -->
++    <string name="listFoundAllContactsZero">No contacts</string>
++
++    <!-- Displayed at the top of the contacts showing the total number of contacts found when typing search query -->
++    <plurals name="searchFoundContacts">
++        <item quantity="one">1 found</item>
++        <item quantity="other"><xliff:g id="count">%d</xliff:g> found</item>
++    </plurals>
++
++    <!-- String describing the text for photo of a contact in a contacts list.
++
++        Note: AccessibilityServices use this attribute to announce what the view represents.
++              This is especially valuable for views without textual representation like ImageView.
++    -->
++    <string name="description_quick_contact_for">Quick contact for <xliff:g id="name">%1$s</xliff:g></string>
++
++    <!-- Shown as the display name for a person when the name is missing or unknown. [CHAR LIMIT=18]-->
++    <string name="missing_name">(No name)</string>
++
++    <!-- The text displayed on the divider for the Favorites tab in Phone app indicating that items below it are frequently called as opposed to starred contacts [CHAR LIMIT = 39] -->
++    <string name="favoritesFrequentCalled">Frequently called</string>
++
++    <!-- The text displayed on the divider for the Favorites tab in People app indicating that items below it are frequently contacted [CHAR LIMIT = 39] -->
++    <string name="favoritesFrequentContacted">Frequently contacted</string>
++
++    <!-- String describing a contact picture that introduces users to the contact detail screen.
++
++       Used by AccessibilityService to announce the purpose of the button.
++
++       [CHAR LIMIT=NONE]
++    -->
++    <string name="description_view_contact_detail" msgid="2795575601596468581">View contact</string>
++
++    <!-- Contact list filter selection indicating that the list shows all contacts with phone numbers [CHAR LIMIT=64] -->
++    <string name="list_filter_phones">All contacts with phone numbers</string>
++
++    <!-- Contact list filter selection indicating that the list shows all work contacts with phone numbers [CHAR LIMIT=64] -->
++    <string name="list_filter_phones_work">Work profile contacts</string>
++
++    <!-- Button to view the updates from the current group on the group detail page [CHAR LIMIT=25] -->
++    <string name="view_updates_from_group">View updates</string>
++
++    <!-- Title for data source when creating or editing a contact that doesn't
++         belong to a specific account.  This contact will only exist on the phone
++         and will not be synced. -->
++    <string name="account_phone">Phone-only, unsynced</string>
++
++    <!-- Header that expands to list all name types when editing a structured name of a contact
++         [CHAR LIMIT=20] -->
++    <string name="nameLabelsGroup">Name</string>
++
++    <!-- Header that expands to list all nickname types when editing a nickname of a contact
++         [CHAR LIMIT=20] -->
++    <string name="nicknameLabelsGroup">Nickname</string>
++
++    <!-- Field title for the full name of a contact [CHAR LIMIT=64]-->
++    <string name="full_name">Name</string>
++    <!-- Field title for the given name of a contact -->
++    <string name="name_given">First name</string>
++    <!-- Field title for the family name of a contact -->
++    <string name="name_family">Last name</string>
++    <!-- Field title for the prefix name of a contact -->
++    <string name="name_prefix">Name prefix</string>
++    <!-- Field title for the middle name of a contact -->
++    <string name="name_middle">Middle name</string>
++    <!-- Field title for the suffix name of a contact -->
++    <string name="name_suffix">Name suffix</string>
++
++    <!-- Field title for the phonetic name of a contact [CHAR LIMIT=64]-->
++    <string name="name_phonetic">Phonetic name</string>
++
++    <!-- Field title for the phonetic given name of a contact -->
++    <string name="name_phonetic_given">Phonetic first name</string>
++    <!-- Field title for the phonetic middle name of a contact -->
++    <string name="name_phonetic_middle">Phonetic middle name</string>
++    <!-- Field title for the phonetic family name of a contact -->
++    <string name="name_phonetic_family">Phonetic last name</string>
++
++    <!-- Header that expands to list all of the types of phone numbers when editing or creating a
++         phone number for a contact [CHAR LIMIT=20] -->
++    <string name="phoneLabelsGroup">Phone</string>
++
++    <!-- Header that expands to list all of the types of email addresses when editing or creating
++         an email address for a contact [CHAR LIMIT=20] -->
++    <string name="emailLabelsGroup">Email</string>
++
++    <!-- Header that expands to list all of the types of postal addresses when editing or creating
++         an postal address for a contact [CHAR LIMIT=20] -->
++    <string name="postalLabelsGroup">Address</string>
++
++    <!-- Header that expands to list all of the types of IM account when editing or creating an IM
++         account for a contact [CHAR LIMIT=20] -->
++    <string name="imLabelsGroup">IM</string>
++
++    <!-- Header that expands to list all organization types when editing an organization of a
++         contact [CHAR LIMIT=20] -->
++    <string name="organizationLabelsGroup">Organization</string>
++
++    <!-- Header for the list of all relationships for a contact [CHAR LIMIT=20] -->
++    <string name="relationLabelsGroup">Relationship</string>
++
++    <!-- Header that expands to list all event types when editing an event of a contact
++         [CHAR LIMIT=20] -->
++    <string name="eventLabelsGroup">Special date</string>
++
++    <!-- Generic action string for text messaging a contact. Used by AccessibilityService to
++         announce the purpose of the view. [CHAR LIMIT=NONE] -->
++    <string name="sms">Text message</string>
++
++    <!-- Field title for the full postal address of a contact [CHAR LIMIT=64]-->
++    <string name="postal_address">Address</string>
++
++    <!-- Hint text for the organization name when editing -->
++    <string name="ghostData_company">Company</string>
++
++    <!-- Hint text for the organization title when editing -->
++    <string name="ghostData_title">Title</string>
++
++    <!-- The label describing the Notes field of a contact. This field allows free form text entry
++         about a contact -->
++    <string name="label_notes">Notes</string>
++
++    <!-- The label describing the SIP address field of a contact. [CHAR LIMIT=20] -->
++    <string name="label_sip_address">SIP</string>
++
++    <!-- Header that expands to list all website types when editing a website of a contact
++         [CHAR LIMIT=20] -->
++    <string name="websiteLabelsGroup">Website</string>
++
++    <!-- Header for the list of all groups for a contact [CHAR LIMIT=20] -->
++    <string name="groupsLabel">Groups</string>
++
++    <!-- Action string for sending an email to a home email address -->
++    <string name="email_home">Email home</string>
++    <!-- Action string for sending an email to a mobile email address -->
++    <string name="email_mobile">Email mobile</string>
++    <!-- Action string for sending an email to a work email address -->
++    <string name="email_work">Email work</string>
++    <!-- Action string for sending an email to an other email address -->
++    <string name="email_other">Email</string>
++    <!-- Action string for sending an email to a custom email address -->
++    <string name="email_custom">Email <xliff:g id="custom">%s</xliff:g></string>
++
++    <!-- Generic action string for sending an email -->
++    <string name="email">Email</string>
++
++    <!-- Field title for the street of a structured postal address of a contact -->
++    <string name="postal_street">Street</string>
++    <!-- Field title for the PO box of a structured postal address of a contact -->
++    <string name="postal_pobox">PO box</string>
++    <!-- Field title for the neighborhood of a structured postal address of a contact -->
++    <string name="postal_neighborhood">Neighborhood</string>
++    <!-- Field title for the city of a structured postal address of a contact -->
++    <string name="postal_city">City</string>
++    <!-- Field title for the region, or state, of a structured postal address of a contact -->
++    <string name="postal_region">State</string>
++    <!-- Field title for the postal code of a structured postal address of a contact -->
++    <string name="postal_postcode">ZIP code</string>
++    <!-- Field title for the country of a structured postal address of a contact -->
++    <string name="postal_country">Country</string>
++
++    <!-- Action string for viewing a home postal address -->
++    <string name="map_home">View home address</string>
++    <!-- Action string for viewing a work postal address -->
++    <string name="map_work">View work address</string>
++    <!-- Action string for viewing an other postal address -->
++    <string name="map_other">View address</string>
++    <!-- Action string for viewing a custom postal address -->
++    <string name="map_custom">View <xliff:g id="custom">%s</xliff:g> address</string>
++
++    <!-- Action string for starting an IM chat with the AIM protocol -->
++    <string name="chat_aim">Chat using AIM</string>
++    <!-- Action string for starting an IM chat with the MSN or Windows Live protocol -->
++    <string name="chat_msn">Chat using Windows Live</string>
++    <!-- Action string for starting an IM chat with the Yahoo protocol -->
++    <string name="chat_yahoo">Chat using Yahoo</string>
++    <!-- Action string for starting an IM chat with the Skype protocol -->
++    <string name="chat_skype">Chat using Skype</string>
++    <!-- Action string for starting an IM chat with the QQ protocol -->
++    <string name="chat_qq">Chat using QQ</string>
++    <!-- Action string for starting an IM chat with the Google Talk protocol -->
++    <string name="chat_gtalk">Chat using Google Talk</string>
++    <!-- Action string for starting an IM chat with the ICQ protocol -->
++    <string name="chat_icq">Chat using ICQ</string>
++    <!-- Action string for starting an IM chat with the Jabber protocol -->
++    <string name="chat_jabber">Chat using Jabber</string>
++
++    <!-- Generic action string for starting an IM chat -->
++    <string name="chat">Chat</string>
++
++    <!-- String describing the Contact Editor Minus button
++
++         Used by AccessibilityService to announce the purpose of the button.
++
++         [CHAR LIMIT=NONE]
++    -->
++    <string name="description_minus_button">delete</string>
++
++    <!-- Content description for the expand or collapse name fields button.
++         Clicking this button causes the name editor to toggle between showing
++         a single field where the entire name is edited at once, or multiple
++         fields corresponding to each part of the name (Name Prefix, First Name,
++         Middle Name, Last Name, Name Suffix).
++         [CHAR LIMIT=NONE] -->
++    <string name="expand_collapse_name_fields_description">Expand or collapse name fields</string>
++
++    <!-- Content description for the expand or collapse phonetic name fields button. [CHAR LIMIT=100] -->
++    <string name="expand_collapse_phonetic_name_fields_description">Expand or collapse phonetic
++        name fields</string>
++
++    <!-- Contact list filter label indicating that the list is showing all available accounts [CHAR LIMIT=64] -->
++    <string name="list_filter_all_accounts">All contacts</string>
++
++    <!-- Contact list filter label indicating that the list is showing all starred contacts [CHAR LIMIT=64] -->
++    <string name="list_filter_all_starred">Starred</string>
++
++    <!-- Contact list filter selection indicating that the list shows groups chosen by the user [CHAR LIMIT=64] -->
++    <string name="list_filter_customize">Customize</string>
++
++    <!-- Contact list filter selection indicating that the list shows only the selected contact [CHAR LIMIT=64] -->
++    <string name="list_filter_single">Contact</string>
++
++    <!-- List title for a special contacts group that covers all contacts. [CHAR LIMIT=25] -->
++    <string name="display_ungrouped">All other contacts</string>
++
++    <!-- List title for a special contacts group that covers all contacts that
++a        ren't members of any other group. [CHAR LIMIT=25] -->
++    <string name="display_all_contacts">All contacts</string>
++
++    <string name="menu_sync_remove">Remove sync group</string>
++    <string name="dialog_sync_add">Add sync group</string>
++    <string name="display_more_groups">More groups\u2026</string>
++
++    <!-- Warning message given to users just before they remove a currently syncing
++         group that would also cause all ungrouped contacts to stop syncing.  [CHAR LIMIT=NONE] -->
++    <string name="display_warn_remove_ungrouped">Removing \"<xliff:g id="group" example="Starred">%s</xliff:g>\" from sync will also remove any ungrouped contacts from sync.</string>
++
++    <!-- Displayed in a spinner dialog as user changes to display options are saved -->
++    <string name="savingDisplayGroups">Saving display options\u2026</string>
++
++    <!-- Menu item to indicate you are done editing a contact and want to save the changes you've made -->
++    <string name="menu_done">Done</string>
++
++    <!-- Menu item to indicate you want to cancel the current editing process and NOT save the changes you've made [CHAR LIMIT=12] -->
++    <string name="menu_doNotSave">Cancel</string>
++
++    <!-- Displayed at the top of the contacts showing the account filter selected  [CHAR LIMIT=64] -->
++    <string name="listAllContactsInAccount">Contacts in <xliff:g id="name" example="abc@gmail.com">%s</xliff:g></string>
++
++    <!-- Displayed at the top of the contacts showing single contact. [CHAR LIMIT=64] -->
++    <string name="listCustomView">Contacts in custom view</string>
++
++    <!-- Displayed at the top of the contacts showing single contact. [CHAR LIMIT=64] -->
++    <string name="listSingleContact">Single contact</string>
++
++    <!-- Message asking user to select an account to save contacts imported from vcard or SIM card [CHAR LIMIT=64] -->
++    <string name="dialog_new_contact_account">Save imported contacts to:</string>
++
++    <!-- Action string for selecting SIM for importing contacts -->
++    <string name="import_from_sim">Import from SIM card</string>
++
++    <!-- Action string for selecting a SIM subscription for importing contacts -->
++    <string name="import_from_sim_summary">Import from SIM <xliff:g id="sim_name">^1</xliff:g> - <xliff:g id="sim_number">^2</xliff:g></string>
++
++    <!-- Action string for selecting a SIM subscription for importing contacts, without a phone number -->
++    <string name="import_from_sim_summary_no_number">Import from SIM <xliff:g id="sim_name">%1$s</xliff:g></string>
++
++    <!-- Action string for selecting a .vcf file to import contacts from [CHAR LIMIT=30] -->
++    <string name="import_from_vcf_file" product="default">Import from .vcf file</string>
++
++    <!-- Dialog message asking the user for confirmation before starting to import contacts from a .vcf file. [CHAR LIMIT=NONE] -->
++    <string name="import_from_vcf_file_confirmation_message" product="default">Import contacts from vCard?</string>
++
++    <!-- Message shown in a Dialog confirming a user's cancel request toward existing vCard import.
++         The argument is file name for the vCard import the user wants to cancel.
++         [CHAR LIMIT=128] -->
++    <string name="cancel_import_confirmation_message">Cancel import of <xliff:g id="filename" example="import.vcf">%s</xliff:g>?</string>
++
++    <!-- Message shown in a Dialog confirming a user's cancel request toward existing vCard export.
++         The argument is file name for the vCard export the user wants to cancel.
++         [CHAR LIMIT=128] -->
++    <string name="cancel_export_confirmation_message">Cancel export of <xliff:g id="filename" example="export.vcf">%s</xliff:g>?</string>
++
++    <!-- Title shown in a Dialog telling users cancel vCard import/export operation is failed. [CHAR LIMIT=40] -->
++    <string name="cancel_vcard_import_or_export_failed">Couldn\'t cancel vCard import/export</string>
++
++    <!-- The failed reason which should not be shown but it may in some buggy condition. [CHAR LIMIT=40] -->
++    <string name="fail_reason_unknown">Unknown error.</string>
++
++    <!-- The failed reason shown when vCard importer/exporter could not open the file
++         specified by a user. The file name should be in the message. [CHAR LIMIT=NONE] -->
++    <string name="fail_reason_could_not_open_file">Couldn\'t open \"<xliff:g id="file_name">%s</xliff:g>\": <xliff:g id="exact_reason">%s</xliff:g>.</string>
++
++    <!-- The failed reason shown when contacts exporter fails to be initialized.
++         Some exact reason must follow this. [CHAR LIMIT=NONE]-->
++    <string name="fail_reason_could_not_initialize_exporter">Couldn\'t start the exporter: \"<xliff:g id="exact_reason">%s</xliff:g>\".</string>
++
++    <!-- The failed reason shown when there's no contact which is allowed to be exported.
++         Note that user may have contacts data but all of them are probably not allowed to be
++         exported because of security/permission reasons. [CHAR LIMIT=NONE] -->
++    <string name="fail_reason_no_exportable_contact">There is no exportable contact.</string>
++
++    <!-- The user doesn't have all permissions required to use the current screen. So
++         close the current screen and show the user this message. -->
++    <string name="missing_required_permission">You have disabled a required permission.</string>
++
++    <!-- The failed reason shown when some error happend during contacts export.
++         Some exact reason must follow this. [CHAR LIMIT=NONE] -->
++    <string name="fail_reason_error_occurred_during_export">An error occurred during export: \"<xliff:g id="exact_reason">%s</xliff:g>\".</string>
++
++    <!-- The failed reason shown when the given file name is too long for the system.
++         The length limit of each file is different in each Android device, so we don't need to
++         mention it here. [CHAR LIMIT=NONE] -->
++    <string name="fail_reason_too_long_filename">Required filename is too long (\"<xliff:g id="filename">%s</xliff:g>\").</string>
++
++    <!-- The failed reason shown when Contacts app (especially vCard importer/exporter)
++         emitted some I/O error. Exact reason will be appended by the system. [CHAR LIMIT=NONE] -->
++    <string name="fail_reason_io_error">I/O error</string>
++
++    <!-- Failure reason show when Contacts app (especially vCard importer) encountered
++         low memory problem and could not proceed its import procedure. [CHAR LIMIT=NONE] -->
++    <string name="fail_reason_low_memory_during_import">Not enough memory. The file may be too large.</string>
++
++    <!-- The failed reason shown when vCard parser was not able to be parsed by the current vCard
++         implementation. This might happen even when the input vCard is completely valid, though
++         we believe it is rather rare in the actual world. [CHAR LIMIT=NONE] -->
++    <string name="fail_reason_vcard_parse_error">Couldn\'t parse vCard for an unexpected reason.</string>
++
++    <!-- The failed reason shown when vCard importer doesn't support the format.
++         This may be shown when the vCard is corrupted [CHAR LIMIT=40] -->
++    <string name="fail_reason_not_supported">The format isn\'t supported.</string>
++
++    <!-- Fail reason shown when vCard importer failed to look over meta information stored in vCard file(s). -->
++    <string name="fail_reason_failed_to_collect_vcard_meta_info">Couldn\'t collect meta information of given vCard file(s).</string>
++
++    <!-- The failed reason shown when the import of some of vCard files failed during multiple vCard
++         files import. It includes the case where all files were failed to be imported. -->
++    <string name="fail_reason_failed_to_read_files">One or more files couldn\'t be imported (%s).</string>
++
++    <!-- The title shown when exporting vCard is successfuly finished [CHAR LIMIT=40] -->
++    <string name="exporting_vcard_finished_title">Finished exporting <xliff:g id="filename" example="export.vcf">%s</xliff:g>.</string>
++
++    <!-- The title shown when exporting vCard has finished successfully but the destination filename could not be resolved. [CHAR LIMIT=NONE] -->
++    <string name="exporting_vcard_finished_title_fallback">Finished exporting contacts.</string>
++
++    <!-- The toast message shown when exporting vCard has finished and vCards are ready to be shared [CHAR LIMIT=150]-->
++    <string name="exporting_vcard_finished_toast">Finished exporting contacts, click the notification to share contacts.</string>
++
++    <!-- The message on notification shown when exporting vCard has finished and vCards are ready to be shared [CHAR LIMIT=60]-->
++    <string name="touch_to_share_contacts">Tap to share contacts.</string>
++
++    <!-- The title shown when exporting vCard is canceled (probably by a user)
++         The argument is file name the user canceled importing.
++         [CHAR LIMIT=40] -->
++    <string name="exporting_vcard_canceled_title">Exporting <xliff:g id="filename" example="export.vcf">%s</xliff:g> canceled.</string>
++
++    <!-- Dialog title shown when the application is exporting contact data outside. [CHAR LIMIT=NONE] -->
++    <string name="exporting_contact_list_title">Exporting contact data</string>
++
++    <!-- Message shown when the application is exporting contact data outside -->
++    <string name="exporting_contact_list_message">Contact data is being exported.</string>
++
++    <!-- The error reason the vCard composer "may" emit when database is corrupted or
++         something is going wrong. Usually users should not see this text. [CHAR LIMIT=NONE] -->
++    <string name="composer_failed_to_get_database_infomation">Couldn\'t get database information.</string>
++
++    <!-- This error message shown when the user actually have no contact
++         (e.g. just after data-wiping), or, data providers of the contact list prohibits their
++         contacts from being exported to outside world via vcard exporter, etc. [CHAR LIMIT=NONE] -->
++    <string name="composer_has_no_exportable_contact">There are no exportable contacts. If you do have contacts on your phone, some data providers may not allow the contacts to be exported from the phone.</string>
++
++    <!-- The error reason the vCard composer may emit when vCard composer is not initialized
++         even when needed.
++         Users should not usually see this error message. [CHAR LIMIT=NONE] -->
++    <string name="composer_not_initialized">The vCard composer didn\'t start properly.</string>
++
++    <!-- Dialog title shown when exporting Contact data failed. [CHAR LIMIT=20] -->
++    <string name="exporting_contact_failed_title">Couldn\'t export</string>
++
++    <!-- Dialog message shown when exporting Contact data failed. [CHAR LIMIT=NONE] -->
++    <string name="exporting_contact_failed_message">The contact data wasn\'t exported.\nReason: \"<xliff:g id="fail_reason">%s</xliff:g>\"</string>
++
++    <!-- Dialog message shown when (USB) storage does not exist [CHAR LIMIT=30] -->
++    <string name="no_sdcard_message" product="nosdcard">No storage was found.</string>
++    <!-- Dialog message shown when SDcard does not exist. [CHAR LIMIT=30] -->
++    <string name="no_sdcard_message" product="default">No SD card was found.</string>
++
++    <!-- Dialog message shown when a user confirms whether he/she export Contact data [CHAR LIMIT=NONE] -->
++    <string name="confirm_export_message">Your contact list will be exported to file: <xliff:g id="vcard_filename">%s</xliff:g>.</string>
++
++    <!-- Description shown when importing vCard data.
++         The argument is the name of a contact which is being read.
++         [CHAR LIMIT=20] -->
++    <string name="importing_vcard_description">Importing <xliff:g id="name" example="Joe Due">%s</xliff:g></string>
++
++    <!-- Dialog title shown when reading vCard data failed [CHAR LIMIT=40] -->
++    <string name="reading_vcard_failed_title">Couldn\'t read vCard data</string>
++
++    <!-- The title shown when reading vCard is canceled (probably by a user)
++         [CHAR LIMIT=40] -->
++    <string name="reading_vcard_canceled_title">Reading vCard data canceled</string>
++
++    <!-- The title shown when reading vCard finished
++         The argument is file name the user imported.
++         [CHAR LIMIT=40] -->
++    <string name="importing_vcard_finished_title">Finished importing vCard <xliff:g id="filename" example="import.vcf">%s</xliff:g></string>
++
++    <!-- The title shown when importing vCard is canceled (probably by a user)
++         The argument is file name the user canceled importing.
++         [CHAR LIMIT=40] -->
++    <string name="importing_vcard_canceled_title">Importing <xliff:g id="filename" example="import.vcf">%s</xliff:g> canceled</string>
++
++    <!-- The message shown when vCard import request is accepted. The system may start that work soon, or do it later
++         when there are already other import/export requests.
++         The argument is file name the user imported.
++         [CHAR LIMIT=40] -->
++    <string name="vcard_import_will_start_message"><xliff:g id="filename" example="import.vcf">%s</xliff:g> will be imported shortly.</string>
++    <!-- The message shown when vCard import request is accepted. The system may start that work soon, or do it later when there are already other import/export requests.
++         "The file" is what a user selected for importing.
++         [CHAR LIMIT=40] -->
++    <string name="vcard_import_will_start_message_with_default_name">The file will be imported shortly.</string>
++    <!-- The message shown when a given vCard import request is rejected by the system. [CHAR LIMIT=NONE] -->
++    <string name="vcard_import_request_rejected_message">vCard import request was rejected. Try again later.</string>
++    <!-- The message shown when vCard export request is accepted. The system may start that work soon, or do it later
++         when there are already other import/export requests.
++         The argument is file name the user exported.
++         [CHAR LIMIT=40] -->
++    <string name="vcard_export_will_start_message"><xliff:g id="filename" example="import.vcf">%s</xliff:g> will be exported shortly.</string>
++
++    <!-- The message shown when a vCard export request is accepted but the destination filename could not be resolved. [CHAR LIMIT=NONE] -->
++    <string name="vcard_export_will_start_message_fallback">The file will be exported shortly.</string>
++
++    <!-- The message shown when a vCard export request is accepted and contacts will be exported shortly. [CHAR LIMIT=70]-->
++    <string name="contacts_export_will_start_message">Contacts will be exported shortly.</string>
++
++    <!-- The message shown when a given vCard export request is rejected by the system. [CHAR LIMIT=NONE] -->
++    <string name="vcard_export_request_rejected_message">vCard export request was rejected. Try again later.</string>
++    <!-- Used when file name is unknown in vCard processing. It typically happens
++         when the file is given outside the Contacts app. [CHAR LIMIT=30] -->
++    <string name="vcard_unknown_filename">contact</string>
++
++    <!-- The message shown when vCard importer is caching files to be imported into local temporary
++         data storage. [CHAR LIMIT=NONE] -->
++    <string name="caching_vcard_message">Caching vCard(s) to local temporary storage. The actual import will start soon.</string>
++
++    <!-- Message used when vCard import has failed. [CHAR LIMIT=40] -->
++    <string name="vcard_import_failed">Couldn\'t import vCard.</string>
++
++    <!-- The "file name" displayed for vCards received directly via NFC [CHAR LIMIT=16] -->
++    <string name="nfc_vcard_file_name">Contact received over NFC</string>
++
++    <!-- Dialog title shown when a user confirms whether he/she export Contact data. [CHAR LIMIT=32] -->
++    <string name="confirm_export_title">Export contacts?</string>
++
++    <!-- Dialog title shown when a user is asked to select vCard file. [CHAR LIMIT=25] -->
++    <string name="select_vcard_title">Choose vCard file</string>
++
++    <!-- One of alternatives shown when the system allows a user to select how many vCard files
++         should be imported. This message shows only when the system is certain that there's more
++         than one vCard files available in the system. -->
++    <string name="import_one_vcard_string">Import one vCard file</string>
++
++    <!-- One of alternatives shown when the system allows a user to select how many vCard files
++         should be imported. This message shows only when the system is certain that there's more
++         than one vCard files available in the system. -->
++    <string name="import_multiple_vcard_string">Import multiple vCard files</string>
++
++    <!-- One of alternatives shown when the system allows a user to select how many vCard files
++         should be imported. This message shows only when the system is certain that there's more
++         than one vCard files available in the system. -->
++    <string name="import_all_vcard_string">Import all vCard files</string>
++
++    <!-- Dialog message shown when searching VCard data from (USB) storage [CHAR LIMIT=NONE] -->
++    <string name="searching_vcard_message" product="nosdcard">Searching for vCard data in storage\u2026</string>
++    <!-- Dialog message shown when searching VCard data from SD Card. [CHAR LIMIT=NONE] -->
++    <string name="searching_vcard_message" product="default">Searching for vCard data on SD card\u2026</string>
++
++    <!-- The title shown when vCard importer is caching files to be imported into local temporary
++         data storage.  [CHAR LIMIT=40] -->
++    <string name="caching_vcard_title">Caching</string>
++
++    <!-- The message shown while importing vCard(s).
++         First argument is current index of contacts to be imported.
++         Second argument is the total number of contacts.
++         Third argument is the name of a contact which is being read.
++         [CHAR LIMIT=20] -->
++    <string name="progress_notifier_message">Importing <xliff:g id="current_number">%s</xliff:g>/<xliff:g id="total_number">%s</xliff:g>: <xliff:g id="name" example="Joe Due">%s</xliff:g></string>
++
++    <!-- Action that exports all contacts to a user selected destination. [CHAR LIMIT=25] -->
++    <string name="export_to_vcf_file" product="default">Export to .vcf file</string>
++
++    <!-- Contact preferences related strings -->
++
++    <!-- Label of the "sort by" display option -->
++    <string name="display_options_sort_list_by">Sort by</string>
++
++    <!-- An allowable value for the "sort list by" contact display option  -->
++    <string name="display_options_sort_by_given_name">First name</string>
++
++    <!-- An allowable value for the "sort list by" contact display option  -->
++    <string name="display_options_sort_by_family_name">Last name</string>
++
++    <!-- Label of the "name format" display option [CHAR LIMIT=64]-->
++    <string name="display_options_view_names_as">Name format</string>
++
++    <!-- An allowable value for the "view names as" contact display option  -->
++    <string name="display_options_view_given_name_first">First name first</string>
++
++    <!-- An allowable value for the "view names as" contact display option  -->
++    <string name="display_options_view_family_name_first">Last name first</string>
++
++    <!--Label of the "default account" setting option to set default editor account. [CHAR LIMIT=80]-->
++    <string name="default_editor_account">Default account for new contacts</string>
++
++    <!--Label of the "Sync contact metadata" setting option to set sync account for Lychee. [CHAR LIMIT=80]-->
++    <string name="sync_contact_metadata_title">Sync contact metadata [DOGFOOD]</string>
++
++    <!--Label of the "Sync contact metadata" setting dialog to set sync account for Lychee. [CHAR LIMIT=80]-->
++    <string name="sync_contact_metadata_dialog_title">Sync contact metadata</string>
++
++    <!-- Label of the "About" setting -->
++    <string name="setting_about">About Contacts</string>
++
++    <!-- Title of the settings activity [CHAR LIMIT=64] -->
++    <string name="activity_title_settings">Settings</string>
++
++    <!-- Action that shares visible contacts -->
++    <string name="share_visible_contacts">Share visible contacts</string>
++
++    <!-- A framework exception (ie, transaction too large) can be thrown while attempting to share all visible contacts. If so, show this toast. -->
++    <string name="share_visible_contacts_failure">Failed to share visible contacts.</string>
++
++    <!-- Action that shares favorite contacts [CHAR LIMIT=40]-->
++    <string name="share_favorite_contacts">Share favorite contacts</string>
++
++    <!-- Action that shares contacts [CHAR LIMIT=30]-->
++    <string name="share_contacts">Share all contacts</string>
++
++    <!-- A framework exception can be thrown while attempting to share all contacts. If so, show this toast. [CHAR LIMIT=40]-->
++    <string name="share_contacts_failure">Failed to share contacts.</string>
++
++    <!-- Dialog title when selecting the bulk operation to perform from a list. [CHAR LIMIT=36] -->
++    <string name="dialog_import_export">Import/export contacts</string>
++
++    <!-- Dialog title when importing contacts from an external source. [CHAR LIMIT=36] -->
++    <string name="dialog_import">Import contacts</string>
++
++    <!-- Toast indicating that sharing a contact has failed. [CHAR LIMIT=NONE]  -->
++    <string name="share_error">This contact can\'t be shared.</string>
++
++    <!-- Toast indicating that no visible contact to share [CHAR LIMIT=NONE]  -->
++    <string name="no_contact_to_share">There are no contacts to share.</string>
++
++    <!-- Menu item to search contacts -->
++    <string name="menu_search">Search</string>
++
++    <!-- The menu item to filter the list of contacts displayed -->
++    <string name="menu_contacts_filter">Contacts to display</string>
++
++    <!-- Title of the activity that allows the uesr to filter the list of contacts displayed according to account [CHAR LIMIT=25] -->
++    <string name="activity_title_contacts_filter">Contacts to display</string>
++
++    <!-- Title of the activity that allows the user to customize filtering of contact list [CHAR LIMIT=128] -->
++    <string name="custom_list_filter">Define custom view</string>
++
++    <!-- Query hint displayed inside the search field [CHAR LIMIT=64] -->
++    <string name="hint_findContacts">Find contacts</string>
++
++    <!-- The description text for the favorites tab.
++
++         Note: AccessibilityServices use this attribute to announce what the view represents.
++         This is especially valuable for views without textual representation like ImageView.
++
++         [CHAR LIMIT=NONE] -->
++    <string name="contactsFavoritesLabel">Favorites</string>
++
++    <!-- Displayed at the top of the contacts showing the zero total number of contacts visible when "All contacts" is selected  [CHAR LIMIT=64]-->
++    <string name="listTotalAllContactsZero">No contacts.</string>
++
++    <!-- Displayed at the top of the contacts showing the zero total number of contacts visible when "Custom" is selected  [CHAR LIMIT=64]-->
++    <string name="listTotalAllContactsZeroCustom">No visible contacts.</string>
++
++    <!-- Displayed at the top of the contacts showing the zero total number of contacts visible when starred contact list is selected  [CHAR LIMIT=64]-->
++    <string name="listTotalAllContactsZeroStarred">No favorites</string>
++
++    <!-- Displayed at the top of the contacts showing the zero total number of contacts visible when a group or account is selected  [CHAR LIMIT=64]-->
++    <string name="listTotalAllContactsZeroGroup">No contacts in <xliff:g id="name" example="Friends">%s</xliff:g></string>
++
++    <!--  The menu item to clear frequents [CHAR LIMIT=30] -->
++    <string name="menu_clear_frequents">Clear frequents</string>
++
++    <!-- Menu item to select SIM card -->
++    <string name="menu_select_sim">Select SIM card</string>
++
++    <!-- The menu item to open the list of accounts. [CHAR LIMIT=60]-->
++    <string name="menu_accounts">Manage accounts</string>
++
++    <!-- The menu item to bulk import or bulk export contacts from SIM card or SD card.  [CHAR LIMIT=30]-->
++    <string name="menu_import_export">Import/export</string>
++
++    <!-- The font-family to use for tab text.
++         Do not translate. -->
++    <string name="tab_font_family">sans-serif</string>
++
++    <!-- Attribution of a contact status update, when the time of update is unknown -->
++    <string name="contact_status_update_attribution">via <xliff:g id="source" example="Google Talk">%1$s</xliff:g></string>
++
++    <!-- Attribution of a contact status update, when the time of update is known -->
++    <string name="contact_status_update_attribution_with_date"><xliff:g id="date" example="3 hours ago">%1$s</xliff:g> via <xliff:g id="source" example="Google Talk">%2$s</xliff:g></string>
++
++    <!-- Font family used when drawing letters for letter tile avatars.
++         Do not translate. -->
++    <string name="letter_tile_letter_font_family">sans-serif-medium</string>
++
++    <!-- Content description for the fake action menu up button as used
++     inside search. [CHAR LIMIT=NONE] -->
++    <string name="action_menu_back_from_search">stop searching</string>
++
++    <!--  String describing the icon used to clear the search field -->
++    <string name="description_clear_search">Clear search</string>
++
++    <!-- The font-family to use for the text inside the searchbox.
++         Do not translate. -->
++    <string name="search_font_family">sans-serif</string>
++
++    <!-- The title of the preference section that allows users to configure how they want their
++         contacts to be displayed. [CHAR LIMIT=128] -->
++    <string name="settings_contact_display_options_title">Contact display options</string>
++
++    <!-- Title for Select Account Dialog [CHAR LIMIT=30] -->
++    <string name="select_account_dialog_title">Account</string>
++
++    <!-- Label for the check box to toggle default sim card setting [CHAR LIMIT=35]-->
++    <string name="set_default_account">Always use this for calls</string>
++
++    <!-- Title for dialog to select Phone Account for outgoing call.  [CHAR LIMIT=40] -->
++    <string name="select_phone_account_for_calls">Call with</string>
++
++    <!-- String used for actions in the dialer call log and the quick contact card to initiate
++         a call to an individual.  The user is prompted to enter a note which is sent along with
++         the call (e.g. a call subject). [CHAR LIMIT=40] -->
++    <string name="call_with_a_note">Call with a note</string>
++
++    <!-- Hint text shown in the call subject dialog. [CHAR LIMIT=255] -->
++    <string name="call_subject_hint">Type a note to send with call ...</string>
++
++    <!-- Button used to start a new call with the user entered subject. [CHAR LIMIT=32] -->
++    <string name="send_and_call_button">SEND &amp; CALL</string>
++
++    <!-- String used to represent the total number of characters entered for a call subject,
++         compared to the character limit.  Example: 2 / 64 -->
++    <string name="call_subject_limit"><xliff:g id="count" example="4">%1$s</xliff:g> / <xliff:g id="limit" example="64">%2$s</xliff:g></string>
++
++    <!-- String used to build a phone number bype and phone number string.
++         Example: Mobile • 650-555-1212  -->
++    <string name="call_subject_type_and_number"><xliff:g id="type" example="Mobile">%1$s</xliff:g> • <xliff:g id="number" example="(650) 555-1212">%2$s</xliff:g></string>
++
++    <!-- String format to describe the number of unread items in a tab.
++
++        Note: AccessibilityServices use this attribute to announce what the view represents.
++              This is especially valuable for views without textual representation like ImageView.
++    -->
++    <plurals name="tab_title_with_unread_items">
++        <item quantity="one">
++            <xliff:g id="title">%1$s</xliff:g>. <xliff:g id="count">%2$d</xliff:g> unread item.
++        </item>
++        <item quantity="other">
++            <xliff:g id="title">%1$s</xliff:g>. <xliff:g id="count">%2$d</xliff:g> unread items.
++        </item>
++    </plurals>
++
++    <!-- Build version title in About preference. [CHAR LIMIT=40]-->
++    <string name="about_build_version">Build version</string>
++
++    <!-- Open source licenses title in About preference. [CHAR LIMIT=60] -->
++    <string name="about_open_source_licenses">Open source licenses</string>
++
++    <!-- Open source licenses summary in About preference. [CHAR LIMIT=NONE] -->
++    <string name="about_open_source_licenses_summary">License details for open source software</string>
++
++    <!-- Privacy policy title in About preference. [CHAR LIMIT=40]-->
++    <string name="about_privacy_policy">Privacy policy</string>
++
++    <!-- Terms of service title in about preference. [CHAR LIMIT=60]-->
++    <string name="about_terms_of_service">Terms of service</string>
++
++    <!-- Title for the activity that displays licenses for open source libraries. [CHAR LIMIT=100]-->
++    <string name="activity_title_licenses">Open source licenses</string>
++
++    <!-- Toast message showing when failed to open the url. [CHAR LIMIT=100]-->
++    <string name="url_open_error_toast">Failed to open the url.</string>
++
++    <!-- Content description of entries (including that radio button is checked) in contact
++         accounts list filter. For example: Google abc@gmail.com checked, etc [CHAR LIMIT=30]-->
++    <string name="account_filter_view_checked"><xliff:g id="account_info">%s</xliff:g> checked</string>
++
++    <!-- Content description of entries (including that the radio button is not checked) in contact
++         accounts list filter. For example: Google abc@gmail.com not checked, etc [CHAR LIMIT=30]-->
++    <string name="account_filter_view_not_checked"><xliff:g id="account_info">%s</xliff:g> not checked</string>
++
++    <!-- Description string for an action button to initiate a video call from search results.
++         Note: AccessibilityServices use this attribute to announce what the view represents.
++         This is especially valuable for views without textual representation like ImageView.
++
++         [CHAR LIMIT=NONE]-->
++    <string name="description_search_video_call">Place video call</string>
++	
++	<!-- Begin, by mzj for smart_dial_sort -->
++    <string name="sort_in_Russian">Cyrillic first</string>
++    <string name="sort_in_English">Latin first</string>
++    <string name="smart_dial_sort">Smart Dial sorting order</string>
++    <string name="smart_dial_sort_ellipsize">Smart Dial sorting order</string>
++    <!-- End, by mzj for smart_dial_sort-->
++	
++</resources>
+Index: vendor/branch/5058Y/packages/apps/ContactsCommon/res/values-ru/strings.xml
+===================================================================
+--- vendor/branch/5058Y/packages/apps/ContactsCommon/res/values-ru/strings.xml	(revision 0)
++++ vendor/branch/5058Y/packages/apps/ContactsCommon/res/values-ru/strings.xml	(revision 1719)
+@@ -0,0 +1,303 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!-- 
++  ~ Copyright (C) 2012 The Android Open Source Project
++  ~
++  ~ Licensed under the Apache License, Version 2.0 (the "License");
++  ~ you may not use this file except in compliance with the License.
++  ~ You may obtain a copy of the License at
++  ~
++  ~      http://www.apache.org/licenses/LICENSE-2.0
++  ~
++  ~ Unless required by applicable law or agreed to in writing, software
++  ~ distributed under the License is distributed on an "AS IS" BASIS,
++  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  ~ See the License for the specific language governing permissions and
++  ~ limitations under the License
++   -->
++
++<resources xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <string name="toast_text_copied" msgid="8327159932780920627">"Текст скопирован"</string>
++    <string name="copy_text" msgid="3424081789297978355">"Копировать в буфер обмена"</string>
++    <string name="call_custom" msgid="2786306789889210756">"Вызов:<xliff:g id="CUSTOM">%s</xliff:g>"</string>
++    <string name="call_home" msgid="1479549630992276827">"Домашний"</string>
++    <string name="call_mobile" msgid="8618334085824709009">"Мобильный"</string>
++    <string name="call_work" msgid="8299062439076337075">"Рабочий"</string>
++    <string name="call_fax_work" msgid="3770754834467992571">"Рабочий факс"</string>
++    <string name="call_fax_home" msgid="6219051113573396065">"Домашний факс"</string>
++    <string name="call_pager" msgid="3038080882899955112">"Пейджер"</string>
++    <string name="call_other" msgid="4472141328347894937">"Набор"</string>
++    <string name="call_callback" msgid="687494744634190411">"Обратный вызов"</string>
++    <string name="call_car" msgid="9078083109758282133">"Телефон в машине"</string>
++    <string name="call_company_main" msgid="8768047233970315359">"Телефон офиса"</string>
++    <string name="call_isdn" msgid="3342482563847537747">"Номер ISDN"</string>
++    <string name="call_main" msgid="4640261071249938558">"Основной телефон"</string>
++    <string name="call_other_fax" msgid="2536328553125487877">"Факс"</string>
++    <string name="call_radio" msgid="9055749313292712021">"Радиотелефон"</string>
++    <string name="call_telex" msgid="2909886619224843563">"Телекс"</string>
++    <string name="call_tty_tdd" msgid="6704940636171078852">"Телетайп"</string>
++    <string name="call_work_mobile" msgid="4408630608955148641">"Рабочий мобильный"</string>
++    <string name="call_work_pager" msgid="3036932765279753793">"Рабочий пейджер"</string>
++    <string name="call_assistant" msgid="5188990854852312696">"Вызов: <xliff:g id="ASSISTANT">%s</xliff:g>"</string>
++    <string name="call_mms" msgid="8998771923464696960">"Номер MMS"</string>
++    <string name="call_by_shortcut" msgid="4053430514293064454">"<xliff:g id="CONTACT_NAME">%s</xliff:g> (вызов)"</string>
++    <string name="sms_custom" msgid="4601748252470175865">"SMS: <xliff:g id="CUSTOM">%s</xliff:g>"</string>
++    <string name="sms_home" msgid="7765831490534280540">"SMS: домашний"</string>
++    <string name="sms_mobile" msgid="8387632124165893103">"SMS: мобильный"</string>
++    <string name="sms_work" msgid="3910570578912367742">"SMS: рабочий"</string>
++    <string name="sms_fax_work" msgid="909086167151248212">"SMS: рабочий факс"</string>
++    <string name="sms_fax_home" msgid="4145442497939634875">"SMS: домашний факс"</string>
++    <string name="sms_pager" msgid="5664381349583724906">"SMS: пейджер"</string>
++    <string name="sms_other" msgid="910895193552957097">"SMS"</string>
++    <string name="sms_callback" msgid="728414485478941361">"SMS: номер обратного вызова"</string>
++    <string name="sms_car" msgid="8543669230270954512">"SMS: телефон в машине"</string>
++    <string name="sms_company_main" msgid="5441902128445061862">"SMS: телефон офиса"</string>
++    <string name="sms_isdn" msgid="7142483128948042667">"SMS: номер ISDN"</string>
++    <string name="sms_main" msgid="6815987840926184815">"SMS: основной номер"</string>
++    <string name="sms_other_fax" msgid="8649822154879781466">"SMS: факс"</string>
++    <string name="sms_radio" msgid="8750339218480745940">"SMS: радиотелефон"</string>
++    <string name="sms_telex" msgid="5469333785775443999">"SMS: телекс"</string>
++    <string name="sms_tty_tdd" msgid="5057886576150816002">"SMS: телетайп"</string>
++    <string name="sms_work_mobile" msgid="8426872094268475047">"SMS: рабочий мобильный"</string>
++    <string name="sms_work_pager" msgid="499303540738557836">"SMS: рабочий пейджер"</string>
++    <string name="sms_assistant" msgid="2677586547377136683">"SMS: <xliff:g id="ASSISTANT">%s</xliff:g>"</string>
++    <string name="sms_mms" msgid="4887206338311086612">"SMS: номер MMS"</string>
++    <string name="sms_by_shortcut" msgid="2675928528835074838">"<xliff:g id="CONTACT_NAME">%s</xliff:g> (SMS)"</string>
++    <string name="description_video_call" msgid="4907306403398614909">"Начать видеовстречу"</string>
++    <string name="clearFrequentsConfirmation_title" msgid="1482750234535491083">"Очистить список популярных контактов?"</string>
++    <string name="clearFrequentsConfirmation" msgid="1117709667923254374">"Список популярных контактов в приложениях \"Контакты\" и \"Телефон\" будет очищен, а приложения электронной почты начнут запоминать адреса заново."</string>
++    <string name="clearFrequentsProgress_title" msgid="3738406170865048982">"Подождите…"</string>
++    <string name="status_available" msgid="4832569677396634846">"Доступен"</string>
++    <string name="status_away" msgid="6267905184545881094">"Отсутствует"</string>
++    <string name="status_busy" msgid="7111912905211403545">"Не беспокоить"</string>
++    <string name="contactsList" msgid="7140022347217602605">"Контакты"</string>
++    <string name="local_invisible_directory" msgid="8934840494825588347">"Другое"</string>
++    <string name="directory_search_label" msgid="4484648822765516947">"Каталог"</string>
++    <string name="directory_search_label_work" msgid="7396227297795426967">"Каталог контактов из рабочего профиля"</string>
++    <string name="local_search_label" msgid="9094584931063745728">"Все контакты"</string>
++    <string name="user_profile_contacts_list_header" msgid="8436133790234197565">"Я"</string>
++    <string name="search_results_searching" msgid="9022794597388306615">"Поиск…"</string>
++    <string name="foundTooManyContacts" msgid="3060037437459313616">"Найдено контактов: более <xliff:g id="COUNT">%d</xliff:g>"</string>
++    <string name="listFoundAllContactsZero" msgid="4406036083994138930">"Ничего не найдено."</string>
++    <plurals name="searchFoundContacts" formatted="false" msgid="4016164064185890420">
++      <item quantity="one">Найден <xliff:g id="COUNT">%d</xliff:g> контакт</item>
++      <item quantity="few">Найдено <xliff:g id="COUNT">%d</xliff:g> контакта</item>
++      <item quantity="many">Найдено <xliff:g id="COUNT">%d</xliff:g> контактов</item>
++      <item quantity="other">Найдено <xliff:g id="COUNT">%d</xliff:g> контакта</item>
++    </plurals>
++    <string name="description_quick_contact_for" msgid="6355240770807101947">"Быстрый вызов, контакт: <xliff:g id="NAME">%1$s</xliff:g>"</string>
++    <string name="missing_name" msgid="2633118852693000081">"Имя не указано"</string>
++    <string name="favoritesFrequentCalled" msgid="6600127125011757687">"Часто вызываемые"</string>
++    <string name="favoritesFrequentContacted" msgid="2849493314447751970">"Часто набираемые"</string>
++    <string name="description_view_contact_detail" msgid="2756753096193839285">"Показать сведения о контакте"</string>
++    <string name="list_filter_phones" msgid="3692815632088465422">"Контакты с номерами телефонов"</string>
++    <string name="list_filter_phones_work" msgid="5226451114859079417">"Контакты из рабочего профиля"</string>
++    <string name="view_updates_from_group" msgid="3310864388165884352">"Просмотреть обновления"</string>
++    <string name="account_phone" msgid="6104157990869081962">"только на телефоне, без синхронизации"</string>
++    <string name="nameLabelsGroup" msgid="1817502703362057154">"Имя"</string>
++    <string name="nicknameLabelsGroup" msgid="6312795212164843246">"Псевдоним"</string>
++    <string name="full_name" msgid="885420216812981202">"Полное имя"</string>
++    <string name="name_given" msgid="4153709115654909377">"Имя"</string>
++    <string name="name_family" msgid="5317387657540738981">"Фамилия"</string>
++    <string name="name_prefix" msgid="8219879405071462309">"Префикс имени"</string>
++    <string name="name_middle" msgid="3951610314424632183">"Отчество"</string>
++    <string name="name_suffix" msgid="5436984808550075931">"Суффикс имени"</string>
++    <string name="name_phonetic" msgid="2249169131785620210">"Транскрипция имени"</string>
++    <string name="name_phonetic_given" msgid="2863316331175661852">"Транскрипция имени"</string>
++    <string name="name_phonetic_middle" msgid="5970174427249235577">"Транскрипция отчества"</string>
++    <string name="name_phonetic_family" msgid="1572398622239414464">"Транскрипция фамилии"</string>
++    <string name="phoneLabelsGroup" msgid="7913782787902007482">"Телефон"</string>
++    <string name="emailLabelsGroup" msgid="4696310712601184208">"Эл. почта"</string>
++    <string name="postalLabelsGroup" msgid="3727124282406728557">"Адрес"</string>
++    <string name="imLabelsGroup" msgid="8733603247535725786">"Чат"</string>
++    <string name="organizationLabelsGroup" msgid="961008074745871784">"Организация"</string>
++    <string name="relationLabelsGroup" msgid="3585294036166325520">"Связи"</string>
++    <string name="eventLabelsGroup" msgid="4801419345682462171">"Определенная дата"</string>
++    <string name="sms" msgid="8086289395154598654">"SMS"</string>
++    <string name="postal_address" msgid="7692926530081579786">"Адрес"</string>
++    <string name="ghostData_company" msgid="22470841482615409">"Организация"</string>
++    <string name="ghostData_title" msgid="6221293237772204604">"Должность"</string>
++    <string name="label_notes" msgid="3997277594846722699">"Примечания"</string>
++    <string name="label_sip_address" msgid="3754551597798479318">"SIP"</string>
++    <string name="websiteLabelsGroup" msgid="8620657380165071493">"Веб-сайт"</string>
++    <string name="groupsLabel" msgid="3574316547053047551">"Группы"</string>
++    <string name="email_home" msgid="2230967805906450693">"Написать на личный адрес"</string>
++    <string name="email_mobile" msgid="7532438378678903685">"Написать на мобильную эл. почту"</string>
++    <string name="email_work" msgid="7065971921227432400">"Написать на рабочий адрес"</string>
++    <string name="email_other" msgid="4601881243553289615">"Написать письмо"</string>
++    <string name="email_custom" msgid="5777583741581538870">"Написать письмо (<xliff:g id="CUSTOM">%s</xliff:g>)"</string>
++    <string name="email" msgid="5624424151176351591">"Написать письмо"</string>
++    <string name="postal_street" msgid="881349814077356134">"Улица"</string>
++    <string name="postal_pobox" msgid="1799978742074885091">"Абонентский ящик"</string>
++    <string name="postal_neighborhood" msgid="3721092668038527674">"Район"</string>
++    <string name="postal_city" msgid="3173008531169519309">"Город"</string>
++    <string name="postal_region" msgid="1695206048198921115">"Регион"</string>
++    <string name="postal_postcode" msgid="6542806670034753265">"Индекс"</string>
++    <string name="postal_country" msgid="3988452247038791892">"Страна"</string>
++    <string name="map_home" msgid="1221397355014741634">"Посмотреть домашний адрес"</string>
++    <string name="map_work" msgid="9015981646907637207">"Посмотреть рабочий адрес"</string>
++    <string name="map_other" msgid="55098598855607997">"Посмотреть адрес"</string>
++    <string name="map_custom" msgid="4943554530347163288">"Посмотреть адрес (<xliff:g id="CUSTOM">%s</xliff:g>)"</string>
++    <string name="chat_aim" msgid="6479001490307452172">"Чат через AIM"</string>
++    <string name="chat_msn" msgid="627481952525245054">"Чат через Windows Live"</string>
++    <string name="chat_yahoo" msgid="5542489454092719897">"Чат через Yahoo"</string>
++    <string name="chat_skype" msgid="3145166404699830256">"Чат через Skype"</string>
++    <string name="chat_qq" msgid="2811762660890755082">"Чат через QQ"</string>
++    <string name="chat_gtalk" msgid="6043734883347741789">"Чат через Google Talk"</string>
++    <string name="chat_icq" msgid="7538190395602030726">"Чат через ICQ"</string>
++    <string name="chat_jabber" msgid="4525546665986350869">"Чат через Jabber"</string>
++    <string name="chat" msgid="6297650784873558837">"Чат"</string>
++    <string name="description_minus_button" msgid="2142439445814730827">"удалить"</string>
++    <string name="expand_collapse_name_fields_description" msgid="5073419090665464541">"Показать/скрыть дополнительные поля"</string>
++    <string name="expand_collapse_phonetic_name_fields_description" msgid="5241493357460353777">"Показать или скрыть поля с транскрипцией имени"</string>
++    <string name="list_filter_all_accounts" msgid="4265359896628915784">"Все контакты"</string>
++    <string name="list_filter_all_starred" msgid="9060325494254507806">"Помеченные"</string>
++    <string name="list_filter_customize" msgid="2352794292558465089">"Настроить"</string>
++    <string name="list_filter_single" msgid="4553809449379139446">"Выбранный контакт"</string>
++    <string name="display_ungrouped" msgid="3669471582032440138">"Остальные контакты"</string>
++    <string name="display_all_contacts" msgid="7251385818740728862">"Все контакты"</string>
++    <string name="menu_sync_remove" msgid="6581565236520430269">"Удалить группу синхронизации"</string>
++    <string name="dialog_sync_add" msgid="1795682729089027675">"Добавить группу синхронизации"</string>
++    <string name="display_more_groups" msgid="6304997485733158224">"Другие группы"</string>
++    <string name="display_warn_remove_ungrouped" msgid="7297678747857509619">"Исключение из синхронизации группы \"<xliff:g id="GROUP">%s</xliff:g>\" приведет к исключению из синхронизации всех контактов, не относящихся к какой-либо группе."</string>
++    <string name="savingDisplayGroups" msgid="6863012138107446030">"Сохранение параметров…"</string>
++    <string name="menu_done" msgid="32470053723443112">"Готово"</string>
++    <string name="menu_doNotSave" msgid="6012426160993364871">"Отмена"</string>
++    <string name="listAllContactsInAccount" msgid="755499980092808715">"Контакты аккаунта \"<xliff:g id="NAME">%s</xliff:g>\""</string>
++    <string name="listCustomView" msgid="1915154113477432033">"Пользовательский фильтр"</string>
++    <string name="listSingleContact" msgid="8525131203887307088">"Один контакт"</string>
++    <string name="dialog_new_contact_account" msgid="32435918254518570">"Куда сохранить контакты?"</string>
++    <string name="import_from_sim" msgid="4749894687871835873">"Импорт с SIM-карты"</string>
++    <string name="import_from_sim_summary" msgid="2306434118233541675">"Импорт с SIM-карты <xliff:g id="SIM_NAME">^1</xliff:g> (<xliff:g id="SIM_NUMBER">^2</xliff:g>)"</string>
++    <string name="import_from_sim_summary_no_number" msgid="8498561004799710237">"Импорт с SIM-карты <xliff:g id="SIM_NAME">%1$s</xliff:g>"</string>
++    <string name="import_from_vcf_file" product="default" msgid="1381675161522633950">"Импорт из файла VCF"</string>
++    <string name="cancel_import_confirmation_message" msgid="7764915400478970495">"Отменить импорт файла \"<xliff:g id="FILENAME">%s</xliff:g>\"?"</string>
++    <string name="cancel_export_confirmation_message" msgid="4063783315931861656">"Отменить экспорт файла \"<xliff:g id="FILENAME">%s</xliff:g>\"?"</string>
++    <string name="cancel_vcard_import_or_export_failed" msgid="7450212880694781527">"Не удалось отменить импорт/экспорт vCard"</string>
++    <string name="fail_reason_unknown" msgid="8541352164960008557">"Неизвестная ошибка."</string>
++    <string name="fail_reason_could_not_open_file" msgid="7041148341788958325">"Не удалось открыть файл \"<xliff:g id="FILE_NAME">%s</xliff:g>\". <xliff:g id="EXACT_REASON">%s</xliff:g>"</string>
++    <string name="fail_reason_could_not_initialize_exporter" msgid="1231982631020480035">"Не удалось запустить инструмент экспорта. <xliff:g id="EXACT_REASON">%s</xliff:g>"</string>
++    <string name="fail_reason_no_exportable_contact" msgid="3717046989062541369">"Нет контактов для экспорта."</string>
++    <string name="missing_required_permission" msgid="3120850759881656369">"Отсутствует необходимое разрешение."</string>
++    <string name="fail_reason_error_occurred_during_export" msgid="8426833603664168716">"Произошла ошибка экспорта. <xliff:g id="EXACT_REASON">%s</xliff:g>"</string>
++    <string name="fail_reason_too_long_filename" msgid="3996610741248972232">"Слишком длинное название файла (\"<xliff:g id="FILENAME">%s</xliff:g>\")."</string>
++    <string name="fail_reason_io_error" msgid="7736686553669161933">"Ошибка ввода-вывода"</string>
++    <string name="fail_reason_low_memory_during_import" msgid="3277485820827338116">"Недостаточно памяти. Возможно, файл слишком большой."</string>
++    <string name="fail_reason_vcard_parse_error" msgid="514012644716565082">"Не удалось выполнить синтаксический анализ файла vCard."</string>
++    <string name="fail_reason_not_supported" msgid="388664373573337601">"Формат не поддерживается."</string>
++    <string name="fail_reason_failed_to_collect_vcard_meta_info" msgid="3179066075701123895">"Не удалось собрать метаданные файлов vCard."</string>
++    <string name="fail_reason_failed_to_read_files" msgid="9213844535907986665">"Не удалось импортировать один или несколько файлов (%s)."</string>
++    <string name="exporting_vcard_finished_title" msgid="3581883972188707378">"Экспорт файла \"<xliff:g id="FILENAME">%s</xliff:g>\" завершен"</string>
++    <string name="exporting_vcard_finished_title_fallback" msgid="2953278060195308065">"Экспорт контактов завершен."</string>
++    <string name="exporting_vcard_finished_toast" msgid="5995505525489290221">"Экспорт контактов завершен. Чтобы открыть к ним доступ, нажмите на уведомление."</string>
++    <string name="touch_to_share_contacts" msgid="3237211496215699092">"Нажмите, чтобы открыть доступ к контактам."</string>
++    <string name="exporting_vcard_canceled_title" msgid="6993607802553630980">"Экспорт файла \"<xliff:g id="FILENAME">%s</xliff:g>\" отменен"</string>
++    <string name="exporting_contact_list_title" msgid="5663945499580026953">"Экспорт данных контакта"</string>
++    <string name="exporting_contact_list_message" msgid="141905615542638683">"Экспорт контактов…"</string>
++    <string name="composer_failed_to_get_database_infomation" msgid="7801276776746351694">"База данных недоступна."</string>
++    <string name="composer_has_no_exportable_contact" msgid="7063040740576745307">"Не найдены контакты для экспорта. Возможно, экспорт контактов с телефона не поддерживается поставщиком услуг передачи данных."</string>
++    <string name="composer_not_initialized" msgid="6514403866246950877">"Сбой при запуске редактора vCard."</string>
++    <string name="exporting_contact_failed_title" msgid="6059039606302373945">"Ошибка экспорта"</string>
++    <string name="exporting_contact_failed_message" msgid="3922498776695333328">"Не удалось экспортировать данные.\nПричина: <xliff:g id="FAIL_REASON">%s</xliff:g>"</string>
++    <string name="importing_vcard_description" msgid="7206609625359484356">"Импорт файла \"<xliff:g id="NAME">%s</xliff:g>\"…"</string>
++    <string name="reading_vcard_failed_title" msgid="4360989450476024034">"Данные файла vCard не прочитаны"</string>
++    <string name="reading_vcard_canceled_title" msgid="1290217818311955708">"Чтение данных vCard отменено"</string>
++    <string name="importing_vcard_finished_title" msgid="5590676758277628951">"Файл \"<xliff:g id="FILENAME">%s</xliff:g>\" импортирован"</string>
++    <string name="importing_vcard_canceled_title" msgid="556913863250769870">"Импорт файла \"<xliff:g id="FILENAME">%s</xliff:g>\" отменен"</string>
++    <string name="vcard_import_will_start_message" msgid="7184603116300604514">"Импорт файла \"<xliff:g id="FILENAME">%s</xliff:g>\" скоро начнется."</string>
++    <string name="vcard_import_will_start_message_with_default_name" msgid="2560192057642180334">"Импорт файла скоро начнется."</string>
++    <string name="vcard_import_request_rejected_message" msgid="5209363425953891316">"Запрос на импорт данных vCard отклонен. Повторите попытку позже."</string>
++    <string name="vcard_export_will_start_message" msgid="2168853666316526278">"Экспорт файла \"<xliff:g id="FILENAME">%s</xliff:g>\" скоро начнется."</string>
++    <string name="vcard_export_will_start_message_fallback" msgid="6418767460851707308">"Файл будет экспортирован в ближайшее время."</string>
++    <string name="contacts_export_will_start_message" msgid="4527597765334949574">"Контакты скоро будут экспортированы."</string>
++    <string name="vcard_export_request_rejected_message" msgid="8044599716727705282">"Запрос на экспорт данных vCard отклонен. Повторите попытку позже."</string>
++    <string name="vcard_unknown_filename" msgid="4832657686149881554">"контакт"</string>
++    <string name="caching_vcard_message" msgid="6635485116655518520">"Выполняется кеширова��ие файлов vCard в локальное временное хранилище, после чего начнется импорт."</string>
++    <string name="vcard_import_failed" msgid="4105296876768072508">"Не удалось импортировать данные vCard."</string>
++    <string name="nfc_vcard_file_name" msgid="305679412445157370">"Получено по NFC"</string>
++    <string name="confirm_export_title" msgid="3240899428149018226">"Экспортировать контакты?"</string>
++    <string name="caching_vcard_title" msgid="9185299351381102305">"Кеширование…"</string>
++    <string name="progress_notifier_message" msgid="359931715339778107">"Импорт <xliff:g id="CURRENT_NUMBER">%s</xliff:g> из <xliff:g id="TOTAL_NUMBER">%s</xliff:g>: <xliff:g id="NAME">%s</xliff:g>..."</string>
++    <string name="export_to_vcf_file" product="default" msgid="4142192068495589925">"Экспорт в файл VCF"</string>
++    <string name="display_options_sort_list_by" msgid="8635268562263708102">"Сортировка"</string>
++    <string name="display_options_sort_by_given_name" msgid="7775798046001047995">"По имени"</string>
++    <string name="display_options_sort_by_family_name" msgid="8196947856299225342">"По фамилии"</string>
++    <string name="display_options_view_names_as" msgid="3232196224409242435">"Формат имени"</string>
++    <string name="display_options_view_given_name_first" msgid="7283772578267332801">"Сначала имя"</string>
++    <string name="display_options_view_family_name_first" msgid="8133167685885174166">"Сначала фамилия"</string>
++    <string name="default_editor_account" msgid="4338725881650654966">"Аккаунт по умолчанию для новых контактов"</string>
++    <string name="sync_contact_metadata_title" msgid="8322455849769727129">"Синхронизация метаданных контакта [DOGFOOD]"</string>
++    <string name="sync_contact_metadata_dialog_title" msgid="4521648342253661374">"Синхронизация метаданных контакта"</string>
++    <string name="setting_about" msgid="3926137653588942297">"О Контактах"</string>
++    <string name="activity_title_settings" msgid="3056389601004689380">"Настройки"</string>
++    <string name="share_visible_contacts" msgid="2150662668080757107">"Передать видимые контакты"</string>
++    <string name="share_visible_contacts_failure" msgid="5895137872238059893">"Не удалось поделиться видимыми контактами."</string>
++    <string name="share_favorite_contacts" msgid="2838432887118216222">"Отправить избранные"</string>
++    <string name="share_contacts" msgid="6404040163340914061">"Отправить все контакты"</string>
++    <string name="share_contacts_failure" msgid="3498837575583860197">"Не удалось отправить контакты"</string>
++    <string name="dialog_import_export" msgid="1125776851100740858">"Импорт/экспорт контактов"</string>
++    <string name="dialog_import" msgid="5177004290082451296">"Импорт контактов"</string>
++    <string name="share_error" msgid="665756457151793108">"Не удалось передать данные"</string>
++    <string name="no_contact_to_share" msgid="5749367538191552509">"Доступных контактов нет"</string>
++    <string name="menu_search" msgid="7464453023659824700">"Поиск"</string>
++    <string name="menu_contacts_filter" msgid="586356478145511794">"Фильтр контактов"</string>
++    <string name="activity_title_contacts_filter" msgid="7689519428197855166">"Фильтр контактов"</string>
++    <string name="custom_list_filter" msgid="582616656313514803">"Выберите группы"</string>
++    <string name="hint_findContacts" msgid="28151707326753522">"Поиск контактов"</string>
++    <string name="contactsFavoritesLabel" msgid="1222038757062409949">"Избранное"</string>
++    <string name="listTotalAllContactsZero" msgid="6041341919823872732">"Нет контактов"</string>
++    <string name="listTotalAllContactsZeroCustom" msgid="5661794891640163617">"Нет видимых контактов"</string>
++    <string name="listTotalAllContactsZeroStarred" msgid="2747107662985362061">"Здесь пока ничего нет"</string>
++    <string name="listTotalAllContactsZeroGroup" msgid="7450331854661098879">"Нет контактов в группе \"<xliff:g id="NAME">%s</xliff:g>\""</string>
++    <string name="menu_clear_frequents" msgid="8492322695770647639">"Очистить популярные"</string>
++    <string name="menu_select_sim" msgid="7814841439832447299">"Выбрать SIM-карту"</string>
++    <string name="menu_accounts" msgid="2944004960829403994">"Управление аккаунтами"</string>
++    <string name="menu_import_export" msgid="6446229463809981669">"Импорт/экспорт"</string>
++    <string name="contact_status_update_attribution" msgid="8419168578670128134">"в <xliff:g id="SOURCE">%1$s</xliff:g>"</string>
++    <string name="contact_status_update_attribution_with_date" msgid="7492465535645607473">"<xliff:g id="DATE">%1$s</xliff:g> в <xliff:g id="SOURCE">%2$s</xliff:g>"</string>
++    <string name="action_menu_back_from_search" msgid="1138551123844019647">"прекратить поиск"</string>
++    <string name="description_clear_search" msgid="3893511425518852086">"Очистить условия поиска"</string>
++    <string name="settings_contact_display_options_title" msgid="1020420603072835628">"Отображение контактов"</string>
++    <string name="select_account_dialog_title" msgid="5509088895267310568">"Аккаунт"</string>
++    <string name="set_default_account" msgid="3865970860434642695">"Всегда использовать для звонков"</string>
++    <string name="select_phone_account_for_calls" msgid="933905607702811164">"Аккаунт для звонка"</string>
++	
++	<!--Begin, by mzj for smart_dial_sort-->
++    <string name="sort_in_Russian">Сначала кириллица</string>
++    <string name="sort_in_English">Сначала латиница</string>
++    <string name="smart_dial_sort">Сортировка результатов быстрого поиска</string>
++    <string name="smart_dial_sort_ellipsize">Сортировка результатов быстрого поиска</string>
++    <!--End,by mzj for smart_dial_sort-->
++	
++    <string name="no_sdcard_message" product="nosdcard">"Накопитель не обнаружен"</string>
++    <string name="no_sdcard_message" product="default">"SD-карта не обнаружена"</string>
++    <string name="confirm_export_message">"Список контактов будет экспортирован в файл \"<xliff:g id="VCARD_FILENAME">%s</xliff:g>\"."</string>
++    <string name="select_vcard_title">"Выберите файл vCard"</string>
++    <string name="import_one_vcard_string">"Импорт одного файла vCard"</string>
++    <string name="import_multiple_vcard_string">"Импорт нескольких файлов vCard"</string>
++    <string name="import_all_vcard_string">"Импорт всех файлов vCard"</string>
++    <string name="searching_vcard_message" product="nosdcard">Поиск данных vCard в накопителе\u2026</string>
++    <string name="searching_vcard_message" product="default">Поиск данных vCard на SD-карте\u2026</string>
++    <string name="call_with_a_note" msgid="8453800473226831257">"Написать сообщение абоненту"</string>
++    <string name="call_subject_hint" msgid="2270115162050853866">"Введите текст…"</string>
++    <string name="send_and_call_button" msgid="7459507823002185202">"ОТПРАВИТЬ СООБЩЕНИЕ И ПОЗВОНИТЬ"</string>
++    <string name="call_subject_limit" msgid="4746194916585506281">"<xliff:g id="COUNT">%1$s</xliff:g>/<xliff:g id="LIMIT">%2$s</xliff:g>"</string>
++    <string name="call_subject_type_and_number" msgid="517676698821671164">"<xliff:g id="TYPE">%1$s</xliff:g> • <xliff:g id="NUMBER">%2$s</xliff:g>"</string>
++    <plurals name="tab_title_with_unread_items" formatted="false" msgid="6318422670912575609">
++      <item quantity="one"><xliff:g id="TITLE_2">%1$s</xliff:g>. <xliff:g id="COUNT_3">%2$d</xliff:g> непрочитанный элемент. </item>
++      <item quantity="few"><xliff:g id="TITLE_2">%1$s</xliff:g>. <xliff:g id="COUNT_3">%2$d</xliff:g> непрочитанных элемента. </item>
++      <item quantity="many"><xliff:g id="TITLE_2">%1$s</xliff:g>. <xliff:g id="COUNT_3">%2$d</xliff:g> непрочитанных элементов. </item>
++      <item quantity="other"><xliff:g id="TITLE_2">%1$s</xliff:g>. <xliff:g id="COUNT_3">%2$d</xliff:g> непрочитанного элемента. </item>
++    </plurals>
++    <string name="about_build_version" msgid="4221971683776635130">"Версия сборки"</string>
++    <string name="about_open_source_licenses" msgid="3224958101863814649">"Лицензии на ПО с открытым исходным кодом"</string>
++    <string name="about_open_source_licenses_summary" msgid="3009343539281606716">"Сведения о лицензиях на ПО с открытым исходным кодом"</string>
++    <string name="about_privacy_policy" msgid="8458337666582973913">"Политика конфиденциальности"</string>
++    <string name="about_terms_of_service" msgid="628537491496465267">"Условия использования"</string>
++    <string name="activity_title_licenses" msgid="7812517458691564230">"Лицензии открытого ПО"</string>
++    <string name="url_open_error_toast" msgid="7557601281695424805">"Не удалось открыть URL."</string>
++    <string name="account_filter_view_checked" msgid="4368757211136754319">"Аккаунт <xliff:g id="ACCOUNT_INFO">%s</xliff:g> выбран"</string>
++    <string name="account_filter_view_not_checked" msgid="5652044086126815700">"Аккаунт <xliff:g id="ACCOUNT_INFO">%s</xliff:g> не выбран"</string>
++    <string name="description_search_video_call" msgid="1699305143973045516">"Видеовызов"</string>
++    <string name="import_from_vcf_file_confirmation_message" msgid="967723361108008345">"Импортировать контакты из vCard?"</string>
++</resources>

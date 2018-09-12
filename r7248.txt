@@ -1,0 +1,318 @@
+Index: vendor/branch/5058A_Cable_Bahamas/frameworks/base/core/res/res/values/config.xml
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/frameworks/base/core/res/res/values/config.xml	(revision 7247)
++++ vendor/branch/5058A_Cable_Bahamas/frameworks/base/core/res/res/values/config.xml	(revision 7248)
+@@ -2494,7 +2494,7 @@
+ 
+     <!-- Allow the gesture to double tap the power button twice to start the camera while the device
+          is non-interactive. -->
+-    <bool name="config_cameraDoubleTapPowerGestureEnabled">true</bool>
++    <bool name="config_cameraDoubleTapPowerGestureEnabled">false</bool>
+ 
+     <!-- Name of the component to handle network policy notifications. If present,
+          disables NetworkPolicyManagerService's presentation of data-usage notifications. -->
+Index: vendor/branch/5058A_Cable_Bahamas/diff.txt
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/diff.txt	(revision 7247)
++++ vendor/branch/5058A_Cable_Bahamas/diff.txt	(revision 7248)
+@@ -23,10 +23,38 @@
+ > 	{ 0x00, 0x00 }, /* COUNTRY CODE */
+ 
+ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpComposeExt.java:
+->         return encodingType;
++> 		boolean bFrSmsEncoding = context.getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++> 		if(bFrSmsEncoding){
++> 			int type = SmsMessage.ENCODING_UNKNOWN;
++> 			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++> 			String encodingTypeStr = null;
++> 			encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++> 			if ("Unicode".equals(encodingTypeStr)) {
++> 				type = SmsMessage.ENCODING_16BIT;
++> 			} else if ("GSM alphabet".equals(encodingTypeStr)) {
++> 				type = SmsMessage.ENCODING_7BIT;
++> 			}
++> 			return type;
++> 		}else{
++> 			return encodingType;
++> 		}
++> 		boolean bFrSmsEncoding = context.getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++> 		if(bFrSmsEncoding){
++> 			int type = SmsMessage.ENCODING_UNKNOWN;
++> 			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
++> 			String encodingTypeStr = null;
++> 			encodingTypeStr = prefs.getString("pref_key_sms_input_mode", "Automatic");
++> 			if ("Unicode".equals(encodingTypeStr)) {
++> 				type = SmsMessage.ENCODING_16BIT;
++> 			} else if ("GSM alphabet".equals(encodingTypeStr)) {
++> 				type = SmsMessage.ENCODING_7BIT;
++> 			}
++> 			return type;
++> 		}else{
++> 			return encodingType;
++> 		}
+ 
+ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/ext/src/com/mediatek/mms/ext/DefaultOpSmsSingleRecipientSenderExt.java:
+->         return codingType;
+ 
+ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/MmsConfig.java:
+ >     private static int sSmsToMmsTextThreshold = 4;
+@@ -37,14 +65,34 @@
+ >         }
+ 
+ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java:
+-> 
+->         params = SmsMessage.calculateLength(text, false, encodingType);
+ 
+ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/setting/SmsPreferenceActivity.java:
+->                 smsCategory.removePreference(mSmsInputMode);
++> 				boolean bFrSmsEncoding = getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++> 				if(bFrSmsEncoding){
++> 					mSmsInputMode.setOnPreferenceChangeListener(this);
++> 				}else{
++> 					smsCategory.removePreference(mSmsInputMode);
++> 				}
++>                 
+ >                                 mNumberText.setInputType(
+ >                                         EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_CLASS_PHONE);
+->         if (preference == mSmsLocation && !(SimStateMonitor.getInstance().getSubCount() > 1)) {
++> 		boolean bFrSmsEncoding = getResources().getBoolean(com.android.internal.R.bool.FR_SMS_ENCODING);
++> 		if(bFrSmsEncoding){
++> 			editor.putString(SMS_INPUT_MODE, "Automatic"); // Add this
++> 		}
++>             if (SMS_INPUT_MODE.equals(key)) {
++>                 MmsLog.d(TAG, "Input Mode Changed");
++>                 mSmsInputMode.setValue((String) arg1);
++>             }else if (preference == mSmsLocation && !(SimStateMonitor.getInstance().getSubCount() > 1)) {
++> 				if (!getResources().getBoolean(R.bool.isTablet)) {
++> 					mSmsLocation.setSummary(MessageUtils.getVisualTextName(this, (String) arg1,
++> 							R.array.pref_sms_save_location_choices,
++> 							R.array.pref_sms_save_location_values));
++> 				} else {
++> 					mSmsLocation.setSummary(MessageUtils.getVisualTextName(this, (String) arg1,
++> 							R.array.pref_tablet_sms_save_location_choices,
++> 							R.array.pref_tablet_sms_save_location_values));
++> 				}
+ 
+ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/BrowserOverlay/res/values/isdm_BrowserRes_defaults.xml:
+ >     <string name="def_browser_homepage_base">"http://www.alcatel-mobile.com"</string>
+@@ -101,43 +149,12 @@
+ >         launcher:className="com.tcl.gallery.app.GalleryActivity"
+ >         launcher:packageName="com.tcl.gallery"
+ >         launcher:x="2"
+->         launcher:x="0"
+->         launcher:className="com.google.android.apps.chrome.Main"
+->         launcher:container="1"
+->         launcher:icon=""
+->         launcher:packageName="com.android.chrome"
+->         launcher:screen="0"
+->         launcher:spanX="1"
+->         launcher:spanY="1"
+->         launcher:title=""
+->         launcher:type="1"
+->         launcher:uri=""
+->         launcher:x="1"
+->         launcher:y="0"/>
+-> 
+ >     <item
+->         launcher:id=""
+ >         launcher:x="0"
+->         launcher:y="1"/>
+->         launcher:x="1"
+->         launcher:x="2"
+-> 
+->         launcher:x="0"
+->         launcher:y="2"/>
+->         launcher:x="1"
+->         launcher:y="2"/>
+->         launcher:x="2"
+->         launcher:x="0"
+->         launcher:y="3"/>
+-> 
+->     <item
+->         launcher:x="1"
+->         launcher:y="3"/>
+->         launcher:x="2"
+->         launcher:y="3"/>
+->         launcher:y="4"/>
+ >     <!-- Screen 1 begin -->
+ >         launcher:className="com.android.settings.Settings"
++>         launcher:container=""
++>         launcher:icon=""
+ >         launcher:packageName="com.android.settings"
+ >         launcher:screen="1"
+ >         launcher:spanX="1"
+@@ -211,8 +228,6 @@
+ >     <item
+ >         launcher:id="2"
+ >         launcher:className=""
+->         launcher:container=""
+->         launcher:icon=""
+ >         launcher:packageName=""
+ >         launcher:screen="1"
+ >         launcher:spanX="1"
+@@ -629,7 +644,6 @@
+ 
+ vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/res/values/bools.xml:
+ > 	
+-> 	<bool name="def_settings_informed_consent_show">true</bool>
+ 
+ vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/ext/src/com/mediatek/settings/ext/DefaultApnSettingsExt.java:
+ >         return true;
+@@ -653,6 +667,22 @@
+ >         //startActivity(intent);
+ 
+ vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/src/com/android/settings/DateTimeSettings.java:
++> import java.text.SimpleDateFormat;
++> 		//Add feature [FR_DATEFORMAT] for different date format type {
++> 		boolean bDateFr = getResources().getBoolean(com.android.internal.R.bool.FR_DATEFORMAT);
++> 		if(bDateFr){
++> 			mDatePref.setSummary(dateToStrLong(now.getTime()));
++> 		}else{
++> 			mDatePref.setSummary(DateFormat.getLongDateFormat(context).format(now.getTime()));
++> 		}
++> 		//End feature [FR_DATEFORMAT] by javen 2018.01.29
++>         
++>     }
++>     private String dateToStrLong(Date dateDate) {
++> 		String sFormat = getResources().getString(com.android.internal.R.string.STR_DATEFORMAT);
++>         SimpleDateFormat formatter = new SimpleDateFormat(sFormat);  
++>         String dateString = formatter.format(dateDate);  
++>         return dateString;  
+ 
+ vendor/branch/5058A_Cable_Bahamas/packages/apps/Settings/src/com/android/settings/ApnPreference.java:
+ 
+@@ -699,11 +729,14 @@
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/core/res/res/values/config.xml:
+ >     <string name="default_browser" translatable="false"></string>
++>     <string name="config_mms_user_agent" translatable="false">Android-Mms/0.1</string>
++>     <string name="config_mms_user_agent_profile_url" translatable="false">http://www.google.com/oha/rdf/ua-profile-kila.xml</string>
+ >     <string translatable="false" name="config_ntpServer">asia.pool.ntp.org</string>
+->     <bool name="config_cellBroadcastAppLinks">true</bool>
++>     <bool name="config_dreamsActivatedOnDockByDefault">false</bool>
++>     <bool name="config_dreamsActivatedOnSleepByDefault">true</bool>
+ >     <bool name="config_camera_sound_forced">true</bool>
+ >     <bool name="config_supportAudioSourceUnprocessed">false</bool>
+-> 	<bool name="def_cb_channel_50_behaviour_brazil">true</bool>
++>     <bool name="config_cameraDoubleTapPowerGestureEnabled">false</bool>
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/core/res/res/values/locale_config.xml:
+ >         <item>es-US</item> <!-- Spanish (United States) -->
+@@ -842,7 +875,6 @@
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/opt/telephony/src/java/android/telephony/SmsMessage.java:
+ >     public static ArrayList<String> fragmentText(String text) {
+->     public static ArrayList<String> fragmentText(String text, int encodingType) {
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java:
+ >                 !dcHelper.isDataSupportConcurrent(mPhone.getPhoneId()) &&
+Index: vendor/branch/5058A_Cable_Bahamas/diff_5058A.txt
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/diff_5058A.txt	(revision 7247)
++++ vendor/branch/5058A_Cable_Bahamas/diff_5058A.txt	(revision 7248)
+@@ -1,9 +1,11 @@
+ vendor/branch/5058A_Cable_Bahamas/vendor/customer/custom.mk:
++>                     Diagnostics \
+ > 					SimpleLauncher \
+ >                     MotocrossTrialExtreme \
+ >                     PuzzlePets \
+ >                     ModernCombat4 \
+ >                     Gboard \
++>                     Toolkit
+ 
+ vendor/branch/5058A_Cable_Bahamas/vendor/mediatek/proprietary/packages/apps/BrowserOverlay/res/values/isdm_BrowserRes_defaults.xml:
+ >     <string name="def_browser_homepage_base">"http://www.alcatel-mobile.com"</string>
+@@ -76,6 +78,7 @@
+ > 	<bool name="def_cb_channel_50_behaviour_brazil">true</bool>
+ 
+ vendor/branch/5058A_Cable_Bahamas/frameworks/base/core/res/res/values/locale_config.xml:
++> 		<item>es-MX</item> <!-- Spanish (Mexico) -->
+ >         <item>es-US</item> <!-- Spanish (United States) -->
+ >         <item>fr-FR</item> <!-- French (France) -->
+ >         <item>es</item> <!-- Spanish (Spain) -->
+@@ -105,18 +108,71 @@
+ >                 if (isSimInsert(phoneType) && telEx.isUserCustomizedEcc(number)) {
+ >         vlog("[getQueryPhoneType] needQueryGsm:" + needQueryGsm
+ 
++vendor/branch/5058A_Cable_Bahamas/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java:
++>     // add for FDN
++>     Cursor cursor = null;
++>     private static final String[] COLUMN_NAMES = new String[] {
++>             "index"/*MTK*/,
++>             "name",
++>             "number"
++>     };
++>                 !dcHelper.isDataSupportConcurrent(mPhone.getPhoneId()) &&
++>             if ((mTelDevController.getModem(0) != null &&
++>         if ((TelephonyManager.getDefault().getSimCount() == 1) || resource == null) {
++>             logd("fetchDunApn: get sysResource mcc=" + sysMcc + ", mnc=" + sysMnc );
++> 				checkFdnList();
++>     private Uri getUri(int subId){
++> 		Uri fdnContentUri;    
++>         fdnContentUri = Uri.parse("content://icc/fdn/subId/"+subId);
++>         return fdnContentUri;
++> 	}
++>    
++> 	private void checkFdnList(){
++> 		new Thread(new Runnable() {
++>             @Override
++>             public void run() {
++>                 try {
++>                     cursor = mResolver.query(getUri(mPhone.getSubId()),COLUMN_NAMES,null,null,null);
++>                     if(cursor != null){
++> 						List<String> numberList = new ArrayList<String>();
++>                         cursor.moveToFirst();
++>                         do{
++> 						   numberList.add(cursor.getString(2));
++>                            android.util.Log.i("cursor.count && number",cursor.getCount()+"***"+cursor.getString(2));
++>                         }while (cursor.moveToNext());
++> 						if(numberList != null){
++> 						if (numberList.contains("*99#")){
++>                                setupDataOnConnectableApns(Phone.REASON_FDN_DISABLED);
++>                            }else{
++> 							   cleanUpAllConnections(true, Phone.REASON_FDN_ENABLED);
++> 						   }
++> 						}
++>                     }
++>                 } catch (Exception e) {
++>                     e.printStackTrace();
++>                 } finally {
++>                     if(cursor != null){
++>                         cursor.close();
++>                     }
++>                 }
++>             }
++>         }).start();
++> 	}
++> 	
++> 	
++
+ vendor/branch/5058A_Cable_Bahamas/build/tools/buildinfo.sh:
+-> echo "ro.build.display.id=5058A_LATAM_V2.1_180116"
+-> echo "ro.build.version.custintid=5058A_LATAM_V2.1_180116"
+-> echo "ro.build.version.incremental=LATAM_5058A_L030_S16_180116"
+-> echo "ro.tct.sys.ver=O58AWE02"
++> echo "ro.build.display.id=5058A_LATAM_V2.3_180126"
++> echo "ro.build.version.custintid=5058A_LATAM_V2.3_180126"
++> echo "ro.build.version.incremental=LATAM_5058A_L030_S18_180126"
++> echo "ro.tct.sys.ver=O58AWE04"
+ > echo "ro.build.hardware.version=V1"
+-> echo "ro.build.display.factoryid=Plat:LATAM_5058A_L030_S16_180116Outer:5058A_LATAM_V2.1_180116End"
++> echo "ro.build.display.factoryid=Plat:LATAM_5058A_L030_S18_180126Outer:5058A_LATAM_V2.3_180126End"
+ > echo "ro.product.manufacturer= TCT"
+-> echo "ro.build.fingerprint=TCL/5058A/A3A_PLUS:7.1.1/N6F26Q/5058A_LATAM_V2.1_180116:user/release-keys"
++> echo "ro.build.fingerprint=TCL/5058A/A3A_PLUS:7.1.1/N6F26Q/5058A_LATAM_V2.3_180126:user/release-keys"
+ 
+ vendor/branch/5058A_Cable_Bahamas/build/target/product/full_base.mk:
+-> PRODUCT_LOCALES :=es_US en_ES en_US en_GB pt_BR pt_PT fr_FR
++> PRODUCT_LOCALES :=es_MX es_US en_ES en_US en_GB pt_BR pt_PT fr_FR
+ 
+ vendor/branch/5058A_Cable_Bahamas/device/ausshine/aus6739_66_n1/system.prop:
+ > ro.tct.curef.default=5058A-2*ALOP1
+@@ -138,5 +194,5 @@
+ >   #endif
+ >   #PRODUCT_LOCALES:=zh_CN zh_HK zh_TW en_US pt_BR pt_PT en_GB fr_FR ja_JP
+ >   #PRODUCT_LOCALES := en_US zh_CN zh_TW es_ES pt_BR ru_RU fr_FR de_DE tr_TR vi_VN ms_MY in_ID th_TH it_IT ar_EG hi_IN bn_IN ur_PK fa_IR pt_PT nl_NL el_GR hu_HU tl_PH ro_RO cs_CZ ko_KR km_KH iw_IL my_MM pl_PL es_US bg_BG hr_HR lv_LV lt_LT sk_SK uk_UA de_AT da_DK fi_FI nb_NO sv_SE en_GB hy_AM zh_HK et_EE ja_JP kk_KZ sr_RS sl_SI ca_ES
+-> PRODUCT_LOCALES :=es_US es en_US en_GB pt_BR pt_PT fr_FR
++> PRODUCT_LOCALES :=es_MX es_US es en_US en_GB pt_BR pt_PT fr_FR
+ 

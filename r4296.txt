@@ -1,0 +1,75 @@
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 4295)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 4296)
+@@ -866,7 +866,8 @@
+ 			//added by lei.shi for task927658 at 2015.11.22 begin
+             else if ("com.jrdcom.action.CHANNEL_50_MSG".equals(action)) {
+                 Log.d(TAG, "#--- received broadcast : com.jrdcom.action.CHANNEL_50_MSG");
+-                int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
++                ServiceState serviceState = ServiceState.newFromBundle(intent.getExtras());
++				int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                         SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+                 Log.d(TAG, "SPN_STRINGS_UPDATED_ACTION, sub Id = " + subId);
+                 int phoneId = KeyguardUtils.getPhoneIdUsingSubId(subId);
+@@ -885,10 +886,14 @@
+                 final TelephonyManager tele = TelephonyManager.from(mContext);
+                 int netWorkType = -1;
+                 int netWorkClass = 0;
+-                if (tele != null) {
+-                    netWorkType = tele.getNetworkType(subId);
+-                    netWorkClass = tele.getNetworkClass(netWorkType);
+-                }
++                //if (tele != null) {
++                //    netWorkType = tele.getNetworkType(subId);
++                //    netWorkClass = tele.getNetworkClass(netWorkType);
++                //}
++				
++				netWorkType = serviceState.getDataNetworkType() != TelephonyManager.NETWORK_TYPE_UNKNOWN ?
++								serviceState.getDataNetworkType() : serviceState.getVoiceNetworkType();
++				netWorkClass = TelephonyManager.getNetworkClass(netWorkType);
+                 Log.d(TAG, "#--- service mNetWorkType : " + netWorkType
+                         + ", mNetWorkClass :" + netWorkClass);
+                 if (netWorkClass == TelephonyManager.NETWORK_CLASS_2_G) {
+@@ -935,15 +940,20 @@
+                         if (phoneId < 0 || phoneId >= KeyguardUtils.getNumOfPhone()) {
+                             phoneId = 0;
+                         }
+-                        if (tele != null) {
+-                            netWorkType = tele.getNetworkType(subId);
+-                            mNewNetWorkClass = tele.getNetworkClass(netWorkType);
+-                        }
++                        //if (tele != null) {
++                        //    netWorkType = tele.getNetworkType(subId);
++                        //    mNewNetWorkClass = tele.getNetworkClass(netWorkType);
++                        //}
++						
++						netWorkType = serviceState.getDataNetworkType() != TelephonyManager.NETWORK_TYPE_UNKNOWN ?
++								serviceState.getDataNetworkType() : serviceState.getVoiceNetworkType();
++						mNewNetWorkClass = TelephonyManager.getNetworkClass(netWorkType);
++						
+                         Log.d(TAG, "#--- service mNewNetWorkClass : " + mNewNetWorkClass
+                                 + ", oldNetWorkClass :" + mOldNetWorkClass + "netWorkType : "
+                                 + netWorkType);
+                         if (mNewNetWorkClass != mOldNetWorkClass) {
+-                            if (mNewNetWorkClass != TelephonyManager.NETWORK_CLASS_2_G) {
++                            if (mNewNetWorkClass == TelephonyManager.NETWORK_CLASS_3_G || mNewNetWorkClass == TelephonyManager.NETWORK_CLASS_4_G) {
+                                 mOldNetWorkClass = mNewNetWorkClass;
+                                 Log.d(TAG, "#--- set mChannel50Msg[0] = null");
+                                 if (mChannel50Msg[phoneId] != null) {
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/CarrierText.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/CarrierText.java	(revision 4295)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/CarrierText.java	(revision 4296)
+@@ -470,7 +470,10 @@
+                         if(mvivoPlmn != null){
+                             toSetCarrierView.setText(mvivoPlmn);
+                             Log.d(TAG, "set mvivoPlmn = " + mvivoPlmn);
+-                        }
++                        } else {
++							Log.i(TAG, " my set mvivoPlmn = " + text);
++							toSetCarrierView.setText(text);
++						}
+                     } else {
+                         toSetCarrierView.setText(text);
+                     }

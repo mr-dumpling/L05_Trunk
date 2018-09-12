@@ -1,0 +1,70 @@
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 2432)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 2433)
+@@ -2742,5 +2742,6 @@
+   <java-symbol type="string" name="face_verify_timeout_tip" />
+   <java-symbol type="string" name="face_verify_fail_tip" />
+   <java-symbol type="drawable" name="face_verify_frame" />
+-
++  <java-symbol type="string" name="fingerprint_acquired_duplicate_finger" />
++  <java-symbol type="string" name="fingerprint_acquired_duplicate_area" />
+ </resources>
+Index: frameworks/base/core/res/res/values/strings.xml
+===================================================================
+--- frameworks/base/core/res/res/values/strings.xml	(revision 2432)
++++ frameworks/base/core/res/res/values/strings.xml	(revision 2433)
+@@ -4530,4 +4530,7 @@
+   <string name="global_action_enforce_restart">Press and hold the power key for at least 8 seconds to power off or hold it longer to reboot.</string>
+     <string name="face_verify_fail_tip">Verify failure </string>
+     <string name="face_verify_timeout_tip">No face was detected</string>
++	
++	<string name="fingerprint_acquired_duplicate_finger">Duplicate finger.Please change a finger.</string>
++    <string name="fingerprint_acquired_duplicate_area">Duplicate area.Please try again.</string>
+ </resources>
+Index: frameworks/base/core/res/res/values-zh-rCN/strings.xml
+===================================================================
+--- frameworks/base/core/res/res/values-zh-rCN/strings.xml	(revision 2432)
++++ frameworks/base/core/res/res/values-zh-rCN/strings.xml	(revision 2433)
+@@ -1683,5 +1683,6 @@
+ 	<string name="battery_countdown">您的手机将在十五秒后关机。</string>
+     <!-- no translation found for suspended_widget_accessibility (6712143096475264190) -->
+     <skip />
+-
++	<string name="fingerprint_acquired_duplicate_finger">重复手指。请更换手指</string>
++    <string name="fingerprint_acquired_duplicate_area">重复区域。请重试。</string>
+     </resources>
+Index: frameworks/base/core/java/android/hardware/fingerprint/FingerprintManager.java
+===================================================================
+--- frameworks/base/core/java/android/hardware/fingerprint/FingerprintManager.java	(revision 2432)
++++ frameworks/base/core/java/android/hardware/fingerprint/FingerprintManager.java	(revision 2433)
+@@ -963,7 +963,13 @@
+             case FINGERPRINT_ACQUIRED_TOO_FAST:
+                 return mContext.getString(
+                     com.android.internal.R.string.fingerprint_acquired_too_fast);
+-            default:
++            case 1105:
++				return mContext.getString(
++					com.android.internal.R.string.fingerprint_acquired_duplicate_finger);
++			case 1106:
++				return mContext.getString(
++					com.android.internal.R.string.fingerprint_acquired_duplicate_area);
++			default:
+                 if (acquireInfo >= FINGERPRINT_ACQUIRED_VENDOR_BASE) {
+                     int msgNumber = acquireInfo - FINGERPRINT_ACQUIRED_VENDOR_BASE;
+                     String[] msgArray = mContext.getResources().getStringArray(
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintEnrollEnrolling.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintEnrollEnrolling.java	(revision 2432)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintEnrollEnrolling.java	(revision 2433)
+@@ -269,7 +269,9 @@
+ 
+     @Override
+     public void onEnrollmentHelp(CharSequence helpString) {
+-        mErrorText.setText(helpString);
++        //mErrorText.setText(helpString);
++		showError(helpString);
++		stopIconAnimation();
+     }
+ 
+     @Override

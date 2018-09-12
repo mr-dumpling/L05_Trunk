@@ -1,0 +1,70 @@
+Index: vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/nfc/NfcEnabler.java
+===================================================================
+--- vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/nfc/NfcEnabler.java	(revision 9615)
++++ vendor/branch/5058Y/packages/apps/Settings/src/com/android/settings/nfc/NfcEnabler.java	(revision 9616)
+@@ -30,6 +30,9 @@
+ import com.android.settings.R;
+ import com.android.settingslib.RestrictedLockUtils;
+ import com.android.settingslib.RestrictedPreference;
++import android.provider.Settings;
++import android.content.SharedPreferences.Editor;
++import android.content.SharedPreferences;
+ 
+ /**
+  * NfcEnabler is a helper to manage the Nfc on/off checkbox preference. It is
+@@ -43,6 +46,8 @@
+     private final NfcAdapter mNfcAdapter;
+     private final IntentFilter mIntentFilter;
+     private boolean mBeamDisallowedBySystem;
++	private SharedPreferences mNfcStatePreference ;
++    private Editor mEditor;
+ 
+     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+         @Override
+@@ -52,9 +57,31 @@
+                 handleNfcStateChanged(intent.getIntExtra(NfcAdapter.EXTRA_ADAPTER_STATE,
+                         NfcAdapter.STATE_OFF));
+             }
+-        }
++			else if(Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(action)){
++            	 boolean airplaneMode=getAirplaneMode(context);
++				 int state=mNfcAdapter.getAdapterState();
++				 boolean switchState = mNfcStatePreference.getBoolean("NfcStateOn",false);
++				 if(airplaneMode==true && state==NfcAdapter.STATE_ON){
++					mEditor.putBoolean("NfcStateOn",state==NfcAdapter.STATE_ON); 
++					mNfcAdapter.disable();
++				 	handleNfcStateChanged(NfcAdapter.STATE_OFF);
++				 }else if(airplaneMode==false && switchState){
++					mNfcAdapter.enable();
++					handleNfcStateChanged(NfcAdapter.STATE_ON);
++					mEditor.remove("NfcStateOn");
++					
++				 }
++				mEditor.commit();
++			}
++		}
+     };
+-
++	
++	public  boolean getAirplaneMode(Context context){  
++	    int isAirplaneMode = Settings.Global.getInt(context.getContentResolver(),  
++	                          Settings.Global.AIRPLANE_MODE_ON, 0) ;  
++	    return (isAirplaneMode == 1)?true:false;  
++	}  
++	
+     public NfcEnabler(Context context, SwitchPreference switchPreference,
+             RestrictedPreference androidBeam) {
+         mContext = context;
+@@ -74,7 +101,11 @@
+         if (mBeamDisallowedBySystem) {
+             mAndroidBeam.setEnabled(false);
+         }
+-        mIntentFilter = new IntentFilter(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
++        mIntentFilter = new IntentFilter();
++        mIntentFilter.addAction(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
++		mIntentFilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
++		mNfcStatePreference=context.getSharedPreferences("NfcStateOn",Context.MODE_PRIVATE);
++		mEditor = mNfcStatePreference.edit();
+     }
+ 
+     public void resume() {

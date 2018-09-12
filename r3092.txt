@@ -1,0 +1,150 @@
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertDialog.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertDialog.java	(revision 3091)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertDialog.java	(revision 3092)
+@@ -63,8 +63,12 @@
+     @Override
+     public void onBackPressed() {
+         // stop animating warning icon, stop playing alert sound, mark broadcast as read
+-        dismiss();
+-    }
++        // modify for 115443 by dongdongli 20171211 start 
++		if(!getResources().getBoolean(R.bool.cb_tcl_customer_config)){
++			dismiss();
++		}
++		// modify for 115443 by dongdongli 20171211
++	}
+ 
+     @Override
+     protected int getLayoutResId() {
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 3091)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 3092)
+@@ -309,7 +309,12 @@
+             }
+         }
+         // release CPU wake lock acquired by CellBroadcastAlertService
+-        CellBroadcastAlertWakeLock.releaseCpuLock();
++		// modify for 115440 by dongdongli 20171211 start
++		// CellBroadcastAlertWakeLock.releaseCpuLock();
++        if(!getResources().getBoolean(R.bool.cb_tcl_customer_config)){
++			CellBroadcastAlertWakeLock.releaseCpuLock(); 
++		}
++		// modify for 115440 by dongdongli 20171211 end
+     }
+ 
+     @Override
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertFullScreen.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertFullScreen.java	(revision 3091)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertFullScreen.java	(revision 3092)
+@@ -75,7 +75,7 @@
+     private static final int WARNING_ICON_OFF_DURATION_MSEC = 800;
+ 
+     /** Length of time to keep the screen turned on. */
+-    private static final int KEEP_SCREEN_ON_DURATION_MSEC = 60000;
++    private static final int KEEP_SCREEN_ON_DURATION_MSEC = 1200 * 60000;   // modify by dongdongli for 115440
+ 
+     /** Animation handler for the flashing warning icon (emergency alerts only). */
+     private final AnimationHandler mAnimationHandler = new AnimationHandler();
+@@ -303,12 +303,16 @@
+         // For emergency alerts, keep screen on so the user can read it, unless this is a
+         // full screen alert created by CellBroadcastAlertDialog when the screen turned off.
+         CellBroadcastMessage message = getLatestMessage();
+-        /*if (CellBroadcastConfigService.isEmergencyAlertMessage(message) &&
+-                (savedInstanceState != null ||
+-                        !getIntent().getBooleanExtra(SCREEN_OFF_EXTRA, false))) {
+-            Log.d(TAG, "onCreate setting screen on timer for emergency alert");
+-            mScreenOffHandler.startScreenOnTimer();
+-        }*/
++		// modify by dongdongli for 115440 start
++		if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {
++			if (CellBroadcastConfigService.isEmergencyAlertMessage(message) &&
++					(savedInstanceState != null ||
++							!getIntent().getBooleanExtra(SCREEN_OFF_EXTRA, false))) {
++				Log.d(TAG, "onCreate setting screen on timer for emergency alert");
++				mScreenOffHandler.startScreenOnTimer();
++			}
++		}
++		// modify by dongdongli for 115440 start
+ 
+         updateAlertText(message);
+     }
+@@ -464,7 +468,11 @@
+                 }
+             }
+         }
+-
++		// add for 115440 by dongdongli 20171211 start
++		if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {
++			CellBroadcastAlertWakeLock.releaseCpuLock();
++		}
++		// add for 115440 by dongdongli 20171211 end
+         finish();
+     }
+ 
+@@ -475,14 +483,37 @@
+             switch (event.getKeyCode()) {
+                 // Volume keys and camera keys mute the alert sound/vibration (except ETWS).
+                 case KeyEvent.KEYCODE_VOLUME_UP:
++					if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {
++						return true;
++					}
+                 case KeyEvent.KEYCODE_VOLUME_DOWN:
++					if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {
++						return true;
++					}
+                 case KeyEvent.KEYCODE_VOLUME_MUTE:
++					if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {
++						return true;
++					}
+                 case KeyEvent.KEYCODE_CAMERA:
++					if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {
++						return true;
++					}
++				case KeyEvent.KEYCODE_POWER:
++					if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {
++						return true;
++					}
++				case KeyEvent.KEYCODE_HOME:
++					if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {
++						return true;
++					}
++				case KeyEvent.KEYCODE_MENU:
++					if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {
++						return true;
++					}
+                 case KeyEvent.KEYCODE_FOCUS:
+                     // Stop playing alert sound/vibration/speech (if started)
+                     stopService(new Intent(this, CellBroadcastAlertAudio.class));
+                     return true;
+-
+                 default:
+                     break;
+             }
+@@ -489,6 +520,14 @@
+         }
+         return super.dispatchKeyEvent(event);
+     }
++	
++	@Override
++	public void onAttachedToWindow() {
++		if (getResources().getBoolean(R.bool.cb_tcl_customer_config)) {	
++			this.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD);
++		}		
++		super.onAttachedToWindow();
++	}
+ 
+     /**
+      * Ignore the back button for emergency alerts (overridden by alert dialog so that the dialog
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/config.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/config.xml	(revision 3091)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/config.xml	(revision 3092)
+@@ -21,4 +21,5 @@
+     <bool name="show_cmas_settings">true</bool>
+     <!-- Whether to enable channel 50 settings (Brazil) -->
+     <bool name="show_brazil_settings">false</bool>
++	<bool name="cb_tcl_customer_config">false</bool>
+ </resources>

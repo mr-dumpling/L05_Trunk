@@ -1,0 +1,118 @@
+Index: packages/apps/PhoneCommon/src/com/android/phone/common/util/SettingsUtil.java
+===================================================================
+--- packages/apps/PhoneCommon/src/com/android/phone/common/util/SettingsUtil.java	(revision 1656)
++++ packages/apps/PhoneCommon/src/com/android/phone/common/util/SettingsUtil.java	(revision 1657)
+@@ -30,7 +30,9 @@
+ import android.provider.MediaStore;
+ import android.provider.Settings;
+ import android.text.TextUtils;
+-
++import android.provider.MediaStore;
++import android.content.ContentResolver;
++import android.provider.OpenableColumns;
+ import com.android.phone.common.R;
+ 
+ import java.lang.CharSequence;
+@@ -39,7 +41,14 @@
+ public class SettingsUtil {
+     private static final String DEFAULT_NOTIFICATION_URI_STRING =
+             Settings.System.DEFAULT_NOTIFICATION_URI.toString();
+-
++	private static final String DEFAULT_RING = "Fresh";
++	private static final String DEFAULT_ALARM = "Galactic";
++	private static final String DEFAULT_NOTIFICATION = "Success";
++	 private static final String[] INTERNAL_COLUMNS = new String[] {
++        MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
++        "\"" + MediaStore.Audio.Media.INTERNAL_CONTENT_URI + "\"",
++        MediaStore.Audio.Media.TITLE_KEY
++    };
+     /**
+      * Queries for a ringtone name, and sets the name using a handler.
+      * This is a method was originally copied from com.android.settings.SoundSettings.
+@@ -52,7 +61,7 @@
+      */
+     public static void updateRingtoneName(
+             Context context, Handler handler, int type, String key, int msg) {
+-        final Uri ringtoneUri;
++        Uri ringtoneUri;
+         boolean defaultRingtone = false;
+         if (type == RingtoneManager.TYPE_RINGTONE) {
+             // For ringtones, we can just lookup the system default because changing the settings
+@@ -83,6 +92,7 @@
+             summary = context.getString(R.string.ringtone_silent);
+         } else {
+             // Fetch the ringtone title from the media provider
++			ringtoneUri = checkRingUri(context,type,ringtoneUri);
+             final Ringtone ringtone = RingtoneManager.getRingtone(context, ringtoneUri);
+             if (ringtone != null) {
+                 try {
+@@ -100,4 +110,69 @@
+         }
+         handler.sendMessage(handler.obtainMessage(msg, summary));
+     }
++	
++	private static Uri checkRingUri(Context context,int type, Uri ringtoneUri){
++			Cursor cursor = null;
++            try {
++                if (MediaStore.AUTHORITY.equals(ringtoneUri.getAuthority())) {
++                    // Fetch the ringtone title from the media provider
++                    cursor = context.getContentResolver().query(ringtoneUri,
++                            new String[] { MediaStore.Audio.Media.TITLE }, null, null, null);
++                } else if (ContentResolver.SCHEME_CONTENT.equals(ringtoneUri.getScheme())) {
++                    cursor = context.getContentResolver().query(ringtoneUri,
++                            new String[] { OpenableColumns.DISPLAY_NAME }, null, null, null);
++                }
++                if (cursor != null) {
++                    if (cursor.moveToFirst()) {
++                    //    return ringtoneUri;
++                    }else if(!ringtoneUri.toString().startsWith(MediaStore.Audio.Media.INTERNAL_CONTENT_URI.toString())){
++						ringtoneUri = queryDefaultUri(context,type);
++						if(null != ringtoneUri) RingtoneManager.setActualDefaultRingtoneUri(context,type,ringtoneUri);
++					//	return ringtoneUri;
++                    }
++                }
++				
++            } catch (SQLiteException sqle) {
++                // Unknown title for the ringtone
++            } catch (IllegalArgumentException iae) {
++                // Some other error retrieving the column from the provider
++            } finally {
++                if (cursor != null) {
++                    cursor.close();
++                }
++				return ringtoneUri;
++            }
++	}
++	
++	private static Uri queryDefaultUri(Context context,int type){
++		Cursor cursor = null;
++		try {
++			cursor = context.getContentResolver().query(MediaStore.Audio.Media.INTERNAL_CONTENT_URI, INTERNAL_COLUMNS, null,
++						null, MediaStore.Audio.Media.DEFAULT_SORT_ORDER);
++			if(cursor.moveToFirst()){
++			   while(cursor != null){
++			        if(cursor.getString(1).startsWith(DEFAULT_ALARM) && type == RingtoneManager.TYPE_ALARM){
++					    Uri aUri = Uri.parse(cursor.getString(2)+"/"+cursor.getString(0));
++					    return aUri;
++				    }else if(cursor.getString(1).startsWith(DEFAULT_RING) && type == RingtoneManager.TYPE_RINGTONE){
++						Uri aUri = Uri.parse(cursor.getString(2)+"/"+cursor.getString(0));
++					    return aUri;
++					}else if(cursor.getString(1).startsWith(DEFAULT_NOTIFICATION) && type == RingtoneManager.TYPE_NOTIFICATION){
++						Uri aUri = Uri.parse(cursor.getString(2)+"/"+cursor.getString(0));
++					    return aUri;
++					}
++				    if(!cursor.moveToNext()) break;
++			    }
++			}
++		} catch (SQLiteException sqle) {
++			return null;
++		} catch (IllegalArgumentException iae) {
++			return null;
++		} finally {
++			if (cursor != null) {
++				cursor.close();
++			}
++  	    }
++		return null;
++	}
+ }

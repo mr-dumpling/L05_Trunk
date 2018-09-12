@@ -1,0 +1,67 @@
+Index: packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 1756)
++++ packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 1757)
+@@ -2,6 +2,7 @@
+  * Night mode attribute list
+  */
+ package com.android.settings;
++import android.app.Activity;
+ import android.content.ComponentName;
+ import android.content.Context;
+ import android.content.Intent;
+@@ -26,9 +27,12 @@
+ import android.provider.Settings.Secure;
+ import android.content.ContentResolver;
+ import android.os.SystemProperties;
++import android.content.BroadcastReceiver;
++import android.content.IntentFilter;
+ 
+ 
+ 
++
+ public class NightModeTypeSettings extends SettingsPreferenceFragment implements Indexable {
+ 	private static final String TAG = "NightModeTypeSettings";
+ 	private static final String PREFERENCE_NAME = "com.android.settings";
+@@ -55,6 +59,9 @@
+ 	private PreferenceScreen schedulePlanPreference;
+     private boolean mPrefChangeFlag = false;
+ 	
++	private final String NIGHT_MODE_ACTION_ON="android.intent.action.NIGHT_MODE_ACTION_ON";
++	private final String NIGHT_MODE_ACTION_OFF="android.intent.action.NIGHT_MODE_ACTION_OFF";
++	
+ 	 @Override
+     protected int getMetricsCategory() {
+         return MetricsEvent.WALLPAPER_TYPE;
+@@ -138,10 +145,30 @@
+ 	@Override
+ 	public void onCreate(Bundle savedInstanceState) {
+ 			super.onCreate(savedInstanceState);
++			final Activity activity = getActivity();
+ 			addPreferencesFromResource(R.xml.nightmode_settings);
+ 			mContentResolver = getContext().getContentResolver();		
+-			initPreference();	
++			initPreference();
++			IntentFilter filter = new IntentFilter(NIGHT_MODE_ACTION_ON);
++            filter.addAction(NIGHT_MODE_ACTION_OFF);
++            activity.registerReceiver(manuallyNightReceiver,filter);		
+ 	}
++      private BroadcastReceiver manuallyNightReceiver = new BroadcastReceiver(){  
++        @Override  
++        public void onReceive(Context context, Intent intent) {  
++            Log.d(TAG,"intent.getAction()="+intent.getAction());
++            if(intent.getAction().equals(NIGHT_MODE_ACTION_ON)){
++                manuallyEnablePreference.setChecked(true);
++            }else if(intent.getAction().equals(NIGHT_MODE_ACTION_OFF)){
++                manuallyEnablePreference.setChecked(false);
++            }
++        }  
++    };
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++        getActivity().unregisterReceiver(manuallyNightReceiver);
++    }	
+    public void sendBroadcast(){
+    		Intent intent1=new Intent(getContext(),BootedReceiver.class);
+         getContext().sendBroadcast(intent1);

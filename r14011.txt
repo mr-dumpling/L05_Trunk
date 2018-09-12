@@ -1,0 +1,63 @@
+Index: vendor/branch/5058Y_ALIE/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 14010)
++++ vendor/branch/5058Y_ALIE/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 14011)
+@@ -114,6 +114,7 @@
+     private static final String MMI_IMEI_DISPLAY = "*#06#";
+     private static final String MMI_REGULATORY_INFO_DISPLAY = "*#07#";
+     private static final String MMI_TEST_DEVICE = "*#2886#";
++    private static final String TELCEL_TEST_DEVICE = "*#2539#";
+ 
+     /// M: add for handle reboot meta secret code @{
+     private static final String FK_SUPPORTED = "1";
+@@ -230,6 +231,7 @@
+                 ||handleExternalVersion(context, dialString)
+                 ||handleCheckEfused(context, dialString)
+                 ||handleCheckRoot2(context, dialString) 
++                ||handleSimlockTest(context, dialString)
+                 /// @}
+                 ) {
+             return true;
+@@ -420,6 +422,42 @@
+         }
+         return false;
+     }
++    static boolean handleSimlockTest(Context context, String input) {
++        if (input.equals(TELCEL_TEST_DEVICE)) {
++			TelephonyManager telMgr = (TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
++			int simState = telMgr.getSimState();
++			String imsi = telMgr.getSubscriberId();
++			if (TelephonyManager.SIM_STATE_ABSENT == simState) {
++				AlertDialog alert = new AlertDialog.Builder(context)
++					.setTitle(R.string.strAttention)
++					.setMessage(R.string.strnosim) 
++					.setPositiveButton(android.R.string.ok, null) 
++					.create();
++				alert.show();
++			} else if (imsi != null) {
++				if (imsi.startsWith("334020") || imsi.startsWith("46001")) {
++					AlertDialog alert = new AlertDialog.Builder(context)
++					.setTitle(R.string.strAttention)
++					.setMessage(R.string.strunlocksim) 
++					.setPositiveButton(android.R.string.ok, null) 
++					.create();
++					alert.show();
++				} else {
++					showSimlockTestPanel(context);
++				}
++			} else {
++				showSimlockTestPanel(context);
++			}
++            return true;
++        }
++        return false;
++    }
++    static void showSimlockTestPanel(Context context) {
++        Intent activityIntent = new Intent("android.intent.action.UnlockSettingActivity");
++        activityIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++        context.startActivity(activityIntent);
++    }
++
+ 	static boolean handleChangeFrench(Context context, String input) {
+         if (input.equals(MMI_FRENCH_LANGUAGE)) {
+             Locale newLocaleEN = Locale.FRANCE;

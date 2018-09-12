@@ -1,0 +1,105 @@
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 2548)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 2549)
+@@ -21987,18 +21987,12 @@
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+         if(act != null) {
+             if(!pkg.equals("com.google.android.packageinstaller")) {
+-                //String str = (pkg.equals("com.mediatek.hz.camera") ? 1 : 0) + ";" + (act.mActivityType==ActivityRecord.HOME_ACTIVITY_TYPE ? 1 : 0);
+-                //if(mLastPkgName == null || !str.equals(mLastPkgName)) {
+-                //    Settings.System.putString(mContext.getContentResolver(),"tct_top_package_name", str);
+-                //    mLastPkgName = str;
+-                //}
+-                String str = (pkg.equals("com.mediatek.hz.camera") ? "camer_opened" : "camer_closed");
+-                if(!str.equals(mLastPkgName)) {
++                String str = (pkg.equals("com.mediatek.hz.camera") ? 1 : 0) + ";" + (act.mActivityType==ActivityRecord.HOME_ACTIVITY_TYPE ? 1 : 0);
++                if(mLastPkgName == null || !str.equals(mLastPkgName)) {
+                     Settings.System.putString(mContext.getContentResolver(),"tct_top_package_name", str);
+                     mLastPkgName = str;
++                    Log.d(TAG, "resumedAppLocked: mLastPkgName = " + mLastPkgName);
+                 }
+-                
+-                //Log.d(TAG, "resumedAppLocked: mLastPkgName = " + mLastPkgName);
+             }
+         }
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 2548)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 2549)
+@@ -5495,6 +5495,7 @@
+     private int mOldLayout     = 0;
+     private boolean mNavigationBarViewIsAdded = false;
+     protected int mPreviousUserId = 0;
++    private boolean mCameraOpened = false;
+     
+     @Override
+     public void showNavigationBar() {
+@@ -5684,27 +5685,46 @@
+             Log.d(TAG, "mActivityRecordObserver: selfChange = " + selfChange);
+             String record = Settings.System.getString(mContext.getContentResolver(), "tct_top_package_name");
+             Log.d(TAG, "mActivityRecordObserver: record = " + record);
+-            if((record != null) && record.equals("camer_opened")) {
+-                mOldLayout = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
+-                mOldBackground = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
+-                mOldNailStatus = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
+-                
+-                int newLayout = mOldLayout;
+-                if(mOldLayout == 0 || mOldLayout == 2) {
+-                    newLayout = 4;
+-                } else if(mOldLayout == 1 || mOldLayout == 3) {
+-                    newLayout = 5;
++            if(record != null) {
++                String flags[] = record.split(";");
++                if("1".equals(flags[0])) {
++                    mCameraOpened = true;
++                    mOldLayout = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
++                    mOldBackground = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
++                    mOldNailStatus = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
++                    
++                    int newLayout = mOldLayout;
++                    if(mOldLayout == 0 || mOldLayout == 2) {
++                        newLayout = 4;
++                    } else if(mOldLayout == 1 || mOldLayout == 3) {
++                        newLayout = 5;
++                    }
++                    
++                    Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
++                    Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, newLayout, mCurrentUserId);
++                    Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
++                    resetNavigationBar();
++                } else {
++                    if(mCameraOpened) {
++                        mCameraOpened = false;
++                        Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, mOldNailStatus, mCurrentUserId);
++                        Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, mOldLayout, mCurrentUserId);
++                        Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, mOldBackground, mCurrentUserId);
++                        resetNavigationBar();
++                    } else {
++                        if("1".equals(flags[1])) {
++                            boolean isFixed = checkNavigationBarFixed();
++                            Settings.Global.putStringForUser(mContext.getContentResolver(), Settings.Global.POLICY_CONTROL, 
++                                            !isFixed ? "" : "immersive.navigation=-com.android.systemui,*", mCurrentUserId);
++                            mHandler.postDelayed(new Runnable() {
++                                @Override
++                                public void run() {
++                                    changeNavigationBarStatus(isFixed);
++                                }
++                            }, 200);
++                        }
++                    }
+                 }
+-                
+-                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId);
+-                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, newLayout, mCurrentUserId);
+-                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, 0x00000000, mCurrentUserId);
+-                resetNavigationBar();
+-            } else {
+-                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, mOldNailStatus, mCurrentUserId);
+-                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, mOldLayout, mCurrentUserId);
+-                Settings.Secure.putIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_BACKGROUND_COLOR, mOldBackground, mCurrentUserId);
+-                resetNavigationBar();
+             }
+         }
+     };

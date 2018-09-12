@@ -1,0 +1,136 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1180)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1181)
+@@ -252,7 +252,7 @@
+                 <category android:name="android.intent.category.VOICE_LAUNCH" />
+                 <category android:name="com.android.settings.SHORTCUT" />
+             </intent-filter>
+-            <intent-filter android:priority="4">
++            <intent-filter android:priority="5">
+                 <action android:name="com.android.settings.action.SETTINGS" />
+             </intent-filter>
+             <meta-data android:name="com.android.settings.category"
+@@ -2925,7 +2925,12 @@
+ 
+         <activity android:name="Settings$WifiCallingSettingsActivity"
+                   android:label="@string/wifi_calling_settings_title"
++                  android:icon="@drawable/ic_settings_wireless"
+                   android:taskAffinity="">
++            <intent-filter android:priority="1">
++                <action android:name="android.settings.WIFI_CALLING_SETTINGS" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+                 <action android:name="android.settings.WIFI_CALLING_SETTINGS" />
+@@ -2932,6 +2937,11 @@
+                 <category android:name="android.intent.category.DEFAULT" />
+                 <category android:name="android.intent.category.VOICE_LAUNCH" />
+             </intent-filter>
++            <intent-filter android:priority="4">
++                <action android:name="com.android.settings.action.SETTINGS" />
++            </intent-filter>
++            <meta-data android:name="com.android.settings.category"
++                       android:value="com.android.settings.category.wireless" />
+             <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                        android:value="com.android.settings.WifiCallingSettings" />
+             <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+
+Property changes on: packages/apps/Settings/AndroidManifest.xml
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Settings/AndroidManifest.xml:r406
+Index: packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1180)
++++ packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1181)
+@@ -27,6 +27,7 @@
+ import android.content.DialogInterface;
+ import android.content.Intent;
+ import android.database.Cursor;
++import android.content.ComponentName;
+ import android.net.Uri;
+ import android.os.Looper;
+ import android.os.IBinder;
+@@ -98,6 +99,7 @@
+     private static final String SECRET_CODE_ACTION = "android.provider.Telephony.SECRET_CODE";
+     private static final String MMI_IMEI_DISPLAY = "*#06#";
+     private static final String MMI_REGULATORY_INFO_DISPLAY = "*#07#";
++    private static final String MMI_TEST_DEVICE = "*#2886#";
+ 
+     /// M: add for handle reboot meta secret code @{
+     private static final String FK_SUPPORTED = "1";
+@@ -190,6 +192,7 @@
+                 || handlePinEntry(context, dialString)
+                 || handleAdnEntry(context, dialString, textField)
+                 || handleSecretCode(context, dialString)
++                || handleMMITest(context, dialString)
+                 /// M: for plug-in @{
+                 || ExtensionManager.getInstance().getDialPadExtension().handleChars(context,
+                         dialString)
+@@ -377,6 +380,20 @@
+         return false;
+     }
+ 
++    static boolean handleMMITest(Context context, String input) {
++        if (input.equals(MMI_TEST_DEVICE)) {
++            showMMITestPanel(context);
++            return true;
++        }
++        return false;
++    }
++    static void showMMITestPanel(Context context) {
++        Intent activityIntent = new Intent(Intent.ACTION_MAIN);
++        activityIntent.setComponent(new ComponentName("com.android.mmi", "com.android.mmi.MMITestDevice"));
++        activityIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++        context.startActivity(activityIntent);
++    }
++
+     private static void handleAdnQuery(QueryHandler handler, SimContactQueryCookie cookie,
+             Uri uri) {
+         if (handler == null || cookie == null || uri == null) {
+
+Property changes on: packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java:r406
+Index: frameworks/base/core/java/android/os/PowerManager.java
+===================================================================
+--- frameworks/base/core/java/android/os/PowerManager.java	(revision 1180)
++++ frameworks/base/core/java/android/os/PowerManager.java	(revision 1181)
+@@ -1555,4 +1555,11 @@
+         return (int) (Math.pow((float) physicalValue / (float) BRIGHTNESS_ON, dimmingGammaHighInv) *
+                 (float) BRIGHTNESS_ON + 0.5f);
+     }
++    public void setButtonOffForWfd(boolean enable) {
++        try {
++            mService.setButtonOffForWfd(enable);
++        } catch (RemoteException e) {
++            e.printStackTrace();
++        }
++    }
+ }
+
+Property changes on: frameworks/base/core/java/android/os/PowerManager.java
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/core/java/android/os/PowerManager.java:r406,472,634,650,707,710,717,722,825,827,836,849,926
+Index: frameworks/base/core/java/android/os/IPowerManager.aidl
+===================================================================
+--- frameworks/base/core/java/android/os/IPowerManager.aidl	(revision 1180)
++++ frameworks/base/core/java/android/os/IPowerManager.aidl	(revision 1181)
+@@ -68,7 +68,7 @@
+     void setTemporaryScreenAutoBrightnessAdjustmentSettingOverride(float adj);
+ 
+     void setBacklightOffForWfd(boolean enable);
+-
++    void setButtonOffForWfd(boolean enable);
+     // sets the attention light (used by phone app only)
+     void setAttentionLight(boolean on, int color);
+ 
+
+Property changes on: frameworks/base/core/java/android/os/IPowerManager.aidl
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/core/java/android/os/IPowerManager.aidl:r406,472,634,650,707,710,717,722,825,827,836,849,926

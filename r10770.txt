@@ -1,0 +1,43 @@
+Index: packages/apps/Settings/src/com/android/settings/MasterClear.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 10769)
++++ packages/apps/Settings/src/com/android/settings/MasterClear.java	(revision 10770)
+@@ -52,8 +52,8 @@
+ import android.content.DialogInterface;
+ import com.android.settings.NvRAMAgent;
+ import android.provider.Settings;
+-
+-
++import android.os.BatteryManager;
++import android.widget.Toast;
+ import java.util.List;
+ 
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+@@ -75,7 +75,8 @@
+ 	private static final String TAG_SELECT_ACCT_FRAGMENT = "tag_select_acct_fragment";
+ 	private static final int CALL_INFO_NV_POS = 850;
+     private static final int CALL_INFO_STEP = 15; 
+-	private static final String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
++    private static final String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
++    private static final int LOW_BATTERY_TO_RESET = 30;
+ 
+     static final String ERASE_EXTERNAL_EXTRA = "erase_sd";
+ 
+@@ -136,7 +137,16 @@
+                 ad.setMessage(res.getString(R.string.reset_attention));  
+                 ad.setButton(res.getString(R.string.reset_confirm), new DialogInterface.OnClickListener() {
+                     @Override  
+-                    public void onClick(DialogInterface dialog, int which) {  
++                    public void onClick(DialogInterface dialog, int which) { 
++                        BatteryManager batteryManager = (BatteryManager) getActivity()
++                            .getSystemService(Context.BATTERY_SERVICE);
++                        int batteryCapacity = batteryManager
++                            .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
++                        if (batteryCapacity < LOW_BATTERY_TO_RESET) {
++                            Toast.makeText(getActivity(), R.string.battery_low_to_reset, Toast.LENGTH_LONG)
++                            .show();
++                            return;
++                        }                   
+                         doMasterClear();
+ 						resetHandleCallTimes();
+ 						/*

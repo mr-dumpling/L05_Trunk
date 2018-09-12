@@ -1,0 +1,28 @@
+Index: frameworks/base/core/java/android/os/AsyncTask.java
+===================================================================
+--- frameworks/base/core/java/android/os/AsyncTask.java	(revision 1071)
++++ frameworks/base/core/java/android/os/AsyncTask.java	(revision 1072)
+@@ -33,6 +33,7 @@
+ import java.util.concurrent.TimeoutException;
+ import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.concurrent.atomic.AtomicInteger;
++import android.util.Log;
+ 
+ /**
+  * <p>AsyncTask enables proper and easy use of the UI thread. This class allows you
+@@ -495,6 +496,15 @@
+      * @see #onCancelled(Object)
+      */
+     public final boolean cancel(boolean mayInterruptIfRunning) {
++    	 java.lang.StackTraceElement stackTrace[] = new java.lang.Throwable().getStackTrace();
++       for(int i= 0;i < stackTrace.length; i ++) {
++           String classMethodName = stackTrace[i].getClassName()+"."+stackTrace[i].getMethodName();
++           //"com.google.android.gms.auth.frp.FrpClient.isChallengeSupported
++           if(classMethodName.contains("com.google.android.setupwizard.util.FrpHelper")) {
++               Log.w("xingheng","SetupWizard canceled this task, getStatus()= "+getStatus());
++               return false;
++           }
++       }
+         mCancelled.set(true);
+         return mFuture.cancel(mayInterruptIfRunning);
+     }

@@ -1,0 +1,123 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 13498)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 13499)
+@@ -24,6 +24,7 @@
+ import android.content.ContentUris;
+ import android.content.ContentValues;
+ import android.content.Context;
++import android.content.DialogInterface;
+ import android.content.Intent;
+ import android.content.IntentFilter;
+ import android.database.Cursor;
+@@ -55,6 +56,8 @@
+ import android.view.MotionEvent;
+ import android.widget.TextView;
+ import android.widget.Toast;
++import android.app.AlertDialog;
++import android.content.DialogInterface;
+ 
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ import com.android.internal.telephony.PhoneConstants;
+@@ -108,6 +111,7 @@
+     private static final int EVENT_RESTORE_DEFAULTAPN_COMPLETE = 2;
+ 
+     private static final int DIALOG_RESTORE_DEFAULTAPN = 1001;
++    private static final int PROMPT_DIALOG_RESTORE_DEFAULTAPN = 1002;
+ 
+     private static final Uri DEFAULTAPN_URI = Uri.parse(RESTORE_CARRIERS_URI);
+     private static final Uri PREFERAPN_URI = Uri.parse(PREFERRED_APN_URI);
+@@ -527,7 +531,11 @@
+             return true;
+ 
+         case MENU_RESTORE:
++            if (getResources().getBoolean(R.bool.def_show_dialog_when_restore_default_apn)) {
++                showDialog(PROMPT_DIALOG_RESTORE_DEFAULTAPN);
++            } else {
+             restoreDefaultApn();
++            }
+             return true;
+         }
+         return super.onOptionsItemSelected(item);
+@@ -631,6 +639,27 @@
+         return true;
+     }
+ 
++    private boolean isDisplaySimProviderList(String numeric) {
++        boolean  mSimproviderOpenmarket=getResources().getBoolean(R.bool.def_sim_service_for_openmarket);
++        Log.d(TAG,"isDisplaySimProviderList: mSimproviderOpenmarket = "+mSimproviderOpenmarket);
++        if(!mSimproviderOpenmarket){
++            return false;
++        }
++        String mSimprovierWhere = "numeric=\"" +numeric
++                +"\" AND NOT (type='ia' AND (apn=\"\" OR apn IS NULL))"
++                +"AND mvno_type=\""+"simprovider\"";
++        Log.d(TAG, "isDisplaySimProviderList:mSimprovierWhere: " + mSimprovierWhere);
++        Cursor mSimprovierCursor = getContentResolver().query(
++                Telephony.Carriers.CONTENT_URI,
++                new String[]{"mvno_type", "mvno_match_data"}, mSimprovierWhere, null, null);
++        int mSimProviderCount = mSimprovierCursor.getCount();
++        mSimprovierCursor.close();
++        if(mSimProviderCount > 0){
++            return true;
++        }else {
++            return false;
++        }
++    }
+     private class RestoreApnUiHandler extends Handler {
+         @Override
+         public void handleMessage(Message msg) {
+@@ -651,7 +680,23 @@
+                         getResources().getString(
+                                 R.string.restore_default_apn_completed),
+                         Toast.LENGTH_LONG).show();
+-                    mRestoreOngoing = false;
++                    //Add by zubin.chen.hz for Task3601617 on 2016/12/29 begin
++                        final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++                        final String mNumeric = mSubscriptionInfo == null ? ""
++                                : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
++                        if ("23430".equals(mNumeric) || "23420".equals(mNumeric)
++                                ||"23410".equals(mNumeric) ||"23415".equals(mNumeric)) {
++                            Log.d(TAG, "EVENT_RESTORE_DEFAULTAPN_COMPLETE, simNumeric=" + mNumeric
++                                    + " getActivity()=" + getActivity().toString());
++                            if(isDisplaySimProviderList(mNumeric)){
++                                Intent simServiceIntent = new Intent("android.intent.action.SIMSERVICE", Telephony.Carriers.CONTENT_URI);
++                                simServiceIntent.putExtra("mccmnc", mNumeric);
++                                simServiceIntent.putExtra("subid", mSubscriptionInfo.getSubscriptionId());
++                                simServiceIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++                                startActivity(simServiceIntent);
++                                return;
++                            }
++                        }
+                     break;
+             }
+         }
+@@ -694,6 +739,17 @@
+             dialog.setMessage(getResources().getString(R.string.restore_default_apn));
+             dialog.setCancelable(false);
+             return dialog;
++        } else if (id == PROMPT_DIALOG_RESTORE_DEFAULTAPN) {
++            final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
++            builder.setMessage(R.string.prompt_message_when_restore_default_apn);
++            builder.setPositiveButton(R.string.apn_reset, new DialogInterface.OnClickListener() {
++                @Override
++                public void onClick(DialogInterface dialog, int which) {
++                    restoreDefaultApn();
++                }
++            });
++            builder.setNegativeButton(android.R.string.cancel, null);
++            return builder.create();
+         }
+         return null;
+     }
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/res/values/bools.xml	(revision 13498)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/res/values/bools.xml	(revision 13499)
+@@ -58,4 +58,6 @@
+     <bool name="def_settings_informed_consent_show">true</bool>
+     <bool name="def_show_diagnostics">true</bool>
+     <bool name="def_auto_open_Diagnostics">true</bool>
++	<bool name="def_show_dialog_when_restore_default_apn">true</bool>
++    <bool name="def_sim_service_for_openmarket">true</bool>
+ </resources>

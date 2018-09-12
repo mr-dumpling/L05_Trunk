@@ -1,0 +1,335 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 3004)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 3005)
+@@ -1665,10 +1665,10 @@
+         homeButton.setOnLongClickListener(mLongPressHomeListener);
+         
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        if(mNavigationBarView.isWithNailIcon()) {
+-            ButtonDispatcher nailButton = mNavigationBarView.getNailButton();
+-            nailButton.setOnTouchListener(mNailActionListener);
+-        }
++        ButtonDispatcher leftNailButton = mNavigationBarView.getLeftNailButton();
++        leftNailButton.setOnTouchListener(mNailActionListener);
++        ButtonDispatcher rightNailButton = mNavigationBarView.getRightNailButton();
++        rightNailButton.setOnTouchListener(mNailActionListener);
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         /// M: BMW  restore button @{
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 3004)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java	(revision 3005)
+@@ -138,27 +138,7 @@
+         }
+         /// @}
+         
+-        //CHG-S By Justin.Shen for Hide/Show navigation-bar
+-        //return mContext.getString(R.string.config_navBarLayout);
+-        int resId = R.string.config_navBarLayout;
+-        int layoutIndex = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
+-        if(0 == layoutIndex) {
+-            resId = R.string.config_navBarLayout;
+-        } else if(1 == layoutIndex) {
+-            resId = R.string.config_navBarLayout_1;
+-        } else if(2 == layoutIndex) {
+-            resId = R.string.config_navBarLayout_2;
+-        } else if(3 == layoutIndex) {
+-            resId = R.string.config_navBarLayout_3;
+-        } else if(4 == layoutIndex) {
+-            resId = R.string.config_navBarLayout_4;
+-        } else if(5 == layoutIndex) {
+-            resId = R.string.config_navBarLayout_5;
+-        } else {
+-            resId = R.string.config_navBarLayout;
+-        }
+-        return mContext.getString(resId);
+-        //CHG-E By Justin.Shen for Hide/Show navigation-bar
++        return mContext.getString(R.string.config_navBarLayout);
+     }
+ 
+     @Override
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 3004)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java	(revision 3005)
+@@ -240,10 +240,9 @@
+         mButtonDisatchers.put(R.id.home, new ButtonDispatcher(R.id.home));
+         mButtonDisatchers.put(R.id.recent_apps, new ButtonDispatcher(R.id.recent_apps));
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        if(isWithNailIcon()) {
+-            mButtonDisatchers.put(R.id.nail, new ButtonDispatcher(R.id.nail));
+-            updateNailIcon();
+-        }
++        mButtonDisatchers.put(R.id.nail_left, new ButtonDispatcher(R.id.nail_left));
++        mButtonDisatchers.put(R.id.nail_right, new ButtonDispatcher(R.id.nail_right));
++        updateNailIcon();
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+         /// M: BMW @{
+         if (MultiWindowManager.isSupported()) {
+@@ -326,9 +325,13 @@
+     /// @}
+     
+     //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-    public ButtonDispatcher getNailButton() {
+-        return mButtonDisatchers.get(R.id.nail);
++    public ButtonDispatcher getLeftNailButton() {
++        return mButtonDisatchers.get(R.id.nail_left);
+     }
++    
++    public ButtonDispatcher getRightNailButton() {
++        return mButtonDisatchers.get(R.id.nail_right);
++    }
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+     private void updateCarModeIcons(Context ctx) {
+@@ -356,10 +359,8 @@
+             mImeIcon = ctx.getDrawable(R.drawable.ic_ime_switcher_default);
+             
+             //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-            if(isWithNailIcon()) {
+-                mNailFixedIcon = ctx.getDrawable(R.drawable.ic_sysbar_nail_fixed);
+-                mNailUnFixedIcon = ctx.getDrawable(R.drawable.ic_sysbar_nail_unfixed);
+-            }
++            mNailFixedIcon = ctx.getDrawable(R.drawable.ic_sysbar_nail_fixed);
++            mNailUnFixedIcon = ctx.getDrawable(R.drawable.ic_sysbar_nail_unfixed);
+             //ADD-E By Justin.Shen for Hide/Show navigation-bar
+             
+             /// M: BMW @{
+@@ -378,9 +379,7 @@
+         // Reload all the icons
+         updateIcons(getContext(), Configuration.EMPTY, mConfiguration);
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        if(isWithNailIcon()) {
+-            updateNailIcon();
+-        }
++        updateNailIcon();
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         super.setLayoutDirection(layoutDirection);
+@@ -456,9 +455,8 @@
+         getMenuButton().setImageDrawable(mMenuIcon);
+         
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        if(isWithNailIcon()) {
+-            updateNailIcon();
+-        }
++        mShowImeButton = showImeButton;
++        updateNailIcon();
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         setDisabledFlags(mDisabledFlags, true);
+@@ -502,9 +500,20 @@
+         getRecentsButton().setVisibility(disableRecent ? View.INVISIBLE : View.VISIBLE);
+         
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        if(isWithNailIcon() && getNailButton()!=null) {
+-            final boolean disableNail = ((disabledFlags & View.STATUS_BAR_DISABLE_HOME) != 0);
+-            getNailButton().setVisibility(disableNail      ? View.INVISIBLE : View.VISIBLE);
++        final boolean disableNail = ((disabledFlags & View.STATUS_BAR_DISABLE_HOME) != 0);
++        if(isLeftNail()) {
++            getLeftNailButton().setVisibility(disableNail      ? View.INVISIBLE : View.VISIBLE);
++            getRightNailButton().setVisibility(View.INVISIBLE);
++        } else if(isRightNail()) {
++            if(mShowMenu || mShowImeButton) {
++                getRightNailButton().setVisibility(View.INVISIBLE);
++            } else {
++                getRightNailButton().setVisibility(disableNail      ? View.INVISIBLE : View.VISIBLE);
++            }
++            getLeftNailButton().setVisibility(View.INVISIBLE);
++        } else {
++            getLeftNailButton().setVisibility(View.INVISIBLE);
++            getRightNailButton().setVisibility(View.INVISIBLE);
+         }
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+@@ -769,9 +778,7 @@
+         updateIcons(getContext(), mConfiguration, newConfig);
+         updateRecentsIcon();
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        if(isWithNailIcon()) {
+-            updateNailIcon();
+-        }
++        updateNailIcon();
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+         
+         if (uiCarModeChanged || mConfiguration.densityDpi != newConfig.densityDpi) {
+@@ -887,9 +894,8 @@
+         dumpButton(pw, "rcnt", getRecentsButton());
+         dumpButton(pw, "menu", getMenuButton());
+         //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-        if(isWithNailIcon()) {
+-            dumpButton(pw, "nail", getNailButton());
+-        }
++        dumpButton(pw, "nail_left", getLeftNailButton());
++        dumpButton(pw, "nail_right", getRightNailButton());
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+         pw.println("    }");
+@@ -913,38 +919,62 @@
+     
+     //ADD-S By Justin.Shen for Hide/Show navigation-bar
+     protected int mCurrentUserId = 0;
++    private boolean mShowImeButton = false;
+     
+     public void updateNailIcon() {
+-        if(!isWithNailIcon() || getNailButton() == null) {
+-            Log.d(TAG, "updateNailIcon: current layout without nail, do nothing!");
+-            return;
+-        }
+-        
+         boolean isTipsAnimation = Settings.Global.getInt(mContext.getContentResolver(), "navigation_bar_tips_animation", 0) == 1 ? true : false;
+         if(isTipsAnimation) {
+             Drawable tips_pin = mContext.getDrawable(R.drawable.ic_navigationbar_tips_pin);
+-            getNailButton().setImageDrawable(mNavBarPlugin.getRecentImage(tips_pin));
++            getLeftNailButton().setImageDrawable(mNavBarPlugin.getRecentImage(tips_pin));
+             return;
+         }
+         
+         Log.d(TAG, "updateNailIcon: mCurrentUserId = " + mCurrentUserId);
+         boolean isFixed = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_FIXED_STATUS, 1, mCurrentUserId) == 1 ? true : false;
+-        getNailButton().setImageDrawable(
++        getLeftNailButton().setImageDrawable(
+                 mNavBarPlugin.getRecentImage(isFixed ? mNailFixedIcon : mNailUnFixedIcon));
++        getRightNailButton().setImageDrawable(
++                mNavBarPlugin.getRecentImage(isFixed ? mNailFixedIcon : mNailUnFixedIcon));
++                
++        if(isLeftNail()) {
++            getLeftNailButton().setVisibility(View.VISIBLE);
++            getRightNailButton().setVisibility(View.INVISIBLE);
++        } else if(isRightNail()) {
++            if(mShowMenu || mShowImeButton) {
++                getRightNailButton().setVisibility(View.INVISIBLE);
++            } else {
++                getRightNailButton().setVisibility(View.VISIBLE);
++            }
++            getLeftNailButton().setVisibility(View.INVISIBLE);
++        } else {
++            getLeftNailButton().setVisibility(View.INVISIBLE);
++            getRightNailButton().setVisibility(View.INVISIBLE);
++        }
+     }
+     
+-    public boolean isWithNailIcon() {
++    public void setCurrentUserId(int currentUserId) {
++        mCurrentUserId = currentUserId;
++        mNavigationInflaterView.setCurrentUserId(mCurrentUserId);
++    }
++    
++    public boolean isLeftNail() {
+         boolean bRet = false;
+         int layoutIndex = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
+-        if(layoutIndex == 0 || layoutIndex == 1 || layoutIndex == 2 || layoutIndex == 3) {
++        if(layoutIndex == 0 || layoutIndex == 1) {
+             bRet = true;
+         }
++            
+         return bRet;
+     }
+     
+-    public void setCurrentUserId(int currentUserId) {
+-        mCurrentUserId = currentUserId;
+-        mNavigationInflaterView.setCurrentUserId(mCurrentUserId);
++    public boolean isRightNail() {
++        boolean bRet = false;
++        int layoutIndex = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.NAVIGATION_BAR_LAYOUT, 0, mCurrentUserId);
++        if(layoutIndex == 2 || layoutIndex == 3) {
++            bRet = true;
++        }
++        
++        return bRet;
+     }
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+Index: frameworks/base/packages/SystemUI/res/layout/menu_ime.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/menu_ime.xml	(revision 3004)
++++ frameworks/base/packages/SystemUI/res/layout/menu_ime.xml	(revision 3005)
+@@ -20,7 +20,20 @@
+     android:layout_height="match_parent"
+     android:layout_weight="0"
+     >
++    
+     <com.android.systemui.statusbar.policy.KeyButtonView
++        android:id="@+id/nail_right"
++        android:layout_width="@dimen/navigation_side_padding"
++        android:layout_height="match_parent"
++        android:layout_marginEnd="2dp"
++        android:src="@drawable/ic_sysbar_nail_unfixed"
++        android:scaleType="centerInside"
++        systemui:keyCode="131"
++        android:visibility="invisible"
++        android:contentDescription="@string/accessibility_home"
++        />
++        
++    <com.android.systemui.statusbar.policy.KeyButtonView
+         android:id="@+id/menu"
+         android:layout_width="@dimen/navigation_extra_key_width"
+         android:layout_height="match_parent"
+Index: frameworks/base/packages/SystemUI/res/layout/nail.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/nail.xml	(revision 3004)
++++ frameworks/base/packages/SystemUI/res/layout/nail.xml	(revision 3005)
+@@ -13,18 +13,32 @@
+      See the License for the specific language governing permissions and
+      limitations under the License.
+ -->
+-<com.android.systemui.statusbar.policy.KeyButtonView
+-    xmlns:android="http://schemas.android.com/apk/res/android"
++
++<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:systemui="http://schemas.android.com/apk/res-auto"
+-    android:id="@+id/nail"
+-    android:layout_width="@dimen/navigation_key_width"
++    android:layout_width="@dimen/navigation_side_padding"
+     android:layout_height="match_parent"
+     android:layout_weight="0"
+-    android:src="@drawable/ic_sysbar_nail_unfixed"
+-    systemui:keyCode="131"
+-    android:scaleType="center"
+-    android:contentDescription="@string/accessibility_home"
+-    android:paddingStart="@dimen/navigation_key_padding"
+-    android:paddingEnd="@dimen/navigation_key_padding"
+-    />
++    >
++    
++    <Space 
++        android:layout_width="@dimen/navigation_side_padding"
++        android:layout_height="match_parent"
++        android:layout_weight="0"
++        >
++    </Space>
+ 
++    <com.android.systemui.statusbar.policy.KeyButtonView
++        android:id="@+id/nail_left"
++        android:layout_width="@dimen/navigation_side_padding"
++        android:layout_height="match_parent"
++        android:layout_marginEnd="2dp"
++        android:src="@drawable/ic_sysbar_nail_unfixed"
++        android:scaleType="centerInside"
++        systemui:keyCode="131"
++        android:visibility="invisible"
++        android:contentDescription="@string/accessibility_home"
++        />
++    
++</FrameLayout>
++
+Index: frameworks/base/packages/SystemUI/res/values/config.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/config.xml	(revision 3004)
++++ frameworks/base/packages/SystemUI/res/values/config.xml	(revision 3005)
+@@ -288,12 +288,7 @@
+     <!--
+     <string name="config_navBarLayout" translatable="false">space,back;home;recent,menu_ime</string>
+     -->
+-    <string name="config_navBarLayout" translatable="false">space;nail,back,home,recent;menu_ime</string>
+-    <string name="config_navBarLayout_1" translatable="false">space;nail,recent,home,back;menu_ime</string>
+-    <string name="config_navBarLayout_2" translatable="false">space;back,home,recent,nail;menu_ime</string>
+-    <string name="config_navBarLayout_3" translatable="false">space;recent,home,back,nail;menu_ime</string>
+-    <string name="config_navBarLayout_4" translatable="false">space,back;home;recent,menu_ime</string>
+-    <string name="config_navBarLayout_5" translatable="false">space,recent;home;back,menu_ime</string>
++    <string name="config_navBarLayout" translatable="false">nail,back;home;recent,menu_ime</string>
+     <!-- CHG-E By Justin.Shen for Hide/Show navigation-bar -->
+ 
+     <bool name="quick_settings_show_full_alarm">false</bool>

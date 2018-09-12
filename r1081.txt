@@ -1,0 +1,587 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1080)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1081)
+@@ -705,6 +705,12 @@
+     private boolean mScreenshotChordVolumeUpKeyTriggered;
+     private boolean mScreenshotChordPowerKeyTriggered;
+     private long mScreenshotChordPowerKeyTime;
++    
++    //[BUGFIX]-Mod-BEGIN by TCTNB.yubin.ying,10/21/2016,3179079,
++    private boolean mScreenRecordVolumeUpKeyConsumed;
++    private long mScreenRecordVolumeUpKeyTime;
++    private boolean mScreenRecordVolumeUpKeyTriggered;
++    //[BUGFIX]-Mod-END by TCTNB.yubin.ying
+ 
+     /* The number of steps between min and max brightness */
+     private static final int BRIGHTNESS_STEPS = 10;
+Index: frameworks/base/services/core/java/com/android/server/storage/DeviceStorageMonitorService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/storage/DeviceStorageMonitorService.java	(revision 1080)
++++ frameworks/base/services/core/java/com/android/server/storage/DeviceStorageMonitorService.java	(revision 1081)
+@@ -73,6 +73,11 @@
+ //import com.vladium.emma.rt.RT; /// M : Add emma coverage report for system server.
+ import com.mediatek.common.MPlugin;
+ import com.mediatek.common.lowstorage.ILowStorageExt;
++import android.app.AlarmManager;
++import android.app.ActivityManager;
++import java.util.List;
++
++
+ ///@}
+ 
+ /**
+@@ -184,6 +189,18 @@
+     private String[] mStrings = null;
+     private boolean mGetSize = false; // M
+     // /@}
++	private static final int LOW_THRESHOLD_50M = 50 * 1024 * 1024;
++	private static final int LOW_THRESHOLD_100M = 100 * 1024 * 1024;
++	private static final int LOW_THRESHOLD_500M = 500 * 1024 * 1024;
++	private AlertDialog.Builder mBuilder;
++	private int mLowFreeMemLevelFlag = 0;
++	private int mOldLowFreeMemLevelFlag = 0;
++	private boolean mBootFlag = false;
++	private static final long HOUR_24 = 24 * 60 * 60 * 1000;
++	private static final long HOUR =  60 * 60 * 1000;
++	private static final long SECOND = 30 * 1000;
++	private AlarmManager mAlarmManager;
++	private boolean  mAlreadyAlarmSet = false;
+ 
+     /**
+      * This string is used for ServiceManager access to this class.
+@@ -194,83 +211,253 @@
+     * Handler that checks the amount of disk space on the device and sends a
+     * notification if the device runs low on disk space
+     */
+-    private final Handler mHandler = new Handler() {
+-        @Override
+-        public void handleMessage(Message msg) {
+-            // /M:For Low storage,to show warning dialog per 30s,@{
+-            if (msg.what == DEVICE_MEMORY_CRITICAL_LOW) {
+-                if (mDialog == null || mIPOBootup || mConfigChanged) {
+-                    mIPOBootup = false;
+-                    if (mConfigChanged) {
+-                        mConfigChanged = false;
+-                    }
+-                    final Context context = getContext();
+-                    AlertDialog.Builder builder = new AlertDialog.Builder(context)
+-                            .setIcon(com.android.internal.R.drawable.ic_dialog_alert)
+-                            .setTitle(
+-                                    context
+-                                            .getText(com.mediatek.internal.R.string.low_internal_storage_view_title))
+-                            .setMessage(
+-                                    context
+-                                            .getText(com.mediatek.internal.R.string.low_storage_warning_message))
+-                            .setNegativeButton(
+-                                    context.getText(com.mediatek.R.string.free_memory_btn), new OnClickListener() {
+-                                        @Override
+-                                        public void onClick(DialogInterface dialog, int which) {
+-                                            Intent mIntent = new Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS);
+-                                            mIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+-                                            context.startActivity(mIntent);
+-                                        }
+-                             })
+-                            .setPositiveButton(
+-                                    context.getText(com.android.internal.R.string.cancel), null);
+-                    if (mTotalSize > EMAIL_CHECK_SIZE) {
+-                        builder.setNeutralButton(
+-                            context.getText(com.mediatek.internal.R.string.deleteMails), new OnClickListener() {
+-                                @Override
+-                                public void onClick(DialogInterface dialog, int which) {
+-                                    Intent mIntent = new Intent();
+-                                    mIntent.setAction("android.intent.action.MAIN");
+-                                    mIntent.addCategory("android.intent.category.APP_EMAIL");
+-                                    mIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+-                                    context.startActivity(mIntent);
+-                                }
+-                        });
+-                    }
+-                    mDialog = builder.create();
+-                }
++	private final Handler mHandler = new Handler(getContext().getMainLooper()) {
++		@Override
++		public void handleMessage(Message msg) {
++			final Context context = getContext();
++			// /M:For Low storage,to show warning dialog per 30s,@{
++			if (msg.what == DEVICE_MEMORY_CRITICAL_LOW) {
++				if (mIPOBootup) {
++		   	        mIPOBootup = false;
++			        return;
++		   }
++		   if(mDialog == null){
++            showLowFreeStorageWarningStrategy(context); 
++					mDialog = mBuilder.create();
++				} else {
++		       if(mDialog.isShowing()){
++		             if(mLowFreeMemLevelFlag != mOldLowFreeMemLevelFlag){
++                                mDialog.dismiss();
++				     mBuilder = null;
++				     showLowFreeStorageWarningStrategy(context);
++				     mDialog = mBuilder.create();
++				 }else{
++				     return;
++				 } 		
++			 }else{
++			        mBuilder = null;
++				 showLowFreeStorageWarningStrategy(context);
++				 mDialog = mBuilder.create();
++			 }
++		  }
++		   if(mDialog !=null ){		   	
++					mDialog.getWindow().setType(
++							WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
++					// For CTS running,do not show the no space dailog
++					if (android.os.SystemProperties.getInt("ctsrunning", 0) == 0) {
++						mDialog.show();
++					} else {
++						Slog.i(TAG,
++								"In CTS Running,do not show the no space dailog");
++					}
++				}
++			}
++			// /@}
++			// don't handle an invalid message
++			if (msg.what != DEVICE_MEMORY_WHAT) {
++				Slog.e(TAG, "Will not process invalid message");
++				return;
++			}
++			checkMemory(msg.arg1 == _TRUE);
++		}
++	};
+ 
+-                mDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
+-                if (!mDialog.isShowing()) {
+-                    // For CTS running,do not show the no space dailog
+-                    if (android.os.SystemProperties.getInt("ctsrunning", 0) == 0) {
+-                        mDialog.show();
+-                    } else {
+-                        Slog.i(TAG, "In CTS Running,do not show the no space dailog");
+-                    }
++	private void showLowFreeStorageWarningStrategy(Context context) {
++		
++		if (mFreeMem > LOW_THRESHOLD_500M || mFreeMem <= 0)
++			//||  getTopActivityPackageName(context).equals(" "))
++			return;
++		
++		if (mFreeMem <= LOW_THRESHOLD_500M && mFreeMem > LOW_THRESHOLD_100M) {
++			mLowFreeMemLevelFlag = 3;
++			mOldLowFreeMemLevelFlag = 3;
++			freeStorage500MDialog(context);
++		} else if (mFreeMem <= LOW_THRESHOLD_100M
++				&& mFreeMem > LOW_THRESHOLD_50M) {
++			mLowFreeMemLevelFlag = 2;
++			mOldLowFreeMemLevelFlag = 2;
++			freeStorage100MDialog(context);
++		} else if (mFreeMem <= LOW_THRESHOLD_50M) {
++			mLowFreeMemLevelFlag = 1;
++			mOldLowFreeMemLevelFlag = 1;
++			freeStorage50MDialog(context);
++		}
++
++	}
++
++	private int getLowFreeMemLevelFlag(long mFreeMem) {
++		Slog.i(TAG, "Show warning dialog, mFreeMem level: " + mFreeMem);
++		if (mFreeMem <= LOW_THRESHOLD_500M && mFreeMem > LOW_THRESHOLD_100M) {
++			mLowFreeMemLevelFlag = 3;
++		} else if (mFreeMem <= LOW_THRESHOLD_100M
++				&& mFreeMem > LOW_THRESHOLD_50M) {
++			mLowFreeMemLevelFlag = 2;
++		} else if (mFreeMem <= LOW_THRESHOLD_50M) {
++			mLowFreeMemLevelFlag = 1;
++
++		} else {
++			mLowFreeMemLevelFlag = 0;
++		}
++		return mLowFreeMemLevelFlag;
++	}
++
++	private AlertDialog.Builder freeStorage500MDialog(Context context) {
++		Slog.e(TAG, "freeStorage500MDialog create");
++		mBuilder = new AlertDialog.Builder(context)
++				.setTitle(
++						context.getText(com.android.internal.R.string.low_storage_view_title_500m))
++				.setMessage(
++						context.getText(com.android.internal.R.string.low_storage_warning_message_500m))
++				.setNegativeButton(
++						context.getText(com.android.internal.R.string.free_memory_free_up_space_btn),
++						new OnClickListener() {
++							@Override
++							public void onClick(DialogInterface dialog,
++									int which) {
++								Intent mIntent = new Intent(
++										Settings.ACTION_INTERNAL_STORAGE_SETTINGS);
++								mIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++								context.startActivity(mIntent);
++							}
++						})
++				.setPositiveButton(
++						context.getText(com.android.internal.R.string.free_memory_ignore_btn),
++						null);
++		return mBuilder;
++
++	}
++
++	private AlertDialog.Builder freeStorage100MDialog(Context context) {
++		Slog.e(TAG, "freeStorage100MDialog create");
++		mBuilder = new AlertDialog.Builder(context)
++				.setTitle(
++						context.getText(com.android.internal.R.string.low_storage_view_title_100m))
++				.setMessage(
++						context.getText(com.android.internal.R.string.low_storage_warning_message_100m))
++				.setNegativeButton(
++						context.getText(com.android.internal.R.string.free_memory_free_up_space_btn),
++						new OnClickListener() {
++							@Override
++							public void onClick(DialogInterface dialog,
++									int which) {
++								Intent mIntent = new Intent(
++										Settings.ACTION_INTERNAL_STORAGE_SETTINGS);
++								mIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++								context.startActivity(mIntent);
++							}
++						})
++				.setPositiveButton(
++						context.getText(com.android.internal.R.string.free_memory_ignore_btn),
++						null);
++		return mBuilder;
++
++	}
++
++	private AlertDialog.Builder freeStorage50MDialog(Context context) {
++		Slog.e(TAG, "freeStorage50MDialog create");
++		mBuilder = new AlertDialog.Builder(context)
++				.setTitle(
++						context.getText(com.android.internal.R.string.low_storage_view_title_50m))
++				.setMessage(
++						context.getText(com.android.internal.R.string.low_storage_warning_message_50m))
++				.setNegativeButton(
++						context.getText(com.android.internal.R.string.free_memory_free_up_space_btn),
++						new OnClickListener() {
++							@Override
++							public void onClick(DialogInterface dialog,
++									int which) {
++								Intent mIntent = new Intent(
++										Settings.ACTION_INTERNAL_STORAGE_SETTINGS);
++								mIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++								context.startActivity(mIntent);
++							}
++						})
++				.setPositiveButton(
++						context.getText(com.android.internal.R.string.free_memory_ignore_btn),
++						null);
++		return mBuilder;
++
++	}
++
++     private void sendMessageStrategy(Context context, long freeMem) {
++		if (!mBootFlag) {
++			if (mOldLowFreeMemLevelFlag != mLowFreeMemLevelFlag) {
++				mHandler.removeMessages(DEVICE_MEMORY_CRITICAL_LOW);
++				if(mAlreadyAlarmSet){
++					mAlarmManager.cancel(mAlarmListener);
++					mAlreadyAlarmSet = false;
++				}
++				mHandler.sendMessage(mHandler.obtainMessage(DEVICE_MEMORY_CRITICAL_LOW));
++				setAlarmWakeUpdate(context,freeMem);
++			} else {
++				if (!mHandler.hasMessages(DEVICE_MEMORY_CRITICAL_LOW)) {
++					setAlarmWakeUpdate(context, freeMem);
++				}
++			}
++			
++		} else {
++			mBootFlag = false;
++			mHandler.sendMessage(mHandler
++					.obtainMessage(DEVICE_MEMORY_CRITICAL_LOW));
++			setAlarmWakeUpdate(context,freeMem);
++		}
++	}
++
++	private void setAlarmWakeUpdate(Context context, long freeMem) {
++		mAlarmManager = (AlarmManager) context.getSystemService(context.ALARM_SERVICE);
++		long curentTime = SystemClock.elapsedRealtime();
++		long triggerAtTime = 0;
++		
++		if (freeMem > LOW_THRESHOLD_100M) {
++				if(!mAlreadyAlarmSet){
++					triggerAtTime = curentTime + HOUR_24;
++					mAlarmManager.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, TAG, mAlarmListener, mHandler);
++					mAlreadyAlarmSet = true;
++				}
++		} else if (freeMem > LOW_THRESHOLD_50M
++				&& mFreeMem <= LOW_THRESHOLD_100M) {				
++				if(!mAlreadyAlarmSet){
++					triggerAtTime = curentTime + HOUR;
++					mAlarmManager.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, TAG, mAlarmListener, mHandler);
++					mAlreadyAlarmSet = true;
++				}
++				
++		} else if (mFreeMem < LOW_THRESHOLD_50M) {
++		             mHandler.sendEmptyMessageDelayed(DEVICE_MEMORY_CRITICAL_LOW,  SECOND);
++		}
++	}
++
++	 private final AlarmManager.OnAlarmListener mAlarmListener =
++            new AlarmManager.OnAlarmListener() {
++                @Override
++                public void onAlarm() {
++                    Slog.i(TAG, "AlarmManager.OnAlarmListener----onAlarm");
++			        mAlreadyAlarmSet = false;
++                    mHandler.sendMessage(mHandler.obtainMessage(DEVICE_MEMORY_CRITICAL_LOW));
+                 }
+-                return;
+-            }
+-            // /@}
+-            //don't handle an invalid message
+-            if (msg.what != DEVICE_MEMORY_WHAT) {
+-                Slog.e(TAG, "Will not process invalid message");
+-                return;
+-            }
+-            checkMemory(msg.arg1 == _TRUE);
+-        }
+-    };
++            };
++	 /**
++	 private String  getTopActivityPackageName(Context context){
++	 	ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
++		List <ActivityManager.RunningTaskInfo> runningTaskInfo = activityManager.getRunningTasks(1);
++		if(runningTaskInfo != null  &&  runningTaskInfo.size()!= 0){
++			return  runningTaskInfo.get(0).topActivity().getPackageName();
++		}
++		return null;
++	 }
++	 */
++	private class CachePackageDataObserver extends IPackageDataObserver.Stub {
++		public void onRemoveCompleted(String packageName, boolean succeeded) {
++			mClearSucceeded = succeeded;
++			mClearingCache = false;
++			if (localLOGV)
++				Slog.i(TAG, " Clear succeeded:" + mClearSucceeded
++						+ ", mClearingCache:" + mClearingCache
++						+ " Forcing memory check");
++			postCheckMemoryMsg(false, 0);
++		}
++	}
+ 
+-    private class CachePackageDataObserver extends IPackageDataObserver.Stub {
+-        public void onRemoveCompleted(String packageName, boolean succeeded) {
+-            mClearSucceeded = succeeded;
+-            mClearingCache = false;
+-            if(localLOGV) Slog.i(TAG, " Clear succeeded:"+mClearSucceeded
+-                    +", mClearingCache:"+mClearingCache+" Forcing memory check");
+-            postCheckMemoryMsg(false, 0);
+-        }
+-    }
+-
+     private void restatDataDir() {
+         try {
+             mDataFileStats.restat(DATA_PATH.getAbsolutePath());
+@@ -449,8 +636,6 @@
+             int criticalLowLevel = (int) Math.floor(mFreeMem / (1024 * 1024));
+             if (criticalLowLevel < mLastCriticalLowLevel) {
+                 if (mFreeMem < mLastCriticalLowLevel * 1024 * 1024 && mGetSize) {
+-                    mHandler.sendMessage(mHandler.obtainMessage(DEVICE_MEMORY_CRITICAL_LOW));
+-                    Slog.i(TAG, "Show warning dialog, critical level: " + criticalLowLevel);
+                     mLastCriticalLowLevel = criticalLowLevel;
+                 }
+             }
+@@ -458,6 +643,12 @@
+                 mLastCriticalLowLevel = Math.min(criticalLowLevel, 4);
+             }
+             // /@}
++			mLowFreeMemLevelFlag = getLowFreeMemLevelFlag(mFreeMem);
++			if (mFreeMem <= DEFAULT_THRESHOLD_MAX_BYTES && mGetSize) {
++				sendMessageStrategy(getContext(), mFreeMem);
++				Slog.i(TAG, "Show warning dialog, mFreeMem level: " + mFreeMem);
++			}
++
+         }
+         if(localLOGV) Slog.i(TAG, "Posting Message again");
+         //keep posting messages to itself periodically
+@@ -539,6 +730,8 @@
+         IntentFilter filter = new IntentFilter();
+         filter.addAction(IPO_POWER_ON);
+         filter.addAction(Intent.ACTION_LOCALE_CHANGED);
++	    filter.addAction(Intent.ACTION_BOOT_COMPLETED);
++	    filter.addAction(Intent.ACTION_SCREEN_ON);
+         context.registerReceiver(mIntentReceiver, filter);
+     }
+ 
+@@ -796,6 +989,14 @@
+                     mDialog.cancel();
+                 }
+             }
++	     if(action.equals(Intent.ACTION_BOOT_COMPLETED)){
++                  mBootFlag = true;
++		}
++	      if(action.equals(Intent.ACTION_SCREEN_ON)){
++		  	if(mLowFreeMemLevelFlag == 2  &&  !mBootFlag){
++				mHandler.sendMessage(mHandler.obtainMessage(DEVICE_MEMORY_CRITICAL_LOW));			
++			}
++		 }
+         }
+     };
+ }
+Index: frameworks/base/services
+===================================================================
+--- frameworks/base/services	(revision 1080)
++++ frameworks/base/services	(revision 1081)
+
+Property changes on: frameworks/base/services
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/services:r634
+Index: frameworks/base/core/res/res/values/public.xml
+===================================================================
+--- frameworks/base/core/res/res/values/public.xml	(revision 1080)
++++ frameworks/base/core/res/res/values/public.xml	(revision 1081)
+@@ -2654,6 +2654,15 @@
+     <public type="id" name="accessibilityActionContextClick" id="0x0102003c" />
+ 
+     <public type="string" name="fingerprint_icon_content_description" id="0x01040018" />
++    
++    <public type="string" name="low_storage_view_title_500m" id="0x0104001a" />
++    <public type="string" name="low_storage_view_title_100m" id="0x0104001b" />
++    <public type="string" name="low_storage_view_title_50m" id="0x0104001c" />
++    <public type="string" name="low_storage_warning_message_500m" id="0x0104001d" />
++    <public type="string" name="low_storage_warning_message_100m" id="0x0104001e" />
++    <public type="string" name="low_storage_warning_message_50m" id="0x0104001f" />
++    <public type="string" name="free_memory_ignore_btn" id="0x01040020" />
++    <public type="string" name="free_memory_free_up_space_btn" id="0x01040021" />
+ 
+   <!-- ===============================================================
+        Resources added in version N of the platform
+Index: frameworks/base/core/res/res/values/strings.xml
+===================================================================
+--- frameworks/base/core/res/res/values/strings.xml	(revision 1080)
++++ frameworks/base/core/res/res/values/strings.xml	(revision 1081)
+@@ -4516,4 +4516,12 @@
+ 
+     <!-- Label used by Telephony code, assigned as the display name for conference calls [CHAR LIMIT=60] -->
+     <string name="conference_call">Conference Call</string>
++  <string name="low_storage_view_title_500m">Storage less than 500MB</string>
++  <string name="low_storage_view_title_100m">Storage less than 100MB</string>
++  <string name="low_storage_view_title_50m">Storage less than 50MB</string>
++  <string name="low_storage_warning_message_500m">Apps might now work properly.Do you want to free up space? Don not remind me again.</string>
++  <string name="low_storage_warning_message_100m">Wi-Fi and mobile data are disabled.Apps might stop working. Do you want to free up space?</string>
++  <string name="low_storage_warning_message_50m">Wi-Fi and mobile data are disabled.Apps might stop working. Do you want to free up space?</string>
++  <string name="free_memory_ignore_btn">IGNORE</string>
++  <string name="free_memory_free_up_space_btn">FREE UP SPACE</string>
+ </resources>
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 1080)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 1081)
+@@ -2716,4 +2716,18 @@
+   <!-- Screen-size-dependent modes for picker dialogs. -->
+   <java-symbol type="integer" name="time_picker_mode" />
+   <java-symbol type="integer" name="date_picker_mode" />
+-</resources>
++  
++  <!-- add by dongdongli 20170905 start -->
++  <java-symbol type="style" name="Theme.SystemUI.Dialog" />
++  <java-symbol type="string" name="immersive_cling_positive" />
++  <!-- add end }-->
++  <java-symbol type="string" name="low_storage_view_title_500m" />
++  <java-symbol type="string" name="low_storage_view_title_100m" />
++  <java-symbol type="string" name="low_storage_view_title_50m" />
++  <java-symbol type="string" name="low_storage_warning_message_500m" />
++  <java-symbol type="string" name="low_storage_warning_message_100m" />
++  <java-symbol type="string" name="low_storage_warning_message_50m" />
++  <java-symbol type="string" name="free_memory_ignore_btn" />
++  <java-symbol type="string" name="free_memory_free_up_space_btn" />
++
++>>>>>>> .theirs</resources>
+Index: frameworks/base/core
+===================================================================
+--- frameworks/base/core	(revision 1080)
++++ frameworks/base/core	(revision 1081)
+
+Property changes on: frameworks/base/core
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/core:r634
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 1080)
++++ frameworks/base/api/test-current.txt	(revision 1081)
+@@ -1878,8 +1878,16 @@
+     field public static final int dialog_alert_title = 17039380; // 0x1040014
+     field public static final int emptyPhoneNumber = 17039366; // 0x1040006
+     field public static final int fingerprint_icon_content_description = 17039384; // 0x1040018
++    field public static final int free_memory_free_up_space_btn = 17039393; // 0x1040021
++    field public static final int free_memory_ignore_btn = 17039392; // 0x1040020
+     field public static final int httpErrorBadUrl = 17039367; // 0x1040007
+     field public static final int httpErrorUnsupportedScheme = 17039368; // 0x1040008
++    field public static final int low_storage_view_title_100m = 17039387; // 0x104001b
++    field public static final int low_storage_view_title_500m = 17039386; // 0x104001a
++    field public static final int low_storage_view_title_50m = 17039388; // 0x104001c
++    field public static final int low_storage_warning_message_100m = 17039390; // 0x104001e
++    field public static final int low_storage_warning_message_500m = 17039389; // 0x104001d
++    field public static final int low_storage_warning_message_50m = 17039391; // 0x104001f
+     field public static final int no = 17039369; // 0x1040009
+     field public static final int ok = 17039370; // 0x104000a
+     field public static final int paste = 17039371; // 0x104000b
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 1080)
++++ frameworks/base/api/current.txt	(revision 1081)
+@@ -1878,8 +1878,16 @@
+     field public static final int dialog_alert_title = 17039380; // 0x1040014
+     field public static final int emptyPhoneNumber = 17039366; // 0x1040006
+     field public static final int fingerprint_icon_content_description = 17039384; // 0x1040018
++    field public static final int free_memory_free_up_space_btn = 17039393; // 0x1040021
++    field public static final int free_memory_ignore_btn = 17039392; // 0x1040020
+     field public static final int httpErrorBadUrl = 17039367; // 0x1040007
+     field public static final int httpErrorUnsupportedScheme = 17039368; // 0x1040008
++    field public static final int low_storage_view_title_100m = 17039387; // 0x104001b
++    field public static final int low_storage_view_title_500m = 17039386; // 0x104001a
++    field public static final int low_storage_view_title_50m = 17039388; // 0x104001c
++    field public static final int low_storage_warning_message_100m = 17039390; // 0x104001e
++    field public static final int low_storage_warning_message_500m = 17039389; // 0x104001d
++    field public static final int low_storage_warning_message_50m = 17039391; // 0x104001f
+     field public static final int no = 17039369; // 0x1040009
+     field public static final int ok = 17039370; // 0x104000a
+     field public static final int paste = 17039371; // 0x104000b
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 1080)
++++ frameworks/base/api/system-current.txt	(revision 1081)
+@@ -1992,8 +1992,16 @@
+     field public static final int dialog_alert_title = 17039380; // 0x1040014
+     field public static final int emptyPhoneNumber = 17039366; // 0x1040006
+     field public static final int fingerprint_icon_content_description = 17039384; // 0x1040018
++    field public static final int free_memory_free_up_space_btn = 17039393; // 0x1040021
++    field public static final int free_memory_ignore_btn = 17039392; // 0x1040020
+     field public static final int httpErrorBadUrl = 17039367; // 0x1040007
+     field public static final int httpErrorUnsupportedScheme = 17039368; // 0x1040008
++    field public static final int low_storage_view_title_100m = 17039387; // 0x104001b
++    field public static final int low_storage_view_title_500m = 17039386; // 0x104001a
++    field public static final int low_storage_view_title_50m = 17039388; // 0x104001c
++    field public static final int low_storage_warning_message_100m = 17039390; // 0x104001e
++    field public static final int low_storage_warning_message_500m = 17039389; // 0x104001d
++    field public static final int low_storage_warning_message_50m = 17039391; // 0x104001f
+     field public static final int no = 17039369; // 0x1040009
+     field public static final int ok = 17039370; // 0x104000a
+     field public static final int paste = 17039371; // 0x104000b
+Index: frameworks/base/api
+===================================================================
+--- frameworks/base/api	(revision 1080)
++++ frameworks/base/api	(revision 1081)
+
+Property changes on: frameworks/base/api
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/api:r634
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1080)
++++ frameworks/base	(revision 1081)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P33_K39V1_INHOUSE/frameworks/base:r116,136,153,300
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r634

@@ -1,0 +1,54 @@
+Index: packages/apps/Settings/src/com/android/settings/SettingsActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1431)
++++ packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1432)
+@@ -242,6 +242,7 @@
+ 
+     private CharSequence mInitialTitle;
+     private int mInitialTitleResId;
++    private String mCurrentFragment;
+ 
+     // Show only these settings for restricted users
+     private String[] SETTINGS_FOR_RESTRICTED = {
+@@ -1069,6 +1070,7 @@
+      */
+     private Fragment switchToFragment(String fragmentName, Bundle args, boolean validate,
+             boolean addToBackStack, int titleResId, CharSequence title, boolean withTransition) {
++        mCurrentFragment = fragmentName;
+         if ("android.settings.RegulatorySaftySettings".equals(fragmentName)) {  
+             Intent regulatoryIntent = new Intent();  
+             String pakagename="com.jrdcom.Elabel";  
+@@ -1411,4 +1413,16 @@
+             }
+         }
+     }
++
++    @Override
++    public void onBackPressed() {
++        if ("com.android.settings.ApnEditor".equals(mCurrentFragment)) {
++            Fragment current = getFragmentManager().findFragmentById(R.id.main_content);
++            ((ApnEditor)current).apnNotEmptyDialog();
++
++            return;
++        } else {
++            super.onBackPressed();
++        }
++    }
+ }
+Index: packages/apps/Settings/src/com/android/settings/ApnEditor.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/ApnEditor.java	(revision 1431)
++++ packages/apps/Settings/src/com/android/settings/ApnEditor.java	(revision 1432)
+@@ -905,6 +905,12 @@
+         return false;
+     }
+ 
++    public void apnNotEmptyDialog() {
++        if (validateAndSave(false)) {
++            finish();
++        }
++    }
++
+     @Override
+     public void onSaveInstanceState(Bundle icicle) {
+         super.onSaveInstanceState(icicle);

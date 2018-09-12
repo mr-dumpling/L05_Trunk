@@ -1,0 +1,123 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/datausage/DataUsageSummary.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/datausage/DataUsageSummary.java	(revision 9358)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/datausage/DataUsageSummary.java	(revision 9359)
+@@ -78,6 +78,7 @@
+     private Preference mLimitPreference;
+     private NetworkTemplate mDefaultTemplate;
+     private int mDataUsageTemplate;
++	private String title ;
+ 
+     @Override
+     protected int getHelpResource() {
+@@ -93,11 +94,14 @@
+         mDataInfoController = new DataUsageInfoController();
+         addPreferencesFromResource(R.xml.data_usage);
+ 
+-        int defaultSubId = getDefaultSubscriptionId(getContext());
+-        if (defaultSubId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
++        SubscriptionInfo mDefaultSubscriptionInfo = getDefaultSubscriptionId(getContext());
++		int defaultSubId = -1;
++		if (mDefaultSubscriptionInfo == null) {
+             Log.d(TAG, "onCreate INVALID_SUBSCRIPTION_ID Mobile data false");
+             hasMobileData = false;
+-        }
++        } else {
++			defaultSubId = mDefaultSubscriptionInfo.getSubscriptionId();
++		}
+         mDefaultTemplate = getDefaultTemplate(getContext(), defaultSubId);
+         mSummaryPreference = (SummaryPreference) findPreference(KEY_STATUS_HEADER);
+ 
+@@ -109,10 +113,10 @@
+             List<SubscriptionInfo> subscriptions =
+                     services.mSubscriptionManager.getActiveSubscriptionInfoList();
+             if (subscriptions == null || subscriptions.size() == 0) {
+-                addMobileSection(defaultSubId);
++                addMobileSection(mDefaultSubscriptionInfo);
+             }
+             for (int i = 0; subscriptions != null && i < subscriptions.size(); i++) {
+-                addMobileSection(subscriptions.get(i).getSubscriptionId());
++                addMobileSection(subscriptions.get(i));
+             }
+             mSummaryPreference.setSelectable(true);
+         } else {
+@@ -183,19 +187,15 @@
+         return super.onPreferenceTreeClick(preference);
+     }
+ 
+-    private void addMobileSection(int subId) {
++    private void addMobileSection(SubscriptionInfo mSubInfoRecord) {
+         TemplatePreferenceCategory category = (TemplatePreferenceCategory)
+                 inflatePreferences(R.xml.data_usage_cellular);
+         //category.findPreference("mobile_category");
+-		
+-		SubscriptionManager mSubscriptionManager = SubscriptionManager.from(getContext());
+-		SubscriptionInfo mSubInfoRecord ;
+-		mSubInfoRecord = mSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(subId - 1);
+-        int slotId = SubscriptionManager.getSlotId(subId);
+-        String title =  mSubInfoRecord.getDisplayName().toString();
+-        category.setTitle(title);
+-        category.setTemplate(getNetworkTemplate(subId), subId, services);
+-        category.pushTemplates(services);
++		String title =  mSubInfoRecord.getDisplayName().toString();
++		int	subId = mSubInfoRecord.getSubscriptionId();			
++		category.setTitle(title);
++		category.setTemplate(getNetworkTemplate(subId), subId, services);
++		category.pushTemplates(services); 
+     }
+ 
+     private void addWifiSection() {
+@@ -377,21 +377,21 @@
+         return conn.isNetworkSupported(TYPE_WIFI);
+     }
+ 
+-    public static int getDefaultSubscriptionId(Context context) {
++    public static SubscriptionInfo getDefaultSubscriptionId(Context context) {
+         SubscriptionManager subManager = SubscriptionManager.from(context);
+         if (subManager == null) {
+-            return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
++            return null;
+         }
+         SubscriptionInfo subscriptionInfo = subManager.getDefaultDataSubscriptionInfo();
+         if (subscriptionInfo == null) {
+             List<SubscriptionInfo> list = subManager.getAllSubscriptionInfoList();
+             if (list.size() == 0) {
+-                return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
++                return null;
+             }
+             subscriptionInfo = list.get(0);
+         }
+         Log.d(TAG, "getDefaultSubscriptionId = " + subscriptionInfo);
+-        return subscriptionInfo.getSubscriptionId();
++        return subscriptionInfo;//.getSubscriptionId();
+     }
+ 
+     public static NetworkTemplate getDefaultTemplate(Context context, int defaultSubId) {
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/datausage/AppDataUsage.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/datausage/AppDataUsage.java	(revision 9358)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/datausage/AppDataUsage.java	(revision 9359)
+@@ -41,6 +41,7 @@
+ import android.util.Log;
+ import android.view.View;
+ import android.widget.AdapterView;
++import android.telephony.SubscriptionInfo;
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ import com.android.settings.AppHeader;
+ import com.android.settings.R;
+@@ -125,8 +126,13 @@
+                 : null;
+         if (mTemplate == null) {
+             Context context = getContext();
+-            mTemplate = DataUsageSummary.getDefaultTemplate(context,
+-                    DataUsageSummary.getDefaultSubscriptionId(context));
++			SubscriptionInfo mDefaultSubscriptionInfo = DataUsageSummary.getDefaultSubscriptionId(context);
++            if (mDefaultSubscriptionInfo == null) {
++				mTemplate = null;
++			} else {
++				mTemplate = DataUsageSummary.getDefaultTemplate(context,
++                    mDefaultSubscriptionInfo.getSubscriptionId());
++			}			
+         }
+         if (mAppItem == null) {
+             int uid = (args != null) ? args.getInt(AppInfoBase.ARG_PACKAGE_UID, -1)

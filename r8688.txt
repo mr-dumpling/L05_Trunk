@@ -1,0 +1,48 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 8687)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 8688)
+@@ -1542,7 +1542,7 @@
+         return mUsersAllowingPrivateNotifications.get(userHandle);
+     }
+ 
+-    private boolean adminAllowsUnredactedNotifications(int userHandle) {
++    public boolean adminAllowsUnredactedNotifications(int userHandle) {
+         if (userHandle == UserHandle.USER_ALL) {
+             return true;
+         }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 8687)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 8688)
+@@ -2081,6 +2081,18 @@
+             boolean sensitivePackage = packageHasVisibilityOverride(ent.notification.getKey());
+             boolean sensitive = (sensitiveNote && hideSensitive) || sensitivePackage;
+             boolean showingPublic = sensitive && isLockscreenPublicMode();
++			
++			//Begin added by zengjie for XR5756554 on 20180226
++            boolean disablebyPolicy = !adminAllowsUnredactedNotifications(ent.notification.getUserId());
++            String notificationHiddenText = mContext.getString(R.string.notification_hidden_by_policy_text);
++            if(disablebyPolicy){
++                if (ent.notification.getPackageName().equals("com.android.cts.verifier")){
++                    JoyLscreenProxy.getLScreen().onNotificationRemoved(ent.notification);
++                    JoyLscreenProxy.getLScreen().onNotificationUpdate(notificationHiddenText,ent.notification);
++                }
++            }
++            //End added by zengjie for XR5756554 on 2018022
++			
+             if (showingPublic) {
+                 updatePublicContentView(ent, ent.notification);
+             }
+Index: frameworks/base/packages/SystemUI/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 8687)
++++ frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 8688)
+@@ -1686,4 +1686,6 @@
+     <string name="disturb_turn_off_hint">Do Not Disturb mode off.</string>
+     <string name="no_sim_card1">No SIM card detected (Slot1)</string>
+     <string name="no_sim_card2">No SIM card detected (Slot2)</string>
++	
++	<string name="notification_hidden_by_policy_text">Contents hidden by policy</string>
+ </resources>
+\ No newline at end of file

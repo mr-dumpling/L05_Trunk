@@ -1,0 +1,112 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1061)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1062)
+@@ -1040,7 +1040,7 @@
+                 <category android:name="android.intent.category.DEFAULT" />
+                 <category android:name="android.intent.category.VOICE_LAUNCH" />
+             </intent-filter>
+-            <intent-filter android:priority="-1">
++            <intent-filter android:priority="-2">
+                 <action android:name="com.android.settings.action.SETTINGS" />
+             </intent-filter>
+             <meta-data android:name="com.android.settings.category"
+@@ -3360,5 +3360,31 @@
+                        android:value="com.mediatek.settings.sim.SmartCallFwdFragment" />
+         </activity>
+         <!-- M: @} -->
++		<!--add by wqq for RegulatorySafty-->
++		<activity android:name="Settings$RegulatorySaftySettingsActivity"
++			android:label="@string/regulartory_safety_title"   
++            android:icon="@drawable/ic_settings_regulatory_safety"   
++            android:taskAffinity="com.android.settings"  
++            android:parentActivityName="Settings">  
++            <intent-filter android:priority="1">  
++                <category android:name="android.intent.category.DEFAULT" />  
++            </intent-filter>  
++            <intent-filter>  
++                <action android:name="android.intent.action.MAIN" />  
++                <category android:name="android.intent.category.DEFAULT" />  
++                <category android:name="android.intent.category.VOICE_LAUNCH" />  
++            </intent-filter>  
++            <intent-filter android:priority="-1">  
++                <action android:name="com.android.settings.action.SETTINGS" />  
++            </intent-filter>  
++            <meta-data android:name="com.android.settings.category"  
++                android:value="com.android.settings.category.system" />  
++            <meta-data android:name="com.android.settings.title"  
++                android:resource="@string/regulartory_safety_title" />  
++            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"  
++                android:value="android.settings.RegulatorySaftySettings" /> 
++            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"  
++                android:value="true" />  
++        </activity>  
+     </application>
+ </manifest>
+Index: packages/apps/Settings/src/com/android/settings/SettingsActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1061)
++++ packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1062)
+@@ -1053,6 +1053,17 @@
+      */
+     private Fragment switchToFragment(String fragmentName, Bundle args, boolean validate,
+             boolean addToBackStack, int titleResId, CharSequence title, boolean withTransition) {
++        if ("android.settings.RegulatorySaftySettings".equals(fragmentName)) {  
++            Intent regulatoryIntent = new Intent();  
++            String pakagename="com.jrdcom.Elabel";  
++            String classname="com.jrdcom.Elabel.SettingsRegulatoryActivity";  
++            ComponentName component = new ComponentName(pakagename, classname);  
++            regulatoryIntent.setComponent(component);  
++            startActivity(regulatoryIntent);  
++            finish();  
++            return null;  
++        }
++		
+         if (validate && !isValidFragment(fragmentName)) {
+             throw new IllegalArgumentException("Invalid fragment for this activity: "
+                     + fragmentName);
+Index: packages/apps/Settings/src/com/android/settings/Settings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/Settings.java	(revision 1061)
++++ packages/apps/Settings/src/com/android/settings/Settings.java	(revision 1062)
+@@ -189,4 +189,5 @@
+      */
+     public static class SmartCallFwdActivity extends SettingsActivity { /* empty */ }
+     /**@}*/
++	public static class RegulatorySaftySettingsActivity extends SettingsActivity { /* empty */ }
+ }
+Index: packages/apps/Settings/res/drawable-xhdpi/ic_settings_regulatory_safety.png
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/Settings/res/drawable-xhdpi/ic_settings_regulatory_safety.png
+===================================================================
+--- packages/apps/Settings/res/drawable-xhdpi/ic_settings_regulatory_safety.png	(revision 0)
++++ packages/apps/Settings/res/drawable-xhdpi/ic_settings_regulatory_safety.png	(revision 1062)
+
+Property changes on: packages/apps/Settings/res/drawable-xhdpi/ic_settings_regulatory_safety.png
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1061)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1062)
+@@ -7880,4 +7880,5 @@
+     <string name="navigationbar_background_color_title">"Background color"</string>
+     <string name="navigationbar_background_color_summary">"Change the background color of navigation bar, but it may not be applied to all apps."</string>
+     <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
++	<string name="regulartory_safety_title">Regulatory &amp; Safety</string>
+ </resources>
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1061)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 1062)
+@@ -3248,4 +3248,5 @@
+     <string name="web_action_section_title" msgid="806405168097593614">"未安装的应用"</string>
+     <string name="domain_url_section_title" msgid="7046835219056428883">"已安装的应用"</string>
+     <string name="automatic_storage_manager_activation_warning" msgid="6353100011690933254">"您的存储空间目前是由存储空间管理器管理"</string>
++    <string name="regulartory_safety_title">"监管和安全"</string>
+ </resources>

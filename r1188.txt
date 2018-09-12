@@ -1,0 +1,457 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListActivity.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListActivity.java	(revision 1187)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppListActivity.java	(revision 1188)
+@@ -1,18 +1,21 @@
+ package com.android.systemui.funcsetting;
+ 
+-import android.app.Activity;
+ 
+ import android.app.ProgressDialog;
+ import android.os.Handler;
+ import android.os.Message;
+-import android.support.v4.view.MenuItemCompat;
+-import android.support.v7.app.ActionBar;
++
++
+ import android.support.v7.app.AppCompatActivity;
++import android.support.v7.widget.Toolbar;
++
+ import android.os.Bundle;
+ import android.support.v7.widget.LinearLayoutManager;
+ import android.support.v7.widget.RecyclerView;
+-import android.support.v7.widget.SearchView;
++import android.widget.SearchView;
++
+ import android.util.Log;
++import android.view.MenuInflater;
+ import android.view.Menu;
+ import android.view.MenuItem;
+ import android.widget.Toast;
+@@ -23,17 +26,11 @@
+ import java.util.List;
+ import com.android.systemui.R;
+ 
+-import android.widget.EditText;
+-import android.widget.ImageView;
+-import android.widget.TextView;
++
+ import android.view.View;
+ 
+-public class AppListActivity extends Activity {
+-	private ImageView mSearchBtn;
+-	private EditText mSearch;
+- 	private TextView mTitle;
+-    private ImageView mBackBtn;
+-    private boolean isShowTitle=true;
++public class AppListActivity extends AppCompatActivity {
++	
+     private String searchContent="";
+     private final int APP_LIST_RESULT = 100;
+     private RecyclerView mAppsRecycler;
+@@ -62,8 +59,17 @@
+         setTitle("Func shortcuts");
+ 
+         setContentView(R.layout.activity_app_list);
+-       // ActionBar actionBar = getSupportActionBar();
+-       // actionBar.setDisplayHomeAsUpEnabled(true);
++       	Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
++        String title=getString(R.string.add_func_title);
++        toolbar.setTitle(title);
++        setSupportActionBar(toolbar);
++        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
++        toolbar.setNavigationOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                finish();
++            }
++        });
+         appsData = (AppsData) getIntent().getExtras().getSerializable("app");
+         initView();
+         initData();
+@@ -73,57 +79,10 @@
+     private void initView() {
+         mAppsRecycler = (RecyclerView) findViewById(R.id.apps_recycler);
+         mAppsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+-		mBackBtn = (ImageView) findViewById(R.id.back_btn);
+-        mTitle = (TextView) findViewById(R.id.title);
+-        mSearch = (EditText) findViewById(R.id.search_edit);
+-        mSearchBtn = (ImageView) findViewById(R.id.search_btn);
+ 		initListener();
+     }
+ 	private void initListener() {
+-		   mBackBtn.setOnClickListener(new View.OnClickListener() {
+-			   @Override
+-			   public void onClick(View v) {
+-				   finish();
+-			   }
+-		   });
+-		   mSearchBtn.setOnClickListener(new View.OnClickListener() {
+-			   @Override
+-			   public void onClick(View v) {
+-				   if(isShowTitle){
+-					   mTitle.setVisibility(View.GONE);
+-					   mSearch.setVisibility(View.VISIBLE);
+-					   isShowTitle=false;
+-				   }else{
+-					   if(!searchContent.isEmpty()){
+-						   searchData();
+-						   searchContent="";
+-					   }else{
+-                        adapter.updateData(list);
+-                    }
+-				   }
+-			   }
+-		   });
+-		   mSearch.addTextChangedListener(new TextWatcher() {
+-			   @Override
+-			   public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+ 	
+-			   }
+-	
+-			   @Override
+-			   public void onTextChanged(CharSequence s, int start, int before, int count) {
+-	
+-			   }
+-	
+-			   @Override
+-			   public void afterTextChanged(Editable s) {
+-				     searchContent = s.toString();
+-                Log.e("search",searchContent);
+-				if(!searchContent.isEmpty())
+-				   searchData();
+-				else
+-                    adapter.updateData(list);
+-			   }
+-		   });
+ 	   }
+ 	   public void searchData(){
+ 		   if (list != null && list.size() > 0) {
+@@ -156,15 +115,53 @@
+         AppUtils.getAppListData(this, appsData, handler, APP_LIST_RESULT);
+     }
+ 
+-    @Override
+-    public boolean onOptionsItemSelected(MenuItem item) {
+-        switch (item.getItemId()) {
+-            case android.R.id.home:
+-                finish();
+-                return true;
+-            default:
+-                return super.onOptionsItemSelected(item);
+-        }
++   
++	
++	@Override
++    public boolean onCreateOptionsMenu(Menu menu) {
++         MenuInflater inflater = getMenuInflater();
++         inflater.inflate(R.menu.func_search_item, menu);
++		 MenuItem searchMenuItem = menu.findItem(R.id.search);
++         SearchView searchView = (SearchView) searchMenuItem.getActionView();
++		 if (searchMenuItem == null || searchView == null) {
++            return false;
++         }
++         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
++            @Override
++            public boolean onQueryTextSubmit(String query) {
++                Log.i("onQueryTextSubmit", query);
++                return false;
++            }
+ 
++            @Override
++            public boolean onQueryTextChange(String newText) {
++                if (list != null && list.size() > 0) {
++                    if (searchList == null) {
++                        searchList = new ArrayList<AppInfo>();
++                    }
++                    if (searchList.size() > 0) {
++                        searchList.clear();
++                    }
++                    for (AppInfo info : list) {
++                        if (info.getPackerName().contains(newText) ||
++                                info.getAppName().contains(newText)
++                                || info.getIntroduction().contains(newText)) {
++                            searchList.add(info);
++                        }
++
++                    }
++                    if (searchList.size() > 0 && adapter != null) {
++                        adapter.updateData(searchList);
++                    } else {
++                        Toast.makeText(AppListActivity.this, "no result", 0).show();
++                    }
++                }
++
++                return false;
++            }
++        });
++			
++        return true;
++		
+     }
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 1187)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 1188)
+@@ -21,13 +21,16 @@
+ import java.util.List;
+ import android.provider.Settings;
+ import android.support.v7.widget.SwitchCompat;
++import android.support.v7.app.AppCompatActivity;
++import android.support.v7.widget.Toolbar;
+ 
+ 
+ 
++
+ /**
+  * Func Setting List
+  */
+-public class FuncSettings extends Activity {
++public class FuncSettings extends AppCompatActivity {
+     private final String DEFAULT_TABLE = "appinfo_default_list";
+     private final String TABLE = "appinfo_list";
+     public static int defaultNum=0;
+@@ -80,17 +83,18 @@
+             }
+         });
+     }
+-
++	
+     private void initView() {
+-        //setTitle("Func shortcuts");
+-        //ActionBar actionBar=getSupportActionBar();
+-       // actionBar.setDisplayHomeAsUpEnabled(true);
++       Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
++       String title=getString(R.string.func_settings_title);
++       toolbar.setTitle(title);
++       setSupportActionBar(toolbar);
+         
+         mSwitch = (Switch) findViewById(R.id.func_setting_switch);
+         switchOff = (TextView) findViewById(R.id.switch_off);
+ 		mFuncSwitch= (TextView) findViewById(R.id.func_switch);
+ 
+-        mSwitch.setThumbResource(R.drawable.thumb_selector);  
++        //mSwitch.setThumbResource(R.drawable.thumb_selector);  
+  
+         funcSettingList = (RecyclerView) findViewById(R.id.func_setting_recycler);
+         funcSettingList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+Index: frameworks/base/packages/SystemUI/res/layout/activity_func_setting.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/activity_func_setting.xml	(revision 1187)
++++ frameworks/base/packages/SystemUI/res/layout/activity_func_setting.xml	(revision 1188)
+@@ -1,27 +1,25 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:tools="http://schemas.android.com/tools"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    
+     android:layout_width="match_parent"
+     android:layout_height="match_parent"
+     android:orientation="vertical"
+     android:background="#f2f2f2">
+ 	
+- 	<RelativeLayout
++ 	<android.support.v7.widget.Toolbar
++            android:id="@+id/toolbar"
+             android:layout_width="match_parent"
+-            android:layout_height="55dp"
+-            android:background="@color/func_title_bg">
+-            <TextView
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:text="@string/func_title"
+-                android:layout_centerVertical="true"
+-                android:textSize="20sp"
+-                android:layout_marginLeft="20dp"/>
+-    </RelativeLayout>    
++            android:layout_height="?attr/actionBarSize"
++            android:background="?attr/colorPrimary"
++            app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />   
+          
+        <LinearLayout
+         	android:layout_width="match_parent"
+-        	android:layout_height="wrap_content">
++        	android:layout_height="wrap_content"
++        	android:paddingLeft="8dp"
++            android:paddingRight="8dp">
+             <TextView
+         	    android:layout_weight="1"
+             	android:id="@+id/func_switch"
+@@ -35,11 +33,9 @@
+         		android:id="@+id/func_setting_switch"
+         		android:layout_width="wrap_content"
+                 android:layout_height="wrap_content"
+-        	    android:textOn=""
+-    			android:textOff=""
++        	    android:showText="false" 
+ 					
+-				android:gravity="right"	
+-    			android:showText="true"/>
++    			/>
+             	
+        
+             		
+Index: frameworks/base/packages/SystemUI/res/layout/activity_app_list.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/activity_app_list.xml	(revision 1187)
++++ frameworks/base/packages/SystemUI/res/layout/activity_app_list.xml	(revision 1188)
+@@ -1,11 +1,14 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:tools="http://schemas.android.com/tools"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++   
+     android:layout_width="match_parent"
+     android:layout_height="match_parent"
+      android:orientation="vertical"
+     tools:context="com.android.funcsetting.AppListActivity"
+     android:background="#f2f2f2">
++    <!--
+     <LinearLayout
+         android:layout_width="match_parent"
+         android:layout_height="50dp"
+@@ -50,6 +53,13 @@
+             android:src="@android:drawable/ic_menu_search"
+             android:paddingRight="10dp"/>
+     </LinearLayout>
++    -->
++     <android.support.v7.widget.Toolbar
++            android:id="@+id/toolbar"
++            android:layout_width="match_parent"
++            android:layout_height="?attr/actionBarSize"
++            android:background="?attr/colorPrimary"
++            app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />
+     <android.support.v7.widget.RecyclerView
+         android:id="@+id/apps_recycler"
+         android:layout_width="match_parent"
+Index: frameworks/base/packages/SystemUI/res/values/styles.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/styles.xml	(revision 1187)
++++ frameworks/base/packages/SystemUI/res/values/styles.xml	(revision 1188)
+@@ -370,4 +370,11 @@
+         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+         <item name="colorAccent">@color/colorAccent</item>
+     </style>
++  
++    <style name="FuncTheme" parent="Theme.AppCompat.Light.NoActionBar">
++        <!-- Customize your theme here. -->
++        <item name="colorPrimary">#008080</item>
++        <item name="colorPrimaryDark">#000000</item>
++        <item name="colorAccent">#008080</item>
++    </style>
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 1187)
++++ frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 1188)
+@@ -756,7 +756,7 @@
+     <!-- QuickSettings: Work mode [CHAR LIMIT=NONE] -->
+     <string name="quick_settings_work_mode_label">Work mode</string>
+     <!-- QuickSettings: Label for the toggle to activate Night display (renamed "Night Light" with title caps). [CHAR LIMIT=20] -->
+-    <string name="quick_settings_night_display_label">Night Light</string>
++    <string name="quick_settings_night_display_label">Night Mode</string>
+     <!-- QuickSettings: Summary for the toggle to deactivate Night display when it's on (renamed "Night Light" with title caps). [CHAR LIMIT=NONE] -->
+     <string name="quick_settings_night_display_summary_on">Night Light on, tap to turn off</string>
+     <!-- QuickSettings: Label for the toggle to activate Night display when it's off (renamed "Night Light" with title caps). [CHAR LIMIT=NONE] -->
+@@ -1681,14 +1681,17 @@
+ <!-- Dirac -->	
+ 
+ 	<!-- Func Settings. -->	
+-<string name="func_settings_switch">"FuncSettings"</string>
+-<string name="func_off">"off"</string>
+-<string name="func_on">"on"</string>	
+-<string name="func_title">"Func shortcuts"</string>
+-<string name="func_off_content">"Func lets you open app functions directly from\nthe lock screen."</string>
+-<string name="func_max_num">"Maximum of 5 shortcuts reached.\nRemove an active one first."</string>
+-<string name="func_remove_all">"You removed the Func settings\nshortcut from your lock screen. You\ncan always customise the Func\nsettings by going to Settings > Lock\nscreen > Func."</string>
+-<string name="func_add_app">"Add app shortcuts"</string>
+-<string name="torch_text">"Torch"</string>
++	<string name="func_settings_title">"Func shortcuts"</string>
++	<string name="add_func_title">"Add shortcuts to Func"</string>
++	<string name="func_settings_switch">"FuncSettings"</string>
++	<string name="func_off">"off"</string>
++	<string name="func_on">"on"</string>	
++	<string name="func_title">"Func shortcuts"</string>
++	<string name="func_off_content">"Func lets you open app functions directly from\nthe lock screen."</string>
++	<string name="func_max_num">"Maximum of 5 shortcuts reached.\nRemove an active one first."</string>
++	<string name="func_remove_all">"You removed the Func settings\nshortcut from your lock screen. You\ncan always customise the Func\nsettings by going to Settings > Lock\nscreen > Func."</string>
++	<string name="func_add_app">"Add app shortcuts"</string>
++	<string name="torch_text">"Torch"</string>
+ 
++
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/menu/func_search_item.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/menu/func_search_item.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/menu/func_search_item.xml	(revision 1188)
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<menu xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto">
++    <item
++        android:id="@+id/search"
++        android:title="Search"
++        android:icon="@android:drawable/ic_menu_search"
++        app:showAsAction="ifRoom"
++        app:actionViewClass="android.widget.SearchView" />
++</menu>
+\ No newline at end of file
+Index: frameworks/base/packages/SystemUI/AndroidManifest.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 1187)
++++ frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 1188)
+@@ -532,7 +532,7 @@
+         </receiver>
+ 		    <!-- Add func settings -->
+ 		<activity android:name=".funcsetting.FuncSettings"
+-			android:theme="@android:style/Theme.Wallpaper.NoTitleBar">
++			android:theme="@style/FuncTheme">
+ 			<intent-filter >
+ 			  
+ 				<action  android:name="com.android.systemui.SYSTEMUI_FUNC_SETTING" />
+@@ -539,7 +539,7 @@
+ 			</intent-filter>
+ 		</activity>
+ 		<activity android:name=".funcsetting.AppListActivity" 
+-			android:theme="@android:style/Theme.Wallpaper.NoTitleBar"/>
++			android:theme="@style/FuncTheme"/>
+ 		<receiver android:name=".funcsetting.ContactsReceiver">
+ 			<intent-filter >
+ 				<action android:name="com.android.systemui.funcsettings.contact_uri"/>
+Index: frameworks/base/packages/SystemUI
+===================================================================
+--- frameworks/base/packages/SystemUI	(revision 1187)
++++ frameworks/base/packages/SystemUI	(revision 1188)
+
+Property changes on: frameworks/base/packages/SystemUI
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages/SystemUI:r635
+Index: frameworks/base/packages
+===================================================================
+--- frameworks/base/packages	(revision 1187)
++++ frameworks/base/packages	(revision 1188)
+
+Property changes on: frameworks/base/packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base/packages:r635
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 1187)
++++ frameworks/base	(revision 1188)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks/base:r635
+Index: frameworks
+===================================================================
+--- frameworks	(revision 1187)
++++ frameworks	(revision 1188)
+
+Property changes on: frameworks
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/frameworks:r635

@@ -1,0 +1,84 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java	(revision 1243)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java	(revision 1244)
+@@ -36,6 +36,8 @@
+ 	private final String PACKAGE_NAME="com.android.settings";
+ 	private final String SYSTEMUI_NIGHTMODE="com.android.settings.SYSTEMUI_NIGHTMODE";
+     private final String NIGHT_MODE_SWITCH="night_mode_switch";
++	private final String NIGHT_MODE_ACTION_ON="android.intent.action.NIGHT_MODE_ACTION_ON";
++	private final String NIGHT_MODE_ACTION_OFF="android.intent.action.NIGHT_MODE_ACTION_OFF";
+ 	private int mIndex;
+     private String mCurrentValue;
+ 	private boolean mCustomEnabled;
+@@ -75,9 +77,13 @@
+ 		 	if(nightModeSwitch.equals("true")){
+ 				Settings.System.putString(mContentResolver,NIGHT_MODE_SWITCH,"false");
+ 				PictureQuality.enableBlueLight(false);
++				Intent intent = new Intent(NIGHT_MODE_ACTION_OFF);
++                mContext.sendBroadcast(intent);
+ 			}else{
+ 			 	Settings.System.putString(mContentResolver,NIGHT_MODE_SWITCH,"true");
+ 			 	PictureQuality.enableBlueLight(true);
++				Intent intent = new Intent(NIGHT_MODE_ACTION_ON);
++                mContext.sendBroadcast(intent);
+ 
+ 		 	}			
+ 		 }else{
+Index: packages/apps/Settings/src/com/android/settings/DisplaySettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 1243)
++++ packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 1244)
+@@ -57,7 +57,9 @@
+ 
+ import com.mediatek.settings.DisplaySettingsExt;
+ import com.mediatek.settings.FeatureOption;
+-
++import android.content.BroadcastReceiver;
++import android.content.IntentFilter;
++import android.content.Intent;
+ import java.util.ArrayList;
+ import java.util.List;
+ import android.content.SharedPreferences;
+@@ -99,6 +101,8 @@
+     private static final String KEY_CAMERA_GESTURE = "camera_gesture";
+     private static final String KEY_WALLPAPER = "wallpaper";
+     private static final String KEY_VR_DISPLAY_PREF = "vr_display_pref";
++	private final String NIGHT_MODE_ACTION_ON="android.intent.action.NIGHT_MODE_ACTION_ON";
++	private final String NIGHT_MODE_ACTION_OFF="android.intent.action.NIGHT_MODE_ACTION_OFF";
+ 
+     private Preference mFontSizePref;
+     private Preference mCustomFontSizePref;
+@@ -270,6 +274,9 @@
+             mNightModePreference.setValue(String.valueOf(currentNightMode));
+             mNightModePreference.setOnPreferenceChangeListener(this);
+         }*/
++        IntentFilter filter = new IntentFilter(NIGHT_MODE_ACTION_ON);
++        filter.addAction(NIGHT_MODE_ACTION_OFF);
++        activity.registerReceiver(myReceiver,filter);
+     }
+ 
+     private static boolean allowAllRotations(Context context) {
+@@ -379,6 +386,22 @@
+     }
+     /// @}
+ 
++      private BroadcastReceiver myReceiver = new BroadcastReceiver(){  
++        @Override  
++        public void onReceive(Context context, Intent intent) {  
++            Log.d(TAG,"intent.getAction()="+intent.getAction());
++            if(intent.getAction().equals(NIGHT_MODE_ACTION_ON)){
++                mNightModePreference.setSummary(R.string.mode_on);
++            }else if(intent.getAction().equals(NIGHT_MODE_ACTION_OFF)){
++                mNightModePreference.setSummary(R.string.mode_off);
++            }
++        }  
++    }; 
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++        getActivity().unregisterReceiver(myReceiver);
++    }
+     private void updateState() {
+         updateFontSizeSummary();
+         updateScreenSaverSummary();

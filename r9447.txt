@@ -1,0 +1,327 @@
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPasswordView.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPasswordView.java	(revision 9446)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPasswordView.java	(revision 9447)
+@@ -18,6 +18,9 @@
+ 
+ import android.content.Context;
+ import android.graphics.Rect;
++import android.graphics.drawable.Drawable;
++import android.graphics.drawable.InsetDrawable;
++import android.provider.Settings;
+ import android.text.Editable;
+ import android.text.InputType;
+ import android.text.TextUtils;
+@@ -34,6 +37,8 @@
+ import android.view.inputmethod.InputMethodManager;
+ import android.view.inputmethod.InputMethodSubtype;
+ import android.widget.TextView;
++import android.widget.ImageView;
++
+ import android.widget.TextView.OnEditorActionListener;
+ 
+ import com.android.internal.widget.TextViewInputDisabler;
+@@ -64,6 +69,7 @@
+ 
+     private Interpolator mLinearOutSlowInInterpolator;
+     private Interpolator mFastOutLinearInInterpolator;
++	private ImageView mFaceUnlockView;
+ 
+     public KeyguardPasswordView(Context context) {
+         this(context, null);
+@@ -227,6 +233,23 @@
+                 updateSwitchImeButton();
+             }
+         }, DELAY_MILLIS_TO_REEVALUATE_IME_SWITCH_ICON);
++		mFaceUnlockView=(ImageView)findViewById(R.id.face_unlock);
++		int stateType=Settings.System.getInt(getContext().getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
++		Log.v("yujunjie", "KeyguardPatternView:onFinishInflate()...stateType =" + stateType);
++		if(stateType==1){
++			int iconHeight = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_height);
++            int iconWidth = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_width);
++			mFaceUnlockView.setVisibility(View.VISIBLE);
++			int iconRes=com.android.internal.R.drawable.ic_account_circle;
++			Drawable icon = getContext().getDrawable(iconRes);
++			icon = new IntrinsicSizeDrawable(icon, iconWidth, iconHeight);
++			mFaceUnlockView.setImageDrawable(icon);
++		}else{
++			mFaceUnlockView.setVisibility(View.GONE);
++			mFaceUnlockView.setImageDrawable(null);
++		}
+     }
+ 
+     @Override
+@@ -370,4 +393,25 @@
+         }
+         return false;
+     }
++	private static class IntrinsicSizeDrawable extends InsetDrawable {
++
++        private final int mIntrinsicWidth;
++        private final int mIntrinsicHeight;
++
++        public IntrinsicSizeDrawable(Drawable drawable, int intrinsicWidth, int intrinsicHeight) {
++            super(drawable, 0);
++            mIntrinsicWidth = intrinsicWidth;
++            mIntrinsicHeight = intrinsicHeight;
++        }
++
++        @Override
++        public int getIntrinsicWidth() {
++            return mIntrinsicWidth;
++        }
++
++        @Override
++        public int getIntrinsicHeight() {
++            return mIntrinsicHeight;
++        }
++    }
+ }
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPINView.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPINView.java	(revision 9446)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPINView.java	(revision 9447)
+@@ -22,7 +22,16 @@
+ import android.view.View;
+ import android.view.ViewGroup;
+ import android.view.animation.AnimationUtils;
++import android.graphics.drawable.Drawable;
++import android.graphics.drawable.InsetDrawable;
++import android.provider.Settings;
++import android.widget.ImageView;
++import android.view.animation.Interpolator;
++import com.android.settingslib.animation.AppearAnimationCreator;
++import android.util.Log;
+ 
++
++
+ import com.android.settingslib.animation.AppearAnimationUtils;
+ import com.android.settingslib.animation.DisappearAnimationUtils;
+ 
+@@ -43,6 +52,7 @@
+     private int mDisappearYTranslation;
+     private View[][] mViews;
+     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
++	private ImageView mFaceUnlockView;
+ 
+     public KeyguardPINView(Context context) {
+         this(context, null);
+@@ -117,6 +127,22 @@
+                 new View[]{
+                         null, mEcaView, null
+                 }};
++		mFaceUnlockView=(ImageView)findViewById(R.id.face_unlock);
++		int stateType=Settings.System.getInt(getContext().getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
++		if(stateType==1){
++			int iconHeight = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_height);
++            int iconWidth = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_width);
++			mFaceUnlockView.setVisibility(View.VISIBLE);
++			int iconRes=com.android.internal.R.drawable.ic_account_circle;
++			Drawable icon = getContext().getDrawable(iconRes);
++			icon = new IntrinsicSizeDrawable(icon, iconWidth, iconHeight);
++			mFaceUnlockView.setImageDrawable(icon);
++		}else{
++			mFaceUnlockView.setVisibility(View.GONE);
++			mFaceUnlockView.setImageDrawable(null);
++		}
+     }
+ 
+     @Override
+@@ -164,6 +190,8 @@
+                         }
+                     }
+                 });
++		 mAppearAnimationUtils.createAnimation(mFaceUnlockView, 0/* delay */, 280/* duration */, mDisappearYTranslation,
++                   false, mDisappearAnimationUtils.getInterpolator(), null);
+         return true;
+     }
+ 
+@@ -195,4 +223,25 @@
+             mSecurityMessageDisplay.setMessage(R.string.voice_unlock_media_playing, true);
+         }
+     }
++	private static class IntrinsicSizeDrawable extends InsetDrawable {
++
++        private final int mIntrinsicWidth;
++        private final int mIntrinsicHeight;
++
++        public IntrinsicSizeDrawable(Drawable drawable, int intrinsicWidth, int intrinsicHeight) {
++            super(drawable, 0);
++            mIntrinsicWidth = intrinsicWidth;
++            mIntrinsicHeight = intrinsicHeight;
++        }
++
++        @Override
++        public int getIntrinsicWidth() {
++            return mIntrinsicWidth;
++        }
++
++        @Override
++        public int getIntrinsicHeight() {
++            return mIntrinsicHeight;
++        }
++    }
+ }
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPatternView.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPatternView.java	(revision 9446)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardPatternView.java	(revision 9447)
+@@ -30,6 +30,11 @@
+ import android.view.animation.AnimationUtils;
+ import android.view.animation.Interpolator;
+ import android.widget.LinearLayout;
++import android.widget.ImageView;
++import android.provider.Settings;
++import android.graphics.drawable.Drawable;
++import android.graphics.drawable.InsetDrawable;
++import com.android.keyguard.R;
+ 
+ import com.android.internal.widget.LockPatternChecker;
+ import com.android.internal.widget.LockPatternUtils;
+@@ -69,6 +74,7 @@
+     private AsyncTask<?, ?, ?> mPendingLockCheck;
+     private LockPatternView mLockPatternView;
+     private KeyguardSecurityCallback mCallback;
++	private ImageView mFaceUnlockView;
+ 
+     /**
+      * Keeps track of the last time we poked the wake lock during dispatching of the touch event.
+@@ -154,6 +160,24 @@
+         if (button != null) {
+             button.setCallback(this);
+         }
++		mFaceUnlockView=(ImageView)findViewById(R.id.face_unlock);
++		int stateType=Settings.System.getInt(getContext().getContentResolver(),Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
++		Log.v("yujunjie", "KeyguardPatternView:onFinishInflate()...stateType =" + stateType);
++		if(stateType==1){
++			int iconHeight = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_height);
++            int iconWidth = getResources().getDimensionPixelSize(
++                    R.dimen.keyguard_affordance_customize_icon_width);
++			mFaceUnlockView.setVisibility(View.VISIBLE);
++			int iconRes=com.android.internal.R.drawable.ic_account_circle;
++			Drawable icon = getContext().getDrawable(iconRes);
++			icon = new IntrinsicSizeDrawable(icon, iconWidth, iconHeight);
++			mFaceUnlockView.setImageDrawable(icon);
++		}else{
++			mFaceUnlockView.setVisibility(View.GONE);
++			mFaceUnlockView.setImageDrawable(null);
++		}
++		
+     }
+ 
+     @Override
+@@ -478,6 +502,9 @@
+             // Also animate the Emergency call
+             mAppearAnimationUtils.createAnimation(mEcaView, delay, duration, translationY,
+                     appearing, interpolator, null);
++			mAppearAnimationUtils.createAnimation(mFaceUnlockView, delay, duration, translationY,
++                    appearing, interpolator, null);
++			
+         }
+     }
+ 
+@@ -485,4 +512,25 @@
+     public boolean hasOverlappingRendering() {
+         return false;
+     }
++	private static class IntrinsicSizeDrawable extends InsetDrawable {
++
++        private final int mIntrinsicWidth;
++        private final int mIntrinsicHeight;
++
++        public IntrinsicSizeDrawable(Drawable drawable, int intrinsicWidth, int intrinsicHeight) {
++            super(drawable, 0);
++            mIntrinsicWidth = intrinsicWidth;
++            mIntrinsicHeight = intrinsicHeight;
++        }
++
++        @Override
++        public int getIntrinsicWidth() {
++            return mIntrinsicWidth;
++        }
++
++        @Override
++        public int getIntrinsicHeight() {
++            return mIntrinsicHeight;
++        }
++    }
+ }
+Index: frameworks/base/packages/Keyguard/res/values/dimens.xml
+===================================================================
+--- frameworks/base/packages/Keyguard/res/values/dimens.xml	(revision 9446)
++++ frameworks/base/packages/Keyguard/res/values/dimens.xml	(revision 9447)
+@@ -75,4 +75,8 @@
+     <dimen name="face_scan_steps_text">12sp</dimen>
+     <dimen name="ic_default_settings_summary_size">12sp</dimen>
+     <dimen name="ic_default_error_info_size">18sp</dimen>
++	<!-- add by yujunjie 20170831 start {-->
++	<dimen name="keyguard_affordance_customize_icon_height">48dp</dimen>
++	<dimen name="keyguard_affordance_customize_icon_width">48dp</dimen>
++	<!-- add end }-->
+ </resources>
+Index: frameworks/base/packages/Keyguard/res/layout/keyguard_password_view.xml
+===================================================================
+--- frameworks/base/packages/Keyguard/res/layout/keyguard_password_view.xml	(revision 9446)
++++ frameworks/base/packages/Keyguard/res/layout/keyguard_password_view.xml	(revision 9447)
+@@ -33,7 +33,15 @@
+         android:layout_height="0dp"
+         android:layout_weight="7"
+         />
+-
++	<ImageView
++		android:id="@+id/face_unlock"
++		android:layout_height="wrap_content"
++		android:layout_width="wrap_content"
++		android:orientation="vertical"
++		android:gravity="center_horizontal"
++		android:layout_gravity="top|center_horizontal"
++		android:layout_marginBottom="6dip"
++		android:visibility="visible" />
+     <include layout="@layout/keyguard_message_area"
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content" />
+Index: frameworks/base/packages/Keyguard/res/layout/keyguard_pattern_view.xml
+===================================================================
+--- frameworks/base/packages/Keyguard/res/layout/keyguard_pattern_view.xml	(revision 9446)
++++ frameworks/base/packages/Keyguard/res/layout/keyguard_pattern_view.xml	(revision 9447)
+@@ -47,6 +47,15 @@
+             android:layout_gravity="center_horizontal|bottom"
+             android:clipChildren="false"
+             android:clipToPadding="false">
++	    <ImageView
++	    	android:id="@+id/face_unlock"
++		android:layout_height="wrap_content"
++		android:layout_width="wrap_content"
++		android:orientation="vertical"
++		android:gravity="center_horizontal"
++		android:layout_gravity="top|center_horizontal"
++		android:layout_marginBottom="6dip"
++		android:visibility="visible" />
+ 
+             <include layout="@layout/keyguard_message_area"
+                 android:layout_width="match_parent"
+Index: frameworks/base/packages/Keyguard/res/layout/keyguard_pin_view.xml
+===================================================================
+--- frameworks/base/packages/Keyguard/res/layout/keyguard_pin_view.xml	(revision 9446)
++++ frameworks/base/packages/Keyguard/res/layout/keyguard_pin_view.xml	(revision 9447)
+@@ -27,6 +27,15 @@
+         androidprv:layout_maxHeight="@dimen/keyguard_security_max_height"
+         android:orientation="vertical"
+         >
++	<ImageView
++		android:id="@+id/face_unlock"
++		android:layout_height="wrap_content"
++		android:layout_width="wrap_content"
++		android:orientation="vertical"
++		android:gravity="center_horizontal"
++		android:layout_gravity="top|center_horizontal"
++		android:layout_marginBottom="6dip"
++		android:visibility="visible" />
+     <include layout="@layout/keyguard_message_area"
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"

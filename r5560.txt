@@ -1,0 +1,72 @@
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/common/paramsmgr/params/ParamsManager.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/common/paramsmgr/params/ParamsManager.cpp	(revision 5559)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/common/paramsmgr/params/ParamsManager.cpp	(revision 5560)
+@@ -1037,6 +1037,7 @@
+         int prvWidth = 0, prvHeight = 0;
+         getPreviewSize(&prvWidth, &prvHeight);
+         //
++		/*
+         if( panelWidth != prvWidth ||
+             panelHeight != prvHeight)
+         {
+@@ -1047,9 +1048,12 @@
+                     prvHeight);
+             ret = false;
+         }
++		*/
++		ret = false;
+     }
+     //
+-    MY_LOGD_IF(mEnableDebugLog, "getDisplayRotationSupported ret = %d (KEY_CAMERA_MODE=%d)(ms8ClientAppMode=%s)", ret ? 1 : 0, CAM_MODE, ms8ClientAppMode.string());
++    //MY_LOGD_IF(mEnableDebugLog, "getDisplayRotationSupported ret = %d (KEY_CAMERA_MODE=%d)(ms8ClientAppMode=%s)", ret ? 1 : 0, CAM_MODE, ms8ClientAppMode.string());
++	MY_LOGD_IF(1, "getDisplayRotationSupported ret = %d (KEY_CAMERA_MODE=%d)(ms8ClientAppMode=%s)", ret ? 1 : 0, CAM_MODE, ms8ClientAppMode.string());
+     //
+     return ret;
+ }
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.cpp	(revision 5559)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.cpp	(revision 5560)
+@@ -191,22 +191,25 @@
+ DisplayClient:: 
+ applyPreviewBeautification(unsigned char *yuv, int skinSmoothing,int skinTone) {			
+ 	if(mpParamsMgr->getVisidonMode() && libVisidon!=NULL && Link_VDProcessPreviewFrame && mVisidonBeautyShotEngine != NULL ) {        
+-	MY_LOGD("%s: applyPreviewBeautification STARTTING", __FUNCTION__);
+-	VDBeautyShotData inputData;  
+-    memset(inputData.faces,0,sizeof(VDBeautyFace)*MAX_BEAUTY_SHOT_FACES_IN_TRACK);				
+-    mpParamsMgr->getPreviewSize(&inputData.imageCols, &inputData.imageRows);   		
+-	inputData.imageFormat = YUV_420_NV21;        
+-	inputData.imagePtr = yuv;
+-	inputData.beautyFilterParams[SKIN_SMOOTHING] = mpParamsMgr->getVisidonModeSkin();
+-	inputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = mpParamsMgr->getVisidonModeTone();
+-	MY_LOGD("getVisidonModeSkin=%d,getVisidonModeTone=%d",mpParamsMgr->getVisidonModeSkin(),mpParamsMgr->getVisidonModeTone());
+-	MY_LOGD("%s: CALLING VDProcessPreviewFrame (cols = %d, rows = %d, dataptr = %p, engineptr = %p)", 
+-		__FUNCTION__, inputData.imageCols, inputData.imageRows, 
+-		inputData.imagePtr, mVisidonBeautyShotEngine);				
+-	VDBeautyErrorCode err = Link_VDProcessPreviewFrame(&inputData, mVisidonBeautyShotEngine);
+-	if(err = VDBEAUTY_OK)            
+-		return 0;    
+-	}   
++		MY_LOGD("%s: applyPreviewBeautification STARTTING", __FUNCTION__);
++		VDBeautyShotData inputData;  
++		memset(inputData.faces,0,sizeof(VDBeautyFace)*MAX_BEAUTY_SHOT_FACES_IN_TRACK);				
++		mpParamsMgr->getPreviewSize(&inputData.imageCols, &inputData.imageRows);   		
++		inputData.imageFormat = YUV_420_NV21;        
++		inputData.imagePtr = yuv;
++		inputData.beautyFilterParams[SKIN_SMOOTHING] = mpParamsMgr->getVisidonModeSkin();
++		inputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = mpParamsMgr->getVisidonModeTone();
++		MY_LOGD("getVisidonModeSkin=%d,getVisidonModeTone=%d",mpParamsMgr->getVisidonModeSkin(),mpParamsMgr->getVisidonModeTone());
++		MY_LOGD("%s: CALLING VDProcessPreviewFrame (cols = %d, rows = %d, dataptr = %p, engineptr = %p)", 
++			__FUNCTION__, inputData.imageCols, inputData.imageRows, 
++			inputData.imagePtr, mVisidonBeautyShotEngine);				
++		VDBeautyErrorCode err = Link_VDProcessPreviewFrame(&inputData, mVisidonBeautyShotEngine);
++		if(err == VDBEAUTY_OK){            
++			return 0;    
++		}else{
++			initializeBeautyShotEngine();
++		}
++    }	
+ 	MY_LOGD("%s: end", __FUNCTION__);
+ 	return 1;
+ }

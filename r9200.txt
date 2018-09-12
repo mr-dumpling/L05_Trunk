@@ -1,0 +1,955 @@
+Index: vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/blockednumber/BlockedNumberBackupAgent.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/blockednumber/BlockedNumberBackupAgent.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/blockednumber/BlockedNumberBackupAgent.java	(revision 9200)
+@@ -49,6 +49,7 @@
+             BlockedNumberContract.BlockedNumbers.COLUMN_ID,
+             BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER,
+             BlockedNumberContract.BlockedNumbers.COLUMN_E164_NUMBER,
++			BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE,
+     };
+     private static final String TAG = "BlockedNumberBackup";
+     private static final int VERSION = 1;
+@@ -134,6 +135,7 @@
+         dataOutputStream.writeInt(VERSION);
+         writeString(dataOutputStream, blockedNumber.originalNumber);
+         writeString(dataOutputStream, blockedNumber.e164Number);
++		writeString(dataOutputStream, blockedNumber.blockType);
+         dataOutputStream.flush();
+ 
+         output.writeEntityHeader(Integer.toString(blockedNumber.id), outputStream.size());
+@@ -184,7 +186,7 @@
+ 
+     private BackedUpBlockedNumber createBlockedNumberFromCursor(Cursor cursor) {
+         return new BackedUpBlockedNumber(
+-                cursor.getInt(0), cursor.getString(1), cursor.getString(2));
++                cursor.getInt(0), cursor.getString(1), cursor.getString(2), cursor.getString(3));
+     }
+ 
+     private void writeNewState(DataOutputStream dataOutputStream, BackupState state)
+@@ -211,7 +213,7 @@
+             DataInputStream dataInput = new DataInputStream(new ByteArrayInputStream(byteArray));
+             dataInput.readInt(); // Ignore version.
+             BackedUpBlockedNumber blockedNumber =
+-                    new BackedUpBlockedNumber(id, readString(dataInput), readString(dataInput));
++                    new BackedUpBlockedNumber(id, readString(dataInput), readString(dataInput), readString(dataInput));
+             logV("Restoring blocked number: " + blockedNumber);
+             return blockedNumber;
+         } catch (IOException e) {
+@@ -226,6 +228,8 @@
+                 blockedNumber.originalNumber);
+         contentValues.put(BlockedNumberContract.BlockedNumbers.COLUMN_E164_NUMBER,
+                 blockedNumber.e164Number);
++		contentValues.put(BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE,
++                blockedNumber.blockType);		
+         try {
+             getContentResolver().insert(
+                     BlockedNumberContract.BlockedNumbers.CONTENT_URI, contentValues);
+@@ -258,18 +262,20 @@
+         final int id;
+         final String originalNumber;
+         final String e164Number;
++		final String blockType;
+ 
+-        BackedUpBlockedNumber(int id, String originalNumber, String e164Number) {
++        BackedUpBlockedNumber(int id, String originalNumber, String e164Number, String blockType) {
+             this.id = id;
+             this.originalNumber = originalNumber;
+             this.e164Number = e164Number;
++			this.blockType = blockType;
+         }
+ 
+         @Override
+         public String toString() {
+             if (isDebug()) {
+-                return String.format("[%d, original number: %s, e164 number: %s]",
+-                        id, originalNumber, e164Number);
++                return String.format("[%d, original number: %s, e164 number: %s, block type: %s]",
++                        id, originalNumber, e164Number, blockType);
+             } else {
+                 return String.format("[%d]", id);
+             }
+Index: vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/blockednumber/BlockedNumberDatabaseHelper.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/blockednumber/BlockedNumberDatabaseHelper.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/blockednumber/BlockedNumberDatabaseHelper.java	(revision 9200)
+@@ -59,16 +59,18 @@
+ 
+         private void createTables(SQLiteDatabase db) {
+             db.execSQL("CREATE TABLE " + Tables.BLOCKED_NUMBERS + " (" +
+-                    BlockedNumbers.COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +
++                    BlockedNumbers.COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +					
+                     BlockedNumbers.COLUMN_ORIGINAL_NUMBER + " TEXT NOT NULL UNIQUE," +
+-                    BlockedNumbers.COLUMN_E164_NUMBER + " TEXT" +
++                    BlockedNumbers.COLUMN_E164_NUMBER + " TEXT," +
++					BlockedNumbers.COLUMN_BLOCK_TYPE + " TEXT " +
+                     ")");
+ 
+             db.execSQL("CREATE INDEX blocked_number_idx_original ON " + Tables.BLOCKED_NUMBERS +
+                     " (" + BlockedNumbers.COLUMN_ORIGINAL_NUMBER + ");");
+-            db.execSQL("CREATE INDEX blocked_number_idx_e164 ON " + Tables.BLOCKED_NUMBERS + " (" +
+-                    BlockedNumbers.COLUMN_E164_NUMBER +
+-                    ");");
++            db.execSQL("CREATE INDEX blocked_number_idx_e164 ON " + Tables.BLOCKED_NUMBERS + 
++					" (" + BlockedNumbers.COLUMN_E164_NUMBER +");");
++			db.execSQL("CREATE INDEX blocked_number_idx_block_type ON "+ Tables.BLOCKED_NUMBERS +
++					" (" + BlockedNumbers.COLUMN_BLOCK_TYPE + ");");					
+         }
+     }
+ 
+Index: vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/blockednumber/BlockedNumberProvider.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/blockednumber/BlockedNumberProvider.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/providers/BlockedNumberProvider/src/com/android/providers/blockednumber/BlockedNumberProvider.java	(revision 9200)
+@@ -87,6 +87,7 @@
+             .add(BlockedNumberContract.BlockedNumbers.COLUMN_ID)
+             .add(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER)
+             .add(BlockedNumberContract.BlockedNumbers.COLUMN_E164_NUMBER)
++			.add(BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE)
+             .build();
+ 
+     private static final String ID_SELECTION =
+@@ -97,6 +98,9 @@
+ 
+     private static final String E164_NUMBER_SELECTION =
+             BlockedNumberContract.BlockedNumbers.COLUMN_E164_NUMBER + "=?";
++			
++	private static final String BLOCK_TYPE_NUMBER_SELECTION =
++            BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE + "=?";		
+ 
+     @VisibleForTesting
+     protected BlockedNumberDatabaseHelper mDbHelper;
+@@ -152,16 +156,18 @@
+             throw new IllegalArgumentException("Missing a required column " +
+                     BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER);
+         }
+-
++		
++		final String blockType = cv.getAsString(
++                BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE);
++		
+         // Fill in with autogenerated columns.
+         final String e164Number = Utils.getE164Number(getContext(), phoneNumber,
+                 cv.getAsString(BlockedNumberContract.BlockedNumbers.COLUMN_E164_NUMBER));
+         cv.put(BlockedNumberContract.BlockedNumbers.COLUMN_E164_NUMBER, e164Number);
+-
++		cv.put(BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE, blockType);
+         if (DEBUG) {
+             Log.d(TAG, String.format("inserted blocked number: %s", cv));
+         }
+-
+         // Then insert.
+         final long id = mDbHelper.getWritableDatabase().insertWithOnConflict(
+                 BlockedNumberDatabaseHelper.Tables.BLOCKED_NUMBERS, null, cv,
+@@ -342,6 +348,11 @@
+                 res.putBoolean(
+                         BlockedNumberContract.RES_NUMBER_IS_BLOCKED, shouldSystemBlockNumber(arg));
+                 break;
++			case SystemContract.METHOD_GET_BLOCK_NUMBER_TYPE:
++			    enforceSystemReadPermissionAndPrimaryUser();
++				res.putString(
++					SystemContract.RES_BLOCK_TYPE, getBlockNumberType(arg));
++				break;
+             default:
+                 enforceReadPermissionAndPrimaryUser();
+ 
+@@ -403,13 +414,12 @@
+                 );
+         try {
+             while (c.moveToNext()) {
+-                if (DEBUG) {
+-                    final String original = c.getString(0);
+-                    final String e164 = c.getString(1);
+-
+-                    Log.d(TAG, String.format("match found: original=%s, e164=%s", original, e164));
++				if (DEBUG) {
++					final String original = c.getString(0);
++					final String e164 = c.getString(1);				
++					Log.d(TAG, String.format("match found: original=%s, e164=%s", original, e164));
+                 }
+-                return true;
++				return true;
+             }
+         } finally {
+             c.close();
+@@ -454,6 +464,36 @@
+         return isBlocked(phoneNumber);
+     }
+ 
++	private String getBlockNumberType(String phoneNumber) {
++		if (TextUtils.isEmpty(phoneNumber)) {
++            return null;
++        }
++		final String inE164 = Utils.getE164Number(getContext(), phoneNumber, null); // may be empty.
++		
++		final Cursor c = mDbHelper.getReadableDatabase().rawQuery(
++                "SELECT " +
++                BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE +
++                " FROM " + BlockedNumberDatabaseHelper.Tables.BLOCKED_NUMBERS +
++                " WHERE " + BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER + "=?1" +
++                " OR (?2 != '' AND " +
++                        BlockedNumberContract.BlockedNumbers.COLUMN_E164_NUMBER + "=?2)",
++                new String[] {phoneNumber, inE164}
++                );
++		try {
++            while (c.moveToNext()) {
++                
++                final String blockType = c.getString(0);
++				if (DEBUG) {
++					Log.d(TAG, String.format("match found: blockType=%s", blockType));	
++				}       
++				return blockType;				
++            }
++        } finally {
++            c.close();
++        }		
++		return null;
++	}
++	
+     private void writeBlockSuppressionExpiryTimePref(long expiryTimeMillis) {
+         SharedPreferences pref = getContext().getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE);
+         SharedPreferences.Editor editor = pref.edit();
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/AndroidManifest.xml	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/AndroidManifest.xml	(revision 9200)
+@@ -17,6 +17,7 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
+     package="com.android.contacts"
++	android:sharedUserId="android.uid.system"
+     android:versionCode="10422"
+     android:versionName="1.4.22">
+ 
+@@ -72,7 +73,8 @@
+     <uses-permission android:name="com.cmcc.ccs.READ_PROFILE" />
+     <uses-permission android:name="com.cmcc.ccs.WRITE_PROFILE" />
+     <!-- end -->
+-
++    <uses-permission android:name="android.permission.READ_BLOCKED_NUMBERS" />
++    <uses-permission android:name="android.permission.WRITE_BLOCKED_NUMBERS" />
+     <application
+         android:name="com.android.contacts.ContactsApplication"
+         android:label="@string/applicationLabel"
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/quickcontact/QuickContactActivity.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/quickcontact/QuickContactActivity.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/quickcontact/QuickContactActivity.java	(revision 9200)
+@@ -26,6 +26,8 @@
+ import android.animation.ObjectAnimator;
+ import android.app.Activity;
+ import android.app.Fragment;
++import android.app.AlertDialog;
++import android.app.Dialog;
+ import android.app.LoaderManager.LoaderCallbacks;
+ import android.app.SearchManager;
+ import android.content.ActivityNotFoundException;
+@@ -34,11 +36,13 @@
+ import android.content.Context;
+ import android.content.Intent;
+ import android.content.Loader;
++import android.content.DialogInterface;
+ import android.content.pm.PackageManager;
+ import android.content.pm.ResolveInfo;
+ import android.content.res.ColorStateList;
+ import android.content.res.Configuration;
+ import android.content.res.Resources;
++import android.content.ContentResolver;
+ import android.graphics.Bitmap;
+ import android.graphics.BitmapFactory;
+ import android.graphics.Color;
+@@ -51,6 +55,7 @@
+ import android.os.AsyncTask;
+ import android.os.Bundle;
+ import android.os.Trace;
++import android.provider.BlockedNumberContract;
+ import android.provider.CalendarContract;
+ import android.provider.ContactsContract;
+ import android.provider.ContactsContract.CommonDataKinds.Email;
+@@ -79,6 +84,7 @@
+ import android.support.v7.widget.CardView;
+ import android.telecom.PhoneAccount;
+ import android.telecom.TelecomManager;
++import android.telephony.PhoneNumberUtils;
+ import android.text.BidiFormatter;
+ import android.text.Spannable;
+ import android.text.SpannableString;
+@@ -123,6 +129,7 @@
+ import com.android.contacts.common.compat.CompatUtils;
+ import com.android.contacts.common.compat.EventCompat;
+ import com.android.contacts.common.compat.MultiWindowCompat;
++import com.android.contacts.common.compat.TelecomManagerUtil;
+ import com.android.contacts.common.dialog.CallSubjectDialog;
+ import com.android.contacts.common.editor.SelectAccountDialogFragment;
+ import com.android.contacts.common.interactions.TouchPointManager;
+@@ -274,7 +281,8 @@
+     private boolean mHasAlreadyBeenOpened;
+     private boolean mOnlyOnePhoneNumber;
+     private boolean mOnlyOneEmail;
+-
++	private String blockNumber;
++	
+     private QuickContactImageView mPhotoView;
+     private ExpandingEntryCardView mContactCard;
+     /// M:[for RCS-e] show Joyn Card(rcs-e plugin) under ContactCard.
+@@ -303,7 +311,7 @@
+     private SelectAccountDialogFragmentListener mSelectAccountFragmentListener;
+     private AsyncTask<Void, Void, Cp2DataCardModel> mEntriesAndActionsTask;
+     private AsyncTask<Void, Void, Void> mRecentDataTask;
+-
++	private BlockNumberTask mTask;
+     private AggregationSuggestionEngine mAggregationSuggestionEngine;
+     private List<Suggestion> mSuggestions;
+ 
+@@ -1284,15 +1292,16 @@
+     private void setHeaderNameText(int resId) {
+         if (mScroller != null) {
+             mScroller.setTitle(getText(resId) == null ? null : getText(resId).toString(),
++			getText(resId) == null ? null : getText(resId).toString(),
+                     /* isPhoneNumber= */ false);
+         }
+     }
+ 
+     /** Assign this string to the view if it is not empty. */
+-    private void setHeaderNameText(String value, boolean isPhoneNumber) {
++    private void setHeaderNameText(String phoneNumber, String value, boolean isPhoneNumber) {
+         if (!TextUtils.isEmpty(value)) {
+             if (mScroller != null) {
+-                mScroller.setTitle(value, isPhoneNumber);
++                mScroller.setTitle(phoneNumber, value, isPhoneNumber);
+             }
+         }
+     }
+@@ -1326,19 +1335,6 @@
+         mPhotoView.setIsBusiness(mContactData.isDisplayNameFromOrganization());
+         mPhotoSetter.setupContactPhoto(data, mPhotoView);
+         extractAndApplyTintFromPhotoViewAsynchronously();
+-        final String displayName = ContactDisplayUtils.getDisplayName(this, data).toString();
+-        setHeaderNameText(
+-                displayName, mContactData.getDisplayNameSource() == DisplayNameSources.PHONE);
+-        final String phoneticName = ContactDisplayUtils.getPhoneticName(this, data);
+-        if (mScroller != null) {
+-            // Show phonetic name only when it doesn't equal the display name.
+-            if (!TextUtils.isEmpty(phoneticName) && !phoneticName.equals(displayName)) {
+-                mScroller.setPhoneticName(phoneticName);
+-            } else {
+-                mScroller.setPhoneticNameGone();
+-            }
+-        }
+-
+         Trace.endSection();
+ 
+         mEntriesAndActionsTask = new AsyncTask<Void, Void, Cp2DataCardModel>() {
+@@ -1368,8 +1364,9 @@
+                 /// @}
+                 }
+             }
+-        };
++        };		
+         mEntriesAndActionsTask.execute();
++		
+         Log.d(TAG, "[bindContactData] mEntriesAndActionsTask.execute()");
+     }
+ 
+@@ -1393,7 +1390,22 @@
+             for (int i = 0; i < phoneDataItems.size(); ++i) {
+                 phoneNumbers[i] = ((PhoneDataItem) phoneDataItems.get(i)).getNumber();
+             }
++			blockNumber = phoneNumbers[0];
+         }
++		
++		final String displayName = ContactDisplayUtils.getDisplayName(this, mContactData).toString();
++        setHeaderNameText(blockNumber,
++                displayName, mContactData.getDisplayNameSource() == DisplayNameSources.PHONE);
++        final String phoneticName = ContactDisplayUtils.getPhoneticName(this, mContactData);
++		if (mScroller != null) {
++            // Show phonetic name only when it doesn't equal the display name.
++            if (!TextUtils.isEmpty(phoneticName) && !phoneticName.equals(displayName)) {
++                mScroller.setPhoneticName(phoneticName,blockNumber);
++            } else {
++                mScroller.setPhoneticNameGone();
++            }
++        }
++		
+         final Bundle phonesExtraBundle = new Bundle();
+         phonesExtraBundle.putStringArray(KEY_LOADER_EXTRA_PHONES, phoneNumbers);
+ 
+@@ -1974,6 +1986,7 @@
+             final PhoneDataItem phone = (PhoneDataItem) dataItem;
+             String phoneLabel = null;
+             if (!TextUtils.isEmpty(phone.getNumber())) {
++				Log.d(TAG,"phone number:"+phone.getNumber());
+                 primaryContentDescription.append(res.getString(R.string.call_other)).append(" ");
+                 header = sBidiFormatter.unicodeWrap(phone.buildDataStringForDisplay(context, kind),
+                         TextDirectionHeuristics.LTR);
+@@ -2861,6 +2874,9 @@
+         if (mAggregationSuggestionEngine != null) {
+             mAggregationSuggestionEngine.quit();
+         }
++		if (mTask != null) {
++            mTask.cancel(true /* mayInterruptIfRunning */);
++        }
+         ///M: Video Entry @{
+         ExtensionManager.getInstance().getOp01Extension().resetVideoState();
+         ///@}
+@@ -3179,11 +3195,20 @@
+             case R.id.menu_help:
+                 HelpUtils.launchHelpAndFeedbackForContactScreen(this);
+                 return true;
++			 case R.id.menu_blocked_numbers: 
++				addBlockNumberDialog();
++                /*final Intent intent = TelecomManagerUtil.createManageBlockedNumbersIntent(
++                        (TelecomManager) getSystemService(Context.TELECOM_SERVICE));
++                if (intent != null) {
++                    startActivity(intent);
++                }*/
++                return true;            
+             default:
+                 return super.onOptionsItemSelected(item);
+         }
+     }
+-
++	
++	
+     /// M: ALPS02782438.not support to show email for sim,Ruim and Usim which not support email
+     /// field. @{
+     private boolean isSupportShowEmailData(Contact contactsData) {
+@@ -3213,4 +3238,125 @@
+         return true;
+     }
+     /// @}
++	
++	//add block number start
++	final boolean[] checkedItems={false,false};
++	private void addBlockNumberDialog() {
++		final String[] items = {getResources().getString(R.string.block_item_call),
++								getResources().getString(R.string.block_item_message)};		
++		final String[] resultItems = {"call", "message"};
++		AlertDialog.Builder builder = new AlertDialog.Builder(this);
++		builder.setTitle(getResources().getString(R.string.block_number_dialog_title))
++		.setMultiChoiceItems(items, checkedItems, new DialogInterface.OnMultiChoiceClickListener() {
++			@Override
++			public void onClick(DialogInterface dialog, int which, boolean isChecked) {	}					
++			})
++			.setPositiveButton("BLOCK", new DialogInterface.OnClickListener() {
++				@Override
++				public void onClick(DialogInterface dialog, int which) {
++					
++					StringBuilder type = new StringBuilder();
++					for (int i = 0; i < items.length; i++) {
++						if (checkedItems[i]) {
++							type.append(resultItems[i]);
++						}
++					}
++					if (TextUtils.isEmpty(type)) {
++						Toast.makeText(QuickContactActivity.this, getResources().getString(R.string.select_block_type),0).show();
++						return;
++					}
++					String phoneNumber = blockNumber;
++					if (TextUtils.isEmpty(phoneNumber)) {
++						Toast.makeText(QuickContactActivity.this,getResources().getString(R.string.empty_contact_phone_number),0).show();
++						return;
++					}
++					addBlockedNumber(phoneNumber,type.toString());
++					dialog.dismiss();					
++				}
++			})
++			.setNegativeButton("CANCEL", new DialogInterface.OnClickListener() {
++				@Override
++				public void onClick(DialogInterface dialog, int which) {
++					dialog.dismiss();
++				}
++			});
++		builder.show();
++	}
++	
++	/**
++     * Add blocked number if it does not exist.
++     */
++    private void addBlockedNumber(String number,String type) {
++        if (PhoneNumberUtils.isEmergencyNumber(number)) {
++            Toast.makeText(
++                    this,
++                    getString(R.string.blocked_numbers_block_emergency_number_message),
++                    Toast.LENGTH_SHORT).show();
++        } else {
++            // We disable the add button, to prevent the user from adding other numbers until the
++            // current number is added.
++            blockIfNotAlreadyBlocked(number, type, mScroller);
++        }
++    }	
++	
++	/**
++     * Runs an async task to write the number to the blocked numbers provider if it does not already
++     * exist.
++     *
++     * Triggers {@link Listener#onBlocked(String, boolean)} when task finishes to show proper UI.
++     */
++    public void blockIfNotAlreadyBlocked(String number, String type, Listener listener) {
++        mListener = listener;
++        mTask = new BlockNumberTask();
++        mTask.execute(number,type);
++    }
++	
++	
++	/**
++     * Task to block a number.
++     */
++    private class BlockNumberTask extends AsyncTask<String, Void, Boolean> {
++        private String mNumber;
++		private String mType;
++        /**
++         * @return true if number was blocked; false if number is already blocked.
++         */
++        @Override
++        protected Boolean doInBackground(String... params) {
++            mNumber = params[0];
++			mType = params[1];
++			/**
++			*we do not check the repeated number,cause we will add to list more times
++			***/
++            //if (BlockedNumberContract.isBlocked(QuickContactActivity.this, mNumber)) {
++            //    return false;
++            //} else {
++                ContentResolver contentResolver = QuickContactActivity.this.getContentResolver();
++                ContentValues newValues = new ContentValues();
++                newValues.put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER,
++                        mNumber);
++				newValues.put(BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE,
++                        mType);
++                contentResolver.insert(BlockedNumberContract.BlockedNumbers.CONTENT_URI,
++                        newValues);
++                return true;
++            //}
++        }
++
++        @Override
++        protected void onPostExecute(Boolean result) {
++            mTask = null;
++            if (mListener != null) {
++                mListener.onBlocked(mNumber, result);
++            }
++            mListener = null;
++        }
++    }
++	
++	Listener mListener;
++	
++	public interface Listener {
++        void onBlocked(String number, boolean isBlocked);
++    }
++	//add block number end
+ }
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/widget/MultiShrinkScroller.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/widget/MultiShrinkScroller.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/src/com/android/contacts/widget/MultiShrinkScroller.java	(revision 9200)
+@@ -24,6 +24,7 @@
+ import android.hardware.display.DisplayManager;
+ import android.net.Uri;
+ import android.os.Trace;
++import android.text.TextUtils;
+ import android.support.v4.view.ViewCompat;
+ import android.support.v4.view.animation.PathInterpolatorCompat;
+ import android.util.AttributeSet;
+@@ -45,9 +46,11 @@
+ import android.widget.ScrollView;
+ import android.widget.TextView;
+ import android.widget.Toolbar;
++import android.widget.Toast;
++import android.provider.BlockedNumberContract;
+ 
+ import com.mediatek.contacts.ExtensionManager;
+-
++import com.android.contacts.quickcontact.QuickContactActivity;
+ /**
+  * A custom {@link ViewGroup} that operates similarly to a {@link ScrollView}, except with multiple
+  * subviews. These subviews are scrolled or shrinked one at a time, until each reaches their
+@@ -68,7 +71,7 @@
+  * order to track velocity, modify EdgeEffect color & perform the originally specified animations.
+  * As a result this ViewGroup has non-standard talkback and keyboard support.
+  */
+-public class MultiShrinkScroller extends FrameLayout {
++public class MultiShrinkScroller extends FrameLayout implements QuickContactActivity.Listener{
+ 
+     /**
+      * 1000 pixels per second. Ie, 1 pixel per millisecond.
+@@ -441,16 +444,23 @@
+         mTitleGradientView.setLayoutParams(titleGradientLayoutParams);
+     }
+ 
+-    public void setTitle(String title, boolean isPhoneNumber) {
+-        mLargeTextView.setText(title);
++    public void setTitle(String number, String title, boolean isPhoneNumber) {
++        mLargeTextView.setText(title);		
+         // We have a phone number as "mLargeTextView" so make it always LTR.
+         if (isPhoneNumber) {
+-            mLargeTextView.setTextDirection(View.TEXT_DIRECTION_LTR);
++            mLargeTextView.setTextDirection(View.TEXT_DIRECTION_LTR);			
+         }
+         mPhotoTouchInterceptOverlay.setContentDescription(title);
++		if (!TextUtils.isEmpty(number)) {
++			if (BlockedNumberContract.isBlocked(getContext(), number)) {
++			mLargeTextView.setCompoundDrawablesRelativeWithIntrinsicBounds(
++                    R.drawable.ic_call_detail_block, 0, 0, 0);
++			}
++		}
++		
+     }
+ 
+-    public void setPhoneticName(String phoneticName) {
++    public void setPhoneticName(String phoneticName,String displayName) {
+         // Set phonetic name only when it was gone before or got changed.
+         if (mPhoneticNameView.getVisibility() == View.VISIBLE
+                 && phoneticName.equals(mPhoneticNameView.getText())) {
+@@ -457,6 +467,12 @@
+             return;
+         }
+         mPhoneticNameView.setText(phoneticName);
++		if (!TextUtils.isEmpty(displayName)) {
++			if (BlockedNumberContract.isBlocked(getContext(), displayName)) {
++			mPhoneticNameView.setCompoundDrawablesRelativeWithIntrinsicBounds(
++                    R.drawable.ic_call_detail_block, 0, 0, 0);
++			}
++		}		
+         // Every time the phonetic name is changed, set mPhoneticNameView as visible,
+         // in case it just changed from Visibility=GONE.
+         mPhoneticNameView.setVisibility(View.VISIBLE);
+@@ -1401,4 +1417,20 @@
+         mIsTouchDisabledForSuppressLayout = areTouchesDisabled;
+     }
+ 
++	@Override
++    public void onBlocked(String number, boolean isBlocked) {
++        if (isBlocked) {
++            if (mLargeTextView != null && mLargeTextView.getVisibility() == View.VISIBLE) {
++				mLargeTextView.setCompoundDrawablesRelativeWithIntrinsicBounds(
++                    R.drawable.ic_call_detail_block, 0, 0, 0);
++			}
++			if (mPhoneticNameView !=null && mPhoneticNameView.getVisibility() == View.VISIBLE) {
++				mPhoneticNameView.setCompoundDrawablesRelativeWithIntrinsicBounds(
++                    R.drawable.ic_call_detail_block, 0, 0, 0);
++			}
++        } else {
++            
++        }       
++    }
++	
+ }
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/res/values/colors.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/res/values/colors.xml	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/res/values/colors.xml	(revision 9200)
+@@ -85,4 +85,7 @@
+ 
+     <!-- Color of background of disabled link contacts button, 15% black. -->
+     <color name="disabled_button_background">#26000000</color>
++	
++	<color name="call_detail_footer_text_color">#616161</color>
++	<color name="call_detail_footer_icon_tint">@color/call_detail_footer_text_color</color>
+ </resources>
+Index: vendor/branch/5058I_ALRU/packages/apps/Contacts/res/menu/quickcontact.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Contacts/res/menu/quickcontact.xml	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/apps/Contacts/res/menu/quickcontact.xml	(revision 9200)
+@@ -41,4 +41,8 @@
+     <item
+         android:id="@+id/menu_help"
+         android:title="@string/menu_help" />
++	
++	<item
++        android:id="@+id/menu_blocked_numbers"
++        android:title="@string/menu_blocked_numbers"/>
+ </menu>
+Index: vendor/branch/5058I_ALRU/packages/apps/Dialer/src-N/com/android/dialer/compat/BlockedNumbersSdkCompat.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Dialer/src-N/com/android/dialer/compat/BlockedNumbersSdkCompat.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/apps/Dialer/src-N/com/android/dialer/compat/BlockedNumbersSdkCompat.java	(revision 9200)
+@@ -30,7 +30,9 @@
+     public static final String COLUMN_ORIGINAL_NUMBER = BlockedNumbers.COLUMN_ORIGINAL_NUMBER;
+ 
+     public static final String E164_NUMBER = BlockedNumbers.COLUMN_E164_NUMBER;
+-
++	
++	public static final String BLOCK_TYPE = BlockedNumbers.COLUMN_BLOCK_TYPE;
++	
+     public static boolean canCurrentUserBlockNumbers(Context context) {
+         return BlockedNumberContract.canCurrentUserBlockNumbers(context);
+     }
+Index: vendor/branch/5058I_ALRU/packages/apps/Dialer/src/com/android/dialer/compat/FilteredNumberCompat.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Dialer/src/com/android/dialer/compat/FilteredNumberCompat.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/apps/Dialer/src/com/android/dialer/compat/FilteredNumberCompat.java	(revision 9200)
+@@ -122,7 +122,13 @@
+         return useNewFiltering() ? BlockedNumbersSdkCompat.E164_NUMBER
+                 : FilteredNumberColumns.NORMALIZED_NUMBER;
+     }
+-
++	/**
++	*@return The column name for block type
++	*/
++	public static String getBlockNumberTypeColumnName() {
++		return useNewFiltering() ? BlockedNumbersSdkCompat.BLOCK_TYPE : FilteredNumberColumns.BLOCK_TYPE;
++	}
++	
+     /**
+      * @return {@code true} if the current SDK version supports using new filtering, {@code false}
+      * otherwise.
+@@ -241,6 +247,8 @@
+             @Nullable String e164Number, @Nullable String countryIso) {
+         ContentValues contentValues = new ContentValues();
+         contentValues.put(getOriginalNumberColumnName(), Preconditions.checkNotNull(number));
++		//"callmessage" means call and message will be blocked
++		contentValues.put(getBlockNumberTypeColumnName(),"callmessage");
+         /// M: new filter also suport e164 number,so pass e164 format number to provider
+         // to avoid countryIso inconsistent problem. @{
+         if (e164Number == null) {
+Index: vendor/branch/5058I_ALRU/packages/apps/Dialer/src/com/android/dialer/database/FilteredNumberContract.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Dialer/src/com/android/dialer/database/FilteredNumberContract.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/apps/Dialer/src/com/android/dialer/database/FilteredNumberContract.java	(revision 9200)
+@@ -111,6 +111,11 @@
+          * See {@link FilteredNumberSources}
+          */
+         static final String SOURCE = "source";
++		/**
++         * block number type : call, message, callmessage;
++         * TYPE: TEXT
++         */
++		static final String BLOCK_TYPE = "block_type";
+     }
+ 
+     /**
+Index: vendor/branch/5058I_ALRU/packages/apps/Dialer/src/com/android/dialer/database/FilteredNumberAsyncQueryHandler.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Dialer/src/com/android/dialer/database/FilteredNumberAsyncQueryHandler.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/apps/Dialer/src/com/android/dialer/database/FilteredNumberAsyncQueryHandler.java	(revision 9200)
+@@ -185,8 +185,9 @@
+                 FilteredNumberCompat.getContentUri(null),
+                 FilteredNumberCompat.filter(new String[]{FilteredNumberCompat.getIdColumnName(),
+                         FilteredNumberCompat.getTypeColumnName()}),
+-                FilteredNumberCompat.getE164NumberColumnName() + " = ?",
+-                new String[]{e164Number},
++                FilteredNumberCompat.getE164NumberColumnName() + " = ?1" + " AND "+
++				FilteredNumberCompat.getBlockNumberTypeColumnName() + " = ?2 OR = ?3",
++                new String[]{e164Number,"call","callmessage"},
+                 null);
+ 
+         return true;
+Index: vendor/branch/5058I_ALRU/packages/services/Telecomm/src/com/android/server/telecom/callfiltering/BlockCheckerAdapter.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/services/Telecomm/src/com/android/server/telecom/callfiltering/BlockCheckerAdapter.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/services/Telecomm/src/com/android/server/telecom/callfiltering/BlockCheckerAdapter.java	(revision 9200)
+@@ -17,13 +17,22 @@
+ package com.android.server.telecom.callfiltering;
+ 
+ import android.content.Context;
+-
++import android.text.TextUtils;
+ import com.android.internal.telephony.BlockChecker;
++import android.util.Log;
+ 
+ public class BlockCheckerAdapter {
+     public BlockCheckerAdapter() { }
+ 
+     public boolean isBlocked(Context context, String number) {
+-        return BlockChecker.isBlocked(context, number);
++		if (BlockChecker.isBlocked(context, number)) {
++			String type = BlockChecker.getBlockNumberType(context, number);			
++			if (!TextUtils.isEmpty(type) && type.contains("call")) {				
++				Log.d("BlockCheckerAdapter","type:" + type + " block the call!");
++				return true;
++			}
++			return false;
++		}		
++        return false;
+     }
+ }
+Index: vendor/branch/5058I_ALRU/packages/services/Telecomm/src/com/android/server/telecom/settings/BlockNumberTaskFragment.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/services/Telecomm/src/com/android/server/telecom/settings/BlockNumberTaskFragment.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/packages/services/Telecomm/src/com/android/server/telecom/settings/BlockNumberTaskFragment.java	(revision 9200)
+@@ -54,6 +54,8 @@
+                 ContentValues newValues = new ContentValues();
+                 newValues.put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER,
+                         mNumber);
++				newValues.put(BlockedNumberContract.BlockedNumbers.COLUMN_BLOCK_TYPE,
++                        "callmessage");		
+                 contentResolver.insert(BlockedNumberContract.BlockedNumbers.CONTENT_URI,
+                         newValues);
+                 return true;
+Index: vendor/branch/5058I_ALRU/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058I_ALRU/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 9199)
++++ vendor/branch/5058I_ALRU/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 9200)
+@@ -723,4 +723,4 @@
+ MTK_FULLSCREEN_SWITCH_SUPPORT = yes
+ TCL_LED_SUPPORT = no
+ OP01SOUNDRECORDER_APP = yes
+-BOOT_DEFAULT_LOCALE_BY_SIM = yes
+\ No newline at end of file
++CUSTOM_CONTACTS_PERMISSION = yes
+\ No newline at end of file
+Index: vendor/branch/5058I_ALRU/frameworks/base/core/java/android/provider/BlockedNumberContract.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/core/java/android/provider/BlockedNumberContract.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/frameworks/base/core/java/android/provider/BlockedNumberContract.java	(revision 9200)
+@@ -207,6 +207,11 @@
+          * <p>TYPE: String</p>
+          */
+         public static final String COLUMN_E164_NUMBER = "e164_number";
++		
++		/**
++		* the type of the block number:call, message, callmessage;
++		*/
++		public static final String COLUMN_BLOCK_TYPE = "block_type";
+     }
+ 
+     /** @hide */
+@@ -227,7 +232,7 @@
+ 
+     /** @hide */
+     public static final String RES_CAN_BLOCK_NUMBERS = "can_block";
+-
++	
+     /**
+      * Returns whether a given number is in the blocked list.
+      *
+@@ -283,6 +288,7 @@
+         return res != null && res.getBoolean(RES_CAN_BLOCK_NUMBERS, false);
+     }
+ 
++	
+     /**
+      * <p>
+      * The contract between the blockednumber provider and the system.
+@@ -313,12 +319,16 @@
+ 
+         public static final String METHOD_GET_BLOCK_SUPPRESSION_STATUS =
+                 "get_block_suppression_status";
+-
++		
+         public static final String RES_IS_BLOCKING_SUPPRESSED = "blocking_suppressed";
+ 
+         public static final String RES_BLOCKING_SUPPRESSED_UNTIL_TIMESTAMP =
+                 "blocking_suppressed_until_timestamp";
+-
++		
++		public static final String METHOD_GET_BLOCK_NUMBER_TYPE = "get_block_number_type";
++	
++		public static final String RES_BLOCK_TYPE = "block_type";
++		
+         /**
+          * Notifies the provider that emergency services were contacted by the user.
+          * <p> This results in {@link #shouldSystemBlockNumber} returning {@code false} independent
+@@ -351,7 +361,14 @@
+                     AUTHORITY_URI, METHOD_SHOULD_SYSTEM_BLOCK_NUMBER, phoneNumber, null);
+             return res != null && res.getBoolean(RES_NUMBER_IS_BLOCKED, false);
+         }
+-
++		
++		public static String getBlockNumberType(Context context, String phoneNumber) {
++			final Bundle res = context.getContentResolver().call(
++					AUTHORITY_URI, METHOD_GET_BLOCK_NUMBER_TYPE, phoneNumber, null);
++			String type = res.getString(RES_BLOCK_TYPE, null);		
++			return type;
++		}
++		
+         /**
+          * Returns the current status of block suppression.
+          */
+Index: vendor/branch/5058I_ALRU/frameworks/opt/telephony/src/java/com/android/internal/telephony/BlockChecker.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/opt/telephony/src/java/com/android/internal/telephony/BlockChecker.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/frameworks/opt/telephony/src/java/com/android/internal/telephony/BlockChecker.java	(revision 9200)
+@@ -27,6 +27,7 @@
+                 Rlog.d(TAG, phoneNumber + " is blocked.");
+                 isBlocked = true;
+             }
++			
+         } catch (Exception e) {
+             Rlog.e(TAG, "Exception checking for blocked number: " + e);
+         }
+@@ -37,4 +38,16 @@
+         }
+         return isBlocked;
+     }
++	
++	public static String getBlockNumberType(Context context, String phoneNumber) {
++		String type = null;
++		try {
++			type = BlockedNumberContract.SystemContract.getBlockNumberType(context, phoneNumber);
++			Rlog.d(TAG, "block type:" + type);
++		} catch (Exception e) {
++			Rlog.e(TAG, "Exception checking for get block type: " + e);
++		}
++		return type;		
++	}
++	
+ }
+Index: vendor/branch/5058I_ALRU/frameworks/opt/telephony/src/java/com/android/internal/telephony/InboundSmsHandler.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/opt/telephony/src/java/com/android/internal/telephony/InboundSmsHandler.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/frameworks/opt/telephony/src/java/com/android/internal/telephony/InboundSmsHandler.java	(revision 9200)
+@@ -1024,9 +1024,13 @@
+         }
+ 
+         if (BlockChecker.isBlocked(mContext, tracker.getAddress())) {
+-            deleteFromRawTable(tracker.getDeleteWhere(), tracker.getDeleteWhereArgs(),
+-                    DELETE_PERMANENTLY);
+-            return false;
++			String type = BlockChecker.getBlockNumberType(mContext, tracker.getAddress());
++			log("BLCOK THE MESSAGE:"+type);
++			if (!TextUtils.isEmpty(type) && type.contains("message")) {	
++				deleteFromRawTable(tracker.getDeleteWhere(), tracker.getDeleteWhereArgs(),
++				DELETE_PERMANENTLY);
++				return false;
++			}           
+         }
+ 
+         boolean filterInvoked = filterSms(
+@@ -2048,10 +2052,13 @@
+             if (BlockChecker.isBlocked(mContext, smsTracker.getAddress())) {
+                 log("dispatchConcateSmsParts: block phone number, number = "
+                         + smsTracker.getAddress());
+-                mConcatenatedSmsFwkExt.deleteExistedSegments(record);
+-                deleteFromRawTable(smsTracker.getDeleteWhere(), smsTracker.getDeleteWhereArgs(),
+-                        DELETE_PERMANENTLY);
+-                return false;
++				String type = BlockChecker.getBlockNumberType(mContext, smsTracker.getAddress());
++				if (!TextUtils.isEmpty(type) && type.contains("message")) {
++					mConcatenatedSmsFwkExt.deleteExistedSegments(record);
++					deleteFromRawTable(smsTracker.getDeleteWhere(), smsTracker.getDeleteWhereArgs(),
++							DELETE_PERMANENTLY);
++					return false;
++				}                
+             }
+             if (pdus != null && pdus.length > 0) {
+                 int flag = mConcatenatedSmsFwkExt.getUploadFlag(record);
+Index: vendor/branch/5058I_ALRU/frameworks/opt/telephony/src/java/com/android/internal/telephony/WapPushOverSms.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/opt/telephony/src/java/com/android/internal/telephony/WapPushOverSms.java	(revision 9199)
++++ vendor/branch/5058I_ALRU/frameworks/opt/telephony/src/java/com/android/internal/telephony/WapPushOverSms.java	(revision 9200)
+@@ -41,6 +41,7 @@
+ import android.os.ServiceManager;
+ import android.os.UserHandle;
+ import android.os.UserManager;
++import android.text.TextUtils;
+ import android.provider.Telephony;
+ import android.provider.Telephony.Sms.Intents;
+ import android.telephony.Rlog;
+@@ -274,8 +275,12 @@
+                 final NotificationInd nInd = (NotificationInd) parsedPdu;
+                 if (nInd.getFrom() != null
+                         && BlockChecker.isBlocked(mContext, nInd.getFrom().getString())) {
+-                    result.statusCode = Intents.RESULT_SMS_HANDLED;
+-                    return result;
++					if (DBG) Rlog.d(TAG,"BLCOK THE MESSAGE");
++					String type = BlockChecker.getBlockNumberType(mContext, nInd.getFrom().getString());
++					if (!TextUtils.isEmpty(type) && type.contains("message")) {		
++						result.statusCode = Intents.RESULT_SMS_HANDLED;
++						return result;
++					}
+                 }
+             }
+ 

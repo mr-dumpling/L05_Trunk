@@ -1,0 +1,100 @@
+Index: device/mediatek/common/sepolicy/basic/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/basic/system_app.te	(revision 2481)
++++ device/mediatek/common/sepolicy/basic/system_app.te	(revision 2482)
+@@ -46,4 +46,7 @@
+ allow system_app protect_f_data_file:dir create_dir_perms;
+ allow system_app protect_f_data_file:file create_file_perms;
+ 
+-allow system_app flashlight_test_device:chr_file rw_file_perms;
+\ No newline at end of file
++allow system_app flashlight_test_device:chr_file rw_file_perms;
++
++allow system_app nvdata_file:dir { open read write getattr search add_name};
++allow system_app nvdata_file:file { create open read write getattr};
+Index: device/mediatek/common/sepolicy/full/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/full/system_app.te	(revision 2481)
++++ device/mediatek/common/sepolicy/full/system_app.te	(revision 2482)
+@@ -159,3 +159,5 @@
+ # Operation : SQC
+ # Purpose : allow AT tool to do aee command
+ allow system_app debuggerd_socket:unix_stream_socket connectto;
++allow system_app nvdata_file:dir { open read write getattr search add_name};
++allow system_app nvdata_file:file { create open read write getattr};
+Index: device/mediatek/common/sepolicy/bsp/system_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/bsp/system_app.te	(revision 2481)
++++ device/mediatek/common/sepolicy/bsp/system_app.te	(revision 2482)
+@@ -127,3 +127,5 @@
+ allow system_app mtk_thermal_config_prop:file { getattr open read };
+ allow system_app mtk_thermal_config_prop:property_service set;
+ allow system_app dtv_device:chr_file { read write ioctl open };
++allow system_app nvdata_file:dir { open read write getattr search add_name};
++allow system_app nvdata_file:file {create open read write getattr};
+Index: packages/apps/Settings/src/com/android/settings/BootedReceiver.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/BootedReceiver.java	(revision 2481)
++++ packages/apps/Settings/src/com/android/settings/BootedReceiver.java	(revision 2482)
+@@ -12,6 +12,7 @@
+ import android.os.IBinder;
+ import android.os.ServiceManager;
+ import java.io.IOException;
++import java.io.RandomAccessFile;
+ 
+ /**
+  * Created by Administrator on 2017/8/26.
+@@ -98,29 +99,48 @@
+         return flag;
+     }
+ 
+-    private void writeToNv(){
+-        byte[] buff = null;
++    /*
++    private void writeToNv() {
++        byte[] buff = new byte[2097152 + 16];
++        byte[] readBuff = null;
+         byte[] writeBuff = {'1', '0', '9', 'f', '1', '0', 'e', 'e', 'd', '3', 'f', '0', '2', '1', 'e', '3'};
+ 
+         IBinder binder = ServiceManager.getService("NvRAMAgent");
+         NvRAMAgent agent = NvRAMAgent.Stub.asInterface(binder);
+-
++        
++        
+         try {
+-            buff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
++            readBuff = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
+         } catch (Exception e) {
+             e.printStackTrace();
+             return ;
+         }
+ 
++        System.arraycopy(readBuff, 0, buff, 0, readBuff.length);
+         for(int i = 0 ; i < writeBuff.length; i++){
+             buff[2097152 + i] = (byte)writeBuff[i];
+         }
+ 
+         try {
+-            agent.writeFileByName(PRODUCT_INFO_NVRAM_PATH, buff);
++            agent.writeFileByName(PRODUCT_INFO_NVRAM_PATH + , buff);
+         } catch (Exception e) {
+             e.printStackTrace();
+             return ;
+         }
+     }
++    */
++    
++    private void writeToNv() {
++        try {
++            byte[] writeBuff = {'1', '0', '9', 'f', '1', '0', 'e', 'e', 'd', '3', 'f', '0', '2', '1', 'e', '3'};
++            RandomAccessFile randomFile = new RandomAccessFile(PRODUCT_INFO_NVRAM_PATH, "rw");
++            long fileLength = randomFile.length();
++            randomFile.seek(2097152);
++            randomFile.writeBytes(String.valueOf(writeBuff));
++            randomFile.close();
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++    
+ }

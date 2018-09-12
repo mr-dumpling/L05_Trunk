@@ -1,0 +1,48 @@
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 4996)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 4997)
+@@ -207,7 +207,7 @@
+ 		// add by dongdongli for 112587	20171114 start 
+ 		private static Context mContext;
+ 		// add by dongdongli for 112587	 20171114 end
+-		
++		private static boolean mIsLastOne=false;
+         private AuthenticationCallback mAuthCallback = new AuthenticationCallback() {
+             @Override
+             public void onAuthenticationSucceeded(AuthenticationResult result) {
+@@ -402,14 +402,10 @@
+ 			mFingerprintsCategory = (PreferenceGroup)root.findPreference(KEY_FINGERPRINTS_ITEM_CATEGORY);
+ 			mFingerprintsCategory.setTitle(reNameFingerprintsCategory());
+ 			
+-			if(mFingerprintManager.getEnrolledFingerprints(mUserId).size()>=1){
+-				/*Settings.System.putInt(mContext.getContentResolver(),
+-                        Settings.System.FINGERPRINTS_UNCLOCK_DEVICE,1);*/
+-				if(Settings.System.getInt(mContext.getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 1) == 0) {
+-					mUnclockPreference.setChecked(false);
+-				} else {
+-					mUnclockPreference.setChecked(true);
+-				}				
++			if(mFingerprintManager.getEnrolledFingerprints(mUserId).size()>=1 && mIsLastOne ){
++				Settings.System.putInt(mContext.getContentResolver(),
++                        Settings.System.FINGERPRINTS_UNCLOCK_DEVICE,1);
++				mUnclockPreference.setChecked(true);
+ 			}
+             addFingerprintItemPreferences(mFingerprintsCategory);
+ 
+@@ -558,6 +554,7 @@
+ 					//show dialog
+ 					//mUnclockPreference.setChecked(!onOrOff);
+ 					showDialog(preference,onOrOff,CLOSE_UNLOCK_AND_FUNC_TYPE);
++					mIsLastOne=false;
+ 				}else{
+ 					updateVaule(onOrOff,CLOSE_UNLOCK_AND_FUNC_TYPE);
+ 				}
+@@ -793,6 +790,7 @@
+ 		private void deleteLastFingerPrint() {
+ 			Settings.System.putInt(mContext.getContentResolver(), Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 0);
+ 			mUnclockPreference.setChecked(false);
++			mIsLastOne=true;
+ 			Settings.System.putInt(mContext.getContentResolver(),
+                         Settings.System.FINGERPRINTS_FUNCTION_SETTING, 0);
+ 			mFunctionShortcut.setChecked(false); 

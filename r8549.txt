@@ -1,0 +1,274 @@
+Index: device/mediatek/common/device.mk
+===================================================================
+--- device/mediatek/common/device.mk	(revision 8548)
++++ device/mediatek/common/device.mk	(revision 8549)
+@@ -3232,5 +3232,5 @@
+ endif
+ 
+ ifeq ($(strip $(TCT_DIAGNOSTIC)), yes)
+-   PRODUCT_PROPERTY_OVERRIDES += ro.tct_diagnostic=1
++   PRODUCT_PROPERTY_OVERRIDES += ro.tct.diagnostic=1
+ endif
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 8548)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 8549)
+@@ -3573,5 +3573,16 @@
+         <service android:name=".WakeService"
+ 		android:exported="true"
+ 		android:permission="android.permission.WAKE_LOCK" />
++
++        <activity android:name="com.mediatek.setupwizard.EndActivity"
++            android:label="@string/settings_label"
++            android:launchMode="singleTop"
++            android:theme="@style/SetupWizardTheme.Light">
++            <intent-filter>
++                <action android:name="com.android.setupwizard.OEM_POST_SETUP" />
++
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
+     </application>
+ </manifest>
+Index: packages/apps/Settings/src/com/mediatek/setupwizard/EndActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/mediatek/setupwizard/EndActivity.java	(revision 0)
++++ packages/apps/Settings/src/com/mediatek/setupwizard/EndActivity.java	(revision 8549)
+@@ -0,0 +1,120 @@
++package com.mediatek.setupwizard;
++
++import android.app.Activity;
++import android.content.Intent;
++import android.os.Bundle;
++import android.view.View;
++import android.widget.Button;
++import com.android.settings.R;
++import android.provider.Settings;
++import android.content.ComponentName;
++import android.widget.CheckBox;
++import android.widget.CompoundButton;
++import android.text.SpannableString;
++import android.text.Spanned;
++import android.text.TextPaint;
++import android.text.method.LinkMovementMethod;
++import android.text.style.ClickableSpan;
++import android.os.SystemProperties;
++import android.util.Log;
++
++public class EndActivity extends Activity {
++    private Button button;
++    private CheckBox cbInformedConsent;
++    private CheckBox cbInformedConsentLoc;
++    private View.OnClickListener termsListener = new View.OnClickListener() {
++        @Override
++        public void onClick(View v) {
++            Intent intent = new Intent(Intent.ACTION_MAIN);
++            ComponentName componentName = new ComponentName("com.tct.diagnostics", "com.tct.diagnostics.ui.TermsAndConditionActivity");
++            intent.setComponent(componentName);
++            startActivity(intent);
++        }
++    };
++
++    private View.OnClickListener privacyListener = new View.OnClickListener() {
++        @Override
++        public void onClick(View v) {
++            Intent intent = new Intent(Intent.ACTION_MAIN);
++            ComponentName componentName = new ComponentName("com.tct.diagnostics", "com.tct.diagnostics.ui.PrivacyPolicyActivity");
++            intent.setComponent(componentName);
++            startActivity(intent);
++        }
++    };
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.activity_end);
++        if(isDiagnosticProject() && getResources().getBoolean(R.bool.def_show_diagnostics)) {
++            cbInformedConsent = (CheckBox) findViewById(R.id.cb_informed_consent);
++            cbInformedConsent.setVisibility(View.VISIBLE);
++            SpannableString ss = new SpannableString(cbInformedConsent.getText());
++            String privacy = getString(R.string.privacy_policy);
++            String terms = getString(R.string.terms);
++            int privacyStart = cbInformedConsent.getText().toString().indexOf(privacy);
++            int termsStart = cbInformedConsent.getText().toString().indexOf(terms);
++            ss.setSpan(new Clickable(privacyListener), privacyStart, privacyStart + privacy.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
++            ss.setSpan(new Clickable(termsListener), termsStart, termsStart + terms.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
++            cbInformedConsent.setText(ss);
++            cbInformedConsent.setMovementMethod(LinkMovementMethod.getInstance());
++            cbInformedConsent.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
++                @Override
++                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
++                    Settings.Global.putInt(getContentResolver(), "def.diagnostic.on", isChecked ? 1:0);
++                }
++            });
++            cbInformedConsent.setChecked(getResources().getBoolean(R.bool.def_auto_open_Diagnostics));
++            cbInformedConsentLoc = (CheckBox) findViewById(R.id.cb_informed_consent_location);
++            cbInformedConsentLoc.setVisibility(View.VISIBLE);
++            cbInformedConsentLoc.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
++                @Override
++                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
++                    Settings.Global.putInt(getContentResolver(), "def.share.location.on", isChecked ? 1:0);
++                }
++            });
++        }
++        button = (Button) findViewById(R.id.next_button);
++        button.setOnClickListener(new View.OnClickListener() {
++            @Override
++            public void onClick(View view) {
++                Log.d("lancelot","22222222222222222222222222222");
++                returnToGoogleSetupWizard();
++            }
++        });
++    }
++
++    private boolean isDiagnosticProject() {
++        return "1".equals(SystemProperties.get("ro.tct.diagnostic"));
++    }
++
++    private void returnToGoogleSetupWizard() {
++        Log.d("lancelot","returnToGoogleSetupWizard");
++        Intent i = new Intent("com.android.wizard.NEXT");
++        i.putExtra("scriptUri", getIntent().getStringExtra("scriptUri"));
++        i.putExtra("actionId", getIntent().getStringExtra("actionId"));
++        i.putExtra("theme", getIntent().getStringExtra("theme"));
++        i.putExtra("com.android.setupwizard.ResultCode", Activity.RESULT_OK);
++        startActivityForResult(i, 1000);
++    }
++
++    //lance add for Diagnostic @{
++    class Clickable extends ClickableSpan {
++        private final View.OnClickListener mListener;
++
++        Clickable(View.OnClickListener mListener) {
++            this.mListener = mListener;
++        }
++
++        @Override
++        public void onClick(View view) {
++            mListener.onClick(view);
++        }
++
++        @Override
++        public void updateDrawState(TextPaint ds) {
++            ds.setColor(getResources().getColor(R.color.colorWelcomeText));
++        }
++    }
++	// @}
++}
+\ No newline at end of file
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 8548)
++++ packages/apps/Settings/res/values/strings.xml	(revision 8549)
+@@ -7940,5 +7940,11 @@
+     <string name="data_follow_service_summary">Set mobile data to the selected SIM card once default 4G/3G SIM card is changed</string>
+     <string name="sim_service_data_title">3G/4G service</string>
+     <string name="sim_service_data_mode_off">OFF</string>
+-    <!--end:Add for 3G/4G service feature -->
++    <!--end:Add for 3G/4G service feature -->
++    <string name="informed_consent_text">Help improve your device by sending anonymous diagnostics and usage data.By selecting this checkbox you agree to our Privacy policy and Terms of Service</string>
++    <string name="informed_consent_location">Include my location</string> 
++    <string name="privacy_policy">Privacy policy</string>
++    <string name="terms">Terms</string>
++    <string name="setup_complete">Setup Completed</string>
++    <string name="setup_complete_text">Your phone is set up and ready to use</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- packages/apps/Settings/res/values/bools.xml	(revision 8548)
++++ packages/apps/Settings/res/values/bools.xml	(revision 8549)
+@@ -56,4 +56,6 @@
+ 	<bool name="config_remove_snooze_enabled">false</bool>
+ 
+     <bool name="def_settings_informed_consent_show">true</bool>
++    <bool name="def_show_diagnostics">true</bool>
++    <bool name="def_auto_open_Diagnostics">true</bool>
+ </resources>
+Index: packages/apps/Settings/res/values/colors.xml
+===================================================================
+--- packages/apps/Settings/res/values/colors.xml	(revision 8548)
++++ packages/apps/Settings/res/values/colors.xml	(revision 8549)
+@@ -189,4 +189,5 @@
+     <color name="face_image_selector_pressed">#0D000000</color>
+     <color name="gray_light">#f1f1f1</color>
+     <color name="ic_default_actionbar_back_btn_background_color">#B3000000</color>
++    <color name="colorWelcomeText">#FF2E76FC</color>
+ </resources>
+Index: packages/apps/Settings/res/values-zh-rCN/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 8548)
++++ packages/apps/Settings/res/values-zh-rCN/strings.xml	(revision 8549)
+@@ -3424,4 +3424,10 @@
+     <string name="informed_consent">体验改善</string>
+     <string name="informed_consent_on">开</string>
+     <string name="informed_consent_off">关</string>
++    <string name="informed_consent_text">通过发送匿名诊断和使用数据帮助改进您的设备。通过选择此复选框，您同意我们的隐私政策和服务条款</string>
++    <string name="informed_consent_location">位置信息</string> 
++    <string name="privacy_policy">隐私政策</string>
++    <string name="terms">服务条款</string>
++    <string name="setup_complete">设置已完成</string>
++    <string name="setup_complete_text">您的手机已经设置完成，可以使用了</string>
+ </resources>
+Index: packages/apps/Settings/res/layout/activity_end.xml
+===================================================================
+--- packages/apps/Settings/res/layout/activity_end.xml	(revision 0)
++++ packages/apps/Settings/res/layout/activity_end.xml	(revision 8549)
+@@ -0,0 +1,56 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_height="match_parent"
++    android:layout_width="match_parent"
++    android:orientation="vertical">
++
++    <TextView
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:paddingTop="64dp"
++        android:gravity="center"
++        android:text="@string/setup_complete"
++        android:textColor="@color/colorWelcomeText"
++        android:textSize="40sp"
++        />
++    <TextView
++        android:layout_width="240dp"
++        android:layout_height="wrap_content"
++        android:layout_gravity="center"
++        android:gravity="center"
++        android:paddingTop="32dp"
++        android:textColor="@color/colorWelcomeText"
++        android:text="@string/setup_complete_text"
++        android:textSize="20sp"
++        />
++    <CheckBox
++        android:id="@+id/cb_informed_consent"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:visibility="gone"
++        android:paddingTop="32dp"
++        android:text="@string/informed_consent_text"
++        />
++
++    <CheckBox
++        android:id="@+id/cb_informed_consent_location"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:visibility="gone"
++        android:text="@string/informed_consent_location"
++        />
++    <RelativeLayout android:layout_height="wrap_content"
++        android:layout_weight="0"
++        android:padding="10dip"
++        android:layout_width="fill_parent">
++
++        <Button android:id="@+id/next_button"
++            style="@style/SetupWizardButton.Positive"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_alignParentEnd="true"
++            android:text="@string/finish_button_label"
++            />
++    </RelativeLayout>
++
++</LinearLayout>
+\ No newline at end of file

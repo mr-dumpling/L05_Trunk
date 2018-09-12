@@ -1,0 +1,57 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 7187)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 7188)
+@@ -2578,16 +2578,18 @@
+         }
+         
+         //Begin added by zengjie for XR5429900 on 11/2/17
+-        final boolean  mHasJoyWallpaper = JoyLscreenProxy.getLScreen().getPictorialEnable();
+-        mShouldCustomLockWallpaper = shouldCustomLockscreenWallpaper(mContext);
+-         if  (mHasJoyWallpaper && !mShouldCustomLockWallpaper){
+-            try{
+-                Bitmap  mJoyWallpaper = JoyLscreenProxy.getLScreen().getPictorialBitmap();
+-                if (mJoyWallpaper != null){
++        if(SystemProperties.getBoolean("ro.tcl.lscreen", false)) {
++            final boolean  mHasJoyWallpaper = JoyLscreenProxy.getLScreen().getPictorialEnable();
++            mShouldCustomLockWallpaper = shouldCustomLockscreenWallpaper(mContext);
++            if (mHasJoyWallpaper && !mShouldCustomLockWallpaper){
++                try{
++                    Bitmap  mJoyWallpaper = JoyLscreenProxy.getLScreen().getPictorialBitmap();
++                    if (mJoyWallpaper != null){
+                             artworkDrawable = new BitmapDrawable(mJoyWallpaper);
++                    }
++                }catch (Exception e){
++                    Log.w(TAG, "Can't get PictorialBitmap", e);
+                 }
+-            }catch (Exception e){
+-                Log.w(TAG, "Can't get PictorialBitmap", e);
+             }
+         }
+         //End added by zengjie for XR5429900 on 11/2/17
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 7187)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 7188)
+@@ -2393,14 +2393,18 @@
+                 boolean wasGone = entry.row.getVisibility() == View.GONE;
+                 //entry.row.setVisibility(View.VISIBLE);
+                 //Begin modified by zengjie for XR5607393 on 11/21/17
++                if (SystemProperties.getBoolean("ro.tcl.lscreen", false)) {
+                     //entry.row.setVisibility(View.VISIBLE);
+-                    if (!onKeyguard && SystemProperties.getBoolean("ro.tcl.lscreen", false)) {
++                    if (!onKeyguard) {
+                         entry.row.setVisibility(View.VISIBLE);
+                     }else {
+                         entry.row.setVisibility(View.GONE);
+                     }
+-                    //End modified by zengjie for XR5607393 on 11/21/17
+-				if (!childNotification && !entry.row.isRemoved()) {
++                } else {
++                  	entry.row.setVisibility(View.VISIBLE);
++                }
++                //End modified by zengjie for XR5607393 on 11/21/17
++                if (!childNotification && !entry.row.isRemoved()) {
+                     if (wasGone) {
+                         // notify the scroller of a child addition
+                         mStackScroller.generateAddAnimation(entry.row,

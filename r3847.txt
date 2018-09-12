@@ -1,0 +1,197 @@
+Index: packages/apps/Settings/src/com/android/settings/LockScreenSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/LockScreenSettings.java	(revision 3846)
++++ packages/apps/Settings/src/com/android/settings/LockScreenSettings.java	(revision 3847)
+@@ -49,6 +49,7 @@
+ 
+     private static final String TAG = "LockScreenSettings";
+     private static final String PREF_KEY_FUNCTION_SETTINGS = "fun_setting";
++    public static final String SETTINGS_FUNC_ENABLED = "isFuncOn"; //lance modify for Diagnostic
+ 	private Preference mFunctionPreference;
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+@@ -84,7 +85,7 @@
+         return MetricsEvent.SETTINGS_GESTURES;
+     }
+ 	private void updateSummary(){
+-		String func_switch=Settings.System.getString(getContentResolver(),"func_switch");
++		String func_switch=Settings.System.getString(getContentResolver(), SETTINGS_FUNC_ENABLED);//lance modify for Diagnostic
+ 		if(func_switch==null){
+ 			func_switch="false";}
+ 		if(func_switch.equals("true")){
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 3846)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 3847)
+@@ -39,7 +39,10 @@
+     public static final String CONTANCTS_URI = "contacts_uri";
+     public static final String CONTACTS="com.android.contacts";
+     public static final String MUSIC = "com.android.music";
+-    public static final String FUNC_SWITCH = "func_switch";
++	//lance modify for Diagnostic @{
++    public static final String SETTINGS_FUNC_ENABLED = "isFuncOn"; 
++    public static final String SETTINGS_FUNC_SHORTS = "choosed_list";
++	// @}
+     public static final String TORCH="com.google.torch";
+     public static final int DEFAULT_APPS_TITLE_INDEX = 0;
+     public static final int DEFAULT_APPS = 1;
+@@ -269,6 +272,7 @@
+         }
+         return intent;
+     }
++
+ 	public static List<AppInfo> getData(Context context){
+ 		list = new ArrayList<>();
+         DBManager manager = new DBManager(context);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 3846)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 3847)
+@@ -19,6 +19,12 @@
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.List;
++//lance modify for Diagnostic @{
++import android.provider.Settings;
++import org.json.JSONArray;
++import org.json.JSONException;
++import org.json.JSONObject;
++// @}
+ 
+ /**
+  * Created by Administrator on 2017/8/29.
+@@ -140,7 +146,7 @@
+                             // modify for 110918 by dongdongli 20171115 end }
+                         }
+                     }
+-                    
++                    updateFuncShorts(); //lance modify for Diagnostic
+                 }
+             });
+             holder.edit_icon.setOnClickListener(new View.OnClickListener() {
+@@ -188,6 +194,29 @@
+ 
+     }
+ 
++    //lance modify for Diagnostic @{
++    public void updateFuncShorts() {
++        JSONObject root = new JSONObject();
++        JSONArray jsonArray = new JSONArray();
++        int id = 0;
++        try {
++            for(AppInfo appinfo:data) {
++                if (isInDefaultAppInfoList(appinfo.getPackerName())) {
++                    android.util.Log.d("lancelot", "appinfo:" + appinfo.getPackerName());
++                    JSONObject obj = new JSONObject();
++                    obj.put("id", id++);
++                    obj.put("name", appinfo.getAppName());
++                    obj.put("mainclassName", appinfo.getPackerName());
++                    jsonArray.put(obj);
++                }
++            }
++            root.put("objlist", jsonArray);
++            Settings.System.putString(mContext.getContentResolver(), AppUtils.SETTINGS_FUNC_SHORTS, root.toString());
++        } catch (JSONException e) {
++            e.printStackTrace();
++        }
++    }
++    // @}
+ 
+     public void deleteData(int pos) {
+         AppInfo info = data.get(pos);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 3846)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncSettings.java	(revision 3847)
+@@ -75,12 +75,12 @@
+                     mFuncSwitch.setText(getString(R.string.func_on));
+                     funcSettingList.setVisibility(View.VISIBLE);
+                     switchOff.setVisibility(View.GONE);
+-					Settings.System.putString(getContentResolver(),AppUtils.FUNC_SWITCH,"true");
++					Settings.System.putString(getContentResolver(),AppUtils.SETTINGS_FUNC_ENABLED,"true");
+                 } else {
+                     mFuncSwitch.setText(getString(R.string.func_off));
+                     funcSettingList.setVisibility(View.GONE);
+                     switchOff.setVisibility(View.VISIBLE);
+-					Settings.System.putString(getContentResolver(),AppUtils.FUNC_SWITCH,"false");
++					Settings.System.putString(getContentResolver(),AppUtils.SETTINGS_FUNC_ENABLED,"false");
+                 }
+             }
+         });
+@@ -100,7 +100,7 @@
+  
+         funcSettingList = (RecyclerView) findViewById(R.id.func_setting_recycler);
+         funcSettingList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+-		String func_switch=Settings.System.getString(getContentResolver(),AppUtils.FUNC_SWITCH);
++		String func_switch=Settings.System.getString(getContentResolver(),AppUtils.SETTINGS_FUNC_ENABLED);
+ 		if(func_switch==null){
+ 			func_switch="false";}
+ 		if(func_switch.equals("true")){
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 3846)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 3847)
+@@ -107,6 +107,11 @@
+ import android.graphics.Bitmap;
+ import android.graphics.drawable.BitmapDrawable;
+ import android.net.Uri;
++//lance modify for Diagnostic @{
++import android.content.ContentProviderClient;
++import android.content.ContentValues;
++//@}
++
+ /**
+  * Implementation for the bottom area of the Keyguard, including camera/phone affordance and status
+  * text.
+@@ -317,7 +322,7 @@
+ 		mLeftAffordanceView.setVisibility(View.GONE);
+ 		mCameraImageView.setVisibility(View.GONE);
+         
+-		String func_switch=Settings.System.getString(mContext.getContentResolver(),AppUtils.FUNC_SWITCH);
++		String func_switch=Settings.System.getString(mContext.getContentResolver(),AppUtils.SETTINGS_FUNC_ENABLED);
+ 		if(func_switch==null){
+ 			func_switch="false";
+ 		}
+@@ -1054,7 +1059,7 @@
+                     } else {
+                    
+                         packagerName = list.get(index).getPackerName();
+-						
++						saveUsageToDiagnostics(packagerName); //lance modify for Diagnostic
+                         if (packagerName.equals(CAMERA)) {
+ 							// modify by dongdongli for 112586 20171114 start {
+ 							launchCamera(CAMERA_LAUNCH_SOURCE_AFFORDANCE);
+@@ -1110,6 +1115,33 @@
+         }
+     }
+ 	
++	//lance modify for Diagnostic @{
++    private void saveUsageToDiagnostics(String packageName) {
++        final String SCHEME = "content";
++        final String AUTHORITY = "com.tct.diagnostics.provider.diagnosticsinfo";
++        final String TABLE_NAME = "diagnostics";
++        final Uri CONTENT_URI = new Uri.Builder().scheme(SCHEME)
++                       .authority(AUTHORITY).path(TABLE_NAME).build();
++        ContentValues values = new ContentValues();
++        values.put("action","ADD");
++        values.put(("FUNC_TOTAL_" + packageName.replace(".", "_")).toUpperCase(),1);
++        ContentProviderClient provider = mContext.getContentResolver().acquireUnstableContentProviderClient(AUTHORITY);
++        try {
++            if(provider!=null){
++                provider.update(CONTENT_URI, values, null, null);
++            }
++         } catch (IllegalArgumentException e) {
++             Log.d("Shortcuts","llegalArgumentException Exception: " + e);
++        } catch (RemoteException e) {
++             Log.d("Shortcuts", "write2DB() RemoteException Exception: " + e);
++         } finally {
++             if(provider!=null){
++               provider.release();
++            }
++         }
++    }
++	// @}
++
+ 	private void changeTorchMode(boolean isChecked) {	
+ 		mFlashlightController.setFlashlight(isChecked);
+ 

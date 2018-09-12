@@ -1,0 +1,57 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 13677)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 13678)
+@@ -872,6 +872,7 @@
+                     break;
+                 case MSG_NO_FACE_VERITY:
+ 					if(keyguardOn()){
++						exitFaceVerify();
+ 						executeFaceVerifyTimeout();
+ 					}
+                     break;
+Index: frameworks/av/services/camera/libcameraservice/utils/ClientManager.h
+===================================================================
+--- frameworks/av/services/camera/libcameraservice/utils/ClientManager.h	(revision 13677)
++++ frameworks/av/services/camera/libcameraservice/utils/ClientManager.h	(revision 13678)
+@@ -414,15 +414,20 @@
+         bool conflicting = (curKey == key || i->isConflicting(key) ||
+                 client->isConflicting(curKey));
+ 
++
++				
+         if (!returnIncompatibleClients) {
+             // Find evicted clients
+ 
+-            if (conflicting && curPriority > priority) {
++			if (strcmp("com.android.systemui", String8{i->getValue()->getPackageName()}.string()) == 0){ 
++                evictList.push_back(i);
++            }else{
++				if (conflicting && curPriority > priority) {
+                 // Pre-existing conflicting client with higher priority exists
+-                evictList.clear();
+-                evictList.push_back(client);
+-                return evictList;
+-            } else if (conflicting || ((totalCost > mMaxCost && curCost > 0) &&
++					evictList.clear();
++					evictList.push_back(client);
++					return evictList;
++				} else if (conflicting || ((totalCost > mMaxCost && curCost > 0) &&
+                     (curPriority <= priority) &&
+                     !(highestPriorityOwner == owner && owner == curOwner))) {
+                 // Add a pre-existing client to the eviction list if:
+@@ -431,9 +436,11 @@
+                 //   maximum, and the client has a non-zero cost, lower priority, and a different
+                 //   owner than the incoming client when the incoming client has the
+                 //   highest priority.
+-                evictList.push_back(i);
+-                totalCost -= curCost;
+-            }
++					evictList.push_back(i);
++					totalCost -= curCost;
++				}
++			}
++
+         } else {
+             // Find clients preventing the incoming client from being added
+ 

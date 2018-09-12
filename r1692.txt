@@ -1,0 +1,88 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/LockIcon.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/LockIcon.java	(revision 1691)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/LockIcon.java	(revision 1692)
+@@ -29,6 +29,9 @@
+ import com.android.systemui.R;
+ import com.android.systemui.statusbar.KeyguardAffordanceView;
+ import com.android.systemui.statusbar.policy.AccessibilityController;
++//add for 110884 by dongdongli 20171120 start
++import android.provider.Settings;
++//add for 110884 by dongdongli 20171120 end
+ 
+ /**
+  * Manages the different states and animations of the unlock icon.
+@@ -156,8 +159,10 @@
+             int iconWidth = getResources().getDimensionPixelSize(
+                     R.dimen.keyguard_affordance_icon_width);
+             // add by dongdongli 20180831 start {
+-			// re-difine the width/height of the LockIcon
+-			if (state == STATE_LOCKED || state == STATE_LOCK_OPEN) {
++			// re-define the width/height of the LockIcon
++			//modify for 110884 by dongdongli 20171120 start
++			if (state == STATE_LOCKED || state == STATE_LOCK_OPEN || (Settings.System.getInt(mContext.getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 0) == 0)) {
++			//add for 110884 by dongdongli 20171120 end
+ 				iconHeight = getResources().getDimensionPixelSize(
+                     R.dimen.keyguard_affordance_customize_icon_height);
+ 				iconWidth = getResources().getDimensionPixelSize(
+@@ -251,11 +256,23 @@
+             case STATE_FINGERPRINT:
+                 // If screen is off and device asleep, use the draw on animation so the first frame
+                 // gets drawn.
+-                return screenOn && deviceInteractive
+-                        ? R.drawable.ic_fingerprint
+-                        : R.drawable.lockscreen_fingerprint_draw_on_animation;
++				//modify for 110884 by dongdongli 20171120 start
++				if(Settings.System.getInt(mContext.getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 0) != 0) {
++					return screenOn && deviceInteractive
++							? R.drawable.ic_fingerprint
++							: R.drawable.lockscreen_fingerprint_draw_on_animation;
++				} else {
++					return R.drawable.unlock_all_animation;
++				}
++				//modify for 110884 by dongdongli 20171120 end
+             case STATE_FINGERPRINT_ERROR:
+-                return R.drawable.ic_fingerprint_error;
++				//modify for 110884 by dongdongli 20171120 start
++				if(Settings.System.getInt(mContext.getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 0) != 0) {
++					return R.drawable.ic_fingerprint_error;
++				} else {
++					return R.drawable.unlock_all_animation;
++				}
++				//modify for 110884 by dongdongli 20171120 end
+             default:
+                 throw new IllegalArgumentException();
+         }
+@@ -264,23 +281,26 @@
+     private int getAnimationResForTransition(int oldState, int newState,
+             boolean oldDeviceInteractive, boolean deviceInteractive,
+             boolean oldScreenOn, boolean screenOn) {
+-        if (oldState == STATE_FINGERPRINT && newState == STATE_FINGERPRINT_ERROR) {
++		//modify for 110884 by dongdongli 20171120 start
++		boolean fingerprintUnlockDevice = Settings.System.getInt(mContext.getContentResolver(),Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 0) == 1;
++        if (oldState == STATE_FINGERPRINT && newState == STATE_FINGERPRINT_ERROR && fingerprintUnlockDevice) {
+             return R.drawable.lockscreen_fingerprint_fp_to_error_state_animation;
+-        } else if (oldState == STATE_LOCK_OPEN && newState == STATE_FINGERPRINT_ERROR) {
++        } else if (oldState == STATE_LOCK_OPEN && newState == STATE_FINGERPRINT_ERROR  && fingerprintUnlockDevice) {
+             return R.drawable.trusted_state_to_error_animation;
+-        } else if (oldState == STATE_FINGERPRINT_ERROR && newState == STATE_LOCK_OPEN) {
++        } else if (oldState == STATE_FINGERPRINT_ERROR && newState == STATE_LOCK_OPEN && fingerprintUnlockDevice) {
+             return R.drawable.error_to_trustedstate_animation;
+-        } else if (oldState == STATE_FINGERPRINT_ERROR && newState == STATE_FINGERPRINT) {
++        } else if (oldState == STATE_FINGERPRINT_ERROR && newState == STATE_FINGERPRINT && fingerprintUnlockDevice) {
+             return R.drawable.lockscreen_fingerprint_error_state_to_fp_animation;
+         } else if (oldState == STATE_FINGERPRINT && newState == STATE_LOCK_OPEN
+-                && !mUnlockMethodCache.isTrusted()) {
++                && !mUnlockMethodCache.isTrusted() && fingerprintUnlockDevice) {
+             return R.drawable.lockscreen_fingerprint_draw_off_animation;
+         } else if (newState == STATE_FINGERPRINT && (!oldScreenOn && screenOn && deviceInteractive
+-                || screenOn && !oldDeviceInteractive && deviceInteractive)) {
++                || screenOn && !oldDeviceInteractive && deviceInteractive) && fingerprintUnlockDevice) {
+             return R.drawable.lockscreen_fingerprint_draw_on_animation;
+         } else {
+             return -1;
+         }
++		//modify for 110884 by dongdongli 20171120 end
+     }
+ 
+     private int getState() {

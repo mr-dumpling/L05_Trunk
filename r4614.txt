@@ -1,0 +1,92 @@
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/dtv/Dtv.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/dtv/Dtv.java	(revision 4613)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/dtv/Dtv.java	(revision 4614)
+@@ -2,6 +2,9 @@
+ 
+ import android.app.Activity;
+ import android.content.Intent;
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.IntentFilter;
+ import android.os.Bundle;
+ import android.view.KeyEvent;
+ import android.view.View;
+@@ -27,6 +30,8 @@
+ 	//private Button succesButton ;
+ 	//private Button failButton ;
+ 	Button bt_base_left, bt_base_right;
++	TextView   dtv_tips ;
++	boolean isplug = false;
+ 	@Override
+ 	protected void onCreate(Bundle savedInstanceState) {
+ 		// TODO Auto-generated method stub
+@@ -40,14 +45,12 @@
+ 		bt_base_left = (Button) findViewById(R.id.bt_base_left);
+ 		bt_base_left.setText(R.string.bt_pass);
+ 		bt_base_left.setOnClickListener(this);
+-	//	bt_base_left.setEnabled(false);
++		bt_base_left.setEnabled(false);
+ 		bt_base_right = (Button) findViewById(R.id.bt_base_right);
+ 		bt_base_right.setText(R.string.bt_fail);
+ 		bt_base_right.setOnClickListener(this);
+-		
+-		Intent intent = new Intent();
+-        intent.setClassName("kr.co.fci.tv", "kr.co.fci.tv.activity.IntroActivity");
+-        startActivity(intent);
++		dtv_tips = (TextView)findViewById(R.id.dtv_tips);
++		dtv_tips.setText("Please plug headset !!! ");	
+ 	
+ 	}
+ 
+@@ -70,6 +73,10 @@
+ 	@Override
+ 	protected void onResume() {
+ 		// TODO Auto-generated method stub
++		IntentFilter filter = new IntentFilter();
++						filter.addAction(Intent.ACTION_TIME_TICK);
++						filter.addAction(Intent.ACTION_HEADSET_PLUG);
++				registerReceiver(mReceiver, filter);
+ 		super.onResume();
+ 	}
+ 
+@@ -113,5 +120,26 @@
+ 		}
+ 		return super.onKeyUp(keyCode, event);
+ 	}
++ private final BroadcastReceiver mReceiver = new BroadcastReceiver() {	
++	@Override  
++	public void onReceive(Context context, Intent intent) {  
++		String action = intent.getAction();  
++		if (action.equals(Intent.ACTION_HEADSET_PLUG)) {  
++			if(intent.hasExtra("state")) {	
++				if(intent.getIntExtra("state", 0) == 0) {  
++					isplug =false;
++				} else if(intent.getIntExtra("state", 0) == 1) {  
++					gototest();
++				}  
++			}  
++		}  
++	}  
++};	
++		public void gototest() {
++				Intent intent = new Intent();
++       				intent.setClassName("kr.co.fci.tv.factory", "kr.co.fci.tv.factory.MainActivity");
++       				startActivityForResult(intent, MMITestDevice.TESTITEM_DTV);
++					finish();
++		}
+ }
+ 
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/audio/Audio.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/audio/Audio.java	(revision 4613)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/audio/Audio.java	(revision 4614)
+@@ -33,7 +33,7 @@
+ 	int count = 0;
+ 	int maxVolume;
+ 	int currentVolume;
+-	private static final int MIC_VALUE = 3;
++	private static final int MIC_VALUE = 4;
+ 	private static final int TEST_VOLUME = 15;
+ 	AudioRecord audioRecord;
+ 	AudioTrack audioTrack;

@@ -1,0 +1,59 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/photomanager/LetterTileProvider.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/photomanager/LetterTileProvider.java	(revision 7156)
++++ vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/photomanager/LetterTileProvider.java	(revision 7157)
+@@ -101,8 +101,10 @@
+         /// M: Draw letter tile for specific first char, or draw a default icon otherwise
+         if (!TextUtils.isEmpty(display)) {
+             final char firstChar = display.charAt(0);
++            /* [issue 19161] Begin, by Chenghui.Dai, 2015-10-22*/
+             if (isEnglishLetterOrDigit(firstChar)
+-                    || isChineseLetter(firstChar)) {
++                    || isChineseLetter(firstChar) || isCyrillicLetter(firstChar)) {
++            /* [issue 19161] End, by Chenghui.Dai, 2015-10-22*/
+                 mFirstChar[0] = Character.toUpperCase(firstChar);
+                 mPaint.setTextSize(
+                         dimensions.fontSize > 0 ? dimensions.fontSize : getFontSize(dimensions.scale));
+@@ -131,6 +133,12 @@
+     private static boolean isChineseLetter(char c) {
+         return (0x4E00 <= c && c <= 0x9FBF);
+     }
++    
++    /* [issue 19161] Begin, by Chenghui.Dai, 2015-10-22*/ 
++    private static boolean isCyrillicLetter(char c) {
++        return (0x0400 <= c && c <= 0x052F);
++    }
++    /* [issue 19161] End, by Chenghui.Dai, 2015-10-22*/ 
+ 
+     private Bitmap getBitmap(final Dimensions d, boolean getDefault) {
+         if (d.width <= 0 || d.height <= 0) {
+Index: vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/bitmap/ContactDrawable.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/bitmap/ContactDrawable.java	(revision 7156)
++++ vendor/branch/5058I_ALRU/packages/apps/Email/UnifiedEmail/src/com/android/mail/bitmap/ContactDrawable.java	(revision 7157)
+@@ -98,7 +98,9 @@
+         // Draw letter/digit or generic avatar.
+         final String displayName = mContactRequest.getDisplayName();
+         final char firstChar = displayName.charAt(0);
+-        if (isEnglishLetterOrDigit(firstChar)) {
++        /* [issue 19161] Begin, by Chenghui.Dai, 2015-10-22*/
++        if (isEnglishLetterOrDigit(firstChar) || isChineseLetter(firstChar) || isCyrillicLetter(firstChar)) {
++        /* [issue 19161] End, by Chenghui.Dai, 2015-10-22*/
+             // Draw letter or digit.
+             sFirstChar[0] = Character.toUpperCase(firstChar);
+             sPaint.setTextSize(sTileLetterFontSize);
+@@ -115,4 +117,14 @@
+     private static boolean isEnglishLetterOrDigit(final char c) {
+         return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9');
+     }
++    
++    /* [issue 19161] Begin, by Chenghui.Dai, 2015-10-22*/
++    private static boolean isChineseLetter(final char c) {
++        return (0x4E00 <= c && c <= 0x9FBF);
++    }
++
++    private static boolean isCyrillicLetter(final char c) {
++        return (0x0400 <= c && c <= 0x052F);
++    }
++    /* [issue 19161] End, by Chenghui.Dai, 2015-10-22*/
+ }

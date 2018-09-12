@@ -1,0 +1,75 @@
+Index: vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/NetworkSetting.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 9644)
++++ vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/NetworkSetting.java	(revision 9645)
+@@ -111,7 +111,7 @@
+ 
+     /** message for network selection */
+     String mNetworkSelectMsg;
+-
++    boolean handled = false;
+     //preference objects
+     private PreferenceGroup mNetworkList;
+     private Preference mSearchButton;
+@@ -216,8 +216,8 @@
+ 
+     @Override
+     public boolean onPreferenceTreeClick(PreferenceScreen preferenceScreen, Preference preference) {
+-        boolean handled = false;
+ 
++
+         /// M: Add for ALPS02416707 When CDMA in roaming to out of roaming,
+         /// we should don't give the user choices to search network. @{
+         if (TelephonyUtilsEx.isCDMAPhone(PhoneFactory.getPhone(mPhoneId))) {
+@@ -236,11 +236,47 @@
+         /// @}
+ 
+         if (preference == mSearchButton) {
+-            loadNetworksList();
+-            handled = true;
++            new AlertDialog.Builder(NetworkSetting.this)
++                    //.setIcon(R.drawable.search_attention)
++                    .setTitle("Attention")
++                    .setMessage("Searching for all available networks will disconnect the data connection which is in use. Continue?")
++                    .setPositiveButton("OK", new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialogInterface, int i) {
++                            loadNetworksList();
++                            handled = true;
++                        }
++
++                    })
++                    .setNegativeButton("CANCEL", new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialogInterface, int i) {
++
++                        }
++                    })
++                    .create().show();
++
+         } else if (preference == mAutoSelect) {
+-            selectNetworkAutomatic();
+-            handled = true;
++            new AlertDialog.Builder(NetworkSetting.this)
++                    //.setIcon(R.drawable.search_attention)
++                    .setTitle("Attention")
++                    .setMessage("Searching for all available networks will disconnect the data connection which is in use. Continue?")
++                    .setPositiveButton("OK", new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialogInterface, int i) {
++                            selectNetworkAutomatic();
++                            handled = true;
++                        }
++
++                    })
++                    .setNegativeButton("CANCEL", new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialogInterface, int i) {
++
++                        }
++                    })
++                    .create().show();
++
+             /// M: For CSG feature @{
+         } else if (preference == mManuSelectFemtocell) {
+             selectFemtocellManually();

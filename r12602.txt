@@ -1,0 +1,257 @@
+Index: vendor/branch/5058A_Digicel_Jamaica/vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/gsensor/Gsensor.java
+===================================================================
+--- vendor/branch/5058A_Digicel_Jamaica/vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/gsensor/Gsensor.java	(revision 0)
++++ vendor/branch/5058A_Digicel_Jamaica/vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/gsensor/Gsensor.java	(revision 12602)
+@@ -0,0 +1,251 @@
++package com.android.mmi.gsensor;
++
++import android.app.Activity;
++import android.app.ActivityManager;
++import android.app.AlertDialog;
++import android.app.AlertDialog.Builder;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.hardware.Sensor;
++import android.hardware.SensorEvent;
++import android.hardware.SensorEventListener;
++import android.hardware.SensorManager;
++import android.os.Bundle;
++import android.util.Log;
++import android.view.KeyEvent;
++import android.view.View;
++import android.view.View.OnClickListener;
++import android.view.Window;
++import android.view.WindowManager;
++import android.widget.Button;
++import android.widget.ImageView;
++import android.widget.LinearLayout;
++import android.widget.RelativeLayout;
++import android.widget.TextView;
++import java.util.List;
++import com.android.mmi.MMITestDevice;
++import com.android.mmi.R;
++
++public class Gsensor extends Activity implements OnClickListener,
++		SensorEventListener {
++	TextView tv_base_title, tv_base_swn, tv_down;
++	RelativeLayout rl_gsensor;
++	LinearLayout ll_gsensor;
++	ImageView iv_up, iv_faceUp, iv_faceDown, iv_left, iv_right, iv_down;
++	Button bt_base_left, bt_base_right, bt_gsensor_pcba;
++	SensorManager sensorManager = null;
++	Sensor gSensor = null;
++	boolean upIsTrue = false;
++	boolean leftIsTrue = false;
++	boolean rightIsTrue = false;
++	boolean downIsTrue = false;
++	boolean faceUpIsTrue = false;
++	boolean faceDownIsTrue = false;
++	float x;
++	float y;
++	float z;
++	boolean isChanged;
++	@Override
++	protected void onCreate(Bundle savedInstanceState) {
++		super.onCreate(savedInstanceState);
++		requestWindowFeature(Window.FEATURE_NO_TITLE);
++		getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
++				WindowManager.LayoutParams.FLAG_FULLSCREEN);
++		getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_GESTURE_ISOLATED);
++		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
++		setContentView(R.layout.activity_gsensor);
++
++		sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
++
++		gSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
++		
++		if (isServiceRunning(this,"com.android.settings.WakeService")) {
++			this.stopService(new Intent().setClassName("com.android.settings","com.android.settings.WakeService")
++			.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
++			isChanged = true;
++		}
++		
++		tv_base_title = (TextView) this.findViewById(R.id.tv_base_title);
++		tv_base_title.setText(R.string.gsensor_name);
++		tv_base_swn = (TextView) this.findViewById(R.id.tv_base_swn);
++		tv_down = (TextView) this.findViewById(R.id.tv_down);
++		tv_base_swn.setText("put the Handset Up and towards up");
++		iv_up = (ImageView) this.findViewById(R.id.iv_up);
++		iv_faceUp = (ImageView) this.findViewById(R.id.iv_faceUp);
++		iv_faceDown = (ImageView) this.findViewById(R.id.iv_faceDown);
++		iv_left = (ImageView) this.findViewById(R.id.iv_left);
++		iv_right = (ImageView) this.findViewById(R.id.iv_right);
++		iv_down = (ImageView) this.findViewById(R.id.iv_down);
++		rl_gsensor = (RelativeLayout) this.findViewById(R.id.rl_gsensor);
++		ll_gsensor = (LinearLayout) this.findViewById(R.id.ll_gsensor);
++		ll_gsensor.setVisibility(View.GONE);
++
++		bt_gsensor_pcba = (Button) findViewById(R.id.bt_gsensor_pcba);
++		bt_gsensor_pcba.setOnClickListener(this);
++
++		bt_base_left = (Button) findViewById(R.id.bt_base_left);
++		bt_base_left.setText(R.string.bt_pass);
++		bt_base_left.setEnabled(false);
++		bt_base_left.setOnClickListener(this);
++		bt_base_right = (Button) findViewById(R.id.bt_base_right);
++		bt_base_right.setText(R.string.bt_fail);
++		bt_base_right.setOnClickListener(this);
++		bt_base_right.getBackground().setAlpha(100);
++		bt_base_left.getBackground().setAlpha(100);
++	}
++
++	@Override
++	protected void onResume() {
++		super.onResume();
++		sensorManager.registerListener(this, gSensor,
++				SensorManager.SENSOR_DELAY_NORMAL);
++	}
++
++	@Override
++	protected void onPause() {
++		super.onPause();
++		sensorManager.unregisterListener(this, gSensor);
++	}
++	
++	@Override
++	protected void onDestroy() {
++		super.onDestroy();
++		if (isChanged) {
++			this.startService(new Intent().setClassName("com.android.settings","com.android.settings.WakeService")
++			.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
++			isChanged = false;
++		}
++	}
++
++	@Override
++	public void onSensorChanged(SensorEvent event) {
++		if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
++			float[] values = event.values;
++			x = values[SensorManager.DATA_X];
++			y = values[SensorManager.DATA_Y];
++			z = values[SensorManager.DATA_Z];
++			if (Math.abs(x) < 1 && y > 9 && Math.abs(z) < 1) {
++				// tv_down.setText("X:" + x + "\nY:" + y + "\nZ:" + z);
++				rl_gsensor.setVisibility(View.GONE);
++				ll_gsensor.setVisibility(View.VISIBLE);
++				bt_gsensor_pcba.setVisibility(View.INVISIBLE);
++				upIsTrue = true;
++			} else if (Math.abs(x) < 1 && y < -9 && Math.abs(z) < 1) {
++				iv_down.setVisibility(View.GONE);
++				downIsTrue = true;
++			} else if (x > 9 && Math.abs(y) < 1 && Math.abs(z) < 1) {
++				iv_left.setVisibility(View.GONE);
++				leftIsTrue = true;
++			} else if (x < -9 && Math.abs(y) < 1 && Math.abs(z) < 1) {
++				iv_right.setVisibility(View.GONE);
++				rightIsTrue = true;
++			} else if (Math.abs(x) < 1 && Math.abs(y) < 1 && z > 9) {
++				iv_faceUp.setVisibility(View.GONE);
++				faceUpIsTrue = true;
++			} else if (Math.abs(x) < 1 && Math.abs(y) < 1 && z < -9) {
++				iv_faceDown.setVisibility(View.GONE);
++				faceDownIsTrue = true;
++			}
++			if (upIsTrue && leftIsTrue && rightIsTrue && downIsTrue
++					&& faceUpIsTrue && faceDownIsTrue) {
++				tv_down.setText("All positions checked!");
++				tv_down.setVisibility(View.VISIBLE);
++				bt_gsensor_pcba.setVisibility(View.INVISIBLE);
++				ll_gsensor.setBackgroundColor(getResources().getColor(
++						R.color.black));
++				bt_base_left.setEnabled(true);
++			}
++		}
++	}
++
++	protected void showSuccessDialog() {
++		AlertDialog.Builder builder = new Builder(Gsensor.this);
++		builder.setMessage("x=" + x + "\ny=" + y + "\nz=" + z+"\nG-Sensor test OK!");
++		builder.setTitle("PCBA");
++		builder.setPositiveButton("PASS",
++				new android.content.DialogInterface.OnClickListener() {
++					@Override
++					public void onClick(DialogInterface dialog, int which) {
++						dialog.dismiss();
++						Intent intent = new Intent(Gsensor.this,
++								MMITestDevice.class);
++						setResult(RESULT_OK, intent);
++						finish();
++					}
++				});
++
++		builder.setNegativeButton("FAIL",
++				new android.content.DialogInterface.OnClickListener() {
++
++					@Override
++					public void onClick(DialogInterface dialog, int which) {
++						Intent intent = new Intent(Gsensor.this,
++								MMITestDevice.class);
++						setResult(RESULT_CANCELED, intent);
++						finish();
++						dialog.dismiss();
++					}
++				});
++
++		builder.create().show();
++	}
++
++	@Override
++	public void onClick(View v) {
++		switch (v.getId()) {
++		case R.id.bt_gsensor_pcba: {
++			showSuccessDialog();
++			break;
++		}
++		case R.id.bt_base_left: {
++			Intent intent = new Intent(Gsensor.this, MMITestDevice.class);
++			setResult(RESULT_OK, intent);
++			finish();
++			break;
++		}
++
++		case R.id.bt_base_right: {
++			Intent intent = new Intent(Gsensor.this, MMITestDevice.class);
++			setResult(RESULT_CANCELED, intent);
++			finish();
++			break;
++		}
++
++		}
++	}
++
++	@Override
++	public void onAccuracyChanged(Sensor sensor, int accuracy) {
++	}
++
++	@Override
++	public boolean onKeyUp(int keyCode, KeyEvent event) {
++		if (MMITestDevice.isAutoTest()) {			
++			return true;
++		}
++		return super.onKeyUp(keyCode, event);
++	}
++	
++	public boolean isServiceRunning(Context mContext, String className) {
++
++        boolean isRunning = false;
++        ActivityManager activityManager = (ActivityManager) mContext
++                .getSystemService(Context.ACTIVITY_SERVICE);
++        List<ActivityManager.RunningServiceInfo> serviceList = activityManager
++                .getRunningServices(35);
++
++        if (!(serviceList.size() > 0)) {
++            return false;
++        }
++        Log.e("OnlineService：",className);
++        for (int i = 0; i < serviceList.size(); i++) {
++            Log.e("serviceName：",serviceList.get(i).service.getClassName());
++            if (serviceList.get(i).service.getClassName().contains(className) == true) {
++                isRunning = true;
++                break;
++            }
++        }
++        return isRunning;
++    }
++}
+\ No newline at end of file

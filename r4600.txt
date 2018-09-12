@@ -1,0 +1,87 @@
+Index: packages/apps/Email/UnifiedEmail/src/com/android/mail/preferences/FolderPreferences.java
+===================================================================
+--- packages/apps/Email/UnifiedEmail/src/com/android/mail/preferences/FolderPreferences.java	(revision 4599)
++++ packages/apps/Email/UnifiedEmail/src/com/android/mail/preferences/FolderPreferences.java	(revision 4600)
+@@ -72,7 +72,7 @@
+     /** An id that is constant across app installations. */
+     private final String mPersistentId;
+     private final boolean mUseInboxDefaultNotificationSettings;
+-
++	private Context mContext;
+     /**
+      * @param accountEmail The account email. This must never change for the account.
+      * @param folder The folder
+@@ -103,6 +103,7 @@
+             final String persistentId, final boolean useInboxDefaultNotificationSettings) {
+         super(context, buildSharedPrefsName(accountEmail, persistentId));
+         mFolder = folder;
++		mContext = context;
+         mPersistentId = persistentId;
+         mUseInboxDefaultNotificationSettings = useInboxDefaultNotificationSettings;
+     }
+@@ -224,25 +225,11 @@
+     public String getNotificationRingtoneUri() {
+     	String ringtoneUri = getSharedPreferences().getString(PreferenceKeys.NOTIFICATION_RINGTONE,
+                 Settings.System.DEFAULT_NOTIFICATION_URI.toString());
+-     	if (ringtoneUri.startsWith("content://media/external")) {
+-     		String path = "";
+-     		String[] proj = { MediaStore.Audio.Media.DATA };  
+-            Cursor cursor = getContext().getContentResolver().query(Uri.parse(ringtoneUri), proj, null, null, null);  
+-            if (cursor.moveToFirst()) {  
+-                int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA);  
+-                path = cursor.getString(columnIndex);  
+-            }  
+-            cursor.close();  
+-  
+-            File f = new File(path);
+-            Log.d("xiawei", "f exist:" + f.exists());  
+-            if (!f.exists()) {
+-    		    ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(getContext(),RingtoneManager.TYPE_NOTIFICATION).toString();
+-				ringtoneUri = Settings.System.DEFAULT_NOTIFICATION_URI.toString();
+-    		    setNotificationRingtoneUri(ringtoneUri);
+-            }
+-            
+-    	}
++		if(!RingtoneManager.isRingtoneExist(mContext,Uri.parse(ringtoneUri))){
++			RingtoneManager.getActualDefaultRingtoneUri(mContext,RingtoneManager.TYPE_NOTIFICATION).toString();
++			ringtoneUri = Settings.System.DEFAULT_NOTIFICATION_URI.toString();
++    		setNotificationRingtoneUri(ringtoneUri);
++		}
+         return ringtoneUri;
+     }
+ 
+Index: packages/apps/Email/UnifiedEmail/src/com/mediatek/mail/vip/VipPreferences.java
+===================================================================
+--- packages/apps/Email/UnifiedEmail/src/com/mediatek/mail/vip/VipPreferences.java	(revision 4599)
++++ packages/apps/Email/UnifiedEmail/src/com/mediatek/mail/vip/VipPreferences.java	(revision 4600)
+@@ -61,25 +61,11 @@
+ 
+     public String getVipRingtone() {
+         String ringtoneUri = mSharedPreferences.getString(VIP_RINGTONE, VIP_RINGTONE_DEFAULT);
+-		if (ringtoneUri.startsWith("content://media/external")) {
+-     		String path = "";
+-     		String[] proj = { MediaStore.Audio.Media.DATA };  
+-            Cursor cursor = mContext.getContentResolver().query(Uri.parse(ringtoneUri), proj, null, null, null);  
+-            if (cursor.moveToFirst()) {  
+-                int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA);  
+-                path = cursor.getString(columnIndex);  
+-            }  
+-            cursor.close();  
+-  
+-            File f = new File(path);
+-            Log.d("xiawei", "f exist:" + f.exists());  
+-            if (!f.exists()) {
+-    		    RingtoneManager.getActualDefaultRingtoneUri(mContext,RingtoneManager.TYPE_NOTIFICATION).toString();
+-				ringtoneUri = VIP_RINGTONE_DEFAULT;
+-    		    mEditor.putString(VIP_RINGTONE, ringtoneUri).apply();
+-            }
+-            
+-    	}
++		if(!RingtoneManager.isRingtoneExist(mContext,Uri.parse(ringtoneUri))){
++			RingtoneManager.getActualDefaultRingtoneUri(mContext,RingtoneManager.TYPE_NOTIFICATION).toString();
++			ringtoneUri = VIP_RINGTONE_DEFAULT;
++    		mEditor.putString(VIP_RINGTONE, ringtoneUri).apply();
++		}
+         return ringtoneUri;
+     }
+ 

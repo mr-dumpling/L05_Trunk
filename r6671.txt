@@ -1,0 +1,3009 @@
+Index: packages/apps/Settings/res/values-ru/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values-ru/strings.xml	(revision 6670)
++++ packages/apps/Settings/res/values-ru/strings.xml	(revision 6671)
+@@ -3321,4 +3321,11 @@
+     <string name="web_action_section_title" msgid="806405168097593614">"Приложения не установлены"</string>
+     <string name="domain_url_section_title" msgid="7046835219056428883">"Установленные приложения"</string>
+     <string name="automatic_storage_manager_activation_warning" msgid="6353100011690933254">"Память устройства теперь управляется менеджером хранилища"</string>
++	
++	<!--start:Modify for screen off effect -->
++	<string name="screen_off_effect_title">Эффект выключения экрана</string>
++	<string name="screen_off_effect_summary">Плавное затухание</string>
++	<string name="screen_off_effect_face_out">Плавное затухание</string>
++	<string name="screen_off_effect_old_tv">Старый телевизор</string>
++	<!--end:Modify for screen off effect -->
+ </resources>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 6670)
++++ packages/apps/Settings/res/values/strings.xml	(revision 6671)
+@@ -7886,4 +7886,11 @@
+     <string name="informed_consent">Experience improvement</string>
+     <string name="informed_consent_on">On</string>
+     <string name="informed_consent_off">Off</string>
++	
++	<!--start:Modify for screen off effect -->
++	<string name="screen_off_effect_title">Screen off effect</string>
++	<string name="screen_off_effect_summary">Face out</string>
++	<string name="screen_off_effect_face_out">Face out</string>
++	<string name="screen_off_effect_old_tv">Old TV</string>
++	<!--end:Modify for screen off effect -->
+ </resources>
+\ No newline at end of file
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/DisplaySettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 6670)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 6671)
+@@ -94,6 +94,9 @@
+     private static final String KEY_CUSTOM_FONT_SIZE = "custom_font_size";
+     private static final String KEY_NOTIFICATION_LED = "notification_led";
+     private static final String KEY_SCREEN_SAVER = "screensaver";
++	//start:Modify for screen off effect
++	private static final String KEY_SCREEN_OFF_EFFECT = "screen_off_effect";
++	//end:Modify for screen off effect
+     private static final String KEY_LIFT_TO_WAKE = "lift_to_wake";
+     private static final String KEY_DOZE = "doze";
+     private static final String KEY_TAP_TO_WAKE = "tap_to_wake";
+@@ -124,6 +127,7 @@
+     private SwitchPreference mTapToWakePreference;
+     private SwitchPreference mAutoBrightnessPreference;
+     private SwitchPreference mCameraGesturePreference;
++	private ListPreference mScreenOffEffectListPreference;
+ 
+     ///M: MTK feature
+     private DisplaySettingsExt mDisplaySettingsExt;
+@@ -147,6 +151,9 @@
+                         com.android.internal.R.bool.config_dreamsSupported) == false) {
+             getPreferenceScreen().removePreference(mScreenSaverPreference);
+         }
++		//start:Modify for screen off effect
++		mScreenOffEffectListPreference = (ListPreference)findPreference(KEY_SCREEN_OFF_EFFECT);
++		//end:Modify for screen off effect
+ 		mNotificationLEDPreference = findPreference(KEY_NOTIFICATION_LED);
+         Log.d("whj", "onCreate: = "+(SystemProperties.getBoolean("ro.tcl.led", false) == true));
+         if (SystemProperties.getBoolean("ro.tcl.led", false) == false) {
+@@ -390,6 +397,13 @@
+                 SCREEN_OFF_TIMEOUT, FALLBACK_SCREEN_TIMEOUT_VALUE);
+         mScreenTimeoutPreference.setValue(String.valueOf(currentTimeout));
+         mScreenTimeoutPreference.setOnPreferenceChangeListener(this);
++		//start:Modify for screen off effect
++		int currentEffect = Settings.System.getInt(getActivity().getContentResolver(), KEY_SCREEN_OFF_EFFECT, 0);
++		mScreenOffEffectListPreference.setValue(String.valueOf(currentEffect));
++		mScreenOffEffectListPreference.setSummary(currentEffect == 0 
++		? R.string.screen_off_effect_face_out : R.string.screen_off_effect_old_tv);
++		mScreenOffEffectListPreference.setOnPreferenceChangeListener(this);
++		//end:Modify for screen off effect
+         final DevicePolicyManager dpm = (DevicePolicyManager) getActivity().getSystemService(
+                 Context.DEVICE_POLICY_SERVICE);
+         if (dpm != null) {
+@@ -561,6 +575,15 @@
+                 Log.e(TAG, "could not persist night mode setting", e);
+             }
+         }
++		//start:Modify for screen off effect
++		if (preference == mScreenOffEffectListPreference) {
++			int value = (int) Integer.parseInt((String) objValue);
++			Log.d(TAG,"effect value="+value);
++			Settings.System.putInt(getContentResolver(), KEY_SCREEN_OFF_EFFECT, value == 1 ? 1 : 0);
++			mScreenOffEffectListPreference.setSummary(value == 0 
++			? R.string.screen_off_effect_face_out : R.string.screen_off_effect_old_tv);
++		}
++		//end:Modify for screen off effect
+         return true;
+     }
+ 
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/res/values/arrays.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/res/values/arrays.xml	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/res/values/arrays.xml	(revision 6671)
+@@ -0,0 +1,1082 @@
++<?xml version="1.0" encoding="utf-8" standalone="no"?>
++<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <!-- Choices for timezone picker first level.
++         These values will be used as search terms for TimeZone displayName
++         strings. --> <skip/>
++    <!-- The time zone picker screen has two levels.  The first level allows the user to choose a region. -->
++    <string-array name="timezone_filters">
++    <!-- The next level of the time zoner picker should show time zones from the Americas. -->
++        <item>America</item>
++    <!-- The next level of the time zoner picker should show time zones from Europe. -->
++        <item>Europe</item>
++    <!-- The next level of the time zoner picker should show time zones from Africa. -->
++        <item>Africa</item>
++    <!-- The next level of the time zoner picker should show time zones from Asia. -->
++        <item>Asia</item>
++    <!-- The next level of the time zoner picker should show time zones from Australia. -->
++        <item>Australia</item>
++    <!-- The next level of the time zoner picker should show time zones from Pacific. -->
++        <item>Pacific</item>
++    <!-- The next level of the time zoner picker should show time zones from ALL regions. -->
++        <item>All</item>
++    </string-array>
++
++    <!-- Display settings.  The delay in inactivity before the screen is turned off. These are shown in a list dialog. -->
++    <string-array name="screen_timeout_entries">
++        <item>15 seconds</item>
++        <item>30 seconds</item>
++        <item>1 minute</item>
++        <item>2 minutes</item>
++        <item>5 minutes</item>
++        <item>10 minutes</item>
++        <item>30 minutes</item>
++		<item>Never</item>
++    </string-array>
++
++    <!-- Do not translate. -->
++    <string-array name="screen_timeout_values" translatable="false">
++        <!-- Do not translate. -->
++        <item>15000</item>
++        <!-- Do not translate. -->
++        <item>30000</item>
++        <!-- Do not translate. -->
++        <item>60000</item>
++        <!-- Do not translate. -->
++        <item>120000</item>
++        <!-- Do not translate. -->
++        <item>300000</item>
++        <!-- Do not translate. -->
++        <item>600000</item>
++        <!-- Do not translate. -->
++        <item>1800000</item>
++		<item>0</item>
++    </string-array>
++
++    <!-- Display settings.  The delay in inactivity before the dream is shown. These are shown in a list dialog. -->
++    <string-array name="dream_timeout_entries">
++        <item>Never</item>
++        <item>15 seconds</item>
++        <item>30 seconds</item>
++        <item>1 minute</item>
++        <item>2 minutes</item>
++        <item>5 minutes</item>
++        <item>10 minutes</item>
++        <item>30 minutes</item>
++    </string-array>
++
++    <!-- Do not translate. -->
++    <string-array name="dream_timeout_values" translatable="false">
++        <!-- Do not translate. -->
++        <item>0</item>
++        <!-- Do not translate. -->
++        <item>15000</item>
++        <!-- Do not translate. -->
++        <item>30000</item>
++        <!-- Do not translate. -->
++        <item>60000</item>
++        <!-- Do not translate. -->
++        <item>120000</item>
++        <!-- Do not translate. -->
++        <item>300000</item>
++        <!-- Do not translate. -->
++        <item>600000</item>
++        <!-- Do not translate. -->
++        <item>1800000</item>
++    </string-array>
++
++    <!-- Security settings.  The delay after screen is turned off until device locks.
++         These are shown in a list dialog. -->
++    <string-array name="lock_after_timeout_entries">
++        <item>Immediately</item>
++        <item>5 seconds</item>
++        <item>15 seconds</item>
++        <item>30 seconds</item>
++        <item>1 minute</item>
++        <item>2 minutes</item>
++        <item>5 minutes</item>
++        <item>10 minutes</item>
++        <item>30 minutes</item>
++    </string-array>
++
++    <!-- Do not translate. -->
++    <string-array name="lock_after_timeout_values" translatable="false">
++        <!-- Do not translate. -->
++        <item>0</item>
++        <!-- Do not translate. -->
++        <item>5000</item>
++        <!-- Do not translate. -->
++        <item>15000</item>
++        <!-- Do not translate. -->
++        <item>30000</item>
++        <!-- Do not translate. -->
++        <item>60000</item>
++        <!-- Do not translate. -->
++        <item>120000</item>
++        <!-- Do not translate. -->
++        <item>300000</item>
++        <!-- Do not translate. -->
++        <item>600000</item>
++        <!-- Do not translate. -->
++        <item>1800000</item>
++    </string-array>
++
++    <string-array name="entries_font_size">
++        <item msgid="6490061470416867723">Small</item>
++        <item msgid="3579015730662088893">Default</item>
++        <item msgid="1678068858001018666">Large</item>
++        <item msgid="490158884605093126">Largest</item>
++    </string-array>
++
++    <string-array name="entryvalues_font_size" translatable="false">
++        <item>0.85</item>
++        <item>1.0</item>
++        <item>1.15</item>
++        <item>1.30</item>
++    </string-array>
++
++    <string-array name="custom_entries_font_size">
++        <item>Minimum</item>
++        <item>Small</item>
++        <item>Medium</item>
++        <item>Large</item>
++        <item>Very large</item>
++    </string-array>
++
++    <string-array name="custom_entryvalues_font_size" translatable="false">
++        <item>0.95</item>
++        <item>1.0</item>
++        <item>1.05</item>
++        <item>1.15</item>
++        <item>1.30</item>
++    </string-array>
++    <!-- Wi-Fi settings -->
++
++    <!-- Match this with the order of NetworkInfo.DetailedState. --> <skip/>
++    <!-- Wi-Fi settings. The status messages when the network is unknown. -->
++    <string-array name="wifi_status">
++        <!-- Status message of Wi-Fi when it is idle. -->
++        <item/>
++        <!-- Status message of Wi-Fi when it is scanning. -->
++        <item>Scanning\u2026</item>
++        <!-- Status message of Wi-Fi when it is connecting. -->
++        <item>Connecting\u2026</item>
++        <!-- Status message of Wi-Fi when it is authenticating. -->
++        <item>Authenticating\u2026</item>
++        <!-- Status message of Wi-Fi when it is obtaining IP address. -->
++        <item>Obtaining IP address\u2026</item>
++        <!-- Status message of Wi-Fi when it is connected. -->
++        <item>Connected</item>
++        <!-- Status message of Wi-Fi when it is suspended. -->
++        <item>Suspended</item>
++        <!-- Status message of Wi-Fi when it is disconnecting. -->
++        <item>Disconnecting\u2026</item>
++        <!-- Status message of Wi-Fi when it is disconnected. -->
++        <item>Disconnected</item>
++        <!-- Status message of Wi-Fi when it is a failure. -->
++        <item>Unsuccessful</item>
++        <!-- Status message of Wi-Fi when it is blocked. -->
++        <item>Blocked</item>
++        <!-- Status message of Wi-Fi when connectiong is being verified. -->
++        <item>Temporarily avoiding poor connection</item>
++    </string-array>
++
++    <!-- Match this with the order of NetworkInfo.DetailedState. --> <skip/>
++    <!-- Wi-Fi settings. The status messages when the network is known. -->
++    <string-array name="wifi_status_with_ssid">
++        <!-- Status message of Wi-Fi when it is idle. -->
++        <item/>
++        <!-- Status message of Wi-Fi when it is scanning. -->
++        <item>Scanning\u2026</item>
++        <!-- Status message of Wi-Fi when it is connecting to a network. -->
++        <item>Connecting to <xliff:g id="network_name">%1$s</xliff:g>\u2026</item>
++        <!-- Status message of Wi-Fi when it is authenticating with a network. -->
++        <item>Authenticating with <xliff:g id="network_name">%1$s</xliff:g>\u2026</item>
++        <!-- Status message of Wi-Fi when it is obtaining IP address from a network. -->
++        <item>Obtaining IP address from <xliff:g id="network_name">%1$s</xliff:g>\u2026</item>
++        <!-- Status message of Wi-Fi when it is connected to a network. -->
++        <item>Connected to <xliff:g id="network_name">%1$s</xliff:g></item>
++        <!-- Status message of Wi-Fi when it is suspended. -->
++        <item>Suspended</item>
++        <!-- Status message of Wi-Fi when it is disconnecting from a network. -->
++        <item>Disconnecting from <xliff:g id="network_name">%1$s</xliff:g>\u2026</item>
++        <!-- Status message of Wi-Fi when it is disconnected. -->
++        <item>Disconnected</item>
++        <!-- Status message of Wi-Fi when it is a failure. -->
++        <item>Unsuccessful</item>
++        <!-- Status message of Wi-Fi when it is blocked. -->
++        <item>Blocked</item>
++        <!-- Status message of Wi-Fi when connectiong is being verified. -->
++        <item>Temporarily avoiding poor connection</item>
++    </string-array>
++
++    <!-- Match this with the constants in AccessPoint. --> <skip/>
++    <!-- Wi-Fi security choices used when manually added a Wi-Fi network -->
++    <string-array name="wifi_security">
++        <!-- The Wi-Fi network does not have any security. -->
++        <item>@string/wifi_security_none</item>
++        <!-- Do not translate. -->
++        <item>@string/wifi_security_wep</item>
++        <!-- Do not translate. -->
++        <item>@string/wifi_security_psk_generic</item>
++        <!-- Do not translate. -->
++        <item>@string/wifi_security_eap</item>
++        <!-- Do not translate. -->
++        <item>WAPI PSK</item>
++        <!-- Do not translate. -->
++        <item>@string/wifi_security_wapi_certificate</item>
++    </string-array>
++
++    <!-- Match this with the constants in AccessPoint. --> <skip/>
++    <!-- Wi-Fi security types for New User Dialog. EAP is not configurable. -->
++    <string-array name="wifi_security_no_eap">
++        <!-- The Wi-Fi network does not have any security. -->
++        <item>@string/wifi_security_none</item>
++        <!-- Do not translate. -->
++        <item>@string/wifi_security_wep</item>
++        <!-- Do not translate. -->
++        <item>@string/wifi_security_psk_generic</item>
++    </string-array>
++
++   <!-- Wi-Fi AP settings.  The type of security a Wi-Fi AP supports. -->
++   <!-- Note that adding/removing/moving the items will need wifi settings code change. -->
++    <string-array name="wifi_ap_security">
++        <item>@string/wifi_security_none</item>
++        <item>@string/wifi_security_wpa2</item>
++    </string-array>
++
++    <!-- Match this with the constants in WifiDialog. --> <skip/>
++    <!-- Wi-Fi settings.  The type of EAP method a Wi-Fi network has. -->
++    <string-array name="wifi_eap_method">
++        <!-- Do not translate. -->
++        <item>PEAP</item>
++        <!-- Do not translate. -->
++        <item>TLS</item>
++        <!-- Do not translate. -->
++        <item>TTLS</item>
++        <!-- Do not translate. -->
++        <item>PWD</item>
++        <!-- Do not translate. -->
++        <item>SIM</item>
++        <!-- Do not translate. -->
++        <item>AKA</item>
++        <!-- Do not translate. -->
++        <item>AKA\'</item>
++    </string-array>
++
++    <!-- Type of EAP method when EAP SIM, AKA, AKA' are not supported -->
++    <string-array name="eap_method_without_sim_auth">
++        <!-- Do not translate. -->
++        <item>PEAP</item>
++        <!-- Do not translate. -->
++        <item>TLS</item>
++        <!-- Do not translate. -->
++        <item>TTLS</item>
++        <!-- Do not translate. -->
++        <item>PWD</item>
++    </string-array>
++
++   <!-- Wi-Fi AP band settings.  Either 2.4GHz or 5GHz. -->
++   <!-- Note that adding/removing/moving the items will need wifi settings code change. -->
++    <string-array name="wifi_ap_band_config_full">
++        <item>@string/wifi_ap_choose_2G</item>
++        <!--<item>@string/wifi_ap_choose_5G</item>-->
++    </string-array>
++
++    <string-array name="wifi_ap_band_config_2G_only">
++        <item>@string/wifi_ap_choose_2G</item>
++    </string-array>
++
++   <!-- Wi-Fi WPS setup for p2p connections.  -->
++   <!-- Note that adding/removing/moving the items will need wifi settings code change. -->
++    <string-array name="wifi_p2p_wps_setup">
++        <!-- Push button based configuration involves pushing a button on two connecting devices [CHAR LIMIT=30]-->
++        <item>Push button</item>
++        <!-- This involves entering a pin obtained from a peer device [CHAR LIMIT=30] -->
++        <item>PIN from peer device</item>
++        <!-- This involves generating a pin from this device [CHAR LIMIT=20] -->
++        <item>PIN from this device</item>
++    </string-array>
++
++    <!-- Match this with the order of WifiP2pDevice.Status -->
++    <!-- Wi-Fi p2p settings device status message -->
++    <string-array name="wifi_p2p_status">
++        <item>Connected</item>
++        <item>Invited</item>
++        <item>Unsuccessful</item>
++        <item>Available</item>
++        <item>Out-of-range</item>
++   </string-array>
++
++
++    <!-- Bluetooth Settings -->
++
++    <!-- Discoverable mode timeout options -->
++    <string-array name="bluetooth_visibility_timeout_entries">
++        <item>2 minutes</item>
++        <item>5 minutes</item>
++        <item>1 hour</item>
++        <item>Never time out</item>
++    </string-array>
++
++    <!-- Match this with drawable.wifi_signal. --> <skip/>
++    <!-- Wi-Fi settings. The signal strength a Wi-Fi network has. -->
++    <string-array name="wifi_signal">
++        <item>Poor</item>
++        <item>Fair</item>
++        <item>Good</item>
++        <item>Excellent</item>
++    </string-array>
++
++    <!-- Wi-Fi settings. Presented as a list dialog to the user to choose the Wi-Fi sleep policy. -->
++    <string-array name="wifi_sleep_policy_entries">
++        <!-- Always keep Wi-Fi on when screen turns off. -->
++        <item>Always</item>
++        <!-- Keep Wi-Fi on when screen turns off and plugged in.  When on battery, go to sleep when screen turns off. -->
++        <item>Only when plugged in</item>
++        <!-- Do not keep Wi-Fi on when screen turns off.  [CHAR LIMIT=40] -->
++        <item>Never</item>
++    </string-array>
++
++    <!-- Wi-Fi settings. Presented as a list dialog to the user to choose the Wi-Fi sleep policy. Used when
++         the device is Wi-Fi-only. [CHAR LIMIT=30] -->
++    <string-array name="wifi_sleep_policy_entries_wifi_only">
++        <!-- Always keep Wi-Fi on when screen turns off. -->
++        <item>Always</item>
++        <!-- Keep Wi-Fi on when screen turns off and plugged in.  When on battery, go to sleep when screen turns off. -->
++        <item>Only when plugged in</item>
++        <!-- Do not keep Wi-Fi on when screen turns off, for Wi-Fi-only devices, no other data connection -->
++        <item>Never</item>
++    </string-array>
++
++    <!-- Match with wifi_sleep_policy_entries and the values of the settings in Settings class. --> <skip/>
++    <!-- Do not translate. -->
++    <string-array name="wifi_sleep_policy_values">
++        <!-- Do not translate. -->
++        <item>2</item>
++        <!-- Do not translate. -->
++        <item>1</item>
++        <!-- Do not translate. -->
++        <item>0</item>
++    </string-array>
++
++    <!-- Data Usage settings. Range of data usage. -->
++    <string-array name="data_usage_data_range">
++        <!-- Last 30 days [CHAR LIMIT=25]-->
++        <item>Last 30 days</item>
++        <!-- Set usage cycle [CHAR LIMIT=25]-->
++        <item>Set usage cycle...</item>
++    </string-array>
++
++    <!-- Display options for UsageStats class -->
++    <string-array name="usage_stats_display_order_types">
++        <item>Usage time</item>
++        <item>Last time used</item>
++        <item>App name</item>
++    </string-array>
++
++    <!-- EAP method -->
++    <string-array name="wifi_eap_entries">
++        <item>PEAP</item>
++        <item>TLS</item>
++        <item>TTLS</item>
++        <item>PWD</item>
++    </string-array>
++
++    <!-- Phase 2 options for PEAP -->
++    <string-array name="wifi_peap_phase2_entries">
++        <item>None</item>
++        <item>MSCHAPV2</item>
++        <item>GTC</item>
++    </string-array>
++
++    <!-- Phase 2 options for rest of EAP methods -->
++    <string-array name="wifi_phase2_entries">
++        <item>None</item>
++        <item>PAP</item>
++        <item>MSCHAP</item>
++        <item>MSCHAPV2</item>
++        <item>GTC</item>
++    </string-array>
++
++    <!-- Wi-Fi IP settings. -->
++   <!-- Note that adding/removing/moving the items will need wifi settings code change. -->
++    <string-array name="wifi_ip_settings">
++        <!-- Use DHCP (Dynamic Host Configuration Protocol) for obtaining IP settings [CHAR LIMIT=25] -->
++        <item>DHCP</item>
++        <!-- Use statically defined IP settings [CHAR LIMIT=25]-->
++        <item>Static</item>
++    </string-array>
++
++    <!-- Wi-Fi proxy settings. -->
++    <!-- Note that adding/removing/moving the items will need wifi settings code change. -->
++    <string-array name="wifi_proxy_settings">
++        <!-- No HTTP proxy is used for the current wifi network [CHAR LIMIT=25] -->
++        <item>None</item>
++        <!-- Manual HTTP proxy settings are used for the current wifi network [CHAR LIMIT=25] -->
++        <item>Manual</item>
++        <!-- Proxy Auto-Config URL that is used for the current wifi network [CHAR LIMIT=25] -->
++        <item>Proxy Auto\u2011Config</item>
++    </string-array>
++
++    <!-- Authentication Types used in APN editor -->
++    <string-array name="apn_auth_entries">
++        <item>None</item>
++        <item>PAP</item>
++        <item>CHAP</item>
++        <item>PAP or CHAP</item>
++    </string-array>
++
++    <string-array name="apn_auth_values" translatable="false">
++        <!-- Do not translate. -->
++        <item>0</item>
++        <!-- Do not translate. -->
++        <item>1</item>
++        <!-- Do not translate. -->
++        <item>2</item>
++        <!-- Do not translate. -->
++        <item>3</item>
++    </string-array>
++
++    <!-- Authentication Types used in APN editor -->
++    <string-array name="apn_protocol_entries">
++        <item>IPv4</item>
++        <item>IPv6</item>
++        <item>IPv4/IPv6</item>
++    </string-array>
++
++    <string-array name="apn_protocol_values" translatable="false">
++        <!-- Do not translate. -->
++        <item>IP</item>
++        <!-- Do not translate. -->
++        <item>IPV6</item>
++        <!-- Do not translate. -->
++        <item>IPV4V6</item>
++    </string-array>
++
++    <!-- Bearer Info used in APN editor -->
++    <string-array name="bearer_entries">
++        <item>Unspecified</item>
++        <item>LTE</item>
++        <item>HSPAP</item>
++        <item>HSPA</item>
++        <item>HSUPA</item>
++        <item>HSDPA</item>
++        <item>UMTS</item>
++        <item>EDGE</item>
++        <item>GPRS</item>
++        <item>eHRPD</item>
++        <item>EVDO_B</item>
++        <item>EVDO_A</item>
++        <item>EVDO_0</item>
++        <item>1xRTT</item>
++        <item>IS95B</item>
++        <item>IS95A</item>
++        <item>GSM</item>
++        <item>TD_SCDMA</item>
++        <item>IWLAN</item>
++    </string-array>
++
++    <string-array name="bearer_values" translatable="false">
++        <!-- Do not translate. -->
++        <item>0</item>
++        <!-- Do not translate. -->
++        <item>14</item>
++        <!-- Do not translate. -->
++        <item>15</item>
++        <!-- Do not translate. -->
++        <item>11</item>
++        <!-- Do not translate. -->
++        <item>10</item>
++        <!-- Do not translate. -->
++        <item>9</item>
++        <!-- Do not translate. -->
++        <item>3</item>
++        <!-- Do not translate. -->
++        <item>2</item>
++        <!-- Do not translate. -->
++        <item>1</item>
++        <!-- Do not translate. -->
++        <item>13</item>
++        <!-- Do not translate. -->
++        <item>12</item>
++        <!-- Do not translate. -->
++        <item>8</item>
++        <!-- Do not translate. -->
++        <item>7</item>
++        <!-- Do not translate. -->
++        <item>6</item>
++        <!-- Do not translate. -->
++        <item>5</item>
++        <!-- Do not translate. -->
++        <item>4</item>
++        <!-- Do not translate. -->
++        <item>16</item>
++        <!-- Do not translate. -->
++        <item>17</item>
++        <!-- Do not translate. -->
++        <item>18</item>
++    </string-array>
++
++    <!-- MVNO Info used in APN editor -->
++    <string-array name="mvno_type_entries">
++        <item>None</item>
++        <!-- Do not translate. -->
++        <item>SPN</item>
++        <!-- Do not translate. -->
++        <item>IMSI</item>
++        <!-- Do not translate. -->
++        <item>GID</item>
++    </string-array>
++
++    <string-array name="mvno_type_values" translatable="false">
++        <!-- Do not translate. -->
++        <item/>
++        <!-- Do not translate. -->
++        <item>spn</item>
++        <!-- Do not translate. -->
++        <item>imsi</item>
++        <!-- Do not translate. -->
++        <item>gid</item>
++    </string-array>
++
++    <!-- Apps on SD installation location options in ApplicationSettings -->
++    <string-array name="app_install_location_entries">
++        <item>Internal device storage</item>
++        <item>Removable SD card</item>
++        <item>Let the system decide</item>
++    </string-array>
++
++    <!-- Do not translate. -->
++    <string-array name="app_install_location_values" translatable="false">
++        <item>device</item>
++        <item>sdcard</item>
++        <item>auto</item>
++    </string-array>
++
++    <!-- Names of categories of app ops tabs -->
++    <string-array name="app_ops_categories">
++        <item>Location</item>
++        <item>Personal</item>
++        <item>Messaging</item>
++        <item>Media</item>
++        <item>Device</item>
++    </string-array>
++
++    <!-- User display names for app ops codes -->
++    <string-array name="app_ops_summaries">
++        <item>coarse location</item>
++        <item>fine location</item>
++        <item>GPS</item>
++        <item>vibrate</item>
++        <item>read contacts</item>
++        <item>modify contacts</item>
++        <item>read call log</item>
++        <item>modify call log</item>
++        <item>read calendar</item>
++        <item>modify calendar</item>
++        <item>wi-fi scan</item>
++        <item>notification</item>
++        <item>cell scan</item>
++        <item>call phone</item>
++        <item>read SMS</item>
++        <item>write SMS</item>
++        <item>receive SMS</item>
++        <item>receive emergency SMS</item>
++        <item>receive MMS</item>
++        <item>receive WAP push</item>
++        <item>send SMS</item>
++        <item>read ICC SMS</item>
++        <item>write ICC SMS</item>
++        <item>modify settings</item>
++        <item>draw on top</item>
++        <item>access notifications</item>
++        <item>camera</item>
++        <item>record audio</item>
++        <item>play audio</item>
++        <item>read clipboard</item>
++        <item>modify clipboard</item>
++        <item>media buttons</item>
++        <item>audio focus</item>
++        <item>master volume</item>
++        <item>voice volume</item>
++        <item>ring volume</item>
++        <item>media volume</item>
++        <item>alarm volume</item>
++        <item>notification volume</item>
++        <item>bluetooth volume</item>
++        <item>keep awake</item>
++        <item>monitor location</item>
++        <item>monitor high power location</item>
++        <item>get usage stats</item>
++        <item>mute/unmute microphone</item>
++        <item>show toast</item>
++        <item>project media</item>
++        <item>activate VPN</item>
++        <item>write wallpaper</item>
++        <item>assist structure</item>
++        <item>assist screenshot</item>
++        <item>read phone state</item>
++        <item>add voicemail</item>
++        <item>use sip</item>
++        <item>process outgoing call</item>
++        <item>fingerprint</item>
++        <item>body sensors</item>
++        <item>read cell broadcasts</item>
++        <item>mock location</item>
++        <item>read storage</item>
++        <item>write storage</item>
++        <item>turn on screen</item>
++        <item>get accounts</item>
++        <item>run in background</item>
++    </string-array>
++
++    <!-- User display names for app ops codes -->
++    <string-array name="app_ops_labels">
++        <item>Location</item>
++        <item>Location</item>
++        <item>Location</item>
++        <item>Vibrate</item>
++        <item>Read contacts</item>
++        <item>Modify contacts</item>
++        <item>Read call log</item>
++        <item>Modify call log</item>
++        <item>Read calendar</item>
++        <item>Modify calendar</item>
++        <item>Location</item>
++        <item>Post notification</item>
++        <item>Location</item>
++        <item>Call phone</item>
++        <item>Read SMS/MMS</item>
++        <item>Write SMS/MMS</item>
++        <item>Receive SMS/MMS</item>
++        <item>Receive SMS/MMS</item>
++        <item>Receive SMS/MMS</item>
++        <item>Receive SMS/MMS</item>
++        <item>Send SMS/MMS</item>
++        <item>Read SMS/MMS</item>
++        <item>Write SMS/MMS</item>
++        <item>Modify settings</item>
++        <item>Draw on top</item>
++        <item>Access notifications</item>
++        <item>Camera</item>
++        <item>Record audio</item>
++        <item>Play audio</item>
++        <item>Read clipboard</item>
++        <item>Modify clipboard</item>
++        <item>Media buttons</item>
++        <item>Audio focus</item>
++        <item>Master volume</item>
++        <item>Voice volume</item>
++        <item>Ring volume</item>
++        <item>Media volume</item>
++        <item>Alarm volume</item>
++        <item>Notification volume</item>
++        <item>Bluetooth volume</item>
++        <item>Keep awake</item>
++        <item>Location</item>
++        <item>Location</item>
++        <item>Get usage stats</item>
++        <item>Mute/unmute microphone</item>
++        <item>Show toast</item>
++        <item>Project media</item>
++        <item>Activate VPN</item>
++        <item>Write wallpaper</item>
++        <item>Assist structure</item>
++        <item>Assist screenshot</item>
++        <item>Read phone state</item>
++        <item>Add voicemail</item>
++        <item>Use sip</item>
++        <item>Process outgoing call</item>
++        <item>Fingerprint</item>
++        <item>Body sensors</item>
++        <item>read Cell Broadcast messages</item>
++        <item>Mock location</item>
++        <item>Read storage</item>
++        <item>Write storage</item>
++        <item>Turn on screen</item>
++        <item>Get accounts</item>
++        <item>Run in background</item>
++    </string-array>
++
++    <!-- Titles for the list of long press timeout options. -->
++    <string-array name="long_press_timeout_selector_titles">
++        <!-- A title for the option for short long-press timeout [CHAR LIMIT=25] -->
++        <item>Short</item>
++        <!-- A title for the option for medium long-press timeout [CHAR LIMIT=25] -->
++        <item>Medium</item>
++        <!-- A title for the option for long long-press timeout [CHAR LIMIT=25] -->
++        <item>Long</item>
++    </string-array>
++
++    <!-- Values for the list of long press timeout options. -->
++    <string-array name="long_press_timeout_selector_values" translatable="false">
++        <item>400</item>
++        <item>1000</item>
++        <item>1500</item>
++    </string-array>
++
++    <!-- Titles for captioning typeface preference. [CHAR LIMIT=35] -->
++    <string-array name="captioning_typeface_selector_titles">
++        <item>Default</item>
++        <item>Sans-serif</item>
++        <item>Sans-serif condensed</item>
++        <item>Sans-serif monospace</item>
++        <item>Serif</item>
++        <item>Serif monospace</item>
++        <item>Casual</item>
++        <item>Cursive</item>
++        <item>Small capitals</item>
++    </string-array>
++
++    <!-- Values for captioning typeface preference. -->
++    <string-array name="captioning_typeface_selector_values" translatable="false">
++        <item/>
++        <item>sans-serif</item>
++        <item>sans-serif-condensed</item>
++        <item>sans-serif-monospace</item>
++        <item>serif</item>
++        <item>serif-monospace</item>
++        <item>casual</item>
++        <item>cursive</item>
++        <item>sans-serif-smallcaps</item>
++    </string-array>
++
++    <!-- Titles for captioning font size preference. [CHAR LIMIT=35] -->
++    <string-array name="captioning_font_size_selector_titles">
++        <item>Very small</item>
++        <item>Small</item>
++        <item>Normal</item>
++        <item>Large</item>
++        <item>Very large</item>
++    </string-array>
++
++    <!-- Values for captioning font size preference. -->
++    <string-array name="captioning_font_size_selector_values" translatable="false">
++        <item>0.25</item>
++        <item>0.5</item>
++        <item>1.0</item>
++        <item>1.5</item>
++        <item>2.0</item>
++    </string-array>
++
++    <!-- Titles for captioning character edge type preference. [CHAR LIMIT=35] -->
++    <string-array name="captioning_edge_type_selector_titles">
++        <item>Default</item>
++        <item>None</item>
++        <item>Outline</item>
++        <item>Drop shadow</item>
++        <item>Raised</item>
++        <item>Depressed</item>
++    </string-array>
++
++    <!-- Values for captioning character edge type preference. -->
++    <integer-array name="captioning_edge_type_selector_values" translatable="false">
++        <item>-1</item>
++        <item>0</item>
++        <item>1</item>
++        <item>2</item>
++        <item>3</item>
++        <item>4</item>
++    </integer-array>
++
++    <!-- Titles for captioning color preference. -->
++    <string-array name="captioning_color_selector_titles" translatable="false">
++        <item>@string/color_unspecified</item>
++        <item>@string/color_white</item>
++        <item>@string/color_black</item>
++        <item>@string/color_red</item>
++        <item>@string/color_yellow</item>
++        <item>@string/color_green</item>
++        <item>@string/color_cyan</item>
++        <item>@string/color_blue</item>
++        <item>@string/color_magenta</item>
++    </string-array>
++
++    <!-- Values for captioning color preference. -->
++    <integer-array name="captioning_color_selector_values" translatable="false">
++        <item>0x00FFFFFF</item>
++        <item>0xFFFFFFFF</item>
++        <item>0xFF000000</item>
++        <item>0xFFFF0000</item>
++        <item>0xFFFFFF00</item>
++        <item>0xFF00FF00</item>
++        <item>0xFF00FFFF</item>
++        <item>0xFF0000FF</item>
++        <item>0xFFFF00FF</item>
++        <item>0xFF000055</item>
++        <item>0xFF0000AA</item>
++        <item>0xFF005500</item>
++        <item>0xFF005555</item>
++        <item>0xFF0055AA</item>
++        <item>0xFF0055FF</item>
++        <item>0xFF00AA00</item>
++        <item>0xFF00AA55</item>
++        <item>0xFF00AAAA</item>
++        <item>0xFF00AAFF</item>
++        <item>0xFF00FF55</item>
++        <item>0xFF00FFAA</item>
++        <item>0xFF550000</item>
++        <item>0xFF550055</item>
++        <item>0xFF5500AA</item>
++        <item>0xFF5500FF</item>
++        <item>0xFF555500</item>
++        <item>0xFF555555</item>
++        <item>0xFF5555AA</item>
++        <item>0xFF5555FF</item>
++        <item>0xFF55AA00</item>
++        <item>0xFF55AA55</item>
++        <item>0xFF55AAAA</item>
++        <item>0xFF55AAFF</item>
++        <item>0xFF55FF00</item>
++        <item>0xFF55FF55</item>
++        <item>0xFF55FFAA</item>
++        <item>0xFF55FFFF</item>
++        <item>0xFFAA0000</item>
++        <item>0xFFAA0055</item>
++        <item>0xFFAA00AA</item>
++        <item>0xFFAA00FF</item>
++        <item>0xFFAA5500</item>
++        <item>0xFFAA5555</item>
++        <item>0xFFAA55AA</item>
++        <item>0xFFAA55FF</item>
++        <item>0xFFAAAA00</item>
++        <item>0xFFAAAA55</item>
++        <item>0xFFAAAAAA</item>
++        <item>0xFFAAAAFF</item>
++        <item>0xFFAAFF00</item>
++        <item>0xFFAAFF55</item>
++        <item>0xFFAAFFAA</item>
++        <item>0xFFAAFFFF</item>
++        <item>0xFFFF0055</item>
++        <item>0xFFFF00AA</item>
++        <item>0xFFFF5500</item>
++        <item>0xFFFF5555</item>
++        <item>0xFFFF55AA</item>
++        <item>0xFFFF55FF</item>
++        <item>0xFFFFAA00</item>
++        <item>0xFFFFAA55</item>
++        <item>0xFFFFAAAA</item>
++        <item>0xFFFFAAFF</item>
++        <item>0xFFFFFF55</item>
++        <item>0xFFFFFFAA</item>
++    </integer-array>
++
++    <!-- Titles for captioning opacity preference. [CHAR LIMIT=35] -->
++    <string-array name="captioning_opacity_selector_titles">
++        <item>25%</item>
++        <item>50%</item>
++        <item>75%</item>
++        <item>100%</item>
++    </string-array>
++
++    <!-- Values for captioning opacity preference. -->
++    <integer-array name="captioning_opacity_selector_values" translatable="false">
++        <item>0x40FFFFFF</item>
++        <item>0x80FFFFFF</item>
++        <item>0xC0FFFFFF</item>
++        <item>0xFFFFFFFF</item>
++    </integer-array>
++
++    <!-- Titles for captioning text style preset preference. [CHAR LIMIT=35] -->
++    <string-array name="captioning_preset_selector_titles">
++        <item>Use app defaults</item>
++        <item>White on black</item>
++        <item>Black on white</item>
++        <item>Yellow on black</item>
++        <item>Yellow on blue</item>
++        <item>Custom</item>
++    </string-array>
++
++    <!-- Values for captioning text style preset preference. -->
++    <integer-array name="captioning_preset_selector_values" translatable="false">
++        <item>4</item>
++        <item>0</item>
++        <item>1</item>
++        <item>2</item>
++        <item>3</item>
++        <item>-1</item>
++    </integer-array>
++
++    <!-- Match this with the constants in VpnProfile. --> <skip/>
++    <!-- Short names for each VPN type, not really translatable. [CHAR LIMIT=20] -->
++    <string-array name="vpn_types" translatable="false">
++        <item>PPTP</item>
++        <item>L2TP/IPSec PSK</item>
++        <item>L2TP/IPSec RSA</item>
++        <item>IPSec Xauth PSK</item>
++        <item>IPSec Xauth RSA</item>
++        <item>IPSec Hybrid RSA</item>
++    </string-array>
++
++    <!-- Match this with the constants in VpnProfile. --> <skip/>
++    <!-- Longer descriptions for each VPN type. [CHAR LIMIT=100] -->
++    <string-array name="vpn_types_long">
++        <item>PPTP VPN</item>
++        <item>L2TP/IPSec VPN with pre-shared keys</item>
++        <item>L2TP/IPSec VPN with certificates</item>
++        <item>IPSec VPN with pre-shared keys and Xauth authentication</item>
++        <item>IPSec VPN with certificates and Xauth authentication</item>
++        <item>IPSec VPN with certificates and hybrid authentication</item>
++    </string-array>
++
++    <!-- Match this with the constants in LegacyVpnInfo. --> <skip/>
++    <!-- Status for a VPN network. [CHAR LIMIT=100] -->
++    <string-array name="vpn_states">
++        <!-- Status message when VPN is disconnected. -->
++        <item>Disconnected</item>
++        <!-- Status message when VPN is initializing. -->
++        <item>Initializing\u2026</item>
++        <!-- Status message when VPN is connecting. -->
++        <item>Connecting\u2026</item>
++        <!-- Status message when VPN is connected. -->
++        <item>Connected</item>
++        <!-- Status message when VPN is timeout. -->
++        <item>Timeout</item>
++        <!-- Status message when VPN is failed. -->
++        <item>Unsuccessful</item>
++    </string-array>
++
++    <!-- User content ratings for restricted users [CHAR LIMIT=30] -->
++    <string-array name="user_content_ratings_entries" translatable="false">
++        <item>Ascended being</item>
++        <item>Human</item>
++        <item>Neanderthal</item>
++        <item>Chimp</item>
++        <item>Monkey</item>
++    </string-array>
++
++    <!-- Values for user content ratings for restricted users -->
++    <string-array name="user_content_ratings_values" translatable="false">
++        <item>5</item>
++        <item>4</item>
++        <item>3</item>
++        <item>2</item>
++        <item>1</item>
++    </string-array>
++
++    <!-- Values for premium SMS permission selector [CHAR LIMIT=30] -->
++    <string-array name="security_settings_premium_sms_values">
++        <!-- Ask user before sending to premium SMS short code. -->
++        <item>Ask</item>
++        <!-- Never allow app to send to premium SMS short code. -->
++        <item>Never allow</item>
++        <!-- Always allow app to send to premium SMS short code. -->
++        <item>Always allow</item>
++    </string-array>
++
++    <!-- [CHAR LIMIT=40] Labels for memory states -->
++    <string-array name="ram_states">
++        <!-- Normal desired memory state. -->
++        <item>Normal</item>
++        <!-- Moderate memory state, not as good as normal. -->
++        <item>Moderate</item>
++        <!-- Memory is running low. -->
++        <item>Low</item>
++        <!-- Memory is critical. -->
++        <item>Critical</item>
++        <!-- Unknown memory state -->
++        <item>\?</item>
++    </string-array>
++
++    <array name="ram_colors">
++        <item>@color/memory_normal</item>
++        <item>@color/memory_moderate</item>
++        <item>@color/memory_low</item>
++        <item>@color/memory_critical</item>
++    </array>
++
++    <!-- Display color space adjustment modes for accessibility -->
++    <string-array name="daltonizer_type_entries" translatable="false">
++        <item>@string/daltonizer_mode_deuteranomaly</item>
++        <item>@string/daltonizer_mode_protanomaly</item>
++        <item>@string/daltonizer_mode_tritanomaly</item>
++    </string-array>
++
++    <!-- Values for display color space adjustment modes for accessibility -->
++    <string-array name="daltonizer_type_values" translatable="false">
++        <item>12</item>
++        <item>11</item>
++        <item>13</item>
++    </string-array>
++
++    <!-- Battery saver mode: allowable trigger threshold levels. -->
++    <integer-array name="battery_saver_trigger_values" translatable="false">
++        <item>0</item>
++        <item>5</item>
++        <item>15</item>
++    </integer-array>
++
++    <!-- Process stats memory use details: labels for memory states -->
++    <string-array name="proc_stats_memory_states">
++        <item>Normal</item>
++        <item>Moderate</item>
++        <item>Low</item>
++        <item>Critical</item>
++    </string-array>
++
++    <!-- Process stats memory use details: labels for process -->
++    <string-array name="proc_stats_process_states">
++        <item>Persistent</item>
++        <item>Top activity</item>
++        <item>Important (foreground)</item>
++        <item>Important (background)</item>
++        <item>Backup</item>
++        <item>Heavy weight</item>
++        <item>Service (running)</item>
++        <item>Service (restarting)</item>
++        <item>Receiver</item>
++        <item>Home</item>
++        <item>Last activity</item>
++        <item>Cached (activity)</item>
++        <item>Cached (activity client)</item>
++        <item>Cached (empty)</item>
++    </string-array>
++
++    <!-- Array of titles for sim color for multi-sim -->
++    <string-array name="color_picker">
++        <item>Teal</item>
++        <item>Blue</item>
++        <item>Indigo</item>
++        <item>Purple</item>
++        <item>Pink</item>
++        <item>Red</item>
++    </string-array>
++
++    <!-- Automatic storage management settings. The amount of days for the automatic storage manager
++         to retain. These are shown in a list dialog. [CHAR LIMIT=70] -->
++    <string-array name="automatic_storage_management_days">
++        <item>Over 30 days old</item>
++        <item>Over 60 days old</item>
++        <item>Over 90 days old</item>
++    </string-array>
++
++    <string-array name="automatic_storage_management_days_values" translatable="false">
++        <item>30</item>
++        <item>60</item>
++        <item>90</item>
++    </string-array>
++	<string-array name="night_mode_values">
++        <item msgid="6490061470416867723">Small</item>
++        <item msgid="3579015730662088893">Default</item>
++        <item msgid="1678068858001018666">Large</item>
++        <item msgid="490158884605093126">Largest</item>
++    </string-array>
++	<string-array name="night_mode_entries">
++        <item msgid="6490061470416867723">Small</item>
++        <item msgid="3579015730662088893">Default</item>
++        <item msgid="1678068858001018666">Large</item>
++        <item msgid="490158884605093126">Largest</item>
++    </string-array>
++	
++	<!--start:Modify for screen off effect -->
++	<string-array name="screen_off_effect_entries" translatable="false">
++        <item>@string/screen_off_effect_face_out</item>
++        <item>@string/screen_off_effect_old_tv</item>
++    </string-array>
++	
++	<string-array name="screen_off_effect_values" translatable="false">
++        <item>0</item>
++        <item>1</item>
++    </string-array>
++	<!--end:Modify for screen off effect -->
++</resources>
+\ No newline at end of file
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/display_settings.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/display_settings.xml	(revision 0)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/res/xml/display_settings.xml	(revision 6671)
+@@ -0,0 +1,160 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2010 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
++                  xmlns:settings="http://schemas.android.com/apk/res/com.android.settings"
++        android:title="@string/display_settings"
++        settings:keywords="@string/keywords_display">
++
++        <PreferenceScreen
++                android:key="brightness"
++                android:title="@string/brightness"
++                settings:keywords="@string/keywords_display_brightness_level">
++            <intent android:action="android.intent.action.SHOW_BRIGHTNESS_DIALOG" />
++        </PreferenceScreen>
++
++        <SwitchPreference
++                android:key="auto_brightness"
++                android:title="@string/auto_brightness_title"
++                settings:keywords="@string/keywords_display_auto_brightness"
++                android:summary="@string/auto_brightness_summary" />
++
++        <com.android.settings.display.NightDisplayPreference
++                android:key="night_display"
++                android:title="@string/night_display_title"
++                android:fragment="com.android.settings.display.NightDisplaySettings"
++                android:widgetLayout="@null"
++                settings:keywords="@string/keywords_display_night_display" />
++
++        <!-- Hide night mode for now
++        <ListPreference
++            android:key="night_mode"
++            android:title="@string/night_mode_title"
++            settings:keywords="@string/keywords_display_night_mode"
++            android:summary="@string/night_mode_summary"
++            android:entries="@array/night_mode_entries"
++            android:entryValues="@array/night_mode_values" /> -->
++		<PreferenceScreen
++                android:key="night_mode"
++                android:title="@string/night_mode_title"
++                android:summary="@string/night_mode_summary"
++                
++                android:fragment="com.android.settings.NightModeTypeSettings"
++                />
++                
++        <!-- ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++        <PreferenceScreen
++                android:key="full_screen_mode"
++                android:title="@string/full_screen_mode">
++                <intent android:action="com.mediatek.fullscreenmode_ENTRANCE"/>
++        </PreferenceScreen>
++        <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++        
++        <com.android.settingslib.RestrictedPreference
++                android:key="wallpaper"
++                android:title="@string/wallpaper_settings_title"
++                settings:keywords="@string/keywords_display_wallpaper"
++                settings:useAdminDisabledSummary="true" >
++                <intent
++                        android:targetPackage="@string/config_wallpaper_picker_package"
++                        android:targetClass="@string/config_wallpaper_picker_class" />
++        </com.android.settingslib.RestrictedPreference>
++
++        <com.android.settings.TimeoutListPreference
++                android:key="screen_timeout"
++                android:title="@string/screen_timeout"
++                android:summary="@string/screen_timeout_summary"
++                android:entries="@array/screen_timeout_entries"
++                android:entryValues="@array/screen_timeout_values" />
++	<PreferenceScreen
++                android:key="led_indicator"
++                android:title="@string/led_indicator_title"
++                android:fragment="com.android.settings.LedIndicatorSettings"/>
++
++        <SwitchPreference
++                android:key="camera_gesture"
++                android:title="@string/camera_gesture_title"
++                android:summary="@string/camera_gesture_desc" />
++
++        <PreferenceScreen
++                android:key="notification_led"
++                android:title="@string/notification_led_title"
++            android:fragment="com.android.settings.LEDSettings"/>
++
++        <PreferenceScreen
++                android:key="screensaver"
++                android:title="@string/screensaver_settings_title"
++                android:fragment="com.android.settings.DreamSettings" />
++				
++		<!--start:Modify for screen off effect -->
++		<ListPreference
++                android:key="screen_off_effect"
++                android:title="@string/screen_off_effect_title"
++				android:summary="@string/screen_off_effect_summary"
++				android:entries="@array/screen_off_effect_entries"
++                android:entryValues="@array/screen_off_effect_values"/>
++		<!--end:Modify for screen off effect -->
++		
++        <SwitchPreference
++                android:key="lift_to_wake"
++                android:title="@string/lift_to_wake_title" />
++
++        <SwitchPreference
++                android:key="doze"
++                android:title="@string/doze_title"
++                android:summary="@string/doze_summary" />
++
++        <SwitchPreference
++                android:key="tap_to_wake"
++                android:title="@string/tap_to_wake"
++                android:summary="@string/tap_to_wake_summary" />
++
++        <PreferenceScreen
++                android:key="font_size"
++                android:title="@string/title_font_size"
++                android:fragment="com.android.settings.accessibility.ToggleFontSizePreferenceFragment"
++                settings:keywords="@string/keywords_display_font_size" />
++
++        <PreferenceScreen
++                android:key="custom_font_size"
++                android:title="@string/title_font_size"
++                android:fragment="com.android.settings.accessibility.CustomToggleFontSizePreferenceFragment"
++                settings:keywords="@string/keywords_custom_display_font_size" />
++
++        <com.android.settings.display.ScreenZoomPreference
++                android:key="screen_zoom"
++                android:title="@string/screen_zoom_title"
++                settings:keywords="@string/screen_zoom_keywords" />
++
++        <DropDownPreference
++                android:key="auto_rotate"
++                android:summary="%s"
++                android:title="@string/display_auto_rotate_title" />
++
++       <!--  rm for 117347
++	   <PreferenceScreen
++                android:key="wifi_display"
++                android:title="@string/wifi_display_settings_title"
++                settings:keywords="@string/keywords_display_cast_screen"
++                android:fragment="com.android.settings.wfd.WifiDisplaySettings" />
++
++        -->
++        <DropDownPreference
++                android:key="vr_display_pref"
++                android:summary="%s"
++                android:title="@string/display_vr_pref_title" />
++
++</PreferenceScreen>
+Index: vendor/branch/5058I_ALRU/frameworks/base/services/core/java/com/android/server/display/DisplayPowerController.java
+===================================================================
+--- vendor/branch/5058I_ALRU/frameworks/base/services/core/java/com/android/server/display/DisplayPowerController.java	(revision 0)
++++ vendor/branch/5058I_ALRU/frameworks/base/services/core/java/com/android/server/display/DisplayPowerController.java	(revision 6671)
+@@ -0,0 +1,1656 @@
++/*
++* Copyright (C) 2014 MediaTek Inc.
++* Modification based on code covered by the mentioned copyright
++* and/or permission notice(s).
++*/
++/*
++ * Copyright (C) 2012 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.server.display;
++
++import com.android.internal.app.IBatteryStats;
++import com.android.server.LocalServices;
++import com.android.server.am.BatteryStatsService;
++
++import android.animation.Animator;
++import android.animation.ObjectAnimator;
++import android.content.Context;
++import android.content.res.Resources;
++import android.hardware.Sensor;
++import android.hardware.SensorEvent;
++import android.hardware.SensorEventListener;
++import android.hardware.SensorManager;
++import android.hardware.display.DisplayManagerInternal.DisplayPowerCallbacks;
++import android.hardware.display.DisplayManagerInternal.DisplayPowerRequest;
++import android.os.Handler;
++import android.os.Looper;
++import android.os.Message;
++import android.os.PowerManager;
++import android.os.RemoteException;
++import android.os.SystemClock;
++import android.os.Trace;
++import android.util.MathUtils;
++import android.util.Slog;
++import android.util.Spline;
++import android.util.TimeUtils;
++import android.view.Display;
++import android.view.WindowManagerPolicy;
++
++import java.io.PrintWriter;
++
++// Mediatek AAL support
++import android.content.BroadcastReceiver;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.os.SystemProperties;
++import android.os.UserHandle;
++import android.provider.Settings;
++
++
++
++/**
++ * Controls the power state of the display.
++ *
++ * Handles the proximity sensor, light sensor, and animations between states
++ * including the screen off animation.
++ *
++ * This component acts independently of the rest of the power manager service.
++ * In particular, it does not share any state and it only communicates
++ * via asynchronous callbacks to inform the power manager that something has
++ * changed.
++ *
++ * Everything this class does internally is serialized on its handler although
++ * it may be accessed by other threads from the outside.
++ *
++ * Note that the power manager service guarantees that it will hold a suspend
++ * blocker as long as the display is not ready.  So most of the work done here
++ * does not need to worry about holding a suspend blocker unless it happens
++ * independently of the display ready signal.
++   *
++ * For debugging, you can make the color fade and brightness animations run
++ * slower by changing the "animator duration scale" option in Development Settings.
++ */
++final class DisplayPowerController implements AutomaticBrightnessController.Callbacks {
++    private static final String TAG = "DisplayPowerController";
++    private static final String SCREEN_ON_BLOCKED_TRACE_NAME = "Screen on blocked";
++
++    private static boolean DEBUG = true;
++    private static final boolean DEBUG_PRETEND_PROXIMITY_SENSOR_ABSENT = false;
++
++    // If true, uses the color fade on animation.
++    // We might want to turn this off if we cannot get a guarantee that the screen
++    // actually turns on and starts showing new content after the call to set the
++    // screen state returns.  Playing the animation can also be somewhat slow.
++    private static final boolean USE_COLOR_FADE_ON_ANIMATION = false;
++
++    // The minimum reduction in brightness when dimmed.
++    private static final int SCREEN_DIM_MINIMUM_REDUCTION = 10;
++
++    private static final int COLOR_FADE_ON_ANIMATION_DURATION_MILLIS = 250;
++    private static final int COLOR_FADE_OFF_ANIMATION_DURATION_MILLIS = 400;
++
++    private static final int MSG_UPDATE_POWER_STATE = 1;
++    private static final int MSG_PROXIMITY_SENSOR_DEBOUNCED = 2;
++    private static final int MSG_SCREEN_ON_UNBLOCKED = 3;
++
++    private static final int PROXIMITY_UNKNOWN = -1;
++    private static final int PROXIMITY_NEGATIVE = 0;
++    private static final int PROXIMITY_POSITIVE = 1;
++
++    // Proximity sensor debounce delay in milliseconds for positive or negative transitions.
++    private static final int PROXIMITY_SENSOR_POSITIVE_DEBOUNCE_DELAY = 0;
++    private static final int PROXIMITY_SENSOR_NEGATIVE_DEBOUNCE_DELAY = 250;
++
++    // Trigger proximity if distance is less than 5 cm.
++    private static final float TYPICAL_PROXIMITY_THRESHOLD = 5.0f;
++
++    // Brightness animation ramp rate in brightness units per second.
++    private static final int BRIGHTNESS_RAMP_RATE_SLOW = 40;
++
++    // Mediatek AAL support
++    private int BRIGHTNESS_RAMP_RATE_BRIGHTEN = BRIGHTNESS_RAMP_RATE_SLOW;
++    private int BRIGHTNESS_RAMP_RATE_DARKEN = BRIGHTNESS_RAMP_RATE_SLOW;
++
++    public static final boolean MTK_AAL_SUPPORT =
++            SystemProperties.get("ro.mtk_aal_support").equals("1");
++
++    public static final boolean MTK_ULTRA_DIMMING_SUPPORT = PowerManager.MTK_ULTRA_DIMMING_SUPPORT;
++
++    public static final boolean MTK_AAL_RUNTIME_TUNING_SUPPORT =
++            nativeRuntimeTuningIsSupported();
++
++    private static final String MTK_AAL_UPDATE_CONFIG_ACTION = "com.mediatek.aal.update_config";
++
++    private static final int REPORTED_TO_POLICY_SCREEN_OFF = 0;
++    private static final int REPORTED_TO_POLICY_SCREEN_TURNING_ON = 1;
++    private static final int REPORTED_TO_POLICY_SCREEN_ON = 2;
++
++    private final Object mLock = new Object();
++
++    private final Context mContext;
++
++    // Our handler.
++    private final DisplayControllerHandler mHandler;
++
++    // Asynchronous callbacks into the power manager service.
++    // Only invoked from the handler thread while no locks are held.
++    private final DisplayPowerCallbacks mCallbacks;
++
++    // Battery stats.
++    private final IBatteryStats mBatteryStats;
++
++    // The sensor manager.
++    private final SensorManager mSensorManager;
++
++    // The window manager policy.
++    private final WindowManagerPolicy mWindowManagerPolicy;
++
++    // The display blanker.
++    private final DisplayBlanker mBlanker;
++
++    // The proximity sensor, or null if not available or needed.
++    private Sensor mProximitySensor;
++
++    // The doze screen brightness.
++    private final int mScreenBrightnessDozeConfig;
++
++    // The dim screen brightness.
++    private final int mScreenBrightnessDimConfig;
++
++    // The minimum screen brightness to use in a very dark room.
++    private final int mScreenBrightnessDarkConfig;
++
++    // The minimum allowed brightness.
++    private final int mScreenBrightnessRangeMinimum;
++
++    // The maximum allowed brightness.
++    private final int mScreenBrightnessRangeMaximum;
++
++    // True if auto-brightness should be used.
++    private boolean mUseSoftwareAutoBrightnessConfig;
++
++    // True if should use light sensor to automatically determine doze screen brightness.
++    private final boolean mAllowAutoBrightnessWhileDozingConfig;
++
++    // True if we should fade the screen while turning it off, false if we should play
++    // a stylish color fade animation instead.
++    private boolean mColorFadeFadesConfig;
++
++    // The pending power request.
++    // Initially null until the first call to requestPowerState.
++    // Guarded by mLock.
++    private DisplayPowerRequest mPendingRequestLocked;
++
++    // True if a request has been made to wait for the proximity sensor to go negative.
++    // Guarded by mLock.
++    private boolean mPendingWaitForNegativeProximityLocked;
++
++    // True if the pending power request or wait for negative proximity flag
++    // has been changed since the last update occurred.
++    // Guarded by mLock.
++    private boolean mPendingRequestChangedLocked;
++
++    // Set to true when the important parts of the pending power request have been applied.
++    // The important parts are mainly the screen state.  Brightness changes may occur
++    // concurrently.
++    // Guarded by mLock.
++    private boolean mDisplayReadyLocked;
++
++    // Set to true if a power state update is required.
++    // Guarded by mLock.
++    private boolean mPendingUpdatePowerStateLocked;
++
++    /* The following state must only be accessed by the handler thread. */
++
++    // The currently requested power state.
++    // The power controller will progressively update its internal state to match
++    // the requested power state.  Initially null until the first update.
++    private DisplayPowerRequest mPowerRequest;
++
++    // The current power state.
++    // Must only be accessed on the handler thread.
++    private DisplayPowerState mPowerState;
++
++    // True if the device should wait for negative proximity sensor before
++    // waking up the screen.  This is set to false as soon as a negative
++    // proximity sensor measurement is observed or when the device is forced to
++    // go to sleep by the user.  While true, the screen remains off.
++    private boolean mWaitingForNegativeProximity;
++
++    // The actual proximity sensor threshold value.
++    private float mProximityThreshold;
++
++    // Set to true if the proximity sensor listener has been registered
++    // with the sensor manager.
++    private boolean mProximitySensorEnabled;
++
++    // The debounced proximity sensor state.
++    private int mProximity = PROXIMITY_UNKNOWN;
++
++    // The raw non-debounced proximity sensor state.
++    private int mPendingProximity = PROXIMITY_UNKNOWN;
++    private long mPendingProximityDebounceTime = -1; // -1 if fully debounced
++
++    // True if the screen was turned off because of the proximity sensor.
++    // When the screen turns on again, we report user activity to the power manager.
++    private boolean mScreenOffBecauseOfProximity;
++
++    // The currently active screen on unblocker.  This field is non-null whenever
++    // we are waiting for a callback to release it and unblock the screen.
++    private ScreenOnUnblocker mPendingScreenOnUnblocker;
++
++    // True if we were in the process of turning off the screen.
++    // This allows us to recover more gracefully from situations where we abort
++    // turning off the screen.
++    private boolean mPendingScreenOff;
++
++    // True if we have unfinished business and are holding a suspend blocker.
++    private boolean mUnfinishedBusiness;
++
++    // The elapsed real time when the screen on was blocked.
++    private long mScreenOnBlockStartRealTime;
++
++    // Screen state we reported to policy. Must be one of REPORTED_TO_POLICY_SCREEN_* fields.
++    private int mReportedScreenStateToPolicy;
++
++    // Remembers whether certain kinds of brightness adjustments
++    // were recently applied so that we can decide how to transition.
++    private boolean mAppliedAutoBrightness;
++    private boolean mAppliedDimming;
++    private boolean mAppliedLowPower;
++
++    // Brightness ramp rate fast.
++    private final int mBrightnessRampRateFast;
++
++    // The controller for the automatic brightness level.
++    private AutomaticBrightnessController mAutomaticBrightnessController;
++	
++	//The screen off  effect key
++	private static final String KEY_SCREEN_OFF_EFFECT = "screen_off_effect";
++	
++    // Animators.
++    private ObjectAnimator mColorFadeOnAnimator;
++    private ObjectAnimator mColorFadeOffAnimator;
++    private RampAnimator<DisplayPowerState> mScreenBrightnessRampAnimator;
++
++    /**
++     * Creates the display power controller.
++     */
++    public DisplayPowerController(Context context,
++            DisplayPowerCallbacks callbacks, Handler handler,
++            SensorManager sensorManager, DisplayBlanker blanker) {
++        mHandler = new DisplayControllerHandler(handler.getLooper());
++        mCallbacks = callbacks;
++
++        mBatteryStats = BatteryStatsService.getService();
++        mSensorManager = sensorManager;
++        mWindowManagerPolicy = LocalServices.getService(WindowManagerPolicy.class);
++        mBlanker = blanker;
++        mContext = context;
++
++        final Resources resources = context.getResources();
++
++        boolean screenBrightnessVirtualValues = false;
++        if (MTK_ULTRA_DIMMING_SUPPORT) {
++            screenBrightnessVirtualValues = resources.getBoolean(
++                    com.mediatek.internal.R.bool.config_screenBrightnessVirtualValues);
++        }
++
++        // Mediatek AAL: ultra dimming modified
++        int screenBrightnessSettingMinimum = clampAbsoluteBrightness(resources.getInteger(
++                com.android.internal.R.integer.config_screenBrightnessSettingMinimum),
++                screenBrightnessVirtualValues);
++        if (MTK_ULTRA_DIMMING_SUPPORT) {
++            screenBrightnessSettingMinimum = PowerManager.ULTRA_DIMMING_BRIGHTNESS_MINIMUM;
++        }
++
++        mScreenBrightnessDozeConfig = clampAbsoluteBrightness(resources.getInteger(
++                com.android.internal.R.integer.config_screenBrightnessDoze),
++                screenBrightnessVirtualValues);
++
++        mScreenBrightnessDimConfig = clampAbsoluteBrightness(resources.getInteger(
++                com.android.internal.R.integer.config_screenBrightnessDim),
++                screenBrightnessVirtualValues);
++
++        mScreenBrightnessDarkConfig = clampAbsoluteBrightness(resources.getInteger(
++                com.android.internal.R.integer.config_screenBrightnessDark),
++                screenBrightnessVirtualValues);
++        if (mScreenBrightnessDarkConfig > mScreenBrightnessDimConfig) {
++            Slog.w(TAG, "Expected config_screenBrightnessDark ("
++                    + mScreenBrightnessDarkConfig + ") to be less than or equal to "
++                    + "config_screenBrightnessDim (" + mScreenBrightnessDimConfig + ").");
++        }
++        if (mScreenBrightnessDarkConfig > mScreenBrightnessDimConfig) {
++            Slog.w(TAG, "Expected config_screenBrightnessDark ("
++                    + mScreenBrightnessDarkConfig + ") to be less than or equal to "
++                    + "config_screenBrightnessSettingMinimum ("
++                    + screenBrightnessSettingMinimum + ").");
++        }
++
++        int screenBrightnessRangeMinimum = Math.min(Math.min(
++                screenBrightnessSettingMinimum, mScreenBrightnessDimConfig),
++                mScreenBrightnessDarkConfig);
++
++        mScreenBrightnessRangeMaximum = PowerManager.BRIGHTNESS_ON;
++
++        mUseSoftwareAutoBrightnessConfig = resources.getBoolean(
++                com.android.internal.R.bool.config_automatic_brightness_available);
++
++        mAllowAutoBrightnessWhileDozingConfig = resources.getBoolean(
++                com.android.internal.R.bool.config_allowAutoBrightnessWhileDozing);
++
++        mBrightnessRampRateFast = resources.getInteger(
++                com.android.internal.R.integer.config_brightness_ramp_rate_fast);
++
++        int lightSensorRate = resources.getInteger(
++                com.android.internal.R.integer.config_autoBrightnessLightSensorRate);
++        long brighteningLightDebounce = resources.getInteger(
++                com.android.internal.R.integer.config_autoBrightnessBrighteningLightDebounce);
++        long darkeningLightDebounce = resources.getInteger(
++                com.android.internal.R.integer.config_autoBrightnessDarkeningLightDebounce);
++        boolean autoBrightnessResetAmbientLuxAfterWarmUp = resources.getBoolean(
++                com.android.internal.R.bool.config_autoBrightnessResetAmbientLuxAfterWarmUp);
++        int ambientLightHorizon = resources.getInteger(
++                com.android.internal.R.integer.config_autoBrightnessAmbientLightHorizon);
++        float autoBrightnessAdjustmentMaxGamma = resources.getFraction(
++                com.android.internal.R.fraction.config_autoBrightnessAdjustmentMaxGamma,
++                1, 1);
++
++        if (mUseSoftwareAutoBrightnessConfig) {
++            int[] lux = resources.getIntArray(
++                    com.android.internal.R.array.config_autoBrightnessLevels);
++            int[] screenBrightness = resources.getIntArray(
++                    com.android.internal.R.array.config_autoBrightnessLcdBacklightValues);
++            int lightSensorWarmUpTimeConfig = resources.getInteger(
++                    com.android.internal.R.integer.config_lightSensorWarmupTime);
++            final float dozeScaleFactor = resources.getFraction(
++                    com.android.internal.R.fraction.config_screenAutoBrightnessDozeScaleFactor,
++                    1, 1);
++
++            // Mediatek AAL: ultra dimming modified
++            Spline screenAutoBrightnessSpline = createAutoBrightnessSpline(lux, screenBrightness,
++                    screenBrightnessVirtualValues);
++            if (screenAutoBrightnessSpline == null) {
++                Slog.e(TAG, "Error in config.xml.  config_autoBrightnessLcdBacklightValues "
++                        + "(size " + screenBrightness.length + ") "
++                        + "must be monotic and have exactly one more entry than "
++                        + "config_autoBrightnessLevels (size " + lux.length + ") "
++                        + "which must be strictly increasing.  "
++                        + "Auto-brightness will be disabled.");
++                mUseSoftwareAutoBrightnessConfig = false;
++            } else {
++                int bottom = clampAbsoluteBrightness(screenBrightness[0],
++                        screenBrightnessVirtualValues);
++                if (mScreenBrightnessDarkConfig > bottom) {
++                    Slog.w(TAG, "config_screenBrightnessDark (" + mScreenBrightnessDarkConfig
++                            + ") should be less than or equal to the first value of "
++                            + "config_autoBrightnessLcdBacklightValues ("
++                            + bottom + ").");
++                }
++                if (bottom < screenBrightnessRangeMinimum) {
++                    screenBrightnessRangeMinimum = bottom;
++                }
++                mAutomaticBrightnessController = new AutomaticBrightnessController(this,
++                        handler.getLooper(), sensorManager, screenAutoBrightnessSpline,
++                        lightSensorWarmUpTimeConfig, screenBrightnessRangeMinimum,
++                        mScreenBrightnessRangeMaximum, dozeScaleFactor, lightSensorRate,
++                        brighteningLightDebounce, darkeningLightDebounce,
++                        autoBrightnessResetAmbientLuxAfterWarmUp,
++                        ambientLightHorizon, autoBrightnessAdjustmentMaxGamma);
++
++                if (MTK_AAL_SUPPORT && (lux.length + 1 == screenBrightness.length)) {
++                    int[] curve = new int[lux.length + 1 + screenBrightness.length];
++                    curve[0] = 0;
++                    System.arraycopy(lux, 0, curve, 1, lux.length);
++                    System.arraycopy(screenBrightness, 0, curve,
++                            lux.length + 1, screenBrightness.length);
++                    // We should not write the config to AALService here,
++                    // because the service may be not ready yet.
++                    mTuningInitCurve = curve;
++                }
++            }
++        }
++
++        mScreenBrightnessRangeMinimum = screenBrightnessRangeMinimum;
++
++        mColorFadeFadesConfig = resources.getBoolean(
++                com.android.internal.R.bool.config_animateScreenLights);
++
++        if (!DEBUG_PRETEND_PROXIMITY_SENSOR_ABSENT) {
++            mProximitySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
++            if (mProximitySensor != null) {
++                mProximityThreshold = Math.min(mProximitySensor.getMaximumRange(),
++                        TYPICAL_PROXIMITY_THRESHOLD);
++            }
++        }
++    }
++
++
++    /**
++     * Returns true if the proximity sensor screen-off function is available.
++     */
++    public boolean isProximitySensorAvailable() {
++        return mProximitySensor != null;
++    }
++
++    /**
++     * set IPO screen on delay
++     */
++    public void setIPOScreenOnDelay(int msec) {
++        mPowerState.setIPOScreenOnDelay(msec);
++    }
++
++    /**
++     * Requests a new power state.
++     * The controller makes a copy of the provided object and then
++     * begins adjusting the power state to match what was requested.
++     *
++     * @param request The requested power state.
++     * @param waitForNegativeProximity If true, issues a request to wait for
++     * negative proximity before turning the screen back on, assuming the screen
++     * was turned off by the proximity sensor.
++     * @return True if display is ready, false if there are important changes that must
++     * be made asynchronously (such as turning the screen on), in which case the caller
++     * should grab a wake lock, watch for {@link DisplayPowerCallbacks#onStateChanged()}
++     * then try the request again later until the state converges.
++     */
++    public boolean requestPowerState(DisplayPowerRequest request,
++            boolean waitForNegativeProximity) {
++        synchronized (mLock) {
++            boolean changed = false;
++
++            if (waitForNegativeProximity
++                    && !mPendingWaitForNegativeProximityLocked) {
++                mPendingWaitForNegativeProximityLocked = true;
++                changed = true;
++            }
++
++            if (mPendingRequestLocked == null) {
++                mPendingRequestLocked = new DisplayPowerRequest(request);
++                changed = true;
++            } else if (!mPendingRequestLocked.equals(request)) {
++                mPendingRequestLocked.copyFrom(request);
++                changed = true;
++            }
++
++            if (changed) {
++                mDisplayReadyLocked = false;
++            }
++
++            if (changed && !mPendingRequestChangedLocked) {
++                mPendingRequestChangedLocked = true;
++                sendUpdatePowerStateLocked();
++            }
++
++            if (DEBUG && changed) {
++                Slog.d(TAG, "requestPowerState: " + request +
++                    ", waitForNegativeProximity=" + waitForNegativeProximity +
++                    ", changed=" + changed);
++            }
++
++            return mDisplayReadyLocked;
++        }
++    }
++
++    private void sendUpdatePowerState() {
++        synchronized (mLock) {
++            sendUpdatePowerStateLocked();
++        }
++    }
++
++    private void sendUpdatePowerStateLocked() {
++        if (!mPendingUpdatePowerStateLocked) {
++            mPendingUpdatePowerStateLocked = true;
++            Message msg = mHandler.obtainMessage(MSG_UPDATE_POWER_STATE);
++            msg.setAsynchronous(true);
++            mHandler.sendMessage(msg);
++        }
++    }
++
++    private void initialize() {
++        // Initialize the power state object for the default display.
++        // In the future, we might manage multiple displays independently.
++        mPowerState = new DisplayPowerState(mBlanker,
++                new ColorFade(Display.DEFAULT_DISPLAY));
++
++        mColorFadeOnAnimator = ObjectAnimator.ofFloat(
++                mPowerState, DisplayPowerState.COLOR_FADE_LEVEL, 0.0f, 1.0f);
++        mColorFadeOnAnimator.setDuration(COLOR_FADE_ON_ANIMATION_DURATION_MILLIS);
++        mColorFadeOnAnimator.addListener(mAnimatorListener);
++
++        mColorFadeOffAnimator = ObjectAnimator.ofFloat(
++                mPowerState, DisplayPowerState.COLOR_FADE_LEVEL, 1.0f, 0.0f);
++        mColorFadeOffAnimator.setDuration(COLOR_FADE_OFF_ANIMATION_DURATION_MILLIS);
++        mColorFadeOffAnimator.addListener(mAnimatorListener);
++
++        mScreenBrightnessRampAnimator = new RampAnimator<DisplayPowerState>(
++                mPowerState, DisplayPowerState.SCREEN_BRIGHTNESS);
++        mScreenBrightnessRampAnimator.setListener(mRampAnimatorListener);
++
++        // Initialize screen state for battery stats.
++        try {
++            mBatteryStats.noteScreenState(mPowerState.getScreenState());
++            mBatteryStats.noteScreenBrightness(mPowerState.getScreenBrightness());
++        } catch (RemoteException ex) {
++            // same process
++        }
++    }
++
++    private final Animator.AnimatorListener mAnimatorListener = new Animator.AnimatorListener() {
++        @Override
++        public void onAnimationStart(Animator animation) {
++        }
++        @Override
++        public void onAnimationEnd(Animator animation) {
++            sendUpdatePowerState();
++        }
++        @Override
++        public void onAnimationRepeat(Animator animation) {
++        }
++        @Override
++        public void onAnimationCancel(Animator animation) {
++        }
++    };
++
++    private final RampAnimator.Listener mRampAnimatorListener = new RampAnimator.Listener() {
++        @Override
++        public void onAnimationEnd() {
++            // Mediatek AAL support
++            mTuningQuicklyApply = false;
++            sendUpdatePowerState();
++        }
++    };
++
++    private void updatePowerState() {
++        // Update the power state request.
++        final boolean mustNotify;
++        boolean mustInitialize = false;
++        boolean autoBrightnessAdjustmentChanged = false;
++
++        synchronized (mLock) {
++            mPendingUpdatePowerStateLocked = false;
++            if (mPendingRequestLocked == null) {
++                return; // wait until first actual power request
++            }
++
++            if (mPowerRequest == null) {
++                mPowerRequest = new DisplayPowerRequest(mPendingRequestLocked);
++                mWaitingForNegativeProximity = mPendingWaitForNegativeProximityLocked;
++                mPendingWaitForNegativeProximityLocked = false;
++                mPendingRequestChangedLocked = false;
++                mustInitialize = true;
++            } else if (mPendingRequestChangedLocked) {
++                autoBrightnessAdjustmentChanged = (mPowerRequest.screenAutoBrightnessAdjustment
++                        != mPendingRequestLocked.screenAutoBrightnessAdjustment);
++                mPowerRequest.copyFrom(mPendingRequestLocked);
++                mWaitingForNegativeProximity |= mPendingWaitForNegativeProximityLocked;
++                mPendingWaitForNegativeProximityLocked = false;
++                mPendingRequestChangedLocked = false;
++                mDisplayReadyLocked = false;
++            }
++
++            mustNotify = !mDisplayReadyLocked;
++
++            Slog.d(TAG, "updatePowerState: " + mPowerRequest +
++                ", mWaitingForNegativeProximity=" + mWaitingForNegativeProximity +
++                ", autoBrightnessAdjustmentChanged=" + autoBrightnessAdjustmentChanged +
++                ", mustNotify=" + mustNotify);
++        }
++
++        // Initialize things the first time the power state is changed.
++        if (mustInitialize) {
++            initialize();
++
++            if (MTK_AAL_RUNTIME_TUNING_SUPPORT) {
++                IntentFilter filter = new IntentFilter(MTK_AAL_UPDATE_CONFIG_ACTION);
++                mContext.registerReceiver(new UpdateConfigReceiver(), filter);
++                writeInitConfig();
++            }
++        }
++
++        if (MTK_AAL_RUNTIME_TUNING_SUPPORT) {
++            updateRuntimeConfig();
++        }
++
++        // Compute the basic display state using the policy.
++        // We might override this below based on other factors.
++        int state;
++        int brightness = PowerManager.BRIGHTNESS_DEFAULT;
++        boolean performScreenOffTransition = false;
++        switch (mPowerRequest.policy) {
++            case DisplayPowerRequest.POLICY_OFF:
++                state = Display.STATE_OFF;
++				//start:Modify for screen off effect
++				int currentEffect = Settings.System.getInt(mContext.getContentResolver(), 
++									KEY_SCREEN_OFF_EFFECT, 0);
++				Slog.d(TAG,"currentEffect vlaue = "+currentEffect);
++				if (currentEffect == 0){
++					performScreenOffTransition = true;
++				} else if(currentEffect == 1) {
++					performScreenOffTransition = false;
++				}
++				//end:Modify for screen off effect
++                break;
++            case DisplayPowerRequest.POLICY_DOZE:
++                if (mPowerRequest.dozeScreenState != Display.STATE_UNKNOWN) {
++                    state = mPowerRequest.dozeScreenState;
++                } else {
++                    state = Display.STATE_DOZE;
++                }
++                if (!mAllowAutoBrightnessWhileDozingConfig) {
++                    brightness = mPowerRequest.dozeScreenBrightness;
++                }
++                break;
++            case DisplayPowerRequest.POLICY_DIM:
++            case DisplayPowerRequest.POLICY_BRIGHT:
++            default:
++                state = Display.STATE_ON;
++                break;
++        }
++        assert(state != Display.STATE_UNKNOWN);
++
++        // Apply the proximity sensor.
++        if (mProximitySensor != null) {
++            if (mPowerRequest.useProximitySensor && state != Display.STATE_OFF) {
++                setProximitySensorEnabled(true);
++                if (!mScreenOffBecauseOfProximity
++                        && mProximity == PROXIMITY_POSITIVE) {
++                    mScreenOffBecauseOfProximity = true;
++                    sendOnProximityPositiveWithWakelock();
++                }
++            } else if (mWaitingForNegativeProximity
++                    && mScreenOffBecauseOfProximity
++                    && mProximity == PROXIMITY_POSITIVE
++                    && state != Display.STATE_OFF) {
++                setProximitySensorEnabled(true);
++            } else {
++                if (mPowerRequest.useProximitySensor) {
++                    if (mScreenOffBecauseOfProximity) {
++                        mProximity = PROXIMITY_UNKNOWN;
++                    }
++                    setProximitySensorEnabled(true);
++                } else {
++                    setProximitySensorEnabled(false);
++                }
++                mWaitingForNegativeProximity = false;
++            }
++            if (mScreenOffBecauseOfProximity
++                    && mProximity != PROXIMITY_POSITIVE) {
++                mScreenOffBecauseOfProximity = false;
++                sendOnProximityNegativeWithWakelock();
++            }
++        } else {
++            mWaitingForNegativeProximity = false;
++        }
++        if (mScreenOffBecauseOfProximity) {
++            state = Display.STATE_OFF;
++        }
++
++        // Animate the screen state change unless already animating.
++        // The transition may be deferred, so after this point we will use the
++        // actual state instead of the desired one.
++        animateScreenStateChange(state, performScreenOffTransition);
++        state = mPowerState.getScreenState();
++
++        // Use zero brightness when screen is off.
++        if (state == Display.STATE_OFF) {
++            brightness = PowerManager.BRIGHTNESS_OFF;
++        }
++
++        // Configure auto-brightness.
++        boolean autoBrightnessEnabled = false;
++        if (mAutomaticBrightnessController != null) {
++            final boolean autoBrightnessEnabledInDoze = mAllowAutoBrightnessWhileDozingConfig
++                    && (state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND);
++            autoBrightnessEnabled = mPowerRequest.useAutoBrightness
++                    && (state == Display.STATE_ON || autoBrightnessEnabledInDoze)
++                    && brightness < 0;
++            final boolean userInitiatedChange = autoBrightnessAdjustmentChanged
++                    && mPowerRequest.brightnessSetByUser;
++
++            Slog.d(TAG, "ABC configure: enabledInDoze=" + mAllowAutoBrightnessWhileDozingConfig +
++                ", lowDimmingProtectionEnabled=" + mLowDimmingProtectionEnabled +
++                ", adjustment=" + mPowerRequest.screenAutoBrightnessAdjustment +
++                ", state=" + state +
++                ", brightness=" + brightness);
++
++            mAutomaticBrightnessController.configure(
++                    autoBrightnessEnabled || mLowDimmingProtectionEnabled,
++                    mPowerRequest.screenAutoBrightnessAdjustment, state != Display.STATE_ON,
++                    userInitiatedChange, mPowerRequest.useTwilight);
++        }
++
++        // Apply brightness boost.
++        // We do this here after configuring auto-brightness so that we don't
++        // disable the light sensor during this temporary state.  That way when
++        // boost ends we will be able to resume normal auto-brightness behavior
++        // without any delay.
++        if (mPowerRequest.boostScreenBrightness
++                && brightness != PowerManager.BRIGHTNESS_OFF) {
++            brightness = PowerManager.BRIGHTNESS_ON;
++        }
++
++        // Apply auto-brightness.
++        boolean slowChange = false;
++        if (brightness < 0) {
++            if (autoBrightnessEnabled) {
++                brightness = mAutomaticBrightnessController.getAutomaticScreenBrightness();
++            }
++            if (brightness >= 0) {
++                // Use current auto-brightness value and slowly adjust to changes.
++                brightness = clampScreenBrightness(brightness);
++                if (mAppliedAutoBrightness && !autoBrightnessAdjustmentChanged) {
++                    slowChange = true; // slowly adapt to auto-brightness
++                }
++                mAppliedAutoBrightness = true;
++            } else {
++                mAppliedAutoBrightness = false;
++            }
++        } else {
++            mAppliedAutoBrightness = false;
++        }
++
++        // Use default brightness when dozing unless overridden.
++        if (brightness < 0 && (state == Display.STATE_DOZE
++                || state == Display.STATE_DOZE_SUSPEND)) {
++            brightness = mScreenBrightnessDozeConfig;
++        }
++
++        // Apply manual brightness.
++        // Use the current brightness setting from the request, which is expected
++        // provide a nominal default value for the case where auto-brightness
++        // is not ready yet.
++        if (brightness < 0) {
++            brightness = clampScreenBrightness(mPowerRequest.screenBrightness);
++
++            // Mediatek AAL: ultra dimming modified
++            if (LOW_DIMMING_PROTECTION_SUPPORT) {
++                if (!isScreenStateBright()) {
++                    // Consider a scenario:
++                    // low dimming -> send protection -> screen off -> a while -> screen on
++                    // the protection may be ignored during the screen off
++                    // We have to resend the protection when screen on
++                    mLowDimmingProtectionTriggerBrightness = 0;
++                }
++
++                mLowDimmingProtectionEnabled = (brightness < LOW_DIMMING_PROTECTION_THRESHOLD);
++                final boolean userInitiatedChange = autoBrightnessAdjustmentChanged
++                    && mPowerRequest.brightnessSetByUser;
++                mAutomaticBrightnessController.configure(
++                        autoBrightnessEnabled || mLowDimmingProtectionEnabled,
++                        mPowerRequest.screenAutoBrightnessAdjustment, state != Display.STATE_ON,
++                        userInitiatedChange, mPowerRequest.useTwilight);
++
++                int minBrightness = protectedMinimumBrightness();
++                if (getBrightnessSetting() == mPowerRequest.screenBrightness &&
++                        brightness < minBrightness &&
++                        brightness != mLowDimmingProtectionTriggerBrightness &&
++                        isScreenStateBright())
++                {
++                    long current = SystemClock.uptimeMillis();
++                    mHandler.removeMessages(MSG_PROTECT_LOW_DIMMING);
++                    mHandler.sendEmptyMessageAtTime(MSG_PROTECT_LOW_DIMMING,
++                            current + LOW_DIMMING_PROTECTION_DURATION);
++
++                    Slog.d(TAG, "Trigger low dimming protection : " + brightness +
++                            " < " + minBrightness + ", auto = " +
++                            mAutomaticBrightnessController.getAutomaticScreenBrightness());
++
++                    // If we have emitted a protection for some brightness and another
++                    // updatePowerState() is invoked, do not remove the protection
++                    // message and re-emit if the brightness is not chaged by user.
++                    // That is, the calling of updatePowerState() is not due to user operations.
++                    mLowDimmingProtectionTriggerBrightness = brightness;
++                }
++            }
++        }
++
++        // Apply dimming by at least some minimum amount when user activity
++        // timeout is about to expire.
++        if (mPowerRequest.policy == DisplayPowerRequest.POLICY_DIM) {
++            if (brightness > mScreenBrightnessRangeMinimum) {
++                // Mediatek AAL modified
++                if (brightness - SCREEN_DIM_MINIMUM_REDUCTION > 0)
++                    brightness = brightness - SCREEN_DIM_MINIMUM_REDUCTION;
++                else
++                    brightness = brightness / 2;
++                brightness = Math.max(Math.min(brightness,
++                        mScreenBrightnessDimConfig), mScreenBrightnessRangeMinimum);
++            }
++            if (!mAppliedDimming) {
++                slowChange = false;
++            }
++            mAppliedDimming = true;
++        } else if (mAppliedDimming) {
++            slowChange = false;
++            mAppliedDimming = false;
++        }
++
++        // If low power mode is enabled, cut the brightness level by half
++        // as long as it is above the minimum threshold.
++        if (mPowerRequest.lowPowerMode) {
++            if (brightness > mScreenBrightnessRangeMinimum) {
++                brightness = Math.max(brightness / 2, mScreenBrightnessRangeMinimum);
++            }
++            if (!mAppliedLowPower) {
++                slowChange = false;
++            }
++            mAppliedLowPower = true;
++        } else if (mAppliedLowPower) {
++            slowChange = false;
++            mAppliedLowPower = false;
++        }
++
++        // Animate the screen brightness when the screen is on or dozing.
++        // Skip the animation when the screen is off or suspended.
++        if (!mPendingScreenOff) {
++            if (state == Display.STATE_ON || state == Display.STATE_DOZE) {
++                // Mediatek AAL modified
++                int rate = BRIGHTNESS_RAMP_RATE_SLOW;
++
++                if (MTK_AAL_SUPPORT) {
++                    if (mTuningQuicklyApply) { // was set in updateRuntimeConfig()
++                        slowChange = false;
++                    }
++                    if (mPowerState.getScreenBrightness() < brightness) {
++                        rate = BRIGHTNESS_RAMP_RATE_BRIGHTEN;
++                    } else {
++                        rate = BRIGHTNESS_RAMP_RATE_DARKEN;
++                    }
++                }
++
++                if (!slowChange) {
++                    rate = mBrightnessRampRateFast;
++                }
++                animateScreenBrightness(brightness, rate);
++            }
++        }
++
++        // Determine whether the display is ready for use in the newly requested state.
++        // Note that we do not wait for the brightness ramp animation to complete before
++        // reporting the display is ready because we only need to ensure the screen is in the
++        // right power state even as it continues to converge on the desired brightness.
++        final boolean ready = mPendingScreenOnUnblocker == null
++                && !mColorFadeOnAnimator.isStarted()
++                && !mColorFadeOffAnimator.isStarted()
++                && mPowerState.waitUntilClean(mCleanListener);
++        final boolean finished = ready
++                && !mScreenBrightnessRampAnimator.isAnimating();
++
++        // Notify policy about screen turned on.
++        if (ready && state != Display.STATE_OFF
++                && mReportedScreenStateToPolicy == REPORTED_TO_POLICY_SCREEN_TURNING_ON) {
++            mReportedScreenStateToPolicy = REPORTED_TO_POLICY_SCREEN_ON;
++            mWindowManagerPolicy.screenTurnedOn();
++        }
++
++        // Grab a wake lock if we have unfinished business.
++        if (!finished && !mUnfinishedBusiness) {
++            if (DEBUG) {
++                Slog.d(TAG, "Unfinished business...");
++            }
++            mCallbacks.acquireSuspendBlocker();
++            mUnfinishedBusiness = true;
++        }
++
++        // Notify the power manager when ready.
++        if (ready && mustNotify) {
++            // Send state change.
++            synchronized (mLock) {
++                if (!mPendingRequestChangedLocked) {
++                    mDisplayReadyLocked = true;
++
++                    if (DEBUG) {
++                        Slog.d(TAG, "Display ready!");
++                    }
++                }
++            }
++            sendOnStateChangedWithWakelock();
++        }
++
++        // Release the wake lock when we have no unfinished business.
++        if (finished && mUnfinishedBusiness) {
++            if (DEBUG) {
++                Slog.d(TAG, "Finished business...");
++            }
++            mUnfinishedBusiness = false;
++            mCallbacks.releaseSuspendBlocker();
++        }
++    }
++
++    @Override
++    public void updateBrightness() {
++        sendUpdatePowerState();
++    }
++
++    private void blockScreenOn() {
++        if (mPendingScreenOnUnblocker == null) {
++            Trace.asyncTraceBegin(Trace.TRACE_TAG_POWER, SCREEN_ON_BLOCKED_TRACE_NAME, 0);
++            mPendingScreenOnUnblocker = new ScreenOnUnblocker();
++            mScreenOnBlockStartRealTime = SystemClock.elapsedRealtime();
++            Slog.i(TAG, "Blocking screen on until initial contents have been drawn.");
++        }
++    }
++
++    private void unblockScreenOn() {
++        if (mPendingScreenOnUnblocker != null) {
++            mPendingScreenOnUnblocker = null;
++            long delay = SystemClock.elapsedRealtime() - mScreenOnBlockStartRealTime;
++            Slog.i(TAG, "Unblocked screen on after " + delay + " ms");
++            Trace.asyncTraceEnd(Trace.TRACE_TAG_POWER, SCREEN_ON_BLOCKED_TRACE_NAME, 0);
++        }
++    }
++
++    private boolean setScreenState(int state) {
++        if (mPowerState.getScreenState() != state) {
++            final boolean wasOn = (mPowerState.getScreenState() != Display.STATE_OFF);
++            mPowerState.setScreenState(state);
++
++            // Tell battery stats about the transition.
++            try {
++                mBatteryStats.noteScreenState(state);
++            } catch (RemoteException ex) {
++                // same process
++            }
++        }
++
++        // Tell the window manager policy when the screen is turned off or on unless it's due
++        // to the proximity sensor.  We temporarily block turning the screen on until the
++        // window manager is ready by leaving a black surface covering the screen.
++        // This surface is essentially the final state of the color fade animation and
++        // it is only removed once the window manager tells us that the activity has
++        // finished drawing underneath.
++        final boolean isOff = (state == Display.STATE_OFF);
++        if (isOff && mReportedScreenStateToPolicy != REPORTED_TO_POLICY_SCREEN_OFF
++                && !mScreenOffBecauseOfProximity) {
++            mReportedScreenStateToPolicy = REPORTED_TO_POLICY_SCREEN_OFF;
++            unblockScreenOn();
++            mWindowManagerPolicy.screenTurnedOff();
++        } else if (!isOff && mReportedScreenStateToPolicy == REPORTED_TO_POLICY_SCREEN_OFF) {
++            mReportedScreenStateToPolicy = REPORTED_TO_POLICY_SCREEN_TURNING_ON;
++            if (mPowerState.getColorFadeLevel() == 0.0f) {
++                blockScreenOn();
++            } else {
++                unblockScreenOn();
++            }
++            mWindowManagerPolicy.screenTurningOn(mPendingScreenOnUnblocker);
++        }
++
++        // Return true if the screen isn't blocked.
++        return mPendingScreenOnUnblocker == null;
++    }
++
++    private int clampScreenBrightness(int value) {
++        return MathUtils.constrain(
++                value, mScreenBrightnessRangeMinimum, mScreenBrightnessRangeMaximum);
++    }
++
++    private void animateScreenBrightness(int target, int rate) {
++        if (DEBUG) {
++            Slog.d(TAG, "Animating brightness: target=" + target +", rate=" + rate);
++        }
++        if (mScreenBrightnessRampAnimator.animateTo(target, rate)) {
++            try {
++                mBatteryStats.noteScreenBrightness(target);
++            } catch (RemoteException ex) {
++                // same process
++            }
++        }
++    }
++
++    private void animateScreenStateChange(int target, boolean performScreenOffTransition) {
++        // If there is already an animation in progress, don't interfere with it.
++        if (mColorFadeOnAnimator.isStarted()
++                || mColorFadeOffAnimator.isStarted()) {
++            if (target != Display.STATE_ON) {
++                return;
++            }
++            // If display state changed to on, proceed and stop the color fade and turn screen on.
++            mPendingScreenOff = false;
++        }
++
++        // If we were in the process of turning off the screen but didn't quite
++        // finish.  Then finish up now to prevent a jarring transition back
++        // to screen on if we skipped blocking screen on as usual.
++        if (mPendingScreenOff && target != Display.STATE_OFF) {
++            setScreenState(Display.STATE_OFF);
++            mPendingScreenOff = false;
++            mPowerState.dismissColorFadeResources();
++        }
++
++        if (target == Display.STATE_ON) {
++            // Want screen on.  The contents of the screen may not yet
++            // be visible if the color fade has not been dismissed because
++            // its last frame of animation is solid black.
++            if (!setScreenState(Display.STATE_ON)) {
++                return; // screen on blocked
++            }
++            if (USE_COLOR_FADE_ON_ANIMATION && mPowerRequest.isBrightOrDim()) {
++                // Perform screen on animation.
++                if (mPowerState.getColorFadeLevel() == 1.0f) {
++                    mPowerState.dismissColorFade();
++                } else if (mPowerState.prepareColorFade(mContext,
++                        mColorFadeFadesConfig ?
++                                ColorFade.MODE_FADE :
++                                        ColorFade.MODE_WARM_UP)) {
++                    mColorFadeOnAnimator.start();
++                } else {
++                    mColorFadeOnAnimator.end();
++                }
++            } else {
++                // Skip screen on animation.
++                mPowerState.setColorFadeLevel(1.0f);
++                mPowerState.dismissColorFade();
++            }
++        } else if (target == Display.STATE_DOZE) {
++            // Want screen dozing.
++            // Wait for brightness animation to complete beforehand when entering doze
++            // from screen on to prevent a perceptible jump because brightness may operate
++            // differently when the display is configured for dozing.
++            if (mScreenBrightnessRampAnimator.isAnimating()
++                    && mPowerState.getScreenState() == Display.STATE_ON) {
++                return;
++            }
++
++            // Set screen state.
++            if (!setScreenState(Display.STATE_DOZE)) {
++                return; // screen on blocked
++            }
++
++            // Dismiss the black surface without fanfare.
++            mPowerState.setColorFadeLevel(1.0f);
++            mPowerState.dismissColorFade();
++        } else if (target == Display.STATE_DOZE_SUSPEND) {
++            // Want screen dozing and suspended.
++            // Wait for brightness animation to complete beforehand unless already
++            // suspended because we may not be able to change it after suspension.
++            if (mScreenBrightnessRampAnimator.isAnimating()
++                    && mPowerState.getScreenState() != Display.STATE_DOZE_SUSPEND) {
++                return;
++            }
++
++            // If not already suspending, temporarily set the state to doze until the
++            // screen on is unblocked, then suspend.
++            if (mPowerState.getScreenState() != Display.STATE_DOZE_SUSPEND) {
++                if (!setScreenState(Display.STATE_DOZE)) {
++                    return; // screen on blocked
++                }
++                setScreenState(Display.STATE_DOZE_SUSPEND); // already on so can't block
++            }
++
++            // Dismiss the black surface without fanfare.
++            mPowerState.setColorFadeLevel(1.0f);
++            mPowerState.dismissColorFade();
++        } else {
++            // Want screen off.
++            mPendingScreenOff = true;
++            if (mPowerState.getColorFadeLevel() == 0.0f) {
++                // Turn the screen off.
++                // A black surface is already hiding the contents of the screen.
++                setScreenState(Display.STATE_OFF);
++                mPendingScreenOff = false;
++                mPowerState.dismissColorFadeResources();
++            } else if (performScreenOffTransition
++                    && mPowerState.prepareColorFade(mContext,
++                            mColorFadeFadesConfig ?
++                                    ColorFade.MODE_FADE : ColorFade.MODE_COOL_DOWN)
++                    && mPowerState.getScreenState() != Display.STATE_OFF) {
++                // Perform the screen off animation.
++                mColorFadeOffAnimator.start();
++            } else {
++                // Skip the screen off animation and add a black surface to hide the
++                // contents of the screen.
++                mColorFadeOffAnimator.end();
++            }
++        }
++    }
++
++    private final Runnable mCleanListener = new Runnable() {
++        @Override
++        public void run() {
++            sendUpdatePowerState();
++        }
++    };
++
++    private void setProximitySensorEnabled(boolean enable) {
++        if (enable) {
++            if (!mProximitySensorEnabled) {
++                if (DEBUG) {
++                    Slog.d(TAG, "setProximitySensorEnabled : True");
++                }
++                // Register the listener.
++                // Proximity sensor state already cleared initially.
++                mProximitySensorEnabled = true;
++                mSensorManager.registerListener(mProximitySensorListener, mProximitySensor,
++                        SensorManager.SENSOR_DELAY_NORMAL, mHandler);
++            }
++        } else {
++            if (mProximitySensorEnabled) {
++                if (DEBUG) {
++                    Slog.d(TAG, "setProximitySensorEnabled : False");
++                }
++                // Unregister the listener.
++                // Clear the proximity sensor state for next time.
++                mProximitySensorEnabled = false;
++                mProximity = PROXIMITY_UNKNOWN;
++                mPendingProximity = PROXIMITY_UNKNOWN;
++                mHandler.removeMessages(MSG_PROXIMITY_SENSOR_DEBOUNCED);
++                mSensorManager.unregisterListener(mProximitySensorListener);
++                clearPendingProximityDebounceTime(); // release wake lock (must be last)
++            }
++        }
++    }
++
++    private void handleProximitySensorEvent(long time, boolean positive) {
++        if (mProximitySensorEnabled) {
++            if (mPendingProximity == PROXIMITY_NEGATIVE && !positive) {
++                return; // no change
++            }
++            if (mPendingProximity == PROXIMITY_POSITIVE && positive) {
++                return; // no change
++            }
++
++            // Only accept a proximity sensor reading if it remains
++            // stable for the entire debounce delay.  We hold a wake lock while
++            // debouncing the sensor.
++            mHandler.removeMessages(MSG_PROXIMITY_SENSOR_DEBOUNCED);
++            if (positive) {
++                mPendingProximity = PROXIMITY_POSITIVE;
++                setPendingProximityDebounceTime(
++                        time + PROXIMITY_SENSOR_POSITIVE_DEBOUNCE_DELAY); // acquire wake lock
++            } else {
++                mPendingProximity = PROXIMITY_NEGATIVE;
++                setPendingProximityDebounceTime(
++                        time + PROXIMITY_SENSOR_NEGATIVE_DEBOUNCE_DELAY); // acquire wake lock
++            }
++
++            // Debounce the new sensor reading.
++            debounceProximitySensor();
++        }
++    }
++
++    private void debounceProximitySensor() {
++        if (mProximitySensorEnabled
++                && mPendingProximity != PROXIMITY_UNKNOWN
++                && mPendingProximityDebounceTime >= 0) {
++            final long now = SystemClock.uptimeMillis();
++            if (mPendingProximityDebounceTime <= now) {
++                // Sensor reading accepted.  Apply the change then release the wake lock.
++                mProximity = mPendingProximity;
++                updatePowerState();
++                clearPendingProximityDebounceTime(); // release wake lock (must be last)
++            } else {
++                // Need to wait a little longer.
++                // Debounce again later.  We continue holding a wake lock while waiting.
++                Message msg = mHandler.obtainMessage(MSG_PROXIMITY_SENSOR_DEBOUNCED);
++                msg.setAsynchronous(true);
++                mHandler.sendMessageAtTime(msg, mPendingProximityDebounceTime);
++            }
++        }
++    }
++
++    private void clearPendingProximityDebounceTime() {
++        if (mPendingProximityDebounceTime >= 0) {
++            mPendingProximityDebounceTime = -1;
++            mCallbacks.releaseSuspendBlocker(); // release wake lock
++        }
++    }
++
++    private void setPendingProximityDebounceTime(long debounceTime) {
++        if (mPendingProximityDebounceTime < 0) {
++            mCallbacks.acquireSuspendBlocker(); // acquire wake lock
++        }
++        mPendingProximityDebounceTime = debounceTime;
++    }
++
++    private void sendOnStateChangedWithWakelock() {
++        mCallbacks.acquireSuspendBlocker();
++        mHandler.post(mOnStateChangedRunnable);
++    }
++
++    private final Runnable mOnStateChangedRunnable = new Runnable() {
++        @Override
++        public void run() {
++            mCallbacks.onStateChanged();
++            mCallbacks.releaseSuspendBlocker();
++        }
++    };
++
++    private void sendOnProximityPositiveWithWakelock() {
++        mCallbacks.acquireSuspendBlocker();
++        mHandler.post(mOnProximityPositiveRunnable);
++    }
++
++    private final Runnable mOnProximityPositiveRunnable = new Runnable() {
++        @Override
++        public void run() {
++            mCallbacks.onProximityPositive();
++            mCallbacks.releaseSuspendBlocker();
++        }
++    };
++
++    private void sendOnProximityNegativeWithWakelock() {
++        mCallbacks.acquireSuspendBlocker();
++        mHandler.post(mOnProximityNegativeRunnable);
++    }
++
++    private final Runnable mOnProximityNegativeRunnable = new Runnable() {
++        @Override
++        public void run() {
++            mCallbacks.onProximityNegative();
++            mCallbacks.releaseSuspendBlocker();
++        }
++    };
++
++    public void dump(final PrintWriter pw) {
++        synchronized (mLock) {
++            pw.println();
++            pw.println("Display Power Controller Locked State:");
++            pw.println("  mDisplayReadyLocked=" + mDisplayReadyLocked);
++            pw.println("  mPendingRequestLocked=" + mPendingRequestLocked);
++            pw.println("  mPendingRequestChangedLocked=" + mPendingRequestChangedLocked);
++            pw.println("  mPendingWaitForNegativeProximityLocked="
++                    + mPendingWaitForNegativeProximityLocked);
++            pw.println("  mPendingUpdatePowerStateLocked=" + mPendingUpdatePowerStateLocked);
++        }
++
++        pw.println();
++        pw.println("Display Power Controller Configuration:");
++        pw.println("  mScreenBrightnessDozeConfig=" + mScreenBrightnessDozeConfig);
++        pw.println("  mScreenBrightnessDimConfig=" + mScreenBrightnessDimConfig);
++        pw.println("  mScreenBrightnessDarkConfig=" + mScreenBrightnessDarkConfig);
++        pw.println("  mScreenBrightnessRangeMinimum=" + mScreenBrightnessRangeMinimum);
++        pw.println("  mScreenBrightnessRangeMaximum=" + mScreenBrightnessRangeMaximum);
++        pw.println("  mUseSoftwareAutoBrightnessConfig=" + mUseSoftwareAutoBrightnessConfig);
++        pw.println("  mAllowAutoBrightnessWhileDozingConfig=" +
++                mAllowAutoBrightnessWhileDozingConfig);
++        pw.println("  mColorFadeFadesConfig=" + mColorFadeFadesConfig);
++
++        mHandler.runWithScissors(new Runnable() {
++            @Override
++            public void run() {
++                dumpLocal(pw);
++            }
++        }, 1000);
++    }
++
++    private void dumpLocal(PrintWriter pw) {
++        pw.println();
++        pw.println("Display Power Controller Thread State:");
++        pw.println("  mPowerRequest=" + mPowerRequest);
++        pw.println("  mWaitingForNegativeProximity=" + mWaitingForNegativeProximity);
++
++        pw.println("  mProximitySensor=" + mProximitySensor);
++        pw.println("  mProximitySensorEnabled=" + mProximitySensorEnabled);
++        pw.println("  mProximityThreshold=" + mProximityThreshold);
++        pw.println("  mProximity=" + proximityToString(mProximity));
++        pw.println("  mPendingProximity=" + proximityToString(mPendingProximity));
++        pw.println("  mPendingProximityDebounceTime="
++                + TimeUtils.formatUptime(mPendingProximityDebounceTime));
++        pw.println("  mScreenOffBecauseOfProximity=" + mScreenOffBecauseOfProximity);
++        pw.println("  mAppliedAutoBrightness=" + mAppliedAutoBrightness);
++        pw.println("  mAppliedDimming=" + mAppliedDimming);
++        pw.println("  mAppliedLowPower=" + mAppliedLowPower);
++        pw.println("  mPendingScreenOnUnblocker=" + mPendingScreenOnUnblocker);
++        pw.println("  mPendingScreenOff=" + mPendingScreenOff);
++        pw.println("  mReportedToPolicy=" + reportedToPolicyToString(mReportedScreenStateToPolicy));
++
++        if (mScreenBrightnessRampAnimator != null) {
++            pw.println("  mScreenBrightnessRampAnimator.isAnimating()=" +
++                    mScreenBrightnessRampAnimator.isAnimating());
++        }
++
++        if (mColorFadeOnAnimator != null) {
++            pw.println("  mColorFadeOnAnimator.isStarted()=" +
++                    mColorFadeOnAnimator.isStarted());
++        }
++        if (mColorFadeOffAnimator != null) {
++            pw.println("  mColorFadeOffAnimator.isStarted()=" +
++                    mColorFadeOffAnimator.isStarted());
++        }
++
++        if (mPowerState != null) {
++            mPowerState.dump(pw);
++        }
++
++        if (mAutomaticBrightnessController != null) {
++            mAutomaticBrightnessController.dump(pw);
++        }
++
++    }
++
++    private static String proximityToString(int state) {
++        switch (state) {
++            case PROXIMITY_UNKNOWN:
++                return "Unknown";
++            case PROXIMITY_NEGATIVE:
++                return "Negative";
++            case PROXIMITY_POSITIVE:
++                return "Positive";
++            default:
++                return Integer.toString(state);
++        }
++    }
++
++    private static String reportedToPolicyToString(int state) {
++        switch (state) {
++            case REPORTED_TO_POLICY_SCREEN_OFF:
++                return "REPORTED_TO_POLICY_SCREEN_OFF";
++            case REPORTED_TO_POLICY_SCREEN_TURNING_ON:
++                return "REPORTED_TO_POLICY_SCREEN_TURNING_ON";
++            case REPORTED_TO_POLICY_SCREEN_ON:
++                return "REPORTED_TO_POLICY_SCREEN_ON";
++            default:
++                return Integer.toString(state);
++        }
++    }
++
++    // Mediatek AAL: ultra dimming modified
++    private static Spline createAutoBrightnessSpline(int[] lux,
++            int[] brightness, boolean virtualValues) {
++        if (lux == null || lux.length == 0 || brightness == null || brightness.length == 0) {
++            Slog.e(TAG, "Could not create auto-brightness spline.");
++            return null;
++        }
++        try {
++            final int n = brightness.length;
++            float[] x = new float[n];
++            float[] y = new float[n];
++            // Mediatek AAL: ultra dimming modified
++            y[0] = normalizeAbsoluteBrightness(brightness[0], virtualValues);
++            for (int i = 1; i < n; i++) {
++                x[i] = lux[i - 1];
++                y[i] = normalizeAbsoluteBrightness(brightness[i], virtualValues);
++            }
++
++            Spline spline = Spline.createSpline(x, y);
++            if (DEBUG) {
++                Slog.d(TAG, "Auto-brightness spline: " + spline);
++                for (float v = 1f; v < lux[lux.length - 1] * 1.25f; v *= 1.25f) {
++                    Slog.d(TAG, String.format("  %7.1f: %7.1f", v, spline.interpolate(v)));
++                }
++            }
++            return spline;
++        } catch (IllegalArgumentException ex) {
++            Slog.e(TAG, "Could not create auto-brightness spline.", ex);
++            return null;
++        }
++    }
++
++    // Mediatek AAL: ultra dimming modified
++    private static float normalizeAbsoluteBrightness(int value, boolean virtualValue) {
++        return (float) clampAbsoluteBrightness(value, virtualValue) / PowerManager.BRIGHTNESS_ON;
++    }
++
++    // Mediatek AAL: ultra dimming modified
++    private static int clampAbsoluteBrightness(int value, boolean virtualValue) {
++        if (!virtualValue)
++            value = PowerManager.dimmingPhysicalToVirtual(value);
++        return MathUtils.constrain(value, PowerManager.BRIGHTNESS_OFF, PowerManager.BRIGHTNESS_ON);
++    }
++
++    private final class DisplayControllerHandler extends Handler {
++        public DisplayControllerHandler(Looper looper) {
++            super(looper, null, true /*async*/);
++        }
++
++        @Override
++        public void handleMessage(Message msg) {
++            switch (msg.what) {
++                case MSG_UPDATE_POWER_STATE:
++                    updatePowerState();
++                    break;
++
++                case MSG_PROXIMITY_SENSOR_DEBOUNCED:
++                    debounceProximitySensor();
++                    break;
++
++                case MSG_SCREEN_ON_UNBLOCKED:
++                    if (mPendingScreenOnUnblocker == msg.obj) {
++                        unblockScreenOn();
++                        updatePowerState();
++                    }
++                    break;
++
++                case MSG_PROTECT_LOW_DIMMING:
++                    handleProtectLowDimming();
++                    break;
++            }
++        }
++    }
++
++    private final SensorEventListener mProximitySensorListener = new SensorEventListener() {
++        @Override
++        public void onSensorChanged(SensorEvent event) {
++            if (mProximitySensorEnabled) {
++                final long time = SystemClock.uptimeMillis();
++                final float distance = event.values[0];
++                boolean positive = distance >= 0.0f && distance < mProximityThreshold;
++                handleProximitySensorEvent(time, positive);
++            }
++        }
++
++        @Override
++        public void onAccuracyChanged(Sensor sensor, int accuracy) {
++            // Not used.
++        }
++    };
++
++    private final class ScreenOnUnblocker implements WindowManagerPolicy.ScreenOnListener {
++        @Override
++        public void onScreenOn() {
++            Message msg = mHandler.obtainMessage(MSG_SCREEN_ON_UNBLOCKED, this);
++            msg.setAsynchronous(true);
++            mHandler.sendMessage(msg);
++        }
++    }
++
++    // Mediatek AAL support
++
++    // Must sync with IAALService::AdaptFieldId
++    private static final int TUNING_ALI2BLI_CURVE_LENGTH = 0;
++    private static final int TUNING_ALI2BLI_CURVE = 1;
++    private static final int TUNING_BLI_RAMP_RATE_BRIGHTEN = 2;
++    private static final int TUNING_BLI_RAMP_RATE_DARKEN = 3;
++
++    private int[] mTuningInitCurve = null;
++    private int mTuningAli2BliSerial = 0;
++    private int mTuningBliBrightenSerial = -1;
++    private int mTuningBliDarkenSerial = -1;
++    private boolean mTuningQuicklyApply = false;
++
++    private static native boolean nativeRuntimeTuningIsSupported();
++    private static native int nativeSetTuningInt(int field, int value);
++    private static native int nativeSetTuningIntArray(int field, int[] array);
++    private static native int nativeGetTuningInt(int field);
++    private static native int nativeGetTuningSerial(int field);
++    private static native void nativeGetTuningIntArray(int field, int[] array);
++    public static native void nativeSetDebouncedAmbientLight(int ambientLight);
++
++    // Sync the initial config to AAL service
++    private void writeInitConfig() {
++        synchronized (mLock) {
++            if (mTuningInitCurve != null) {
++                mTuningAli2BliSerial = nativeSetTuningIntArray(TUNING_ALI2BLI_CURVE,
++                        mTuningInitCurve);
++                mTuningInitCurve = null;
++            }
++            if (mTuningBliBrightenSerial == -1) {
++                mTuningBliBrightenSerial = nativeSetTuningInt(TUNING_BLI_RAMP_RATE_BRIGHTEN,
++                        BRIGHTNESS_RAMP_RATE_BRIGHTEN);
++            }
++            if (mTuningBliDarkenSerial == -1) {
++                mTuningBliDarkenSerial = nativeSetTuningInt(TUNING_BLI_RAMP_RATE_DARKEN,
++                        BRIGHTNESS_RAMP_RATE_DARKEN);
++            }
++        }
++    }
++
++    private void updateRuntimeConfig() {
++        synchronized (mLock) {
++            boolean updated = false;
++            int serial;
++
++            serial = nativeGetTuningSerial(TUNING_ALI2BLI_CURVE);
++            if (serial != mTuningAli2BliSerial) {
++                int length = nativeGetTuningInt(TUNING_ALI2BLI_CURVE_LENGTH);
++                if (length > 0) {
++                    int[] curve = new int[length * 2];
++                    nativeGetTuningIntArray(TUNING_ALI2BLI_CURVE, curve);
++
++                    if (curve[0] != 0) {
++                        Slog.w(TAG, "AALRuntimeTuning: lux[0] is not 0: " + curve[0]);
++                    }
++
++                    int[] lux = new int[length - 1];
++                    int[] brightness = new int[length];
++
++                    System.arraycopy(curve, 1, lux, 0, length - 1);
++                    System.arraycopy(curve, length, brightness, 0, length);
++
++                    Spline spline = createAutoBrightnessSpline(lux, brightness, false);
++                    if (spline != null) {
++                        mAutomaticBrightnessController.setScreenAutoBrightnessSpline(spline);
++
++                        mTuningAli2BliSerial = serial;
++                        updated = true;
++
++                        Slog.d(TAG, "AALRuntimeTuning: curve updated. Length = " + length +
++                                ", serial = " + serial);
++                        Slog.d(TAG, "AALRuntimeTuning: lux = " + curve[0] + "-" +
++                                lux[lux.length - 1] + " brightness = " + brightness[0] +
++                                "-" + brightness[brightness.length - 1]);
++                    } else {
++                        Slog.e(TAG, "AALRuntimeTuning: invalid curve is given.");
++
++                        StringBuffer buffer = new StringBuffer();
++                        buffer.append("AALRuntimeTuning: curve = ");
++                        for (int i = 0; i < length; i++) {
++                            buffer.append(curve[i]);
++                            buffer.append(":");
++                            buffer.append(curve[length + i]);
++                            buffer.append(" ");
++                        }
++                        Slog.e(TAG, buffer.toString());
++                    }
++                } else {
++                    Slog.e(TAG, "AALRuntimeTuning: invalid curve length: " + length);
++                }
++            }
++
++            if (updated) {
++                mAutomaticBrightnessController.updateRuntimeConfig();
++                mTuningQuicklyApply = true;
++            }
++
++            serial = nativeGetTuningSerial(TUNING_BLI_RAMP_RATE_BRIGHTEN);
++            if (serial != mTuningBliBrightenSerial) {
++                BRIGHTNESS_RAMP_RATE_BRIGHTEN = nativeGetTuningInt(TUNING_BLI_RAMP_RATE_BRIGHTEN);
++                if (BRIGHTNESS_RAMP_RATE_BRIGHTEN <= 0)
++                    BRIGHTNESS_RAMP_RATE_BRIGHTEN = BRIGHTNESS_RAMP_RATE_SLOW;
++                mTuningBliBrightenSerial = serial;
++
++                Slog.d(TAG, "AALRuntimeTuning: brighten = " + BRIGHTNESS_RAMP_RATE_BRIGHTEN +
++                        ", serial = " + serial);
++            }
++
++            serial = nativeGetTuningSerial(TUNING_BLI_RAMP_RATE_DARKEN);
++            if (serial != mTuningBliDarkenSerial) {
++                BRIGHTNESS_RAMP_RATE_DARKEN = nativeGetTuningInt(TUNING_BLI_RAMP_RATE_DARKEN);
++                if (BRIGHTNESS_RAMP_RATE_DARKEN <= 0)
++                    BRIGHTNESS_RAMP_RATE_DARKEN = BRIGHTNESS_RAMP_RATE_SLOW;
++                mTuningBliDarkenSerial = serial;
++
++                Slog.d(TAG, "AALRuntimeTuning: darken = " + BRIGHTNESS_RAMP_RATE_DARKEN +
++                        ", serial = " + serial);
++            }
++        }
++    }
++
++    private class UpdateConfigReceiver extends BroadcastReceiver {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            Slog.d(TAG, "AALRuntimeTuning: UpdateConfigReceiver received an intent.");
++            sendUpdatePowerState();
++        }
++    }
++
++    // Mediatek AAL: ultra dimming support
++    private static final boolean LOW_DIMMING_PROTECTION_SUPPORT = MTK_ULTRA_DIMMING_SUPPORT;
++
++    // The time which allow low dimming
++    private static final long LOW_DIMMING_PROTECTION_DURATION = 5000;
++
++    // Allow protection only if brightness < LOW_DIMMING_PROTECTION_THRESHOLD
++    private static final int LOW_DIMMING_PROTECTION_THRESHOLD = 40;
++
++    private static final int MSG_PROTECT_LOW_DIMMING = 100;
++
++    private static final String MTK_AAL_LOW_DIMMING_PROTECTION_TRIGGERED =
++            "com.mediatek.aal.low_dimming_protection_triggered";
++
++    private boolean mLowDimmingProtectionEnabled = false;
++    private int mLowDimmingProtectionTriggerBrightness = 0;
++
++    private boolean isScreenStateBright() {
++        return (mPowerRequest.policy == DisplayPowerRequest.POLICY_BRIGHT);
++    }
++
++    private int protectedMinimumBrightness() {
++        int autoBrightness = mAutomaticBrightnessController.getAutomaticScreenBrightness();
++
++        // Calculate the minimum brightness from auto brightness value
++        // return Math.min(Math.max(1, autoBrightness / 8), LOW_DIMMING_PROTECTION_THRESHOLD);
++
++        return (autoBrightness < LOW_DIMMING_PROTECTION_THRESHOLD * 2)
++                ? 1 : LOW_DIMMING_PROTECTION_THRESHOLD;
++    }
++
++    private int getBrightnessSetting() {
++        return Settings.System.getIntForUser(mContext.getContentResolver(),
++                Settings.System.SCREEN_BRIGHTNESS, mPowerRequest.screenBrightness,
++                UserHandle.USER_CURRENT);
++    }
++
++    // Handler of MSG_PROTECT_LOW_DIMMING
++    private void handleProtectLowDimming() {
++        if (!mAppliedAutoBrightness) {
++            int minBrightness = protectedMinimumBrightness();
++
++            if (isScreenStateBright() &&
++                    !mPowerRequest.useAutoBrightness &&
++                    getBrightnessSetting() == mPowerRequest.screenBrightness &&
++                    mPowerRequest.screenBrightness < LOW_DIMMING_PROTECTION_THRESHOLD &&
++                    mPowerRequest.screenBrightness < minBrightness)
++            {
++                Slog.d(TAG, "Low dimming protection : " + mPowerRequest.screenBrightness +
++                        " -> " + minBrightness + ", auto = " +
++                        mAutomaticBrightnessController.getAutomaticScreenBrightness());
++
++                Settings.System.putIntForUser(mContext.getContentResolver(),
++                        Settings.System.SCREEN_BRIGHTNESS, minBrightness,
++                        UserHandle.USER_CURRENT);
++
++                Intent intent = new Intent(MTK_AAL_LOW_DIMMING_PROTECTION_TRIGGERED);
++                intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
++                mContext.sendBroadcast(intent);
++            }
++        }
++
++        // Let the protection can be checked again if minBrightness changed
++        mLowDimmingProtectionTriggerBrightness = 0;
++    }
++}

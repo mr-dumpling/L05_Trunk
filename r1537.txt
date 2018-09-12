@@ -1,0 +1,77 @@
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/sdcard/SdCard.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/sdcard/SdCard.java	(revision 1536)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/sdcard/SdCard.java	(revision 1537)
+@@ -19,6 +19,10 @@
+ import com.android.mmi.MMITestDevice;
+ import com.android.mmi.R;
+ 
++import android.content.BroadcastReceiver;
++import android.content.IntentFilter;
++import java.io.File;
++import android.util.Log;
+ public class SdCard extends Activity implements OnClickListener {
+ 	public static final String TAG = "SDCard";
+ 	private static String SD_CARD = SystemProperties.get("vold.path.external_sd");
+@@ -26,6 +30,7 @@
+ 	TextView tv_base_title, tv_base_pixi;
+ 
+ 	Button bt_base_left, bt_base_right;
++	File path ;
+ 
+ 	private StorageManager mStorageManager;
+ 
+@@ -66,7 +71,53 @@
+ 		} else {
+ 			tv_base_pixi.setText("SDCard tips failed");
+ 		}
++	IntentFilter intentFilter = new IntentFilter(Intent.ACTION_MEDIA_MOUNTED);
++				intentFilter.setPriority(1000);	
++				intentFilter.addAction(Intent.ACTION_MEDIA_UNMOUNTED);
++				intentFilter.addAction(Intent.ACTION_MEDIA_REMOVED);
++				intentFilter.addAction(Intent.ACTION_MEDIA_SHARED);
++				intentFilter.addAction(Intent.ACTION_MEDIA_BAD_REMOVAL); 
++				intentFilter.addAction(Intent.ACTION_MEDIA_SCANNER_STARTED);
++				intentFilter.addAction(Intent.ACTION_MEDIA_SCANNER_FINISHED);
++				intentFilter.addDataScheme("file");    
++				registerReceiver(broadcastRec, intentFilter);
+ 	}
++	private final BroadcastReceiver broadcastRec = new BroadcastReceiver() {	
++			  @Override    
++			  public void onReceive(Context context, Intent intent) {	 
++				  String action = intent.getAction();	 
++				  if (action.equals("android.intent.action.MEDIA_MOUNTED"))
++				  {    
++							  
++				  path = android.os.Environment.getExternalStorageDirectory();
++					 
++				  } else if (action.equals("android.intent.action.MEDIA_REMOVED")
++						  || action.equals("android.intent.action.ACTION_MEDIA_UNMOUNTED")	  
++						  || action.equals("android.intent.action.ACTION_MEDIA_BAD_REMOVAL")) {    
++					  path = android.os.Environment.getDataDirectory();
++					  
++				  }else if (action.equals(Intent.ACTION_MEDIA_SCANNER_STARTED)){
++					 
++				  }else if (action.equals(Intent.ACTION_MEDIA_SCANNER_FINISHED)){
++	
++	
++				  long availableMB = getAvailaleSize();
++				  long totalMB = getAllSize();
++				  tv_base_pixi.setText("SDCard tips success" + "\n\n"
++						  + "SDCard totalsize" + totalMB
++						  + " MB\n\n" + "SDCard freesize"
++						  + availableMB + " MB");
++				  if (totalMB != 0) {
++					  bt_base_left.setEnabled(true);
++				  }
++					
++				  }else {	 
++					 
++					  tv_base_pixi.setText("SDCard tips failed");
++				  }    
++				  Log.i("TAG", "imagepath---" + path);	  
++			  }    
++		  };
+ 
+ 	@Override
+ 	protected void onDestroy() {

@@ -1,0 +1,41 @@
+Index: packages/apps/Settings/src/com/android/settings/TetherSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/TetherSettings.java	(revision 3937)
++++ packages/apps/Settings/src/com/android/settings/TetherSettings.java	(revision 3938)
+@@ -156,7 +156,7 @@
+         mDataSaverFooter = findPreference(DATA_SAVER_FOOTER);
+ 
+         setIfOnlyAvailableForAdmins(true);
+-        if (isUiRestricted()) {
++        if (isUiRestricted() && getActivity().getResources().getBoolean(R.bool.guest_cannot_open_hotspot)) {
+             mUnavailable = true;
+             setPreferenceScreen(new PreferenceScreen(getPrefContext(), null));
+             return;
+@@ -387,7 +387,7 @@
+     public void onStart() {
+         super.onStart();
+ 
+-        if (mUnavailable) {
++        if (mUnavailable && getActivity().getResources().getBoolean(R.bool.guest_cannot_open_hotspot))) {
+             if (!isUiRestrictedByOnlyAdmin()) {
+                 getEmptyTextView().setText(R.string.tethering_settings_not_available);
+             }
+@@ -440,7 +440,7 @@
+     public void onStop() {
+         super.onStop();
+ 
+-        if (mUnavailable) {
++        if (mUnavailable && getActivity().getResources().getBoolean(R.bool.guest_cannot_open_hotspot)) {
+             return;
+         }
+         getActivity().unregisterReceiver(mTetherChangeReceiver);
+Index: packages/apps/Settings/res/values/bools.xml
+===================================================================
+--- packages/apps/Settings/res/values/bools.xml	(revision 3937)
++++ packages/apps/Settings/res/values/bools.xml	(revision 3938)
+@@ -51,4 +51,5 @@
+ 	<bool name="remove_sound_settings_cast">false</bool>
+ 	
+ 	<bool name="config_remove_wifi_calling">true</bool>
++	<bool name="guest_cannot_open_hotspot">true</bool>
+ </resources>

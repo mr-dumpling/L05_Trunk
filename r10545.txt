@@ -1,0 +1,44 @@
+Index: vendor/branch/5058A_Claro/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058A_Claro/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 10544)
++++ vendor/branch/5058A_Claro/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 10545)
+@@ -2157,6 +2157,8 @@
+             ///M: Plug-in to customize the LTE switch @{
+             mExt.customizeEnhanced4GLteSwitchPreference(this, mEnhancedButton4glte);
+             ///@}
++        } else {
++            mEnhancedButton4glte = null;
+         }
+     }
+ 
+@@ -2215,10 +2217,12 @@
+             /// M: [CMCC DUAl VOLTE] @{
+             enableForCtVolte = mExt.customizeDualVolteOpDisable(subId, enableForCtVolte);
+             /// @}
++            boolean secondEnabled = isSecondVolteEnabled();
+             log("updateEnhanced4glteEnableState, incall = " + inCall + ", nontty = " + nontty
+-                    + ", enableForCtVolte = " + enableForCtVolte);
++                    + ", enableForCtVolte = " + enableForCtVolte + ", secondEnabled = "
++                    + secondEnabled);
+             mEnhancedButton4glte.setEnabled(!inCall && nontty && hasActiveSubscriptions()
+-                    && enableForCtVolte);
++                    && enableForCtVolte && secondEnabled);
+             /// M: [CMCC DUAl VOLTE] @{
+             mExt.customizeDualVolteOpHide(getPreferenceScreen(), mEnhancedButton4glte, enableForCtVolte);
+             /// @}
+@@ -2446,4 +2450,15 @@
+             updateEnhanced4GLteSwitchPreference();
+         }
+     };
++
++    private boolean isSecondVolteEnabled() {
++        if (!TelephonyUtilsEx.isBothslotCtSim(mSubscriptionManager)) {
++            return true;
++        }
++        if (TelephonyUtilsEx.getMainPhoneId() == mPhone.getPhoneId()) {
++            return true;
++        } else {
++            return false;
++        }
++    }
+ }

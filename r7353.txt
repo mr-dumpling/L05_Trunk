@@ -1,0 +1,19 @@
+Index: vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 7352)
++++ vendor/branch/5058I_ALRU/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 7353)
+@@ -1123,7 +1123,13 @@
+             }
+         } else if (preference == mButtonEnabledNetworks) {
+             if (Phone.NT_MODE_LTE_ONLY == Integer.parseInt((String) objValue)) {
+-                showAttentionDialog4LteOnly(objValue);
++                boolean enh4glteMode = ImsManager.isEnhanced4gLteModeSettingEnabledByUser(this, mPhone.getPhoneId())
++                            && ImsManager.isNonTtyOrTtyOnVolteEnabled(this, mPhone.getPhoneId());
++                if (enh4glteMode) {
++                    handleEnabledNetworksChange(objValue);
++                } else {
++                    showAttentionDialog4LteOnly(objValue);
++                }
+             } else {
+                 removeLteOnlyNotification();
+                 if(handleEnabledNetworksChange(objValue)) return true;

@@ -1,0 +1,124 @@
+Index: vendor/branch/5058I_VVBG1/vendor/google/apps/GmsSampleLayout/res/xml/partner_default_layout.xml
+===================================================================
+--- vendor/branch/5058I_VVBG1/vendor/google/apps/GmsSampleLayout/res/xml/partner_default_layout.xml	(revision 0)
++++ vendor/branch/5058I_VVBG1/vendor/google/apps/GmsSampleLayout/res/xml/partner_default_layout.xml	(revision 13089)
+@@ -0,0 +1,38 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2013 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<favorites>
++  <!-- Hotseat (We use the screen as the position of the item in the hotseat) -->
++  <!-- Dialer Messaging [All Apps] Contacts Camera -->
++  <favorite container="-101" screen="0" x="0" y="0" packageName="com.google.android.dialer" className="com.google.android.dialer.extensions.GoogleDialtactsActivity"/>
++  <favorite container="-101" screen="1" x="1" y="0" packageName="com.google.android.apps.messaging" className="com.google.android.apps.messaging.ui.ConversationListActivity"/>
++  <favorite container="-101" screen="3" x="2" y="0" packageName="com.google.android.contacts" className="com.android.contacts.activities.PeopleActivity"/>
++  <favorite container="-101" screen="4" x="3" y="0" packageName="com.android.camera2" className="com.android.camera.CameraActivity"/>
++  <!-- In Launcher3, workspaces extend infinitely to the right, incrementing from zero -->
++  <!-- Google folder -->
++  <!-- Google, Chrome, Gmail, Maps, YouTube, (Drive), (Music), (Movies), Duo, Photos -->
++  <folder title="@string/google_folder_title" screen="0" x="0" y="4">
++    <favorite packageName="com.google.android.googlequicksearchbox" className="com.google.android.googlequicksearchbox.SearchActivity"/>
++    <favorite packageName="com.android.chrome" className="com.google.android.apps.chrome.Main"/>
++    <favorite packageName="com.google.android.gm" className="com.google.android.gm.ConversationListActivityGmail"/>
++    <favorite packageName="com.google.android.apps.maps" className="com.google.android.maps.MapsActivity"/>
++    <favorite packageName="com.google.android.youtube" className="com.google.android.youtube.app.honeycomb.Shell$HomeActivity"/>
++    <favorite packageName="com.google.android.apps.docs" className="com.google.android.apps.docs.app.NewMainProxyActivity"/>
++    <favorite packageName="com.google.android.music" className="com.android.music.activitymanagement.TopLevelActivity"/>
++    <favorite packageName="com.google.android.apps.tachyon" className="com.google.android.apps.tachyon.MainActivity"/>
++    <favorite packageName="com.google.android.apps.photos" className="com.google.android.apps.photos.home.HomeActivity"/>
++  </folder>
++  <favorite screen="0" x="4" y="4" packageName="com.android.vending" className="com.android.vending.AssetBrowserActivity"/>
++</favorites>
+Index: vendor/branch/5058I_VVBG1/vendor/google/products/gms.mk
+===================================================================
+--- vendor/branch/5058I_VVBG1/vendor/google/products/gms.mk	(revision 0)
++++ vendor/branch/5058I_VVBG1/vendor/google/products/gms.mk	(revision 13089)
+@@ -0,0 +1,76 @@
++###############################################################################
++# GMS home folder location
++# Note: we cannot use $(my-dir) in this makefile
++ANDROID_PARTNER_GMS_HOME := vendor/google
++
++# GMS mandatory core packages
++PRODUCT_PACKAGES := \
++    ConfigUpdater \
++    GoogleBackupTransport \
++    GoogleExtServices \
++    GoogleExtShared \
++    GoogleFeedback \
++    GoogleLoginService \
++    GoogleOneTimeInitializer \
++    GooglePackageInstaller \
++    GooglePartnerSetup \
++    GooglePrintRecommendationService \
++    GoogleServicesFramework \
++    GoogleCalendarSyncAdapter \
++    GoogleContactsSyncAdapter \
++    GoogleTTS \
++    GmsCore \
++    Phonesky \
++    SetupWizard \
++    CalendarGoogle \
++    CalculatorGoogle \
++    DeskClockGoogle \
++    WebViewGoogle
++
++# GMS mandatory libraries
++PRODUCT_PACKAGES += \
++    com.google.android.maps.jar \
++    com.google.android.media.effects.jar
++
++# Overlay for GMS devices
++$(call inherit-product, device/sample/products/backup_overlay.mk)
++$(call inherit-product, device/sample/products/location_overlay.mk)
++PRODUCT_PACKAGE_OVERLAYS += $(ANDROID_PARTNER_GMS_HOME)/products/gms_overlay
++
++# Overlay for GoogleDialer
++#PRODUCT_PACKAGE_OVERLAYS += $(ANDROID_PARTNER_GMS_HOME)/apps/GoogleDialer/overlay
++
++# Configuration files for GMS apps
++PRODUCT_COPY_FILES += \
++    $(ANDROID_PARTNER_GMS_HOME)/etc/preferred-apps/google.xml:system/etc/preferred-apps/google.xml \
++    $(ANDROID_PARTNER_GMS_HOME)/etc/sysconfig/google.xml:system/etc/sysconfig/google.xml
++
++# GMS mandatory application packages
++# Note: Duo is mandatory for telephony devices, whereas Hangouts is for non-telephony devices.
++PRODUCT_PACKAGES += \
++    Chrome \
++    Drive \
++    Gmail2 \
++    Duo \
++    Maps \
++    Music2 \
++    Photos \
++    Velvet \
++    YouTube
++
++# GMS optional application packages
++PRODUCT_PACKAGES += \
++    LatinImeGoogle \
++    Keep
++
++
++# GMS sample application packages
++# GmsSampleLayout customizes the default home screen layout of Launcher3
++# OpaSuwIntegrationSample cutomizes Google Assistant/Now opt-in screen in Android 7.1 SetupWizard
++PRODUCT_PACKAGES += \
++
++# Overrides
++PRODUCT_PROPERTY_OVERRIDES += \
++    ro.setupwizard.require_network=no \
++    ro.setupwizard.mode=OPTIONAL \
++    ro.com.google.gmsversion=7.1_r8

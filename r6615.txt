@@ -1,0 +1,558 @@
+Index: vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/src/com/android/email/partnerprovider/PartnerProvider.java
+===================================================================
+--- vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/src/com/android/email/partnerprovider/PartnerProvider.java	(revision 0)
++++ vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/src/com/android/email/partnerprovider/PartnerProvider.java	(revision 6615)
+@@ -0,0 +1,294 @@
++package com.android.email.partnerprovider;
++
++import android.content.ContentProvider;
++import android.content.ContentValues;
++import android.content.UriMatcher;
++import android.content.res.XmlResourceParser;
++import android.database.Cursor;
++import android.database.MatrixCursor;
++import android.graphics.Bitmap;
++import android.graphics.Bitmap.CompressFormat;
++import android.graphics.BitmapFactory;
++import android.net.Uri;
++import android.text.TextUtils;
++import android.util.Log;
++import java.io.ByteArrayOutputStream;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.List;
++import org.xmlpull.v1.XmlPullParserException;
++
++/**
++ * Provides the additional email configurations to interested apps. It also provides additional
++ * entry for account setup flow.
++ */
++public class PartnerProvider extends ContentProvider {
++  private static final String TAG = "PartnerMailProvider";
++
++  static final String AUTHORITY = "com.android.email.partnerprovider";
++
++  static final String PROVIDERS_PATH = "v1/providers";
++  static final String ACCOUNT_SETUP_ENTRY_PATH = "v1/account_setup_entry";
++  static final String GLOBAL_SIGNATURE_PATH = "v1/global_signature";
++
++  private static final int NO_MATCH = 0;
++  private static final int MATCH_PROVIDERS = 1;
++  private static final int MATCH_ACCOUNT_SETUP_ENTRY = 2;
++  private static final int MATCH_GLOBAL_SIGNATURE = 3;
++
++  private static final UriMatcher uriMatcher = new UriMatcher(NO_MATCH);
++  static {
++    uriMatcher.addURI(AUTHORITY, PROVIDERS_PATH, MATCH_PROVIDERS);
++    uriMatcher.addURI(AUTHORITY, ACCOUNT_SETUP_ENTRY_PATH, MATCH_ACCOUNT_SETUP_ENTRY);
++    uriMatcher.addURI(AUTHORITY, GLOBAL_SIGNATURE_PATH, MATCH_GLOBAL_SIGNATURE);
++  }
++
++  private static class Provider {
++    private String id;
++    private String label;
++    private String domain;
++    private String signature;
++    private String incomingUriTemplate;
++    private String incomingUsernameTemplate;
++    private String outgoingUriTemplate;
++    private String outgoingUsernameTemplate;
++
++    private static final String[] COLUMNS = {
++        "id",
++        "label",
++        "domain",
++        "signature",
++        "inUriTemplate",
++        "inUserTemplate",
++        "outUriTemplate",
++        "outUserTemplate",
++    };
++
++    // xml tags
++    private static final String PROVIDER_XML_TAG = "provider";
++    private static final String PROVIDERS_XML_TAG = "providers";
++    private static final String INCOMING_XML_TAG = "incoming";
++    private static final String OUTGOING_XML_TAG = "outgoing";
++    // xml attributes
++    private static final String ID_XML_ATTRIBUTE = "id";
++    private static final String LABEL_XML_ATTRIBUTE = "label";
++    private static final String DOMAIN_XML_ATTRIBUTE = "domain";
++    private static final String SIGNATURE_XML_ATTRIBUTE = "signature";
++    private static final String URI_XML_ATTRIBUTE = "uri";
++    private static final String USERNAME_XML_ATTRIBUTE = "username";
++  }
++
++  private static class AccountSetupEntry {
++    private String label;
++    private Bitmap logo;
++
++    private static final String[] COLUMNS = {
++        "label",
++        "logo",
++    };
++
++    // xml tags
++    private static final String ENTRY_XML_TAG = "entry";
++    // xml attributes
++    private static final String LABEL_XML_ATTRIBUTE = "label";
++    private static final String LOGO_XML_ATTRIBUTE = "logo";
++  }
++
++  private static final String[] GLOBAL_SIGNATURE_COLUMNS = {
++      "signature",
++  };
++
++  @Override
++  public boolean onCreate() {
++    return true;
++  }
++
++  @Override
++  public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
++      String sortOrder) {
++    if (projection != null || selection != null || selectionArgs != null || sortOrder != null) {
++      throw new IllegalArgumentException();
++    }
++
++    MatrixCursor cursor;
++    switch (uriMatcher.match(uri)) {
++      case MATCH_PROVIDERS:
++        Log.e(TAG, "MATCH_PROVIDERS uri: " + uri);
++        cursor = new MatrixCursor(Provider.COLUMNS);
++
++        List<Provider> providers = loadProviders();
++        for (Provider provider : providers) {
++          cursor.addRow(Arrays.asList(
++              provider.id,
++              provider.label,
++              provider.domain,
++              provider.signature,
++              provider.incomingUriTemplate,
++              provider.incomingUsernameTemplate,
++              provider.outgoingUriTemplate,
++              provider.outgoingUsernameTemplate));
++        }
++        return cursor;
++      case MATCH_ACCOUNT_SETUP_ENTRY:
++        Log.e(TAG, "MATCH_ACCOUNT_SETUP_ENTRY uri: " + uri);
++        cursor = new MatrixCursor(AccountSetupEntry.COLUMNS);
++        List<AccountSetupEntry> entries = loadAccountSetupEntries();
++        for (AccountSetupEntry entry : entries) {
++          if (!TextUtils.isEmpty(entry.label)) {
++            byte[] logoBytes = null;
++            if (entry.logo != null) {
++              ByteArrayOutputStream logoByteStream = new ByteArrayOutputStream();
++              entry.logo.compress(CompressFormat.PNG, 100 /* quality */, logoByteStream);
++              logoBytes = logoByteStream.toByteArray();
++            }
++            cursor.addRow(new Object[]{entry.label, logoBytes});
++          }
++        }
++        return cursor;
++      case MATCH_GLOBAL_SIGNATURE:
++        Log.e(TAG, "MATCH_GLOBAL_SIGNATURE uri: " + uri);
++        cursor = new MatrixCursor(GLOBAL_SIGNATURE_COLUMNS);
++        String globalSignature = getContext().getString(R.string.def_emailpartner_global_signature_Claro);
++        if (!TextUtils.isEmpty(globalSignature)) {
++          cursor.addRow(new Object[] {globalSignature});
++        }
++        return cursor;
++      default:
++        Log.e(TAG, "Unknown uri: " + uri);
++        return null;
++    }
++  }
++
++  @Override
++  public String getType(Uri uri) {
++    return null;
++  }
++
++  @Override
++  public Uri insert(Uri uri, ContentValues values) {
++    throw new UnsupportedOperationException();
++  }
++
++  @Override
++  public int delete(Uri uri, String selection, String[] selectionArgs) {
++    throw new UnsupportedOperationException();
++  }
++
++  @Override
++  public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
++    throw new UnsupportedOperationException();
++  }
++
++  private List<Provider> loadProviders() {
++    try {
++      XmlResourceParser xml = getContext().getResources().getXml(R.xml.providers);
++      int xmlEventType;
++      while ((xmlEventType = xml.next()) != XmlResourceParser.END_DOCUMENT) {
++        if (xmlEventType == XmlResourceParser.START_TAG
++            && Provider.PROVIDERS_XML_TAG.equals(xml.getName())) {
++          return parseProviders(xml);
++        }
++      }
++      return new ArrayList<>();
++    } catch (Exception e) {
++      Log.e(TAG, "Error loading providers.", e);
++      return Collections.emptyList();
++    }
++  }
++
++  private List<Provider> parseProviders(XmlResourceParser xml)
++      throws IOException, XmlPullParserException {
++    List<Provider> providers = new ArrayList<>();
++    int xmlEventType;
++    while ((xmlEventType = xml.next()) != XmlResourceParser.END_DOCUMENT) {
++      switch (xmlEventType) {
++        case XmlResourceParser.START_TAG:
++          if (Provider.PROVIDER_XML_TAG.equals(xml.getName())) {
++            providers.add(parseProvider(xml));
++          } else {
++            Log.w(TAG, "Unexpected start tag inside providers. Tag name: " + xml.getName());
++          }
++          break;
++        case XmlResourceParser.END_TAG:
++          if (Provider.PROVIDERS_XML_TAG.equals(xml.getName())) {
++            return providers;
++          }
++          break;
++        default:
++          break;
++      }
++    }
++    throw new IllegalStateException("Unexpected end of document inside providers");
++  }
++
++  private Provider parseProvider(XmlResourceParser xml) throws IOException, XmlPullParserException {
++    Provider provider = new Provider();
++    provider.id = getAttributeValue(xml, Provider.ID_XML_ATTRIBUTE);
++    provider.label = getAttributeValue(xml, Provider.LABEL_XML_ATTRIBUTE);
++    provider.domain = getAttributeValue(xml, Provider.DOMAIN_XML_ATTRIBUTE).toLowerCase();
++    provider.signature = getAttributeValue(xml, Provider.SIGNATURE_XML_ATTRIBUTE);
++
++    int xmlEventType;
++    while ((xmlEventType = xml.next()) != XmlResourceParser.END_DOCUMENT) {
++      switch (xmlEventType) {
++        case XmlResourceParser.START_TAG:
++          String tagName = xml.getName();
++          String uriTemplate = getAttributeValue(xml, Provider.URI_XML_ATTRIBUTE);
++          String usernameTemplate = getAttributeValue(xml, Provider.USERNAME_XML_ATTRIBUTE);
++          if (Provider.INCOMING_XML_TAG.equals(tagName)) {
++            provider.incomingUriTemplate = uriTemplate;
++            provider.incomingUsernameTemplate = usernameTemplate;
++          } else if (Provider.OUTGOING_XML_TAG.equals(tagName)) {
++            provider.outgoingUriTemplate = uriTemplate;
++            provider.outgoingUsernameTemplate = usernameTemplate;
++          } else {
++            Log.w(TAG, "Unexpected start tag inside provider. Tag name: " + tagName);
++          }
++          break;
++        case XmlResourceParser.END_TAG:
++          if (Provider.PROVIDER_XML_TAG.equals(xml.getName())) {
++            return provider;
++          }
++          break;
++        default:
++          break;
++      }
++    }
++    throw new IllegalStateException("Unexpected end of document inside provider");
++  }
++
++  private List<AccountSetupEntry> loadAccountSetupEntries() {
++    try {
++      List<AccountSetupEntry> entries = new ArrayList<>();
++      XmlResourceParser xml = getContext().getResources().getXml(R.xml.account_setup_entry);
++      int xmlEventType;
++      while ((xmlEventType = xml.next()) != XmlResourceParser.END_DOCUMENT) {
++        if (xmlEventType == XmlResourceParser.START_TAG
++            && AccountSetupEntry.ENTRY_XML_TAG.equals(xml.getName())) {
++          AccountSetupEntry entry = new AccountSetupEntry();
++          entry.label = getAttributeValue(xml, AccountSetupEntry.LABEL_XML_ATTRIBUTE);
++          int logoResourceId =
++              xml.getAttributeResourceValue(null, AccountSetupEntry.LOGO_XML_ATTRIBUTE, 0);
++          if (logoResourceId != 0) {
++            entry.logo = BitmapFactory.decodeResource(getContext().getResources(), logoResourceId);
++          }
++          entries.add(entry);
++        }
++      }
++      return entries;
++    } catch (Exception e) {
++      Log.e(TAG, "Error loading providers.", e);
++      return null;
++    }
++  }
++
++  private String getAttributeValue(XmlResourceParser xml, String attribute) {
++    int resourceId = xml.getAttributeResourceValue(null, attribute, 0);
++    if (resourceId != 0) {
++      return getContext().getString(resourceId);
++    }
++    return xml.getAttributeValue(null, attribute);
++  }
++}
+Index: vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/xml/providers.xml
+===================================================================
+--- vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/xml/providers.xml	(revision 0)
++++ vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/xml/providers.xml	(revision 6615)
+@@ -0,0 +1,151 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++  This file is used to specify providers for whom we know default settings, and those that users
++  are likely to use, so the user can set up their account by simply entering their email address
++  and password.
++
++  When a user starts this process, the email address is parsed, the domain is broken out and used
++  to search for a provider. Similar file in the email app is consulted first, and if no provider is
++  found then entries from this app are checked. If provider is found then provider's settings are used
++  to attempt to connect to the server.
++
++  ==== XML SCHEME ====
++
++  Root element should be "providers". It shouldn't have any attributes and all children nodes
++  should be "provider" elements.
++
++  Each "provider" element contains information about setting up the email account.
++  Attributes:
++    - id: (required) Must be unique.
++    - label: (required) Will be shown to the user when there are multiple options provided for a
++            single domain (not currently supported).
++    - domain: (required) Domain of the hosting company. See below for details.
++    - signature: (optional) Signature to be set to the account if given provider is used.
++  Inner elements:
++    - incoming: (required) Specify the configuration for incoming settings.
++    - outgoing: (required) Specify the configuration for outgoing settings.
++
++    The "incoming" and "outgoing" elements have the same scheme. They don't have inner elements but
++    they have two required attributes: "uri" and "username". See below for details.
++
++  Each attribute is either a constant string (recommended for id, domain) or reference to string
++  resource. Attributes used as string resource can be overriden for different configurations, like
++  different locale, different Mobile Country Codes (mcc), Mobile Network Code (mnc), etc. See
++  https://developer.android.com/guide/topics/resources/providing-resources.html#AlternativeResources
++  for more details.
++
++  ==== FORMAT OF ENTRIES ====
++
++  The ID must be completely unique. In the future, the label will be shown to the user when there
++  are multiple options provided for a single domain (not currently supported).
++
++  A provider contains the settings for setting up an email account that ends with the given domain.
++  Domains should be unique within this file (see below for domain format). If multiple entries
++  match the domain, the first one will be used.
++
++  Each provider should have one incoming section and one outgoing section.
++
++  Valid incoming uri schemes are:
++    gLegacyImap+tls+   IMAP with required TLS transport security.
++                         If TLS is not available the connection fails.
++                         Default port: 143
++    gLegacyImap+ssl+   IMAP with required SSL transport security.
++                         If SSL is not available the connection fails.
++                         Default port: 993
++
++    gPop3+tls+    POP3 with required TLS transport security.
++                    If TLS is not available the connection fails.
++                    Default port: 110
++    gPop3+ssl+    POP3 with required SSL transport security.
++                    If SSL is not available the connection fails.
++                    Default port: 995
++
++  Valid outgoing uri schemes are:
++    smtp+tls+    SMTP with required TLS transport security.
++                   If TLS is not available the connection fails.
++                   Default port: 587
++    smtp+ssl+    SMTP with required SSL transport security.
++                   If SSL is not available the connection fails.
++                   Default port: 465
++
++  The URIs must contain all of the information to make a connection, including a port if the
++  service uses a non-default port (e.g. smtp+ssl+//foo.bar:123). The default ports are listed
++  above.
++
++  ==== DOMAIN PATTERNS ====
++
++  A hosting company will often have multiple mail server addresses, used for load balancing or
++  based upon geographical boundaries. In these cases, it would be unwieldy to maintain a list of
++  many providers that all point to essentially the same mail server. To alleviate this, domains
++  may contain pattern matching characters that can be used to match user entered domains without
++  knowing the exact domain.
++
++  An asterisk (*) is used to match that part of a domain name that is demarcated by a period (dot);
++  no other characters may appear on either side of an asterisk. Therefore, "foo.*.com" and "bar.*"
++  are valid, whereas "a*.com" and "foo.c*" are not. An asterisk is also not greedy; it only matches
++  a single part of a domain name. Therefore, "foo.bar.bletch" is NOT matched by "foo.*"; it is,
++  however, matched by "foo.*.*" or "foo.bar.*". To prevent matching too many domains, the pattern
++  can't start with asteriks (e.g. "*.com" or "*.co.uk").
++
++  The question mark (?) wildcard character matches any single character. This is very useful when
++  the number of characters is known (such as the country code in the domain).
++
++  ==== TEMPLATES ====
++
++  Both the username and uri attributes (for both incoming and outgoing elements) are templates.
++
++  The username attribute is used to supply a template for the username that will be presented to
++  the server. This username is built from a set of variables that are substituted with parts of the
++  user specified email address.
++
++  Valid substitution values for all templates are:
++      $email  - the email address the user entered
++      $user   - the string before the @ sign in the email address the user entered
++      $domain - the string after the @ sign in the email address the user entered
++
++  ==== SAMPLES ====
++
++  // Sample with hardcoded label, unique domain, no signature and user is authenticated with email
++  // address.
++  // For incoming settings IMAP with SSL transport security should be used (on port 143).
++  // For outgoing settings SMTP with TLS transport security should be used (on default port 587).
++  // For both incoming and outgoing connections full address is used to authenticate the user.
++  <provider id="sample1" label="Sample Provider 1" domain="domain1.com">
++    <incoming uri="gLegacyImap+ssl+://domain1.com:143" username="$email" />
++    <outgoing uri="smtp+tls+://domain1.com" username="$email" />
++  </provider>
++
++  // Sample with the label and signature that are extracted from resources.
++  // Top level domain is not fixed, meaning all domains "@domain2.com", "@domain2.de" and similar
++  // are allowed. For both incoming and outgoing connections only user part of the address is used
++  // to authenticate the user (the part before '@').
++  <provider id="sample2" label="@string/sample2_label" domain="domain2.*" signature="@string/sample2_signature">
++    <incoming uri="gPop3+ssl+://domain2.com" username="$user" />
++    <outgoing uri="smtp+tls+://domain2.com" username="$user" />
++  </provider>
++  <provider id="163" label="163" domain="163.com" signature="@string/def_163_account_Signature">
++        <incoming uri="gPop3+tls+://pop3.163.com:995" username="$email"/>
++        <outgoing uri="smtp+ssl+://smtp.163.com:465" username="$email"/>
++    </provider>
++-->
++<providers>
++    <!-- Yahoo! Mail variants -->
++    <provider id="yahoo" label="Yahoo" domain="yahoo.com" signature="@string/def_emailpartner_global_signature_Claro">
++        <incoming uri="imap+ssl+://android.imap.mail.yahoo.com:993" username="$email" />
++        <outgoing uri="smtp+ssl+://android.smtp.mail.yahoo.com:465" username="$email" />
++    </provider>
++    <provider id="gmail" label="Gmail" domain="gmail.com" signature="@string/def_emailpartner_global_signature_Claro">
++        <incoming uri="pop3+ssl+://pop3.gmail.com:995" username="$email"/>
++        <outgoing uri="smtp+ssl+://smtp.gmail.com:465" username="$email"/>
++    </provider>
++    <provider id="hotmail" label="Hotmail" domain="hotmail.com" signature="@string/def_emailpartner_global_signature_Claro">
++        <incoming uri="pop3+ssl+://pop3.live.com:995"  username="$email" />
++        <outgoing uri="smtp+tls+://smtp.live.com:587" username="$email" />
++    </provider>
++    <provider id="163" label="163" domain="163.com" signature="@string/def_emailpartner_global_signature_Claro">
++        <incoming uri="pop3+ssl+://pop3.163.com:995" username="$email"/>
++        <outgoing uri="smtp+ssl+://smtp.163.com:465" username="$email"/>
++    </provider>
++    
++    
++</providers>
+Index: vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/values-es/strings.xml
+===================================================================
+--- vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/values-es/strings.xml	(revision 0)
++++ vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/values-es/strings.xml	(revision 6615)
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++  <string name="def_emailpartner_global_signature">Enviado desde mi Alcatel de Telcel</string>
++  <string name="def_emailpartner_global_signature_Claro">Enviado desde mi Alcatel de Claro</string>
++  <string name="global_signature">@string/def_emailpartner_global_signature</string>
++</resources>
+Index: vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/values-es-rUS/strings.xml
+===================================================================
+--- vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/values-es-rUS/strings.xml	(revision 0)
++++ vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/values-es-rUS/strings.xml	(revision 6615)
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++  <string name="def_emailpartner_global_signature">Enviado desde mi Alcatel de Telcel</string>
++  <string name="def_emailpartner_global_signature_Claro">Enviado desde mi ALCATEL de Claro</string>
++  <string name="global_signature">@string/def_emailpartner_global_signature</string>
++</resources>
+Index: vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/values/strings.xml
+===================================================================
+--- vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/values/strings.xml	(revision 0)
++++ vendor/branch/5058A_Claro/packages/apps/EmailPartnerProvider/res/values/strings.xml	(revision 6615)
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++  <string name="def_emailpartner_global_signature">Sent from my Alcatel Telcel</string>
++  <string name="def_emailpartner_global_signature_Claro">Sent from my Alcatel 3X</string>
++  <string name="global_signature">@string/def_emailpartner_global_signature</string>
++</resources>
+Index: vendor/branch/5058A_Claro/build/target/product/core.mk
+===================================================================
+--- vendor/branch/5058A_Claro/build/target/product/core.mk	(revision 0)
++++ vendor/branch/5058A_Claro/build/target/product/core.mk	(revision 6615)
+@@ -0,0 +1,64 @@
++#
++# Copyright (C) 2007 The Android Open Source Project
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++# Base configuration for communication-oriented android devices
++# (phones, tablets, etc.).  If you want a change to apply to ALMOST ALL
++# devices (including non-phones and non-tablets), modify
++# core_minimal.mk instead. If you care about wearables, you need to modify
++# core_tiny.mk in addition to core_minimal.mk.
++
++PRODUCT_PACKAGES += \
++    BasicDreams \
++    BlockedNumberProvider \
++    BookmarkProvider \
++    Browser2 \
++    Calendar \
++    CalendarProvider \
++    CaptivePortalLogin \
++    CertInstaller \
++    Contacts \
++    DeskClock \
++    DocumentsUI \
++    DownloadProviderUi \
++    ExternalStorageProvider \
++    FusedLocation \
++    InputDevices \
++    KeyChain \
++    Keyguard \
++    LatinIME \
++    Launcher2 \
++    ManagedProvisioning \
++    MtpDocumentsProvider \
++    PicoTts \
++    PacProcessor \
++    libpac \
++    PrintSpooler \
++    PrintRecommendationService \
++    ProxyHandler \
++    QuickSearchBox \
++    Settings \
++    SharedStorageBackup \
++    StorageManager \
++    Telecom \
++    TeleService \
++    VpnDialogs \
++    MmsService \
++    ChromeCustomizations\
++    EmailPartnerProvider
++
++$(call inherit-product, $(SRC_TARGET_DIR)/product/core_base.mk)
++$(call inherit-product, vendor/customer/custom.mk)
++$(call inherit-product, vendor/customer/Customer_res/custom_res.mk)
+\ No newline at end of file

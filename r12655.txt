@@ -1,0 +1,46 @@
+Index: ov_check.sh
+===================================================================
+--- ov_check.sh	(revision 12654)
++++ ov_check.sh	(revision 12655)
+@@ -20,12 +20,21 @@
+ $svn_path = getUrl();
+ print "####################################\n";
+ #print "revision = [$pre_rev,$revision]\n";
+-print "PATH = [$svn_path], revision = [$revision]\n";
+ 
+-#test dir
+-#$svn_path = $svn_path."/packages/services/Telephony";
++#revision from or to only one match
++$idx_from = getCmdParam("-from");
++if($idx_from > 0){
++	$revision = $ARGV[0];
++	$pre_rev = ($ARGV[$idx_from]-1);
++}
++$idx_to = getCmdParam("-to");
++if($idx_to > 0){
++	$pre_rev = ($ARGV[0]-1);
++	$revision = $ARGV[$idx_to];
++}
++print "PATH = [$svn_path], revision = [".($pre_rev+1).",$revision]\n";
++#print "prev,next revision: [$pre_rev:$revision]\n";
+ 
+-
+ $cmd_list = "svn diff -r $pre_rev:$revision --summarize $svn_path";
+ #print "$cmd_list\n";
+ @ar_list = `$cmd_list`;
+@@ -124,10 +133,12 @@
+ }
+ sub Usage(){
+ 	print "-" x 50;print "\n";
+-	print "-- Useage: ov_check.sh revision [-src] [-m filename] [-b br1 br2]--- \n";
++	print "-- Useage: ov_check.sh revision [-src] [-m filename] [-from rev_from] [-to rev_to] [-b br1 br2]--- \n";
+ 	print "-- -src: Show revision files list --- \n";
+-	print "-- -m Match String(filename) for search \n";
+-	print "-- -b search branchs, must be last one \n";
++	print "-- -m filename: Match String(filename) for search \n";
++	print "-- -b br1 br2: search branchs, must be last one \n";
++	print "-- -from rev_from: search revision from rev_from to revision \n";
++	print "-- -to rev_to: from the revision to rev_to \n";
+ }
+ #####
+ #

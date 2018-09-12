@@ -1,0 +1,83 @@
+Index: vendor/branch/5058Y_ALIE/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java	(revision 15192)
++++ vendor/branch/5058Y_ALIE/frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java	(revision 15193)
+@@ -71,6 +71,13 @@
+ 
+     // M: Disable other sub's data when enable default sub's data
+     private TelephonyManager mTelephonyManager;
++    
++    static final int[] DATA_ACTIVITY = {
++        R.drawable.mobile_data_null,
++        R.drawable.mobile_data_in,
++        R.drawable.mobile_data_out,
++        R.drawable.mobile_data_inout
++    };
+ 
+     private final CellSignalCallback mSignalCallback = new CellSignalCallback();
+ 
+@@ -125,7 +132,7 @@
+         // M: Start setting activity when default SIM isn't set
+         if (mDataController.isMobileDataSupported() && isDefaultDataSimExist()) {
+             //showDetail(true);
+-            boolean dataEnabled = mDataController.isMobileDataSupported()
++			boolean dataEnabled = mDataController.isMobileDataSupported()
+                     && mDataController.isMobileDataEnabled();
+             MetricsLogger.action(mContext, MetricsEvent.QS_CELLULAR_TOGGLE, !dataEnabled);
+             mDataController.setMobileDataEnabled(!dataEnabled);
+@@ -194,14 +201,20 @@
+         state.isOverlayIconWide = cb.isDataTypeIconWide;
+         state.autoMirrorDrawable = !cb.noSim;
+         // M: Update roaming icon with airplane mode state
+-        state.overlayIconId = cb.enabled && (cb.dataTypeIconId > 0)
+-                && !cb.airplaneModeEnabled ? cb.dataTypeIconId : 0;
++        
++        //state.overlayIconId = cb.enabled && (cb.dataTypeIconId > 0)
++        //        && !cb.airplaneModeEnabled ? cb.dataTypeIconId : 0;
++        state.overlayIconId = 0;
++        
+         state.filter = iconId != R.drawable.ic_qs_no_sim;
+-        state.activityIn = cb.enabled && cb.activityIn;
+-        state.activityOut = cb.enabled && cb.activityOut;
++        state.activityIn = false;//cb.enabled && cb.activityIn;
++        state.activityOut = false;//cb.enabled && cb.activityOut;
++        
++        int data_icon = getDataIcon(cb);
++        state.icon = ResourceIcon.get(data_icon);
+ 
+         state.label = cb.enabled
+-                ? removeTrailingPeriod(cb.enabledDesc)
++                ? r.getString(R.string.accessibility_cell_data)//removeTrailingPeriod(cb.enabledDesc)
+                 : r.getString(R.string.quick_settings_rssi_emergency_only);
+ 
+         final String signalContentDesc = cb.enabled && (cb.mobileSignalIconId > 0)
+@@ -243,7 +256,29 @@
+         }
+         // @}
+     }
++    
++    private int getDataIcon(CallbackInfo cb) {
++        Log.d(TAG, "xw --> getDataIcon(in= " + cb.activityIn + "), out= " + cb.activityOut);
+ 
++        int imgDataActivityID=0;
++        if (cb.activityIn && cb.activityOut) {
++            imgDataActivityID=DATA_ACTIVITY[3];
++        } else if (cb.activityOut) {
++            imgDataActivityID=DATA_ACTIVITY[2];
++        } else if (cb.activityIn) {
++            imgDataActivityID=DATA_ACTIVITY[1];
++        } else {
++            imgDataActivityID=DATA_ACTIVITY[0];
++        }
++        
++        int iconId = cb.noSim ? R.drawable.ic_qs_no_sim
++                : !cb.enabled || cb.airplaneModeEnabled ? R.drawable.ic_qs_signal_disabled
++                : cb.mobileSignalIconId > 0 ? imgDataActivityID
++                : R.drawable.ic_qs_signal_no_signal;
++                
++        return iconId;
++    }
++
+     @Override
+     public int getMetricsCategory() {
+         return MetricsEvent.QS_CELLULAR;

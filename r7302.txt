@@ -1,0 +1,202 @@
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 7301)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 7302)
+@@ -166,13 +166,8 @@
+ 				return true;
+ 			}
+ 		}else{
+-			if ((channelId == 4356) || (channelId == 4355) || (channelId == 4352) || (channelId == 4353) 
+-					|| (channelId == 4354) || (channelId == 4370) || (channelId == 4371) || (channelId == 4372)
+-					|| (channelId == 4373) || (channelId == 4374) || (channelId == 4375) || (channelId == 4376)
+-					|| (channelId == 4377) || (channelId == 4378) || (channelId == 4379) || (channelId == 4383)
+-					|| (channelId == 4384) || (channelId == 4385) || (channelId == 4386) || (channelId == 4387)
+-					|| (channelId == 4388) || (channelId == 4389) || (channelId == 4390) || (channelId == 4391)
+-					|| (channelId == 4392) || (channelId == 919) || (channelId == 921) || (channelId == 4411)) {
++			if (((channelId >= 4352) && (channelId <= 4356)) || ((channelId >= 4370) && (channelId <= 4399)) 
++					|| (channelId == 919) || (channelId == 921) || (channelId == 4411) || (channelId == 519)) {
+ 				return true;
+ 			}
+ 		}
+Index: packages/apps/CarrierConfig/assets/carrier_config_71610.xml
+===================================================================
+--- packages/apps/CarrierConfig/assets/carrier_config_71610.xml	(revision 7301)
++++ packages/apps/CarrierConfig/assets/carrier_config_71610.xml	(revision 7302)
+@@ -1,6 +1,6 @@
+ <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+ <carrier_config_list>
+ <carrier_config>
+-<boolean name="carrier_avoid_cmas_list_bool" value="true" />
++<boolean name="carrier_avoid_peru_cmas_list_bool" value="true" />
+ </carrier_config>
+ </carrier_config_list>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java	(revision 7301)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java	(revision 7302)
+@@ -262,6 +262,11 @@
+ 					channel.setSelectable(false);
+ 					channel.setSummary(R.string.enable);
+ 				}
++				
++			} else if (isPeruCmasSupport() && isPeruCmasDefaultChannel(channelId)) {
++				channel.setEnabled(false);
++				channel.setSelectable(false);
++				channel.setSummary(R.string.enable);
+                 // skip to set the onclick handler as well
+             } else {
+ 
+@@ -1265,4 +1270,24 @@
+         }
+         return false;
+     }
++	
++	private boolean isPeruCmasSupport() {
++        CarrierConfigManager configMgr = (CarrierConfigManager) getApplicationContext().
++                                                getSystemService(Context.CARRIER_CONFIG_SERVICE);
++        PersistableBundle carrierConfig =
++                configMgr.getConfigForSubId(mSubId);
++        boolean mIsCmasSupport =
++                carrierConfig.getBoolean(CarrierConfigManager.KEY_CARRIER_AVOID_PERU_CMAS_LIST_BOOL);
++        MmsLog.d(LOG_TAG, "mIsCmasSupport" + mIsCmasSupport);
++        return mIsCmasSupport;
++    }
++	
++	private boolean isPeruCmasDefaultChannel(int channelId) {
++        if (((channelId >= 4352) && (channelId <= 4356)) ||
++			 ((channelId >= 4370) && (channelId <= 4399)) || 
++			 (channelId == 919) || (channelId == 519)) {
++            return true;
++        }
++        return false;
++    }
+ }
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 7301)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 7302)
+@@ -385,6 +385,11 @@
+ 		if (message.getServiceCategory() == 919 && CellBroadcastReceiverApp.isCellAreaInChile()) {
+ 			return false;
+ 		}
++		
++		if (((message.getServiceCategory() == 4380) || (message.getServiceCategory() == 4381)) && 
++				CellBroadcastReceiverApp.isCellAreaInPeru()) {
++			return true;
++		}
+ 
+         if (message.isCmasMessage()) {
+             //Log.d(TAG, "in isMessageEnabledByUser , CMASMessageClass " + message.getCmasMessageClass());
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 7301)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 7302)
+@@ -516,6 +516,7 @@
+             mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_CONTINUE), 24*60*60*1000);
+         } else if (CellBroadcastReceiverApp.isCellAreaInPeru()){
+ 			// stop alert after the peru specified duration (3min)
++			mHandler.removeMessages(ALERT_SOUND_STOP);
+             mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_STOP), 3*60*1000);
+ 		} else {
+              mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_FINISHED), mDuration);
+@@ -607,10 +608,13 @@
+      */
+     private void schedulePlay() {
+          //if (mAudioManager.getRingerMode() != AudioManager.RINGER_MODE_SILENT) {
+-             if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
++            if (CellBroadcastReceiverApp.isCellAreaInChile()) {
+                 mEnableRepeat =  false;
+                 mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_STOP), 300000);
+             }
++			if (CellBroadcastReceiverApp.isCellAreaInPeru()) {
++				mEnableRepeat =  false;
++            }
+             play();
+          //}
+         if (mEnableRepeat) {
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 7301)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 7302)
+@@ -269,6 +269,7 @@
+ 			mScreenOffHandler.sendMessageDelayed(msg, 24*60*60*1000);
+ 		} else if(CellBroadcastReceiverApp.isCmasDefaultChannel(message.getServiceCategory()) && CellBroadcastReceiverApp.isCellAreaInPeru()) {
+ 			Log.i("dongdong","set screenoff after 3min");
++			mScreenOffHandler.removeMessages(SCREEN_OFF_FLAG);
+ 			mScreenOffHandler.sendMessageDelayed(msg, 3*60*1000);
+ 		} else {
+ 			mScreenOffHandler.sendMessageDelayed(msg, ALERT_TIME_LENGTH);
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 7301)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 7302)
+@@ -148,13 +148,8 @@
+     }
+ 	
+ 	public static boolean isCmasDefaultChannel(int channelId) {
+-        if ((channelId == 4356) || (channelId == 4355) || (channelId == 4352) || (channelId == 4353) 
+-				|| (channelId == 4354) || (channelId == 4370) || (channelId == 4371) || (channelId == 4372)
+-				|| (channelId == 4373) || (channelId == 4374) || (channelId == 4375) || (channelId == 4376)
+-				|| (channelId == 4377) || (channelId == 4378) || (channelId == 4379) || (channelId == 4383)
+-				|| (channelId == 4384) || (channelId == 4385) || (channelId == 4386) || (channelId == 4387)
+-				|| (channelId == 4388) || (channelId == 4389) || (channelId == 4390) || (channelId == 4391)
+-				|| (channelId == 4392) || (channelId == 919) || (channelId == 921) || (channelId == 4411)) {
++        if (((channelId >= 4352) && (channelId <= 4356)) || ((channelId >= 4370) && (channelId <= 4399))
++			|| (channelId == 919) || (channelId == 921) || (channelId == 4411) || (channelId == 519)) {
+             return true;
+         }
+         return false;
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastConfigService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastConfigService.java	(revision 7301)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastConfigService.java	(revision 7302)
+@@ -285,6 +285,21 @@
+                                 MESSAGE_ID_CMAS_ALERT_CHILE_EMERGENCY,
+                                 MESSAGE_ID_CMAS_ALERT_CHILE_EMERGENCY);
+                     }
++					if (CellBroadcastReceiverApp.isCellAreaInPeru()) {
++                        setCellBroadcastRange(manager, enableAlerts,
++                                SmsManager.CELL_BROADCAST_RAN_TYPE_GSM,
++                                SmsCbConstants.MESSAGE_ID_GSMA_ALLOCATED_CHANNEL_919,
++                                SmsCbConstants.MESSAGE_ID_GSMA_ALLOCATED_CHANNEL_919);
++                        setCellBroadcastRange(manager, enableAlerts,
++                                SmsManager.CELL_BROADCAST_RAN_TYPE_GSM,
++                                519, 519);
++						setCellBroadcastRange(manager, true,
++								SmsManager.CELL_BROADCAST_RAN_TYPE_GSM,
++								4380, 4382);
++						setCellBroadcastRange(manager, true,
++								SmsManager.CELL_BROADCAST_RAN_TYPE_GSM,
++								4396, 4399);
++                    }
+                 } else {
+                     // No emergency channel system property, disable all
+                     // emergency channels except Presidential alert
+Index: frameworks/base/telephony/java/android/telephony/CarrierConfigManager.java
+===================================================================
+--- frameworks/base/telephony/java/android/telephony/CarrierConfigManager.java	(revision 7301)
++++ frameworks/base/telephony/java/android/telephony/CarrierConfigManager.java	(revision 7302)
+@@ -1124,6 +1124,13 @@
+      * @hide
+      */
+      public static final String KEY_CARRIER_AVOID_CMAS_LIST_BOOL = "carrier_avoid_cmas_list_bool";
++	 
++	 /**
++     * @M: Added to disable Peru Emergency alert list from CellBroadcast app.
++     * Values: true, if no need to show Cmas channels in list
++     * @hide
++     */
++     public static final String KEY_CARRIER_AVOID_PERU_CMAS_LIST_BOOL = "carrier_avoid_peru_cmas_list_bool";
+ 
+      /**
+     * @M: Added for showing conference host number to participants.
+@@ -1372,6 +1379,8 @@
+         sDefaults.putBoolean(KEY_REMOVE_CONFERENCE_TOAST_BOOL, false);
+ 
+         sDefaults.putBoolean(KEY_CARRIER_AVOID_CMAS_LIST_BOOL, false);
++		
++		sDefaults.putBoolean(KEY_CARRIER_AVOID_PERU_CMAS_LIST_BOOL, false);
+         /// M: config whether show conference host number to participants
+         sDefaults.putBoolean(KEY_SHOW_CONF_HOST_NUMBER_TO_PARTICIPANT, false);
+ 

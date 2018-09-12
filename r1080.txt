@@ -1,0 +1,182 @@
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FMMMIService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FMMMIService.java	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FMMMIService.java	(revision 1080)
+@@ -0,0 +1,112 @@
++package com.android.fmradio;
++
++import android.app.Service;
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.Intent;
++import android.content.ServiceConnection;
++import android.os.IBinder;
++import android.util.Log;
++
++public class FMMMIService extends Service {
++
++	private boolean mIsServiceBinded = false;
++	private FmService mService = null;
++	private int mCurrentStation = FmUtils.DEFAULT_STATION;
++	private Context mContext = null;
++
++
++	private ServiceConnection mServiceConnection = new ServiceConnection() {
++		public void onServiceConnected(ComponentName className, IBinder service) {
++			mService = ((FmService.ServiceBinder) service).getService();
++			if (null == mService) {
++				return;
++			}
++			if (!isServiceInited()) {
++				initService(mCurrentStation);
++				mService.powerUpAsync(FmUtils.computeFrequency(mCurrentStation));
++			} else {
++				if (isDeviceOpen()) {
++					int iFreq = getFrequency();
++					if (FmUtils.isValidStation(iFreq)) {
++						if (mCurrentStation != iFreq) {
++							mCurrentStation = iFreq;
++							FmStation.setCurrentStation(mContext,
++									mCurrentStation);
++						}
++					}
++				}
++			}
++		}
++
++		public void onServiceDisconnected(ComponentName className) {
++			mService = null;
++		}
++	};
++
++	@Override
++	public void onCreate() {
++		super.onCreate();
++		
++	}
++
++	@Override
++	public void onDestroy() {
++        if (mIsServiceBinded) {
++        	mContext.unbindService(mServiceConnection);
++            mIsServiceBinded = false;
++        }
++		super.onDestroy();
++		
++	}
++
++	@Override
++	public void onStart(Intent intent, int startid) {
++		mContext = getApplicationContext();
++		mCurrentStation = Integer.parseInt(intent.getStringExtra("fmStation"));
++		mIsServiceBinded = mContext.bindService(new Intent(mContext,
++				FmService.class), mServiceConnection, Context.BIND_AUTO_CREATE);
++		if (!mIsServiceBinded) {
++			return;
++		}
++		
++		if (isServiceInited()) {
++			mService.tuneStationAsync(FmUtils.computeFrequency(mCurrentStation));
++		}
++
++	}
++
++	private void initService(int iCurrentStation) {
++		if (null != mService) {
++			mService.initService(iCurrentStation);
++		}
++	}
++
++	private boolean isServiceInited() {
++		if (null != mService) {
++			return mService.isServiceInited();
++		}
++		return false;
++	}
++
++	private boolean isDeviceOpen() {
++		if (null != mService) {
++			return mService.isDeviceOpen();
++		}
++
++		return false;
++	}
++
++	private int getFrequency() {
++		if (null != mService) {
++			return mService.getFrequency();
++		}
++		return 0;
++	}
++
++	@Override
++	public IBinder onBind(Intent intent) {
++		// TODO Auto-generated method stub
++		return null;
++	}
++}
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/MMIBroadcastReceiver.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/MMIBroadcastReceiver.java	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/MMIBroadcastReceiver.java	(revision 1080)
+@@ -0,0 +1,30 @@
++package com.android.fmradio;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.util.Log;
++import android.widget.Toast;
++
++public class MMIBroadcastReceiver extends BroadcastReceiver {
++	@Override
++	public void onReceive(Context context, Intent intent) {
++
++		String action = intent.getAction();
++
++		if (action.equals("com.android.fmradio.MMIFMRadioTest")) {
++			
++			String fmStation = intent.getStringExtra("fmStation");
++			if (fmStation.equals("close_FMMMIService")) {
++				Intent intentFmServiec = new Intent(context, FMMMIService.class); 
++				context.stopService(intentFmServiec);
++			}else {
++				Intent intentFmServiec = new Intent(context, FMMMIService.class);  
++				intentFmServiec.putExtra("fmStation", fmStation);
++				context.startService(intentFmServiec);
++			}
++			
++		}		
++	}
++}
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/AndroidManifest.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/AndroidManifest.xml	(revision 1079)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/AndroidManifest.xml	(revision 1080)
+@@ -71,6 +71,10 @@
+             </intent-filter>
+         </service>
+ 
++	<service
++            android:name=".FMMMIService"
++            android:exported="false" >
++	</service>
+         <provider
+             android:name=".FmProvider"
+             android:authorities="com.android.fmradio"
+@@ -96,6 +100,13 @@
+                 <category android:name="android.intent.category.LAUNCHER" />
+             </intent-filter>
+         </activity>
++		<receiver android:name=".MMIBroadcastReceiver">  
++			<intent-filter
++				android:priority="1000">  
++				<action  
++					android:name="com.android.fmradio.MMIFMRadioTest"/>  
++			</intent-filter>  
++		</receiver> 
+     </application>
+ 
+ </manifest>

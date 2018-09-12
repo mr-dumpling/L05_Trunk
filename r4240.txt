@@ -1,0 +1,118 @@
+Index: frameworks/base/core/java/android/hardware/Camera.java
+===================================================================
+--- frameworks/base/core/java/android/hardware/Camera.java	(revision 4239)
++++ frameworks/base/core/java/android/hardware/Camera.java	(revision 4240)
+@@ -382,7 +382,7 @@
+      * Returns the number of physical cameras available on this device.
+      */
+ 	 
+-	//add by mzj for cts 
++	/*add by mzj for cts start*/
+     //public native static int getNumberOfCameras();
+ 	private native static int _getNumberOfCameras();
+     public static int getNumberOfCameras() {
+@@ -393,6 +393,20 @@
+          } 
+          return cameraNum;
+     }
++	
++	public static boolean isCtsTest() {
++         String packageName = ActivityThread.currentOpPackageName();
++         if("android.hardware.camera2.cts".equals(packageName) 
++				|| "android.hardware.cts".equals(packageName)
++				||"android.camera.cts".equals(packageName)
++				||"com.android.compatibility.common.deviceinfo".equals(packageName) 
++				||"com.android.cts.verifier".equals(packageName)){
++             return true;
++         }else{
++			 return false; 
++		 }  
++    }
++	/*add by mzj for cts end*/
+ 
+     /**
+      * Returns the information about a particular camera.
+@@ -399,14 +413,17 @@
+      * If {@link #getNumberOfCameras()} returns N, the valid id is 0 to N-1.
+      */
+     public static void getCameraInfo(int cameraId, CameraInfo cameraInfo) {
++		
+ 		Log.d("mzj", "getCameraInfo init ="+cameraId);
+-		if (cameraId == 2) {
+-            SystemProperties.set("debug.camera.open", "2");
+-            Log.d("mzj", "getCameraInfo " +"debug.camera.open 2");
+-            cameraId = 0; 
+-        } else {
+-			SystemProperties.set("debug.camera.open", "-1"); 
+-			Log.d("mzj", "getCameraInfo " +"debug.camera.open -1");
++		if(!isCtsTest()){
++		  if (cameraId == 2) {
++				SystemProperties.set("debug.camera.open", "2");
++				Log.d("mzj", "getCameraInfo " +"debug.camera.open 2");
++				cameraId = 0; 
++			} else {
++				SystemProperties.set("debug.camera.open", "-1"); 
++				Log.d("mzj", "getCameraInfo " +"debug.camera.open -1");
++				}
+ 		}
+         _getCameraInfo(cameraId, cameraInfo);
+         IBinder b = ServiceManager.getService(Context.AUDIO_SERVICE);
+@@ -577,13 +594,15 @@
+             throw new IllegalArgumentException("Invalid HAL version " + halVersion);
+         }
+ 		Log.d("mzj", "openLegacy cameraId init ="+cameraId);
+-		if (cameraId == 2) {
+-              SystemProperties.set("debug.camera.open", "2");
+-              Log.d("mzj", "openLegacy set" +"debug.camera.open 2");
+-              cameraId = 0; 
+-        } else {
+-			SystemProperties.set("debug.camera.open", "-1");
+-			Log.d("mzj", "openLegacy set" +"debug.camera.open -1");
++		if(!isCtsTest()){
++			if (cameraId == 2) {
++				SystemProperties.set("debug.camera.open", "2");
++				Log.d("mzj", "openLegacy set" +"debug.camera.open 2");
++				cameraId = 0; 
++			} else {
++				SystemProperties.set("debug.camera.open", "-1");
++				Log.d("mzj", "openLegacy set" +"debug.camera.open -1");
++			}
+ 		}
+ 		return new Camera(cameraId, halVersion);
+     }
+Index: frameworks/base/api/test-current.txt
+===================================================================
+--- frameworks/base/api/test-current.txt	(revision 4239)
++++ frameworks/base/api/test-current.txt	(revision 4240)
+@@ -13328,6 +13328,7 @@
+     method public static void getCameraInfo(int, android.hardware.Camera.CameraInfo);
+     method public static int getNumberOfCameras();
+     method public android.hardware.Camera.Parameters getParameters();
++    method public static boolean isCtsTest();
+     method public final void lock();
+     method public static android.hardware.Camera open(int);
+     method public static android.hardware.Camera open();
+Index: frameworks/base/api/current.txt
+===================================================================
+--- frameworks/base/api/current.txt	(revision 4239)
++++ frameworks/base/api/current.txt	(revision 4240)
+@@ -13311,6 +13311,7 @@
+     method public static void getCameraInfo(int, android.hardware.Camera.CameraInfo);
+     method public static int getNumberOfCameras();
+     method public android.hardware.Camera.Parameters getParameters();
++    method public static boolean isCtsTest();
+     method public final void lock();
+     method public static android.hardware.Camera open(int);
+     method public static android.hardware.Camera open();
+Index: frameworks/base/api/system-current.txt
+===================================================================
+--- frameworks/base/api/system-current.txt	(revision 4239)
++++ frameworks/base/api/system-current.txt	(revision 4240)
+@@ -13760,6 +13760,7 @@
+     method public static void getCameraInfo(int, android.hardware.Camera.CameraInfo);
+     method public static int getNumberOfCameras();
+     method public android.hardware.Camera.Parameters getParameters();
++    method public static boolean isCtsTest();
+     method public final void lock();
+     method public static android.hardware.Camera open(int);
+     method public static android.hardware.Camera open();

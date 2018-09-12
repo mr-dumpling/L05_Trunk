@@ -1,0 +1,391 @@
+Index: vendor/branch/apn_add.sh
+===================================================================
+--- vendor/branch/apn_add.sh	(revision 0)
++++ vendor/branch/apn_add.sh	(revision 6689)
+@@ -0,0 +1,378 @@
++#!/usr/bin/perl 
++# ##########################################################
++# Author : javen
++# Date : 2018.1.18
++# ##########################################################
++# 
++
++$del_idx = getCmdParam("-remove");
++if($del_idx > 0){
++	
++	if(-e "./add_apn.xml") {
++		`rm add_apn.xml`;
++	}
++	if(-e "./apns-conf.xml") {
++		`rm apns-conf.xml`;
++	}
++	print "-- Remove tmp files Successfully! --\n";
++	exit;
++}
++if(@ARGV < 2){
++	print "-" x 50;print "\n";
++	print "Usage:
++	-- PLEASE INPUT branch_name and apn.txt file,etc 
++	-- ROOT as BRANCH_NAME is root dir
++	-- branch_name is the branch of the apns-conf.xml file
++	-- apn.csv is the need add apns file
++	-- [-twice] option for the mcc like 401 01/401 02 twice show.
++	-- [-remove] option for remove temp file
++	\n";
++	print "Command: 
++	apn_add.sh branch_name apn.csv [-twice] [-remove]\n";
++	print "-" x 50;print "\n";
++	exit;
++}
++## code
++#print "##################### BEGIN ######################\n";
++$my_count = 0;
++$idx = 0;
++$apn_max = 22;
++$spl_sym = ",";
++$open_file = "apn.txt";
++$add_file = ">add_apn.xml";
++$BRANCH = "".$ARGV[0]; #vendor/branch/
++if("ROOT" eq $ARGV[0]){
++	$BRANCH="../../";
++}
++$APN_BR_FILE = $BRANCH."/device/mediatek/common/apns-conf.xml";
++$tmp_file = ">apns-conf_tmp.xml";
++$save_file = ">apns-conf.xml";
++
++if($ARGV[1] ne ""){
++	$open_file = $ARGV[1];
++}
++#define string
++@same_list = {};
++@line23 = {};			
++@arCfg = (
++	["Begin", ""],
++	["Ignore", ""],
++	["Operator", ""], 
++	["Operator_Title", "carrier"], 
++	["MCC_MNC", "mcc"], 
++	["apn", "apn"], 
++	["spn", ""], 
++	["type", "type"], 
++	["author", "authtype"], 
++	["user", "user"], 
++	["password", "password"], 
++	["homepage", "mmsc"], 
++	["http_type", ""], 
++	["proxy", ""], 
++	["proxy_addr", "mmsproxy"], 
++	["proxy_port", "mmsport"], 
++	["proxy_user", "user"], 
++	["proxy_password", "password"]
++);
++
++#open a file
++open(F_APN, $open_file) or die $!;
++my @apns = <F_APN>;
++close(F_APN);
++
++#exit;
++open(F_SAVE, $add_file) or die $!;
++
++print "-" x 50;
++print "\n";
++
++print F_SAVE "  <!-- ---------- APN_ADD_BEGIN ---------- -->\n";
++#print @flist;
++foreach $apn (@apns){
++	@items = split($spl_sym, $apn);
++	$my_c_it = @items;
++	if($my_c_it > 0){
++		$idx++;
++		if($idx >= $apn_max){
++			print "-- Created block items --- ";
++			saveToFile($idx, @line23);
++			@line23 = {};
++			$idx = 0;
++			next;
++		}
++		
++		$ret = InOpArr($items[1], @arCfg);
++		if($ret ne ""){
++			if($ret eq "Begin"){
++				#print "Begin ---\n";
++				push @line23, $apn;
++				$idx = 1;
++				next;
++			}
++			if($ret eq "Ignore"){
++				#print "Ignore ---\n";
++				next;
++			}
++			#other push it
++			push @line23, $apn;
++			next;
++		}
++	}
++}
++
++print F_SAVE "  <!-- ---------- APN_ADD_END ---------- -->\n";
++close(F_SAVE);
++
++print "-" x 50;
++print "\n";
++#print "##################### END ########################\n";
++removeMe();
++removeSame();
++appendMe();
++$tmp_file =~ s/\>//g;
++`rm $tmp_file`;
++print "-- End of APN ADD -------------------------------------\n";
++#######################################end###################
++sub saveToFile(){
++	my ($my_rows, @a_23) = @_;
++	$my_rows = @a_23;
++	my $twice_mcc = "";
++	#print "saveToFile my_rows = $my_rows\n";
++	my @its = split($spl_sym, $a_23[1]);
++	my @titls = split($spl_sym, $a_23[1]);
++	$my_cols = @its;
++	#print "saveToFile my_cols = $my_cols\n";
++	#print "a_23[0] = ".$a_23[1];
++	for($j = 0; $j < $my_cols; $j++){
++		if($j == 0 || $j==1){
++			#print F_SAVE "###";
++			next;
++		}
++Twice:
++		$same_match_it = "";
++		print F_SAVE "  <apn ";
++		for($i = 0; $i < $my_rows; $i++){
++			@its = split($spl_sym, $a_23[$i]);
++			$itm = $its[$j];
++			#print $a_23[$i];
++			$itm =~ s/\r\n//g;
++			chomp($itm);
++			
++			if($arCfg[$i][1] eq ""){
++				#print "No this 2 lines\n";
++				next;
++			}
++			if($arCfg[$i][1] eq "apn"){
++				$same_match_it = $same_match_it."apn=\"$itm\" ";
++			}
++			if($arCfg[$i][1] eq "authtype"){
++				$au = 0;
++				if($itm =~ /CHAP/){
++					$au = 2;
++				}
++				if(($itm =~ /PAP/) || ($itm =~ /Normal/)){
++					$au = $au + 1;
++				}
++				if(($itm =~ /NULL/) || ($itm eq "")){
++					$au = 0;
++				}
++				$itm = ($au > 0) ? ("authtype=\"".$au."\"") : "";
++				print F_SAVE  $itm. " ";
++				next;
++			}
++			if($arCfg[$i][1] eq "mmsproxy"){
++				if("0.0.0.0" eq $itm){
++					next;
++				}
++				if(($itm =~ /:/)){
++					$addr_idx = index($itm, ":");
++					$itm = substr($itm, 0, $addr_idx);
++				}
++			}
++			if($arCfg[$i][1] eq "mcc"){
++				#print "No this 2 lines\n";
++				if($twice_mcc ne ""){
++					$itm = $twice_mcc;
++					$twice_mcc = "";
++					$twice_idx = 0;
++					$my_count = $my_count + 1;
++				}
++				#$itm =~ s/ //g;
++				@arr_mcc = split(" ", $itm);
++				chomp($arr_mcc[0]);
++				chomp($arr_mcc[1]);
++				if("" eq $arr_mcc[1]){
++					$arr_mcc[1] = substr($arr_mcc[0], 3);
++					$arr_mcc[0] = substr($arr_mcc[0], 0, 3);
++				}else{
++					$arr_mcc[1] = substr($arr_mcc[1], 0, 2);
++				}				
++				if($itm =~ /\//){
++					$twice_idx = index($itm, "/");
++					$twice_mcc = substr($itm, $twice_idx+1);
++					if(getCmdParam("-twice") > 0){
++						print "\nMCC MNC Twice [$itm][".$titls[$j]."]\n";
++						print "MCC MNC Twice do clone [".$twice_mcc."]\n";
++					}
++				}
++				$itm = "mcc=\"".$arr_mcc[0]."\" mnc=\"".$arr_mcc[1]."\"";
++				$same_match_it = $same_match_it."mcc=\"".$arr_mcc[0]."\" mnc=\"".$arr_mcc[1]."\" ";
++				print F_SAVE  $itm. " ";
++				next;
++			}			
++			if("" ne $itm){
++				$itm = $arCfg[$i][1]."=\"".$itm."\"";
++				print F_SAVE  $itm. " ";
++			}
++		}
++		$sNormalProp = getAppendNormalItem();
++		print F_SAVE $sNormalProp;
++		print F_SAVE "/>\n";
++		push @same_list, $same_match_it;
++		if("" ne $twice_mcc){
++			goto Twice;
++		}
++	}
++	$my_count = $my_count + $my_cols;
++	print F_SAVE "  <!-- -- $my_count -- -->\n";
++	#print @a_23[$i]."\n";
++	
++	
++	print "###### -- $my_count -- #####\n";
++}
++sub InOpArr(){
++	my ($it, @def) = @_;
++	$d_c = @def;
++	for($i = 0; $i < $d_c; $i++){
++		if($def[$i][0] eq $it){
++			return $it;
++		}
++	}
++	return "";
++}
++
++#no input param
++sub getCmdParam {  
++	my ($my_pa) = @_;
++	
++	$av_str = "";
++	foreach $my_b(@ARGV){
++		$av_str = $av_str.$my_b.",";
++	}
++	
++	my @my_av = split(",", $av_str);
++	my $mycount = 0;
++
++	#print "PARAMS: $av_str/$my_pa\n";
++	foreach $my_la(@my_av){
++		$mycount++;
++		#print "getCmdParam my_la: $my_la\n";
++		if($my_pa eq $my_la){
++			return $mycount;
++		}
++	}
++	return -1;
++}
++sub removeMe(){
++	print "-- removeMe -- \n";
++	#open a file
++	open(F_B_APN, $APN_BR_FILE) or die $!."\n$APN_BR_FILE";
++	my @apn_brs = <F_B_APN>;
++	my $b_No_Write = 0;
++	foreach $ln_apn (@apn_brs){
++		if($apn_br =~ /APN_ADD_BEGIN/){
++			$b_No_Write = 1;
++		}
++		if($b_No_Write == 0){
++			print F_B_APN $ln_apn."\n";
++		}
++		if($apn_br =~ /APN_ADD_END/){
++			$b_No_Write = 0;
++		}
++	}
++	close(F_B_APN);
++}
++sub removeSame(){
++	open(F_B_APN_BAK, $tmp_file) or die $!;
++	open(F_B_APN, $APN_BR_FILE) or die $!."\n$APN_BR_FILE";
++	my @apn_brs = <F_B_APN>;
++	$first_apn = "<apn";
++	$last_apn = "/>";
++	$item_lines = "";
++	foreach $ln_apn_item (@apn_brs){
++		if(($ln_apn_item =~ /$first_apn/) && ($ln_apn_item =~ /$last_apn/)){
++			$ln_apn_item = removeSameItem($ln_apn_item);
++			print F_B_APN_BAK $ln_apn_item;
++			next;
++		}
++		if($ln_apn_item =~ /\<apns/){
++			print F_B_APN_BAK $ln_apn_item;
++			next; 
++		}
++		if($ln_apn_item =~ /$last_apn/){
++			$bFirst = 0;
++			$item_lines = $item_lines.$ln_apn_item;
++			$item_lines = removeSameItem($item_lines);
++			print F_B_APN_BAK $item_lines;
++			$item_lines = "";
++			next;
++		}
++		if($ln_apn_item =~ /$first_apn/){
++			$bFirst = 1;
++		}
++		if($bFirst == 1){
++			$item_lines = $item_lines.$ln_apn_item;
++		}else{
++			print F_B_APN_BAK $ln_apn_item;
++		}
++	}
++	close(F_B_APN);
++	close(F_B_APN_BAK);
++}
++sub removeSameItem(){
++	my ($s_item) = @_;
++	#print "-- removeSameItem $s_item-- \n";
++	foreach $ln_same (@same_list){
++		@ar_it = split(" ", $ln_same);
++		#print "removeSameItem ar_it =".$ar_it[0].",$s_item\n";
++		for($i = 0; $i < 3; $i++){
++			if(($s_item =~ /$ar_it[0]/) && ($s_item =~ /$ar_it[1]/) && ($s_item =~ /$ar_it[2]/)){
++				print "   -- remove Same Item: [".$ar_it[0].",".$ar_it[1].",".$ar_it[2]."]\n";
++				return "";
++			}
++		}
++	}
++	return $s_item;
++}
++sub appendMe(){
++	#print "-- appendMe -- \n";
++	open(F_B_APN_BAK, $save_file) or die $!;
++	$t_file = $tmp_file;
++	$t_file =~ s/\>//g;
++	#print "appendMe t_file = $t_file\n";
++	open(F_B_APN, $t_file) or die $!;
++	my @apn_brs = <F_B_APN>;
++	my $b_No_Write = 0;
++	foreach $ln_apn (@apn_brs){
++		$last_apn = "</apns>";
++		if($ln_apn =~ /$last_apn/){
++			print "-- appendMe to last_apns by [APN_ADD_BEGIN]\n";
++			$add_file =~ s/>//g;
++			open(F_B_APN_SAVE, $add_file) or die $!.$APN_BR_FILE;
++			my @apn_saves = <F_B_APN_SAVE>;
++			foreach $ln_save (@apn_saves){
++				print F_B_APN_BAK $ln_save;
++			}
++			close(F_B_APN_SAVE);
++			print F_B_APN_BAK $ln_apn;
++		}else{
++			print F_B_APN_BAK $ln_apn;
++		}
++	}
++	close(F_B_APN);
++	close(F_B_APN_BAK);
++}
++sub getAppendNormalItem(){
++	$sNormal = "protocol=\"IP\" roaming_protocol=\"IP\" bearer_bitmask=\"\" mvno_type=\"\" mvno_match_data=\"\" csdnum=\"0\"";
++	return $sNormal;
++}
+\ No newline at end of file
+
+Property changes on: vendor/branch/apn_add.sh
+___________________________________________________________________
+Added: svn:executable
+## -0,0 +1 ##
++*
+\ No newline at end of property

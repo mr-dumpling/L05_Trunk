@@ -1,0 +1,91 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/SimStatus.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/SimStatus.java	(revision 13712)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/deviceinfo/SimStatus.java	(revision 13713)
+@@ -158,11 +158,8 @@
+         mSelectableSubInfos = SubscriptionManager.from(getContext())
+                 .getActiveSubscriptionInfoList();
+ 
+-        addPreferencesFromResource(R.xml.device_info_sim_status);
+-		mAccessPointName = findPreference(KEY_ACCESS_POINT_NAMES);
+-		if (mAccessPointName !=null) {
+-			mAccessPointName.setOnPreferenceChangeListener(this);
+-		}
++        addPreferencesFromResource(R.xml.device_info_sim_status);		
++			
+         mRes = getResources();
+         mDefaultText = mRes.getString(R.string.device_info_default);
+         // Note - missing in zaku build, be careful later...
+@@ -172,7 +169,12 @@
+         mCdmaSimStatus = new CdmaSimStatus(this, null);
+ 
+         updatePhoneInfos();
+-
++		
++		mAccessPointName = findPreference(KEY_ACCESS_POINT_NAMES);
++		if (mAccessPointName !=null) {
++			mAccessPointName.setOnPreferenceChangeListener(this);			
++		}
++		
+         /// M: for [SIM Hot Swap] @{
+         mSimHotSwapHandler = new SimHotSwapHandler(getActivity());
+         mSimHotSwapHandler.registerOnSimHotSwap(new OnSimHotSwapListener() {
+@@ -187,7 +189,20 @@
+         /// M: for plug-in
+         customizeTitle();
+     }
+-
++	
++	public void updateApnPreference() {
++		if (mAccessPointName !=null) {
++			if (mPhone!=null) {		
++				Log.d(TAG, "mPhone !=null");
++				mAccessPointName.setSummary("");			
++			} else {
++				Log.d(TAG, "mPhone ==null");
++				mAccessPointName.setSummary(getContext().getResources().
++							getString(R.string.device_info_not_available));
++			}
++		}
++	}
++	
+     @Override
+     public View onCreateView(LayoutInflater inflater, ViewGroup container,
+             Bundle savedInstanceState) {
+@@ -242,6 +257,7 @@
+     @Override
+     public void onResume() {
+         super.onResume();
++		updateApnPreference();
+         if (mPhone != null) {
+             updatePreference();
+ 
+@@ -495,6 +511,7 @@
+                         mSir.getSubscriptionId()));
+             if (UserManager.get(getContext()).isAdminUser()
+                     && SubscriptionManager.isValidSubscriptionId(mSir.getSubscriptionId())) {
++				updateApnPreference();		
+                 if (phone == null) {
+                     Log.e(TAG, "Unable to locate a phone object for the given Subscription ID.");
+                     return;
+@@ -629,12 +646,14 @@
+ 	@Override
+     public boolean onPreferenceTreeClick(Preference preference) {
+         if (preference.getKey().equals(KEY_ACCESS_POINT_NAMES)) {
+-			Intent intent = new Intent(Settings.ACTION_APN_SETTINGS);
+-			// This will setup the Home and Search affordance
+-			intent.putExtra(":settings:show_fragment_as_subsetting", true);
+-			intent.putExtra(EXTRA_SUB_ID, mPhone.getSubId());
+-			intent.putExtra("isDisabledRestoreMenu",true);
+-			getActivity().startActivity(intent);
++			if (mPhone !=null) {
++				Intent intent = new Intent(Settings.ACTION_APN_SETTINGS);
++				// This will setup the Home and Search affordance
++				intent.putExtra(":settings:show_fragment_as_subsetting", true);
++				intent.putExtra(EXTRA_SUB_ID, mPhone.getSubId());
++				intent.putExtra("isDisabledRestoreMenu",true);
++				getActivity().startActivity(intent);
++			}			
+ 		}       
+         return true;
+     }

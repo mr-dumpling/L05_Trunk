@@ -1,0 +1,1037 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 1186)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 1187)
+@@ -3431,7 +3431,6 @@
+ 		<receiver android:name="com.android.settings.BootedReceiver">  
+            <intent-filter android:priority="1000">  
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>  
+-			
+            </intent-filter>  
+        </receiver>  
+         <!-- M: @} -->
+
+Property changes on: packages/apps/Settings/AndroidManifest.xml
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Settings/AndroidManifest.xml:r535
+Index: packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/SchedulePlanTypeSettings.java	(revision 1187)
+@@ -0,0 +1,278 @@
++package com.android.settings;
++import android.os.Bundle;
++import com.android.settings.search.Indexable;
++import com.android.settings.search.SearchIndexableRaw;
++import android.support.v7.preference.Preference;
++import android.content.SharedPreferences;
++import android.support.v7.preference.CheckBoxPreference;
++import android.app.UiModeManager;
++import android.content.Context;
++import com.android.settings.NightModeReceiver;
++
++import android.app.TimePickerDialog;
++import java.util.Calendar;
++import android.support.v7.app.AppCompatDelegate;
++
++import android.text.format.DateFormat;
++import android.widget.TimePicker;
++import android.widget.Toast;
++import com.mediatek.pq.PictureQuality;
++import java.util.Calendar;
++import android.app.AlarmManager;
++import android.app.PendingIntent;
++import android.app.Service;
++import android.content.Intent;
++import android.util.Log;
++import android.widget.Toast;
++import java.util.Calendar;
++
++
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++/**
++ * Created by Administrator on 2017/8/21.
++ Set the night mode time
++ */
++public class SchedulePlanTypeSettings extends SettingsPreferenceFragment implements Indexable{
++	private static final String TAG = "SchedulePlanTypeSettings";
++	public static final String OPEN_ACTION = "com.android.settings.nightmode.open";
++	public static final String CLOSE_ACTION ="com.android.settings.nightmode.close";
++	private static final String PREFERENCE_NAME = "com.android.settings";
++	private static final String SETTING_TIME_PLAN = "setting_time_plan";
++	private static final String SUNSET_TO_SUNRISE = "sunset_to_sunrise";
++	private static final String TIME_ON = "timeOn";
++	private static final String TIME_Off = "timeOff";
++	private static final String KEY_TIME_ON = "turn_on_at";
++	private static final String KEY_TIME_OFF = "turn_off_at";
++	private static final String KEY_SETTING_TIME = "custom_schedule";
++	private static final String KEY_SUNSET_SUNRISE = "sunset2sunrise";
++	private final String timeOn="22:00";
++	private final String timeOff="07:00";
++	 private final String OPEN="open_nightMode";
++    private final String CLOSE="close_nightMode";
++	private  Preference turn_on_at ;
++	private   Preference turn_off_at ;
++	private   CheckBoxPreference custom_schedule ;
++	private   CheckBoxPreference sunset2sunrise ;
++	private   SharedPreferences modePrenference ;
++	private TimePickerDialog.OnTimeSetListener timeOffListener;
++	private TimePickerDialog.OnTimeSetListener timeOnListener;
++	private int startTime_Hour;
++	private int startTime_Min;
++    @Override
++    protected int getMetricsCategory() {
++        return MetricsEvent.WALLPAPER_TYPE;
++    }
++    @Override
++    protected int getHelpResource() {
++        return R.string.help_uri_wallpaper;
++    }
++	/*display attribute list*/
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++
++        addPreferencesFromResource(R.xml.schedule_plan_settings);
++		initListener();
++		initPreference();
++    }
++	/* Initialize the layout and display the user data*/
++	public void initPreference() {
++        turn_on_at= findPreference(KEY_TIME_ON);
++        turn_off_at =  findPreference(KEY_TIME_OFF);
++        custom_schedule = (CheckBoxPreference) findPreference(KEY_SETTING_TIME);
++        sunset2sunrise = (CheckBoxPreference) findPreference(KEY_SUNSET_SUNRISE);
++        modePrenference = getContext().getSharedPreferences(PREFERENCE_NAME, 0);
++        boolean checkoutTime = modePrenference.getBoolean(SETTING_TIME_PLAN, false);	
++		boolean auto = modePrenference.getBoolean(SUNSET_TO_SUNRISE, false);	
++		updateTimeDisplay();
++		sunset2sunrise.setChecked(auto);
++        if (checkoutTime) {
++			custom_schedule.setChecked(true);
++            turn_on_at.setEnabled(true);
++            turn_on_at.setShouldDisableView(false);
++            turn_off_at.setEnabled(true);
++            turn_off_at.setShouldDisableView(false);
++			
++        } else {
++        	custom_schedule.setChecked(false);
++            turn_on_at.setEnabled(false);
++            turn_on_at.setShouldDisableView(true);
++            turn_off_at.setEnabled(false);
++            turn_off_at.setShouldDisableView(true);
++        }
++		sunset2sunrise.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++            		 modePrenference.edit().putBoolean(SUNSET_TO_SUNRISE, Boolean.parseBoolean(newValue.toString())).commit();
++            		 if(Boolean.parseBoolean(newValue.toString())){
++					 	custom_schedule.setChecked(false);
++						modePrenference.edit().putBoolean(SETTING_TIME_PLAN, false).commit();
++						NightModeUtils.sendBroad(OPEN_ACTION,getContext(),OPEN,22,0,0);
++						NightModeUtils.sendBroad(CLOSE_ACTION,getContext(),CLOSE,7,0,-1);
++						Calendar c = Calendar.getInstance();
++           		 		int mHour = c.get(Calendar.HOUR_OF_DAY);
++				 		int mMinute = c.get(Calendar.MINUTE);
++						if(22<mHour){
++							PictureQuality.enableBlueLight(true);
++						}else if(22==mHour&&00<mMinute){
++							PictureQuality.enableBlueLight(true);
++
++						}
++					 }else{
++						NightModeUtils.cancelAlarm(getContext(),OPEN_ACTION,0);
++						NightModeUtils.cancelAlarm(getContext(),CLOSE_ACTION,-1);
++						if(!custom_schedule.isChecked()){
++							PictureQuality.enableBlueLight(false);
++						}
++						
++					 }
++					  return true;
++            	}
++			});
++        custom_schedule.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++                modePrenference.edit().putBoolean(SETTING_TIME_PLAN, Boolean.parseBoolean(newValue.toString())).commit();
++                if(Boolean.parseBoolean(newValue.toString())){
++					sunset2sunrise.setChecked(false);
++                    turn_on_at.setEnabled(true);
++                    turn_on_at.setShouldDisableView(false);
++                    turn_off_at.setEnabled(true);
++                    turn_off_at.setShouldDisableView(false);
++					modePrenference.edit().putBoolean(SUNSET_TO_SUNRISE, false).commit();
++					String[] timeOns=modePrenference.getString(TIME_ON,timeOn).split(":");
++					String[] timeOffs=modePrenference.getString(TIME_ON,timeOff).split(":");
++					startTime_Min=Integer.parseInt(timeOns[0]);
++					startTime_Hour=Integer.parseInt(timeOns[1]);
++					NightModeUtils.sendBroad(OPEN_ACTION, getContext(), OPEN, Integer.parseInt(timeOns[0]), Integer.parseInt(timeOns[1]), 0);
++            		NightModeUtils.sendBroad(CLOSE_ACTION, getContext(), CLOSE, Integer.parseInt(timeOffs[0]), Integer.parseInt(timeOffs[1]), -1);
++					/*PictureQuality.enableBlueLight(true);
++					
++					UiModeManager uiManager = (UiModeManager) getContext().getSystemService(
++                		Context.UI_MODE_SERVICE);
++        			uiManager.setNightMode(UiModeManager.MODE_NIGHT_YES);
++					AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
++					getActivity().recreate();
++            int currentNightMode = uiManager.getNightMode();
++			Toast.makeText(getContext(),"currentNightMode==="+currentNightMode,Toast.LENGTH_LONG).show();*/
++                }else{
++                    turn_on_at.setEnabled(false);
++                    turn_on_at.setShouldDisableView(true);
++                    turn_off_at.setEnabled(false);
++                    turn_off_at.setShouldDisableView(true);
++					NightModeUtils.cancelAlarm(getContext(),OPEN_ACTION,0);
++					NightModeUtils.cancelAlarm(getContext(),CLOSE_ACTION,-1);
++					if(!sunset2sunrise.isChecked()){
++						PictureQuality.enableBlueLight(false);
++					}
++                }
++                return true;
++            }
++        });
++        turn_on_at.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++            @Override
++            public boolean onPreferenceClick(Preference preference) {
++                if(!modePrenference.getBoolean(SETTING_TIME_PLAN, false)){
++                    
++                }else{
++					
++       				String timeon=modePrenference.getString(TIME_ON,timeOn);
++					String[] hourMin=timeon.split(":");
++					TimePickerDialog timeOnDialog=new TimePickerDialog(getContext(),timeOnListener,
++							 Integer.parseInt(hourMin[0]),Integer.parseInt(hourMin[1]),
++							DateFormat.is24HourFormat(getActivity()));
++					timeOnDialog.show();
++				}
++                return true;
++            }
++        });
++        turn_off_at.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++            @Override
++            public boolean onPreferenceClick(Preference preference) {
++                if(!modePrenference.getBoolean(SETTING_TIME_PLAN, false)){
++                    
++                }else{
++					String timeoff=modePrenference.getString(TIME_Off,timeOff);
++					String[] hourMin=timeoff.split(":");
++					
++        			TimePickerDialog dialog=new TimePickerDialog(getContext(),timeOffListener,
++                							Integer.parseInt(hourMin[0]),Integer.parseInt(hourMin[1]),
++               								 DateFormat.is24HourFormat(getActivity()));
++       				 dialog.show();
++				}
++                return true;
++            }
++        });
++	}
++	/*init listener*/
++	public void initListener(){
++		timeOnListener=new TimePickerDialog.OnTimeSetListener() {
++            @Override
++            public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
++            	startTime_Hour=hourOfDay;
++				startTime_Min=minute;
++            	String hour="";
++				String min="";
++           		 if(hourOfDay<10){
++					hour="0"+hourOfDay;
++				}else{
++					 hour=""+hourOfDay;
++
++				}
++				if(minute<10){
++					min="0"+minute;
++				}else{
++					min=""+minute;
++				}
++				
++            	modePrenference.edit().putString(TIME_ON,hour+":"+min).commit();
++				
++            	updateTimeDisplay();
++				
++            }
++        };
++		 timeOffListener=new TimePickerDialog.OnTimeSetListener() {
++            @Override
++            public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
++            	if(startTime_Hour==hourOfDay&&startTime_Min==minute){
++					String content=getContext().getResources().getString(R.string.setting_time_error);
++					Toast.makeText(getContext(),content,Toast.LENGTH_SHORT).show();
++				}else{
++				
++            	String hour="";
++				String min="";
++           		 if(hourOfDay<10){
++					hour="0"+hourOfDay;
++				}else{
++					 hour=""+hourOfDay;
++
++				}
++				if(minute<10){
++					min="0"+minute;
++				}else{
++					min=""+minute;
++				}
++				 Calendar c = Calendar.getInstance();
++           		 int mHour = c.get(Calendar.HOUR_OF_DAY);
++				 int mMinute = c.get(Calendar.MINUTE);
++				if(startTime_Hour<mHour){
++					PictureQuality.enableBlueLight(true);
++				}else if(startTime_Hour==mHour&&startTime_Min<mMinute){
++					PictureQuality.enableBlueLight(true);
++
++				}
++            	modePrenference.edit().putString(TIME_Off,hour+":"+min).commit();
++                updateTimeDisplay();
++				NightModeUtils.sendBroad(OPEN_ACTION,getContext(),OPEN,startTime_Hour,startTime_Min,0);
++				NightModeUtils.sendBroad(CLOSE_ACTION,getContext(),CLOSE,hourOfDay,minute,-1);
++				}
++            }
++        };
++	}
++	/*Update the selected time to the page above */
++	public void updateTimeDisplay(){
++		turn_on_at.setSummary(modePrenference.getString(TIME_ON,timeOn));
++		turn_off_at.setSummary(modePrenference.getString(TIME_Off,timeOff));
++
++	}
++	}
+Index: packages/apps/Settings/src/com/android/settings/NightModeUtils.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeUtils.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/NightModeUtils.java	(revision 1187)
+@@ -0,0 +1,55 @@
++package com.android.settings;
++
++import android.app.AlarmManager;
++import android.app.PendingIntent;
++import android.content.Context;
++import android.content.Intent;
++import android.os.Build;
++import android.util.Log;
++
++import java.util.Calendar;
++
++/**
++ * Created by Administrator on 2017/8/25.
++ Used to turn off the broadcast on or off the night mode
++ */
++public class NightModeUtils {
++	/*close broadcast*/
++   public static void cancelAlarm(Context context, String action, int id) {
++        Intent intent = new Intent(action);
++        PendingIntent pi = PendingIntent.getBroadcast(context, id, intent, PendingIntent
++                .FLAG_CANCEL_CURRENT);
++        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
++        am.cancel(pi);
++    }
++	/*send broadcast*/
++    public static void sendBroad(String action,Context context,String statu, int hourOfDay, int minute, int id){
++
++        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
++        Calendar calendar = Calendar.getInstance();
++        calendar.set(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get
++                (Calendar.DAY_OF_MONTH), hourOfDay, minute, 0);
++        Intent intent =new Intent(action);
++        intent.putExtra("intervalMillis", 24 * 3600 * 1000);
++        intent.putExtra("msg", statu);
++        intent.putExtra("id", id);
++        PendingIntent sender = PendingIntent.getBroadcast(context, id, intent, PendingIntent
++                .FLAG_CANCEL_CURRENT);
++		/*PendingIntent sender = PendingIntent.getBroadcast(getContext(), 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
++		am.setRepeating(AlarmManager.RTC_WAKEUP, calMethod(calendar.getTimeInMillis()/1000),
++                    24 * 3600 * 1000, sender);
++         am.set(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis()/1000, sender);*/      
++        am.setWindow(AlarmManager.RTC_WAKEUP, calMethod( calendar.getTimeInMillis()),
++                    0, sender);      
++    }
++    private static long calMethod(long dateTime) {
++        long time = 0;
++        if (dateTime > System.currentTimeMillis()) {
++            time = dateTime;
++        } else {
++            time = dateTime + 24 * 3600 * 1000;
++        }
++        return time;
++    }
++
++}
+Index: packages/apps/Settings/src/com/android/settings/NightModeReceiver.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeReceiver.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/NightModeReceiver.java	(revision 1187)
+@@ -0,0 +1,36 @@
++package com.android.settings;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import com.mediatek.pq.PictureQuality;
++import android.util.Log;
++import android.widget.Toast;
++import android.content.SharedPreferences;
++
++/**
++ * Created by Administrator on 2017/8/24.
++ 	open nightMode
++ */
++public class NightModeReceiver extends BroadcastReceiver {
++    private final String OPEN="open_nightMode";
++	private  String timeOn="22:00";
++	private  final String TIME_ON = "timeOn";
++    private static final String PREFERENCE_NAME = "com.android.settings";
++	public static final String OPEN_ACTION = "com.android.settings.nightmode.open";
++	 
++    @Override
++    public void onReceive(Context context, Intent intent) {
++   		int id=intent.getIntExtra("id",1);
++		String msg = intent.getStringExtra("msg");
++       	String action= intent.getAction();
++        if(msg.equals(OPEN)&&id==0&&action.equals(OPEN_ACTION)){
++            PictureQuality.enableBlueLight(true);
++			SharedPreferences sp=context.getSharedPreferences(PREFERENCE_NAME, 0);
++			timeOn= sp.getString(TIME_ON,timeOn);
++			String[] time=timeOn.split(":");
++			NightModeUtils.sendBroad(OPEN_ACTION,context,OPEN,Integer.parseInt(time[0]),Integer.parseInt(time[1]),0);
++        }
++
++    }
++}
+Index: packages/apps/Settings/src/com/android/settings/BootedReceiver.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/BootedReceiver.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/BootedReceiver.java	(revision 1187)
+@@ -0,0 +1,77 @@
++package com.android.settings;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.SharedPreferences;
++import android.util.Log;
++import com.mediatek.pq.PictureQuality;
++
++import java.util.Calendar;
++
++/**
++ * Created by Administrator on 2017/8/26.
++ */
++public class BootedReceiver extends BroadcastReceiver {
++    private static final String PREFERENCE_NAME = "com.android.settings";
++    public static final String OPEN_ACTION = "com.android.settings.nightmode.open";
++    public static final String CLOSE_ACTION = "com.android.settings.nightmode.close";
++    private static final String SETTING_TIME = "automate_schedule";
++    private static final String NIGHT_MODE_ON_OROFF = "nightMode";
++    private final String OPEN = "open_nightMode";
++    private final String CLOSE = "close_nightMode";
++    private static final String TIME_ON = "timeOn";
++    private static final String TIME_Off = "timeOff";
++    private String timeOn = "22:00";
++    private String timeOff = "07:00";
++
++    @Override
++    public void onReceive(Context context, Intent intent) {
++      
++        /*SharedPreferences sp = context.getSharedPreferences(PREFERENCE_NAME, 0);
++        boolean definiteTime = sp.getBoolean(SETTING_TIME, false);
++         boolean mode = sp.getBoolean(NIGHT_MODE_ON_OROFF, false);
++		
++        if (mode) { 
++			Log.e("boot", "--------mode");
++            PictureQuality.enableBlueLight(true);
++        } else if (definiteTime) {
++        Log.e("boot", "--------definiteTime");
++            String[] timeOns = sp.getString(TIME_ON, timeOn).split(":");
++            String[] timeOffs = sp.getString(TIME_Off, timeOff).split(":");
++			Log.e("timeOn", sp.getString(TIME_ON, timeOn));
++			Log.e("timeOff", sp.getString(TIME_Off, timeOff));
++            NightModeUtils.sendBroad(OPEN_ACTION, context, OPEN, Integer.parseInt(timeOns[0]), Integer.parseInt(timeOns[1]), 0);
++            NightModeUtils.sendBroad(CLOSE_ACTION, context, CLOSE, Integer.parseInt(timeOffs[0]), Integer.parseInt(timeOffs[1]), -1);
++            Calendar c = Calendar.getInstance();
++            int mHour = c.get(Calendar.HOUR_OF_DAY);
++            int mMinute = c.get(Calendar.MINUTE);
++            int h = Integer.parseInt(timeOffs[0]);
++           if(mHour>Integer.parseInt(timeOns[0]) ){
++		   		if(mHour<Integer.parseInt(timeOffs[0])){
++					PictureQuality.enableBlueLight(true);
++					Log.e("boot", "--------1");
++				}   
++            }else if(mHour==Integer.parseInt(timeOns[0])) {
++                if(mMinute>=Integer.parseInt(timeOns[1])){
++                    PictureQuality.enableBlueLight(true);
++					Log.e("boot", "--------2");
++                }
++            }else if(mHour<Integer.parseInt(timeOns[0])&&mHour<Integer.parseInt(timeOffs[0])){
++                PictureQuality.enableBlueLight(true);
++				Log.e("boot", "--------3");
++            }else if(mHour==Integer.parseInt(timeOffs[0])){
++                if(mMinute<Integer.parseInt(timeOffs[1])){
++                    PictureQuality.enableBlueLight(true);
++					Log.e("boot", "--------4");
++                }
++            }
++            
++
++
++       
++		} else{
++			Log.e("----","-----------------------");
++			}*/
++    }
++}
+Index: packages/apps/Settings/src/com/android/settings/ColorTemperaturePreference.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/ColorTemperaturePreference.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/ColorTemperaturePreference.java	(revision 1187)
+@@ -0,0 +1,136 @@
++package com.android.settings;
++
++import android.content.ContentResolver;
++import android.content.Context;
++import android.media.AudioManager;
++import android.net.Uri;
++
++import android.preference.SeekBarVolumizer;
++
++import android.support.v7.preference.Preference;
++
++
++import android.text.TextUtils;
++import android.util.AttributeSet;
++import android.util.Log;
++import android.view.View;
++import android.widget.ImageView;
++import android.widget.SeekBar;
++import android.widget.TextView;
++import android.widget.SeekBar.OnSeekBarChangeListener; 
++
++import com.android.settings.R;
++import com.mediatek.pq.PictureQuality;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.content.SharedPreferences;
++import android.support.v7.preference.PreferenceViewHolder;
++import android.widget.Toast;
++
++
++import java.util.Objects;
++
++/**
++ * Created by Administrator on 2017/8/18.
++ */
++public class ColorTemperaturePreference extends Preference implements OnSeekBarChangeListener{
++    private static final String TAG = "ColorTemperaturePreference";
++	private static final String PREFERENCE_NAME = "com.android.settings";
++	private static final String NIGHT_MODE_LEVEL = "night_mode_level";
++	private static SharedPreferences modePrenference;
++	private Callback callback;
++
++
++   
++    private SeekBarVolumizer mVolumizer;
++   
++    private String mSuppressionText;
++   
++   
++   private Context mContext;
++   
++
++   
++   private TextView title;
++   	private SeekBar seekBar;
++   
++	private   int mode_level;
++ 
++   
++	 public ColorTemperaturePreference(Context context, AttributeSet attrs, int defStyleAttr) {
++		 super(context, attrs, defStyleAttr);
++		 mContext = context;
++		setLayoutResource(R.layout.preference_color_temperature);
++	 }
++   
++	 public ColorTemperaturePreference(Context context, AttributeSet attrs) {
++		 super(context, attrs);
++		 mContext = context;
++		setLayoutResource(R.layout.preference_color_temperature);
++	 }
++   
++	 public ColorTemperaturePreference(Context context) {
++		 super(context);
++		 mContext = context;
++		 setLayoutResource(R.layout.preference_color_temperature);
++	 }
++
++	
++     @Override
++    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
++    	if(callback!=null){
++			callback.onNightModeLevel(seekBar.getProgress());
++			
++		
++		}  
++    }
++
++    @Override
++    public void onStartTrackingTouch(SeekBar seekBar) {
++
++    }
++
++    @Override
++    public void onStopTrackingTouch(SeekBar seekBar) {
++
++    }
++
++
++   /*	public void setTitleColor(int colorResult){
++		title.setTextColor(colorResult);
++	}
++
++   
++*/
++ 	
++  @Override
++    public void onBindViewHolder(PreferenceViewHolder holder) {
++        super.onBindViewHolder(holder);
++      
++		title=(TextView)holder.findViewById(R.id.title);
++		seekBar=(SeekBar)holder.findViewById(R.id.seek_bar);
++		modePrenference = mContext.getSharedPreferences(PREFERENCE_NAME,  0);
++		seekBar.setProgress(modePrenference.getInt(NIGHT_MODE_LEVEL,5));
++        seekBar.setMax(10);
++		seekBar.setOnSeekBarChangeListener(this);
++		
++    }
++ 	
++	public void setSeekbarProgress(int value){
++		if(seekBar!=null)
++		seekBar.setProgress(value);
++
++	}
++
++
++   public interface Callback {
++        void onNightModeLevel(int level);
++        
++    }
++	public void setCallback(Callback callback){
++		this.callback=callback;
++	}
++
++
++}
+Index: packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 1187)
+@@ -0,0 +1,210 @@
++/*
++ * Night mode attribute list
++ */
++package com.android.settings;
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.content.pm.ResolveInfo;
++import android.os.Bundle;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.PreferenceScreen;
++import android.support.v14.preference.SwitchPreference;
++import android.util.Log;
++
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++import com.android.settings.search.BaseSearchIndexProvider;
++import com.android.settings.search.Indexable;
++import com.android.settings.search.SearchIndexableRaw;
++import android.content.SharedPreferences;
++import com.mediatek.pq.PictureQuality;
++import android.widget.Toast;
++import com.android.settings.ColorTemperaturePreference.Callback;
++import android.provider.Settings;
++import android.app.ActivityManager;
++import android.provider.Settings.Secure;
++import android.content.ContentResolver;
++import android.os.SystemProperties;
++
++
++
++public class NightModeTypeSettings extends SettingsPreferenceFragment implements Indexable {
++	private static final String TAG = "NightModeTypeSettings";
++	private static final String PREFERENCE_NAME = "com.android.settings";
++	private static final String KEY_AUTOMATE = "automate_schedule";
++	private static final String KEY_SCHEDULE = "schedule_plan";
++	private static final String KEY_MANUALLY_ENABLE = "manually_enable";
++	private static final String KEY_MANUALLY = "manually";
++	private static final String NIGHT_MODE_ON_OROFF = "nightMode";
++	private static final String NIGHT_MODE_LEVEL = "night_mode_level";
++	private static final String SETTING_TIME = "automate_schedule";
++	private final String NIGHT_MODE_SWITCH="night_mode_switch";
++	private static final String SETTING_TIME_PLAN = "setting_time_plan";
++	private static final String SUNSET_TO_SUNRISE = "sunset_to_sunrise";
++	private final String timeOn="22:00";
++	private final String timeOff="07:00";
++	private static final String TIME_ON = "timeOn";
++	private static final String TIME_Off = "timeOff";
++    private ContentResolver mContentResolver;
++	private int mCurrentUser;
++	private static SharedPreferences modePrenference;
++	private SwitchPreference manuallyEnablePreference;
++	private SwitchPreference automateSchedulePreference;
++	private static ColorTemperaturePreference manuallyPreference;
++	private PreferenceScreen schedulePlanPreference;
++	
++	 @Override
++    protected int getMetricsCategory() {
++        return MetricsEvent.WALLPAPER_TYPE;
++    }
++	 @Override
++		protected int getHelpResource() {
++			return R.string.help_uri_wallpaper;
++		}
++	 @Override
++		 public void onResume() {
++			 super.onResume();
++	/* manuallyPreference.upDataModeLevel();*/
++			String nightModeSwitch= Settings.System.getString(mContentResolver,NIGHT_MODE_SWITCH);
++			boolean mode= Boolean.parseBoolean(nightModeSwitch);
++			manuallyEnablePreference.setChecked(mode);
++        	manuallyPreference.setEnabled(mode);
++			if(mode&&!PictureQuality.isBlueLightEnabled()){
++				PictureQuality.enableBlueLight(true);
++				
++			}
++			if(mode&&automateSchedulePreference.isChecked()){
++				automateSchedulePreference.setChecked(false);
++				schedulePlanPreference.setEnabled(false);
++            	schedulePlanPreference.setShouldDisableView(true);
++				modePrenference.edit().putBoolean(SETTING_TIME,false).commit();
++			}
++			if(automateSchedulePreference.isChecked()){
++				boolean checkoutTime = modePrenference.getBoolean(SETTING_TIME_PLAN, false);	
++				boolean auto = modePrenference.getBoolean(SUNSET_TO_SUNRISE, false);
++				if(auto){
++					schedulePlanPreference.setSummary("22:00 to 7:00");
++				}else if(checkoutTime){
++					String timeOns=modePrenference.getString(TIME_ON,timeOn);
++					String timeOffs=modePrenference.getString(TIME_Off,timeOff);
++					schedulePlanPreference.setSummary(timeOns+" to "+timeOffs);
++				}else{
++					schedulePlanPreference.setSummary(R.string.sunset2sunrise_title);
++				}
++			}else{
++				schedulePlanPreference.setSummary(R.string.sunset2sunrise_title);
++			}
++		 }
++
++   /*display attribute list*/
++	@Override
++	public void onCreate(Bundle savedInstanceState) {
++			super.onCreate(savedInstanceState);
++			addPreferencesFromResource(R.xml.nightmode_settings);
++			mContentResolver = getContext().getContentResolver();		
++			initPreference();	
++	}
++   public void sendBroadcast(){
++   		Intent intent1=new Intent(getContext(),BootedReceiver.class);
++        getContext().sendBroadcast(intent1);
++	}
++   	/* Initialize the layout and display the user data*/
++     public void initPreference(){
++      	manuallyPreference = (ColorTemperaturePreference) findPreference(KEY_MANUALLY);
++	 	manuallyEnablePreference = (SwitchPreference) findPreference(KEY_MANUALLY_ENABLE);
++        automateSchedulePreference = (SwitchPreference) findPreference(KEY_AUTOMATE);
++        schedulePlanPreference = (PreferenceScreen) findPreference(KEY_SCHEDULE);
++        modePrenference = getContext().getSharedPreferences(PREFERENCE_NAME,  0);
++        // boolean mode = modePrenference.getBoolean(NIGHT_MODE_ON_OROFF, false);
++		 boolean automate_schedule = modePrenference.getBoolean(SETTING_TIME, false);
++		/*manuallyPreference.setSeekbarProgress(modePrenference.getInt(NIGHT_MODE_LEVEL,5));*/
++		Log.e("indexfargmen",modePrenference.getInt(NIGHT_MODE_LEVEL,5)+"");
++		
++		
++		
++		schedulePlanPreference.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++            @Override
++            public boolean onPreferenceClick(Preference preference) {
++                if(!modePrenference.getBoolean(SETTING_TIME, false)){
++                    return true;
++                }
++                return false;
++            }
++        });
++		/*According to whether the user has opened the night mode to set whether the user can click the time to set the night mode*/
++        if(automate_schedule){
++				
++            automateSchedulePreference.setChecked(true);
++			schedulePlanPreference.setEnabled(true);
++            schedulePlanPreference.setShouldDisableView(false);
++            
++        }else{
++        Log.e("automate_schedule------","false");	
++            automateSchedulePreference.setChecked(false);
++            schedulePlanPreference.setEnabled(false);
++            schedulePlanPreference.setShouldDisableView(true);
++        }
++		/*Logical processing when the night mode switch state changes*/
++        automateSchedulePreference.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++            
++          	modePrenference.edit().putBoolean(SETTING_TIME,Boolean.parseBoolean(newValue.toString())).commit();
++				if(Boolean.parseBoolean(newValue.toString())){
++					schedulePlanPreference.setEnabled(true);	
++					if(manuallyEnablePreference.isChecked()){
++						manuallyEnablePreference.setChecked(false);
++						PictureQuality.enableBlueLight(false);
++						manuallyPreference.setEnabled(false);
++						Settings.System.putString(mContentResolver,NIGHT_MODE_SWITCH,"false");
++						//modePrenference.edit().putBoolean(NIGHT_MODE_ON_OROFF,false).commit();
++					}
++				}else{
++					schedulePlanPreference.setEnabled(false);
++				}
++				return true;
++            }
++        });
++		manuallyEnablePreference.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++            	Settings.System.putString(mContentResolver,NIGHT_MODE_SWITCH,newValue.toString());
++              	//modePrenference.edit().putBoolean(NIGHT_MODE_ON_OROFF,Boolean.parseBoolean(newValue.toString())).commit();
++				if(Boolean.parseBoolean(newValue.toString())){
++					if(!PictureQuality.isBlueLightEnabled()){
++						PictureQuality.enableBlueLight(true);
++					}
++					if(automateSchedulePreference.isChecked()){
++						automateSchedulePreference.setChecked(false);
++						schedulePlanPreference.setEnabled(false);
++						schedulePlanPreference.setShouldDisableView(true);
++						modePrenference.edit().putBoolean(SETTING_TIME,false).commit();	
++						}
++					/*Settings.Secure.putIntForUser(mContentResolver, Secure.TWILIGHT_MODE, Secure.TWILIGHT_MODE_LOCKED_ON, mCurrentUser);
++					*/manuallyPreference.setEnabled(true);
++				}else{
++					
++					PictureQuality.enableBlueLight(false);
++					manuallyPreference.setEnabled(false);
++					/*manuallyPreference.setTitleColor();*/
++
++				}
++				return true;
++            }
++        });
++		manuallyPreference.setCallback(new ColorTemperaturePreference.Callback() {
++			@Override
++			public void onNightModeLevel(int level) {
++				if(level!=modePrenference.getInt(NIGHT_MODE_LEVEL,0)){
++     				PictureQuality.setBlueLightStrength(level*40);
++					/*Settings.Secure.putIntForUser(mContentResolver,Secure.ACCESSIBILITY_DISPLAY_COLOR_MATRIX,level*300 , mCurrentUser);
++					*/
++	  				modePrenference.edit().putInt(NIGHT_MODE_LEVEL,level).commit();
++	  			}
++			}
++		});
++
++    }
++	
++}
+Index: packages/apps/Settings/src/com/android/settings/CloseNightMode.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/CloseNightMode.java	(revision 0)
++++ packages/apps/Settings/src/com/android/settings/CloseNightMode.java	(revision 1187)
+@@ -0,0 +1,33 @@
++package com.android.settings;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.util.Log;
++import com.mediatek.pq.PictureQuality;
++import android.content.SharedPreferences;
++
++
++/**
++ * Created by Administrator on 2017/8/25.
++ close nightmode
++ */
++public class CloseNightMode extends BroadcastReceiver {
++	public static final String CLOSE_ACTION = "com.android.settings.nightmode.close";
++	private static final String PREFERENCE_NAME = "com.android.settings";
++    private final String CLOSE="close_nightMode";
++	private  String timeOff="07:00";
++	private  final String TIME_Off = "timeOff";
++    @Override
++    public void onReceive(Context context, Intent intent) {
++        String msg = intent.getStringExtra("msg");
++		int id=intent.getIntExtra("id",1);
++        if(msg.equals(CLOSE)&&id==-1){   
++            PictureQuality.enableBlueLight(false);
++			SharedPreferences sp=context.getSharedPreferences(PREFERENCE_NAME, 0);
++			timeOff= sp.getString(TIME_Off,timeOff);
++			String[] time=timeOff.split(":");
++			NightModeUtils.sendBroad(CLOSE_ACTION,context,CLOSE,Integer.parseInt(time[0]),Integer.parseInt(time[1]),-1);
++        }
++    }
++}
+Index: packages/apps/Settings/src/com/android/settings/DisplaySettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 1186)
++++ packages/apps/Settings/src/com/android/settings/DisplaySettings.java	(revision 1187)
+@@ -60,7 +60,9 @@
+ 
+ import java.util.ArrayList;
+ import java.util.List;
+-
++import android.content.SharedPreferences;
++import android.provider.Settings;
++import com.mediatek.pq.PictureQuality;
+ import static android.provider.Settings.Secure.CAMERA_GESTURE_DISABLED;
+ import static android.provider.Settings.Secure.DOUBLE_TAP_TO_WAKE;
+ import static android.provider.Settings.Secure.DOZE_ENABLED;
+@@ -75,7 +77,11 @@
+ public class DisplaySettings extends SettingsPreferenceFragment implements
+         Preference.OnPreferenceChangeListener, Indexable {
+     private static final String TAG = "DisplaySettings";
+-
++	private final String NIGHT_MODE_SWITCH="night_mode_switch";
++	private static final String PREFERENCE_NAME = "com.android.settings";
++	private static final String SETTING_TIME = "automate_schedule";
++	private ContentResolver mContentResolver;
++	private SharedPreferences modePrenference ;
+     /** If there is no setting in the provider, use this. */
+     private static final int FALLBACK_SCREEN_TIMEOUT_VALUE = 30000;
+ 
+@@ -98,7 +104,7 @@
+     private Preference mCustomFontSizePref;
+ 
+     private TimeoutListPreference mScreenTimeoutPreference;
+-    private ListPreference mNightModePreference;
++    private Preference mNightModePreference;
+     private Preference mScreenSaverPreference;
+     private SwitchPreference mLiftToWakePreference;
+     private SwitchPreference mDozePreference;
+@@ -121,7 +127,7 @@
+         final ContentResolver resolver = activity.getContentResolver();
+ 
+         addPreferencesFromResource(R.xml.display_settings);
+-
++		mContentResolver = getContext().getContentResolver();
+         mScreenSaverPreference = findPreference(KEY_SCREEN_SAVER);
+         if (mScreenSaverPreference != null
+                 && getResources().getBoolean(
+@@ -255,14 +261,15 @@
+             removePreference(KEY_VR_DISPLAY_PREF);
+         }
+ 
+-        mNightModePreference = (ListPreference) findPreference(KEY_NIGHT_MODE);
+-        if (mNightModePreference != null) {
++        mNightModePreference = findPreference(KEY_NIGHT_MODE);
++        modePrenference= getContext().getSharedPreferences(PREFERENCE_NAME,  0);
++        /*if (mNightModePreference != null) {
+             final UiModeManager uiManager = (UiModeManager) getSystemService(
+                     Context.UI_MODE_SERVICE);
+             final int currentNightMode = uiManager.getNightMode();
+             mNightModePreference.setValue(String.valueOf(currentNightMode));
+             mNightModePreference.setOnPreferenceChangeListener(this);
+-        }
++        }*/
+     }
+ 
+     private static boolean allowAllRotations(Context context) {
+@@ -355,6 +362,13 @@
+ 
+         /// M: MTK feature
+         mDisplaySettingsExt.onResume();
++		String nightModeSwitch= Settings.System.getString(mContentResolver,NIGHT_MODE_SWITCH);
++		boolean mode= Boolean.parseBoolean(nightModeSwitch);
++        if(PictureQuality.isBlueLightEnabled()){
++            mNightModePreference.setSummary(R.string.mode_on);
++        }else{
++            mNightModePreference.setSummary(R.string.mode_off);
++        }
+     }
+ 
+     /// M: add MTK extended @{
+Index: packages/apps/Settings/src/com/android/settings/SettingsActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1186)
++++ packages/apps/Settings/src/com/android/settings/SettingsActivity.java	(revision 1187)
+@@ -160,7 +160,7 @@
+     private static final String LOG_TAG = "Settings";
+ 
+     private static final int LOADER_ID_INDEXABLE_CONTENT_MONITOR = 1;
+-
++	private final String SYSTEMUI_NIGHTMODE="com.android.settings.SYSTEMUI_NIGHTMODE";
+     // Constants for state save/restore
+     private static final String SAVE_KEY_CATEGORIES = ":settings:categories";
+     private static final String SAVE_KEY_SEARCH_MENU_EXPANDED = ":settings:search_menu_expanded";
+@@ -666,20 +666,26 @@
+                 switchToFragment(initialFragmentName, initialArguments, true, false,
+                         mInitialTitleResId, mInitialTitle, false);
+             } else {
+-                // No UP affordance if we are displaying the main Dashboard
+-                mDisplayHomeAsUpEnabled = false;
+-                // Show Search affordance
+-                mDisplaySearch = true;
+-                mInitialTitleResId = R.string.dashboard_title;
+-
+-                // add argument to indicate which settings tab should be initially selected
+-                final Bundle args = new Bundle();
+-                final String extraName = DashboardContainerFragment.EXTRA_SELECT_SETTINGS_TAB;
+-                args.putString(extraName, intent.getStringExtra(extraName));
+-
+-                switchToFragment(DashboardContainerFragment.class.getName(), args, false, false,
+-                        mInitialTitleResId, mInitialTitle, false);
+-            }
++                String action =intent.getAction();
++				Log.e("action",action);
++        		if(action.equals(SYSTEMUI_NIGHTMODE)){
++					Fragment f=new NightModeTypeSettings();
++					FragmentTransaction transaction = getFragmentManager().beginTransaction();
++					transaction.add(R.id.main_content, f);
++					transaction.commit();    
++				}else{
++               		 // No UP affordance if we are displaying the main Dashboard
++               		 mDisplayHomeAsUpEnabled = false;
++               		 // Show Search affordance
++               		 mDisplaySearch = true;
++                	 mInitialTitleResId = R.string.dashboard_title;
++					 final Bundle args = new Bundle();
++					 final String extraName = DashboardContainerFragment.EXTRA_SELECT_SETTINGS_TAB;
++					 args.putString(extraName, intent.getStringExtra(extraName));
++                	 switchToFragment(DashboardContainerFragment.class.getName(), args, false, false,
++                     mInitialTitleResId, mInitialTitle, false);
++					}
++            	}
+         }
+ 
+         mActionBar = getActionBar();
+Index: packages/apps/Settings
+===================================================================
+--- packages/apps/Settings	(revision 1186)
++++ packages/apps/Settings	(revision 1187)
+
+Property changes on: packages/apps/Settings
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps/Settings:r535
+Index: packages/apps
+===================================================================
+--- packages/apps	(revision 1186)
++++ packages/apps	(revision 1187)
+
+Property changes on: packages/apps
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages/apps:r535
+Index: packages
+===================================================================
+--- packages	(revision 1186)
++++ packages	(revision 1187)
+
+Property changes on: packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Trunk/ALPS-MP-N1.MP18-OF.P53_K39V1_INHOUSE/packages:r535

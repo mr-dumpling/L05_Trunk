@@ -1,0 +1,46 @@
+Index: packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 6397)
++++ packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 6398)
+@@ -531,8 +531,6 @@
+ 				if(!TextUtils.isEmpty(version)&& version!=null){
+ 					svnver = svnver + version; 
+ 				}
+-				int len=version.length();
+-    			String vers=version.substring(len-2, len);
+                 if (TelephonyManagerCompat.getPhoneCount(telephonyManager) > 1 &&
+                     CompatUtils.isMethodAvailable(TelephonyManagerCompat.TELEPHONY_MANAGER_CLASS,
+                             "getDeviceId", Integer.TYPE)) {
+@@ -542,13 +540,12 @@
+ 							deviceId="IMEI"+(slot+1)+":"+deviceId;
+                             deviceIds.add(deviceId);
+                         }
++                        String imeisv = telephonyManager.getDeviceSoftwareVersion(slot);
++                        if (!TextUtils.isEmpty(imeisv)) {
++                        	imeisv = "IMEISV" + (slot + 1) + ":" + imeisv;
++                        	deviceIds.add(imeisv);
++                        }
+                     }
+-					for(int slot = 0; slot < telephonyManager.getPhoneCount(); slot++){
+-						if (!TextUtils.isEmpty(vers)) {
+-					 	 	String vers1="IMEISV"+(slot+1)+":"+vers;
+-                         	deviceIds.add(vers1);
+-                     	}
+-					}
+                 } else {
+                    String deviceId = telephonyManager.getDeviceId(0);
+ 					/// M: Avoid null object be added
+@@ -556,9 +553,10 @@
+ 						deviceId="IMEI:"+deviceId;
+ 						deviceIds.add(deviceId);
+ 					}
+-					if (!TextUtils.isEmpty(vers)) {
+-					 	vers="IMEISV:"+vers;
+-                        deviceIds.add(vers);
++					String imeisv = telephonyManager.getDeviceSoftwareVersion();
++					if (!TextUtils.isEmpty(imeisv)) {
++					 	imeisv = "IMEISV:" + imeisv;
++                        deviceIds.add(imeisv);
+                     }
+                 }
+ 				deviceIds.add(svnver); 

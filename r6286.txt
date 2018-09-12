@@ -1,0 +1,42 @@
+Index: packages/apps/Settings/src/com/android/settings/inputmethod/SpellCheckerPreference.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/inputmethod/SpellCheckerPreference.java	(revision 6285)
++++ packages/apps/Settings/src/com/android/settings/inputmethod/SpellCheckerPreference.java	(revision 6286)
+@@ -30,6 +30,10 @@
+ 
+ import com.android.settings.CustomListPreference;
+ import com.android.settings.R;
++// Dj add for BugID 115452 set setting imagebutton alpha value when setenable false by zhangle at 2018/01/18 start.
++import android.view.textservice.TextServicesManager;
++// Dj add for BugID 115452 set setting imagebutton alpha value when setenable false by zhangle at 2018/01/18 end.
++import android.widget.ImageView;
+ 
+ /**
+  * Spell checker service preference.
+@@ -107,6 +111,11 @@
+         super.onBindViewHolder(view);
+         View settingsButton = view.findViewById(R.id.settings_button);
+         settingsButton.setVisibility(mIntent != null ? View.VISIBLE : View.INVISIBLE);
++        // Dj add for BugID 115452 set setting imagebutton alpha value when setenable false by zhangle at 2018/01/18 start.
++        final boolean isSpellCheckerEnabled =  isSpellCheckerEnabled();
++        settingsButton.setEnabled(isSpellCheckerEnabled);
++        ((ImageView)settingsButton).setAlpha(isSpellCheckerEnabled?1f:0.3f);
++        // Dj add for BugID 115452 set setting imagebutton alpha value when setenable false by zhangle at 2018/01/18 end.
+         settingsButton.setOnClickListener(new OnClickListener() {
+             @Override
+             public void onClick(View v) {
+@@ -126,4 +135,14 @@
+         } catch (final ActivityNotFoundException e) {
+         }
+     }
++
++    // Dj add for BugID 115452 set setting imagebutton alpha value when setenable false by zhangle at 2018/01/18 start.
++    private android.view.textservice.TextServicesManager mTsm;
++    private boolean isSpellCheckerEnabled () {
++        if (mTsm == null) {
++            mTsm = (TextServicesManager)(getContext().getSystemService(Context.TEXT_SERVICES_MANAGER_SERVICE));
++        }
++        return mTsm.isSpellCheckerEnabled();
++    }
++    // Dj add for BugID 115452 set setting imagebutton alpha value when setenable false by zhangle at 2018/01/18 end.
+ }

@@ -1,0 +1,148 @@
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardStatusView.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardStatusView.java	(revision 1462)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardStatusView.java	(revision 1463)
+@@ -36,6 +36,9 @@
+ import com.android.internal.widget.LockPatternUtils;
+ 
+ import java.util.Locale;
++// add by dongdongli for 112588 20171113 start
++import android.graphics.Typeface;
++// add by dongdongli for 112588 20171113 end
+ 
+ public class KeyguardStatusView extends GridLayout {
+     private static final boolean DEBUG = KeyguardConstants.DEBUG;
+@@ -123,12 +126,26 @@
+         // reason.
+         mClockView.setElegantTextHeight(false);
+     }
++	// add by dongdongli for 112588 20171113 start
++	private static Typeface mClockTypeface = null;
++	private Typeface getClockTypeface() {
++		if (mClockTypeface == null) {
++			mClockTypeface = Typeface.create("sans-serif-light", R.style.widget_big_thin_customer);
++		}
++		return mClockTypeface;
++	}
++	// add by dongdongli for 112588 20171113 end
+ 
+     @Override
+     protected void onConfigurationChanged(Configuration newConfig) {
+         super.onConfigurationChanged(newConfig);
+-        mClockView.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+-                getResources().getDimensionPixelSize(R.dimen.widget_big_font_size));
++        //modify by dongdongli for 112588 20171113 start
++		//mClockView.setTextSize(TypedValue.COMPLEX_UNIT_PX,
++        //        getResources().getDimensionPixelSize(R.dimen.widget_big_font_size));
++		mClockView.setTextSize(TypedValue.COMPLEX_UNIT_PX,
++                getResources().getDimensionPixelSize(R.dimen.widget_big_font_customer_size));
++		mClockView.setTypeface(getClockTypeface());
++		//modify by dongdongli for 112588 20171113 end
+         // Some layouts like burmese have a different margin for the clock
+         MarginLayoutParams layoutParams = (MarginLayoutParams) mClockView.getLayoutParams();
+         layoutParams.bottomMargin = getResources().getDimensionPixelSize(
+Index: frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml
+===================================================================
+--- frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1462)
++++ frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1463)
+@@ -42,7 +42,7 @@
+             android:layout_gravity="center_horizontal"
+             android:textColor="@color/clock_white"
+             android:singleLine="true"
+-            style="@style/widget_big_thin"
++            style="@style/widget_big_thin_customer"
+             android:format12Hour="@string/keyguard_widget_12_hours_format"
+             android:format24Hour="@string/keyguard_widget_24_hours_format"
+             android:layout_marginBottom="@dimen/bottom_text_spacing_digital" />
+Index: frameworks/base/packages/Keyguard/res/values/dimens.xml
+===================================================================
+--- frameworks/base/packages/Keyguard/res/values/dimens.xml	(revision 1462)
++++ frameworks/base/packages/Keyguard/res/values/dimens.xml	(revision 1463)
+@@ -42,6 +42,7 @@
+     <dimen name="bottom_text_spacing_digital">-1dp</dimen>
+     <dimen name="widget_label_font_size">17sp</dimen><!--default size 14sp modify by dongdongli for 112176 -->
+     <dimen name="widget_big_font_size">78dp</dimen>
++	<dimen name="widget_big_font_customer_size">76dp</dimen>
+ 
+     <!-- The y translation to apply at the start in appear animations. -->
+     <dimen name="appear_y_translation_start">32dp</dimen>
+Index: frameworks/base/packages/Keyguard/res/values/styles.xml
+===================================================================
+--- frameworks/base/packages/Keyguard/res/values/styles.xml	(revision 1462)
++++ frameworks/base/packages/Keyguard/res/values/styles.xml	(revision 1463)
+@@ -43,6 +43,10 @@
+         <item name="android:textSize">@dimen/widget_big_font_size</item>
+         <item name="android:fontFamily">sans-serif-light</item>
+     </style>
++    <style name="widget_big_thin_customer">
++        <item name="android:textSize">@dimen/widget_big_font_customer_size</item>
++        <item name="android:fontFamily">sans-serif-light</item>
++    </style>
+ 
+     <style name="BouncerSecurityContainer">
+         <item name="android:layout_gravity">center_horizontal|bottom</item>
+Index: vendor/branch/5058J/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml
+===================================================================
+--- vendor/branch/5058J/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1462)
++++ vendor/branch/5058J/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1463)
+@@ -42,7 +42,7 @@
+             android:layout_gravity="center_horizontal"
+             android:textColor="@color/clock_white"
+             android:singleLine="true"
+-            style="@style/widget_big_thin"
++            style="@style/widget_big_thin_customer"
+ 			android:visibility="gone"
+             android:format12Hour="@string/keyguard_widget_12_hours_format"
+             android:format24Hour="@string/keyguard_widget_24_hours_format"
+Index: vendor/branch/5058A/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml
+===================================================================
+--- vendor/branch/5058A/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1462)
++++ vendor/branch/5058A/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1463)
+@@ -42,7 +42,7 @@
+             android:layout_gravity="center_horizontal"
+             android:textColor="@color/clock_white"
+             android:singleLine="true"
+-            style="@style/widget_big_thin"
++            style="@style/widget_big_thin_customer"
+ 			android:visibility="gone"
+             android:format12Hour="@string/keyguard_widget_12_hours_format"
+             android:format24Hour="@string/keyguard_widget_24_hours_format"
+Index: vendor/branch/5058T/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml
+===================================================================
+--- vendor/branch/5058T/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1462)
++++ vendor/branch/5058T/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1463)
+@@ -42,7 +42,7 @@
+             android:layout_gravity="center_horizontal"
+             android:textColor="@color/clock_white"
+             android:singleLine="true"
+-            style="@style/widget_big_thin"
++            style="@style/widget_big_thin_customer"
+ 			android:visibility="gone"
+             android:format12Hour="@string/keyguard_widget_12_hours_format"
+             android:format24Hour="@string/keyguard_widget_24_hours_format"
+Index: vendor/branch/5058I/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml
+===================================================================
+--- vendor/branch/5058I/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1462)
++++ vendor/branch/5058I/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1463)
+@@ -42,7 +42,7 @@
+             android:layout_gravity="center_horizontal"
+             android:textColor="@color/clock_white"
+             android:singleLine="true"
+-            style="@style/widget_big_thin"
++            style="@style/widget_big_thin_customer"
+ 			android:visibility="gone"
+             android:format12Hour="@string/keyguard_widget_12_hours_format"
+             android:format24Hour="@string/keyguard_widget_24_hours_format"
+Index: vendor/branch/5058Y/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml
+===================================================================
+--- vendor/branch/5058Y/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1462)
++++ vendor/branch/5058Y/frameworks/base/packages/Keyguard/res/layout/keyguard_status_view.xml	(revision 1463)
+@@ -42,7 +42,7 @@
+             android:layout_gravity="center_horizontal"
+             android:textColor="@color/clock_white"
+             android:singleLine="true"
+-            style="@style/widget_big_thin"
++            style="@style/widget_big_thin_customer"
+ 			android:visibility="gone"
+             android:format12Hour="@string/keyguard_widget_12_hours_format"
+             android:format24Hour="@string/keyguard_widget_24_hours_format"

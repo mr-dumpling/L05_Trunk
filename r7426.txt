@@ -1,0 +1,78 @@
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/AndroidManifest.xml	(revision 7425)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/AndroidManifest.xml	(revision 7426)
+@@ -40,7 +40,8 @@
+     <application
+         android:hardwareAccelerated="true"
+         android:icon="@mipmap/ic_launcher"
+-        android:label="@string/app_name" >
++        android:label="@string/app_name"
++		android:name="FmApplication">
+ 
+         <activity
+             android:name=".FmMainActivity"
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmApplication.java
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmApplication.java	(revision 0)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmApplication.java	(revision 7426)
+@@ -0,0 +1,22 @@
++package com.android.fmradio;
++
++import android.app.Application;
++import android.content.Context;
++import android.util.Log;
++public class FmApplication extends Application {
++	private static final String TAG = "FmApplication";
++	private static FmApplication application;
++	
++	@Override
++	public void onCreate() {
++		// TODO Auto-generated method stub
++		super.onCreate();
++		application = this;
++		Log.d(TAG,"onCreate()");
++	}
++	
++	public static Context getApplication(){
++		Log.d(TAG,"getApplication()");
++		return application;
++	}
++}
+\ No newline at end of file
+Index: vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmUtils.java
+===================================================================
+--- vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmUtils.java	(revision 7425)
++++ vendor/branch/5058I_ALRU/vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmUtils.java	(revision 7426)
+@@ -32,7 +32,7 @@
+ 
+ import java.io.File;
+ import java.util.Locale;
+-
++import com.android.fmradio.FmApplication;
+ /**
+  * This class provider interface to compute station and frequency, get project
+  * string
+@@ -177,7 +177,8 @@
+     public static String formatStation(int station) {
+         float frequency;
+         String result;
+-
++	    Resources resources = FmApplication.getApplication().getResources();
++		Locale currentLocale = resources.getConfiguration().locale;
+         if (is50KhzSupportOn()) {
+             frequency = (float) station / CONVERT_RATE_50KHZ;
+             result = String.format(Locale.ENGLISH, "%.2f",
+@@ -187,8 +188,10 @@
+             result = String.format(Locale.ENGLISH, "%.1f",
+                 Float.valueOf(frequency));
+         }
+-		
+-        return result.replace(".",",");
++		if("ru".equals(currentLocale.getLanguage())){
++			return result.replace(".",",");
++		}
++		return result;
+     }
+ 
+     /**

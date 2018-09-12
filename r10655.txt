@@ -1,0 +1,103 @@
+Index: packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/MainActivity.java
+===================================================================
+--- packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/MainActivity.java	(revision 10654)
++++ packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/MainActivity.java	(revision 10655)
+@@ -31,7 +31,8 @@
+ 
+     Button bt_left = null;
+     Button bt_right = null;
+-    private final int RESULT_OK = 1;
++	TextView   dtv_tips ;
++ //   private final int RESULT_OK = 1;
+     private final int RESULT_NG = 0;
+ 
+ 
+@@ -78,6 +79,15 @@
+         FCI_TVi.AVStop();
+         mSignalHandler.removeCallbacks(mSignalHandlerTask);
+     }
++	@Override
++	protected void onResume() {
++		// TODO Auto-generated method stub
++		IntentFilter filter = new IntentFilter();
++						filter.addAction(Intent.ACTION_TIME_TICK);
++						filter.addAction(Intent.ACTION_HEADSET_PLUG);
++				registerReceiver(mReceiver, filter);
++		super.onResume();
++	}
+ 
+     @Override
+     protected void onDestroy(){
+@@ -109,6 +119,8 @@
+ 
+ 	    bt_left = (Button) findViewById(R.id.bt_left);
+         bt_right = (Button) findViewById(R.id.bt_right);
++		dtv_tips = (TextView)findViewById(R.id.dtv_tips);
++		dtv_tips.setText("Please plug headset !!! ");	
+         bt_left.setText("Pass");
+ 		//Intent it = new Intent();
+ 	   bt_left.setOnClickListener(new OnClickListener() {
+@@ -118,7 +130,7 @@
+ 				   intent.setClassName("com.android.mmi", "com.android.mmi.MMITestDevice");
+ 			setResult(RESULT_OK, intent);
+ 				finish();
+-			finish();
++		
+ 		}
+ 	});
+ 
+@@ -210,4 +222,19 @@
+             }
+         }
+     }
++	private final BroadcastReceiver mReceiver = new BroadcastReceiver() {	
++	@Override  
++	public void onReceive(Context context, Intent intent) {  
++		String action = intent.getAction();  
++		if (action.equals(Intent.ACTION_HEADSET_PLUG)) {  
++			if(intent.hasExtra("state")) {	
++				if(intent.getIntExtra("state", 0) == 0) {  
++					dtv_tips.setVisibility(View.VISIBLE);
++				} else if(intent.getIntExtra("state", 0) == 1) {  
++					dtv_tips.setVisibility(View.INVISIBLE);
++				}  
++			}  
++		}  
++	}  
++};
+ }
+Index: packages/apps/fcidtvtest/res/layout/main.xml
+===================================================================
+--- packages/apps/fcidtvtest/res/layout/main.xml	(revision 10654)
++++ packages/apps/fcidtvtest/res/layout/main.xml	(revision 10655)
+@@ -12,6 +12,16 @@
+         android:layout_height="wrap_content" />
+ 
+ 
++     <TextView 
++		android:textSize="22.0dip"
++		android:id="@+id/dtv_tips"
++		android:layout_width="wrap_content"
++		android:layout_height="wrap_content"
++		android:layout_above="@+id/video_surface"
++		android:gravity="center"
++		android:textColor="#ffffff"
++		android:layout_marginBottom="45dp"
++		android:text="@string/null_text" />
+         <SurfaceView
+             android:id="@+id/video_surface"
+             android:layout_width="640px"
+Index: vendor/branch/5058J/vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/MMITestDevice.java
+===================================================================
+--- vendor/branch/5058J/vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/MMITestDevice.java	(revision 10654)
++++ vendor/branch/5058J/vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/MMITestDevice.java	(revision 10655)
+@@ -721,7 +721,8 @@
+   			startActivityForResult(intent, TESTITEM_TPLOCK);
+   			break;		
+   		case TESTITEM_DTV:
+-  			intent.setClass(this, Dtv.class);
++  			//intent.setClass(this, Dtv.class);
++  			intent.setClassName("kr.co.fci.tv.factory", "kr.co.fci.tv.factory.MainActivity");
+   			startActivityForResult(intent, TESTITEM_DTV);
+   			break;				
+  		case TESTITEM_BATTERY_LEVERl:

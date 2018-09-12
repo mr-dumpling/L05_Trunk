@@ -1,0 +1,59 @@
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/batterytemp/BatteryTemp.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/batterytemp/BatteryTemp.java	(revision 5436)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/batterytemp/BatteryTemp.java	(revision 5437)
+@@ -19,6 +19,10 @@
+ import com.android.mmi.MMITestDevice;
+ import com.android.mmi.R;
+ 
++import java.io.BufferedReader;
++import java.io.FileReader;
++import java.io.IOException;
++import java.io.File;
+ public class BatteryTemp extends Activity implements OnClickListener {
+ 	private IntentFilter mIntentFilter;
+ 	TextView tv_base_title, tv_battery_temp, tv_battery_content,
+@@ -56,7 +60,7 @@
+ 		tv_battery_id = (TextView) this
+ 				.findViewById(R.id.tv_battery_id);
+ 		tv_battery_id.setText(battery_id);
+-		tv_battery_id.setVisibility(View.GONE);
++		//tv_battery_id.setVisibility(View.GONE);
+ 		bt_base_left = (Button) findViewById(R.id.bt_base_left);
+ 		bt_base_left.setText(R.string.bt_pass);
+ 		bt_base_left.setOnClickListener(this);
+@@ -63,6 +67,7 @@
+ 		bt_base_right = (Button) findViewById(R.id.bt_base_right);
+ 		bt_base_right.setText(R.string.bt_fail);
+ 		bt_base_right.setOnClickListener(this);
++		CheckBatteryId();
+ 	}
+ 
+ 	@Override
+@@ -112,7 +117,7 @@
+ 			BatteryTemp.this.tv_battery_content.setText(battery_content + level + "%");
+ 
+ 			BatteryTemp.this.tv_battery_voltage.setText(battery_voltage + voltage/1000 + "V");
+-			BatteryTemp.this.tv_battery_id.setText(battery_id);
++		//	BatteryTemp.this.tv_battery_id.setText(battery_id + getBatteryId());
+ 
+ 			if (action.equals(Intent.ACTION_BATTERY_CHANGED)) {
+ 
+@@ -165,5 +170,17 @@
+ 		}
+ 		return super.onKeyUp(keyCode, event);
+ 	}
++	public void CheckBatteryId() {  
+ 	
++			int checkValue =-100;
++			File readFile = new File("proc/batteryid_flag");	
++			FileReader inCmd;
++			try {
++				inCmd = new FileReader(readFile);
++				checkValue = inCmd.read();	
++			} catch (IOException e) {
++				e.printStackTrace();
++			}
++		tv_battery_id.setText(battery_id + checkValue);		
++	} 
+ }

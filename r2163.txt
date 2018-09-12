@@ -1,0 +1,48 @@
+Index: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 2162)
++++ packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 2163)
+@@ -111,6 +111,10 @@
+     };
+     private static final int SAMPLE_CUTOFF = 2000;  // manually cap sample playback at 2 seconds
+ 
++	private static int lastRingValue, lastNotificationValue;
++	private static final String KEY_LAST_RING_VALUE = "lassRingValue";
++	private static final String KEY_LAST_NOTIFICATION_VALUE = "lastNotificationValue";
++	
+     private final VolumePreferenceCallback mVolumeCallback = new VolumePreferenceCallback();
+     private final H mHandler = new H();
+     private final SettingsObserver mSettingsObserver = new SettingsObserver();
+@@ -643,10 +647,22 @@
+ 					if(stream==AudioManager.RINGER_MODE_SILENT){
+ 						updateSilentMode();
+ 					}
++					
++					if(mAudioManager.getRingerModeInternal() != AudioManager.RINGER_MODE_SILENT){
++						Settings.System.putInt(getContentResolver(),"isBusyForSilent",1);
++						lastRingValue = mAudioManager.getStreamVolume(AudioManager.STREAM_RING);
++						lastNotificationValue = mAudioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION);
++						Settings.System.putInt(getContentResolver(),KEY_LAST_RING_VALUE,lastRingValue);
++						Settings.System.putInt(getContentResolver(),KEY_LAST_NOTIFICATION_VALUE,lastNotificationValue);
++					}
++					
+ 					mAudioManager.setStreamVolume(AudioManager.STREAM_RING,0,0);
+ 					mAudioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION,0,0);
+ 					mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_SILENT);			
+ 				}else{
++					lastRingValue = Settings.System.getInt(mContext.getContentResolver(), KEY_LAST_RING_VALUE, lastRingValue);
++					lastNotificationValue = Settings.System.getInt(mContext.getContentResolver(), KEY_LAST_NOTIFICATION_VALUE, lastNotificationValue);
++					
+ 					if(stream==AudioManager.RINGER_MODE_SILENT){
+ 						updateSilentMode();
+ 						mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
+@@ -653,7 +669,8 @@
+ 					}else{
+ 						mAudioManager.setRingerModeInternal(stream);
+ 					}	
+-					
++					mAudioManager.setStreamVolume(AudioManager.STREAM_RING, lastRingValue, 0);
++					mAudioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, lastNotificationValue, 0);
+ 				}
+                 return Settings.System.putInt(getContentResolver(),
+                         Settings.System.VIBRATE_IN_SILENT,

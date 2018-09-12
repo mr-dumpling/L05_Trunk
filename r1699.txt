@@ -1,0 +1,48 @@
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 1698)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 1699)
+@@ -20110,7 +20110,8 @@
+ 
+                 EventLog.writeEvent(EventLogTags.CONFIGURATION_CHANGED, changes);
+ 
+-                if (!initLocale && !values.getLocales().isEmpty() && values.userSetLocale) {
++     //           if (!initLocale && !values.getLocales().isEmpty() && values.userSetLocale) {
++                if (!initLocale && !values.getLocales().isEmpty()) { 
+                     final LocaleList locales = values.getLocales();
+                     int bestLocaleIndex = 0;
+                     if (locales.size() > 1) {
+@@ -20121,8 +20122,16 @@
+                         bestLocaleIndex = Math.max(0,
+                                 locales.getFirstMatchIndex(mSupportedSystemLocales));
+                     }
+-                    SystemProperties.set("persist.sys.locale",
+-                            locales.get(bestLocaleIndex).toLanguageTag());
++					if(values.userSetLocale){
++						SystemProperties.set("persist.sys.locale", 
++						locales.get(bestLocaleIndex).toLanguageTag()); 
++					}else{ 
++						SystemProperties.set("persist.sys.simLocale", 
++						locales.get(bestLocaleIndex).toLanguageTag()); 
++					} 
++					
++       //             SystemProperties.set("persist.sys.locale",
++       //                     locales.get(bestLocaleIndex).toLanguageTag());
+                     LocaleList.setDefault(locales, bestLocaleIndex);
+                     mHandler.sendMessage(mHandler.obtainMessage(SEND_LOCALE_TO_MOUNT_DAEMON_MSG,
+                             locales.get(bestLocaleIndex)));
+Index: frameworks/base/core/jni/AndroidRuntime.cpp
+===================================================================
+--- frameworks/base/core/jni/AndroidRuntime.cpp	(revision 1698)
++++ frameworks/base/core/jni/AndroidRuntime.cpp	(revision 1699)
+@@ -439,6 +439,10 @@
+ 
+         return out;
+     }
++    const std::string simLocale = getProperty("persist.sys.simLocale", ""); 
++	if (!simLocale.empty()) { 
++		return simLocale; 
++	} 
+ 
+     const std::string productLocale = getProperty("ro.product.locale", "");
+     if (!productLocale.empty()) {

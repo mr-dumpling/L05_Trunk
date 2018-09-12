@@ -1,0 +1,57 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1806)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1807)
+@@ -173,6 +173,10 @@
+ import android.os.SystemClock;
+ //add wqq end}
+ 
++//add by dongdongli for 111401 20171122 start
++import java.util.Date;
++//add by dongdongli for 111401 20171122 end
++
+ /**
+  * WindowManagerPolicy implementation for the Android phone UI.  This
+  * introduces a new method suffix, Lp, for an internal lock of the
+@@ -724,6 +728,11 @@
+     boolean mHavePendingMediaKeyRepeatWithWakeLock;
+ 
+     private int mCurrentUserId;
++	
++	//add by dongdongli for 111401 20171122 start
++	long fingerprintDown = 0;
++	long fingerprintUp = 0;
++	//add by dongdongli for 111401 20171122 end 
+ 
+     // Maps global key codes to the components that will handle them.
+     private GlobalKeyManager mGlobalKeyManager;
+@@ -5977,6 +5986,29 @@
+                 return iReturn;
+             }
+         }
++		
++		//add by dongdongli for 111401 20171122 start
++		if (keyCode == 141) {
++			Date dt= new Date();
++			if (mPowerManager.isScreenOn() && !keyguardOn()) {
++				if (down) {
++					fingerprintDown = dt.getTime();
++				} else {
++					fingerprintUp = dt.getTime();
++					Log.i("lidd","fingerprint touch time = " + (fingerprintUp - fingerprintDown));
++					if ((fingerprintUp - fingerprintDown) >= 1000) {
++						ActivityManager activityManager = (ActivityManager)mContext.getSystemService(Context.ACTIVITY_SERVICE);
++						ComponentName topActivity = activityManager.getRunningTasks(1).get(0).topActivity;
++						if (topActivity.getPackageName().equals("com.mediatek.factorymode") || topActivity.getPackageName().equals("com.android.mmi") || 
++							topActivity.getPackageName().equals("com.mediatek.hz.camera")){
++						} else {
++							handleShortPressOnHome();
++						}
++					}
++				}
++			}
++        }
++		//add by dongdongli for 111401 20171122 end
+ 
+         // Handle special keys.
+         switch (keyCode) {

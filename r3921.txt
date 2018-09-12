@@ -1,0 +1,511 @@
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/dialogs/FmEnterFrequencyDialog.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/dialogs/FmEnterFrequencyDialog.java	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/dialogs/FmEnterFrequencyDialog.java	(revision 3921)
+@@ -0,0 +1,162 @@
++/*
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.fmradio.dialogs;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.app.Dialog;
++import android.app.DialogFragment;
++import android.content.DialogInterface;
++import android.os.Bundle;
++import android.text.Editable;
++import android.text.Selection;
++import android.text.TextUtils;
++import android.text.TextWatcher;
++import android.view.View;
++import android.view.WindowManager;
++import android.widget.Button;
++import android.widget.EditText;
++
++import com.android.fmradio.R;
++
++public class FmEnterFrequencyDialog extends DialogFragment {
++    private static final String STATION_FREQ = "station_freq";
++    private EnterFrequencyListener mListener = null;
++    private EditText mStationFrequencyEditor = null;
++
++    public static FmEnterFrequencyDialog newInstance() {
++        FmEnterFrequencyDialog fragment = new FmEnterFrequencyDialog();
++        //Bundle args = new Bundle(2);
++        //args.putString(STATION_NAME, stationName);
++        //args.putInt(STATION_FREQ, stationFreq);
++        //fragment.setArguments(args);
++        return fragment;
++    }
++
++    public interface EnterFrequencyListener {
++        void enterFrequency(int stationFreq);
++    }
++
++    @Override
++    public void onAttach(Activity activity) {
++        super.onAttach(activity);
++        try {
++            mListener = (EnterFrequencyListener) activity;
++        } catch (ClassCastException e) {
++            e.printStackTrace();
++        }
++    }
++
++    @Override
++    public Dialog onCreateDialog(Bundle savedInstanceState) {
++        //String stationName = getArguments().getString(STATION_NAME);
++        //final int stationFreq = getArguments().getInt(STATION_FREQ);
++        View v = View.inflate(getActivity(), R.layout.enter_frequency, null);
++        mStationFrequencyEditor = (EditText) v.findViewById(
++                R.id.dlg_enter_frequency_text);
++
++        mStationFrequencyEditor.requestFocus();
++        mStationFrequencyEditor.requestFocusFromTouch();
++        // Edit
++        //mStationFrequencyEditor.setText(stationName);
++        Editable text = mStationFrequencyEditor.getText();
++        Selection.setSelection(text, text.length());
++        return new AlertDialog.Builder(getActivity())
++                // Must call setTitle here or the title will not be displayed.
++                .setTitle(getString(R.string.fm_enter_frequency)).setView(v)
++                .setPositiveButton(R.string.ok,
++                        new DialogInterface.OnClickListener() {
++                            public void onClick(DialogInterface dialog, int which) {
++                                int newFrequency = (int)(Double.parseDouble(mStationFrequencyEditor.getText().toString().trim())*10);
++                                mListener.enterFrequency(newFrequency);
++                            }
++                        })
++                .setNegativeButton(android.R.string.cancel, null)
++                .create();
++    }
++
++    /**
++     * Set the dialog edit text and other attribute.
++     */
++    @Override
++    public void onResume() {
++        super.onResume();
++        setTextChangedCallback();
++        String toName = mStationFrequencyEditor.getText().toString();
++        // empty or blank or white space only name is not allowed, and call setText to
++        // trigger onTextChanged callback to check edittext's text whether be allowed
++        if (TextUtils.isEmpty(toName)) {
++            toggleSaveButton(false);
++        } else {
++            mStationFrequencyEditor.setText(toName);
++        }
++
++        Dialog dialog = getDialog();
++        dialog.setCanceledOnTouchOutside(false);
++        dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
++                        | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
++    }
++
++    /**
++     * This method register callback and set filter to Edit, in order to make
++     * sure that user input is legal. The input can't be empty/blank/all-spaces filename
++     */
++    private void setTextChangedCallback() {
++        mStationFrequencyEditor.addTextChangedListener(new TextWatcher() {
++            // not use, so don't need to implement it
++            @Override
++            public void afterTextChanged(Editable arg0) {
++            }
++
++            // not use, so don't need to implement it
++            @Override
++            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
++            }
++
++            /**
++             * check user input whether is null or all white space.
++             */
++            @Override
++            public void onTextChanged(CharSequence s, int start, int before, int count) {
++                boolean isEnabled = true;
++                String freq = s.toString().trim();
++                // Characters not allowed by file system, and don't use as station name
++                if (freq.length() <= 0
++                        || freq.startsWith(".")
++                        || !freq.matches("^[1-9][0-9]*(\\.[0-9]{1,"+1+"})?$")
++                        || Double.parseDouble(freq) < 87.5
++                        || Double.parseDouble(freq) > 108) {
++                    isEnabled = false;
++                }
++                toggleSaveButton(isEnabled);
++            }
++        });
++    }
++
++    /**
++     * This method enables or disables save button to forbid renaming station name to null.
++     * @param isEnabled true to enable save button, false to disable save button
++     */
++    private void toggleSaveButton(boolean isEnabled) {
++        final AlertDialog dialog = (AlertDialog) getDialog();
++        if (dialog == null) {
++            return;
++        }
++        final Button button = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
++        button.setEnabled(isEnabled);
++    }
++}
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java	(revision 3920)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/src/com/android/fmradio/FmMainActivity.java	(revision 3921)
+@@ -61,6 +61,7 @@
+ 
+ import com.android.fmradio.FmStation.Station;
+ import com.android.fmradio.dialogs.FmFavoriteEditDialog;
++import com.android.fmradio.dialogs.FmEnterFrequencyDialog;// lance add for bug 114259
+ import com.android.fmradio.views.FmScroller;
+ import com.android.fmradio.views.FmScroller.EventListener;
+ import com.android.fmradio.views.FmSnackBar;
+@@ -70,7 +71,8 @@
+ /**
+  * This class interact with user, provide FM basic function.
+  */
+-public class FmMainActivity extends Activity implements FmFavoriteEditDialog.EditFavoriteListener {
++public class FmMainActivity extends Activity implements FmFavoriteEditDialog.EditFavoriteListener,
++                     FmEnterFrequencyDialog.EnterFrequencyListener { // lance add for bug 114259
+     // Logging
+     private static final String TAG = "FmMainActivity";
+ 
+@@ -140,6 +142,14 @@
+ 
+     private MenuItem mMenuItemRecordList = null;
+ 
++	// lance add for bug 114259 @{
++    private MenuItem mMenuItemEnterFrequency = null;
++
++    private MenuItem mMenuItemSaveChannel = null;
++
++    private MenuItem mMenuItemDeleteChannel = null;
++	// @}
++
+     // State variables
+     private boolean mIsServiceStarted = false;
+ 
+@@ -652,6 +662,46 @@
+         }
+     }
+ 
++	// lance add for bug 114259 @{
++    @Override
++    public void enterFrequency(int stationFreq) {
++        if (mCurrentStation != stationFreq) {
++                tuneStation(stationFreq);
++        }
++    }
++
++    public void showEnterFrequencyDialog() {
++        if (mService != null) {
++            FmEnterFrequencyDialog newFragment = FmEnterFrequencyDialog.newInstance();
++            newFragment.show(mFragmentManager, "TAG_ENTER_FREQUENCY");
++            mFragmentManager.executePendingTransactions();
++        }
++    }
++
++    public void doSaveOrEdit() {
++        if (FmStation.isStationExist(mContext, mCurrentStation)) {
++            showRenameDialog(mCurrentStation);
++        } else {
++            ContentValues values = new ContentValues(2);
++            values.put(Station.FREQUENCY, mCurrentStation);
++            FmStation.insertStationToDb(mContext, values);
++            String title = getString(R.string.fm_save_channel_success);
++            FmSnackBar.make(FmMainActivity.this, title, null, null,
++                FmSnackBar.DEFAULT_DURATION).show();
++        }
++    }
++
++    public void doDelete() {
++        if (FmStation.isFavoriteStation(mContext, mCurrentStation)) {
++            updateFavoriteStation();
++        }
++        FmStation.deleteStationInDb(mContext, mCurrentStation);
++        String title = getString(R.string.fm_delete_channel_success);
++        FmSnackBar.make(FmMainActivity.this, title, null, null,
++            FmSnackBar.DEFAULT_DURATION).show();
++    }
++	// @}
++
+     /**
+      * Go to station list activity
+      */
+@@ -864,6 +914,11 @@
+         mMenuItemHeadset = menu.findItem(R.id.fm_headset);
+         mMenuItemStartRecord = menu.findItem(R.id.fm_start_record);
+         mMenuItemRecordList = menu.findItem(R.id.fm_record_list);
++		// lance add for bug 114259 @{
++        mMenuItemEnterFrequency = menu.findItem(R.id.fm_enter_frequency);
++        mMenuItemSaveChannel = menu.findItem(R.id.fm_save_channel);
++        mMenuItemDeleteChannel = menu.findItem(R.id.fm_delete_channel);
++		// @}
+         if (null != mMenuItemHeadset) {
+             mMenuItemHeadset.setTitle(R.string.optmenu_earphone);
+         }
+@@ -887,6 +942,7 @@
+         boolean isPowerdown = (powerStatus == FmService.POWER_DOWN);
+         boolean isSeeking = mService.isSeeking();
+         boolean isSpeakerUsed = mService.isSpeakerUsed();
++        boolean isCurrentFreqSaved = FmStation.isStationExist(mContext, mCurrentStation);// lance add for bug 114259
+         // if fm power down by other app, should enable power menu, make it to
+         // powerup.
+         refreshActionMenuItem(isSeeking ? false : isPowerUp);
+@@ -897,6 +953,11 @@
+                 : R.drawable.btn_fm_headset_selector);
+         mMenuItemHeadset.setTitle(isSpeakerUsed ? R.string.optmenu_speaker
+                 : R.string.optmenu_earphone);
++		// lance add for bug 114259 @{
++        mMenuItemSaveChannel.setTitle(isCurrentFreqSaved ? R.string.fm_edit_channel_name
++                    : R.string.fm_save_channel);
++        mMenuItemDeleteChannel.setEnabled(isCurrentFreqSaved);
++		// @}
+         return true;
+     }
+ 
+@@ -908,7 +969,7 @@
+      */
+     @Override
+     public boolean onOptionsItemSelected(MenuItem item) {
+-            Log.d(TAG, "onOptionsItemSelected, item = " + item.getItemId());
++        Log.d(TAG, "onOptionsItemSelected, item = " + item.getItemId());
+         switch (item.getItemId()) {
+             case android.R.id.home:
+                 onBackPressed();
+@@ -944,6 +1005,21 @@
+             case R.id.fm_record_list:
+                 openSavedRecordings();
+                 break;
++
++			// lance add for bug 114259 @{
++            case R.id.fm_enter_frequency:
++                showEnterFrequencyDialog();
++                break;
++
++            case R.id.fm_save_channel:
++                doSaveOrEdit();
++                break;
++            
++            case R.id.fm_delete_channel:
++                doDelete();
++                break;
++			// @}
++
+             default:
+                 Log.e(TAG, "onOptionsItemSelected, invalid options menu item.");
+                 break;
+@@ -1248,6 +1324,7 @@
+         boolean isPowerdown = (powerStatus == FmService.POWER_DOWN);
+         boolean isSpeakerUsed = mService.isSpeakerUsed();
+         boolean fmStatus = (isSeeking || isDuringPowerup);
++        boolean isCurrentFreqSaved = FmStation.isStationExist(mContext, mCurrentStation);// lance add for bug 114259
+         // when seeking, all button should disabled,
+         // else should update as origin status
+         refreshImageButton(fmStatus ? false : isPowerUp);
+@@ -1264,7 +1341,15 @@
+             mMenuItemHeadset.setTitle(isSpeakerUsed ? R.string.optmenu_speaker
+                     : R.string.optmenu_earphone);
+         }
+-
++		// lance add for bug 114259 @{
++        if (null != mMenuItemSaveChannel) {
++            mMenuItemSaveChannel.setTitle(isCurrentFreqSaved ? R.string.fm_edit_channel_name
++                    : R.string.fm_save_channel);
++        }
++        if (null != mMenuItemDeleteChannel) {
++            mMenuItemDeleteChannel.setEnabled(isCurrentFreqSaved);
++        }
++        // @}
+     }
+ 
+     private void initUiComponent() {
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rTW/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rTW/strings.xml	(revision 3920)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rTW/strings.xml	(revision 3921)
+@@ -69,4 +69,12 @@
+     <string name="next_channel">"下一頻道"</string>
+     <string name="toast_fm_enter_airplane_mode">進入飛行模式，收音機將被關閉。</string>
+     <string name="not_available_airplanemode">飛行模式下，無法打開收音機。</string>
++    <string name="fm_enter_frequency">輸入頻率</string>
++    <string name="enter_frequency_limit">頻率區間（87.5 ~ 108 MHZ）</string>
++    <string name="ok">確定</string>
++    <string name="fm_save_channel">保存頻道</string>
++    <string name="fm_edit_channel_name">編輯頻道</string>
++    <string name="fm_delete_channel">刪除頻道</string>
++    <string name="fm_save_channel_success">此電臺已保存</string>
++    <string name="fm_delete_channel_success">此电台已刪除</string>
+ </resources>
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/values/colors.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/values/colors.xml	(revision 3920)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/values/colors.xml	(revision 3921)
+@@ -29,4 +29,5 @@
+     <color name="actionbar_overflow_title_disabled_color">#33000000</color>
+     <!-- FM main page text color -->
+     <color name="text_fm_color">#CFD8DC</color>
++    <color name="grey_color">#666666</color>
+ </resources>
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/values/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/values/strings.xml	(revision 3920)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/values/strings.xml	(revision 3921)
+@@ -166,4 +166,13 @@
+ 
+     <string name="toast_fm_enter_airplane_mode">The FM will close because you have been entered the airplane mode</string>
+     <string name="not_available_airplanemode">FM is not available under airplane mode</string>
++    <string name="fm_enter_frequency">Enter frequency</string>
++    <string name="enter_frequency_limit">Between 87.5 and 108 MHz</string>
++    <string name="ok">OK</string>
++    <string name="freq_text">MHz</string>
++    <string name="fm_save_channel">Save channel</string>
++    <string name="fm_save_channel_success">The station has been saved</string>
++    <string name="fm_delete_channel_success">The station has been deleted</string>
++    <string name="fm_edit_channel_name">Edit name</string>
++    <string name="fm_delete_channel">Delete channel</string>
+ </resources>
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rCN/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rCN/strings.xml	(revision 3920)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rCN/strings.xml	(revision 3921)
+@@ -69,4 +69,12 @@
+     <string name="next_channel">"下一频道"</string>
+     <string name="toast_fm_enter_airplane_mode">进入飞行模式，收音机将被关闭。</string>
+     <string name="not_available_airplanemode">飞行模式下，无法打开收音机。</string>
++    <string name="fm_enter_frequency">输入频率</string>
++    <string name="enter_frequency_limit">频率区间（87.5 ~ 108 MHZ）</string>
++    <string name="ok">确定</string>
++    <string name="fm_save_channel">保存频道</string>
++    <string name="fm_edit_channel_name">编辑频道</string>
++    <string name="fm_delete_channel">删除频道</string>
++    <string name="fm_save_channel_success">此电台已保存</string>
++    <string name="fm_delete_channel_success">此电台已删除</string>
+ </resources>
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/menu/fm_action_bar.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/menu/fm_action_bar.xml	(revision 3920)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/menu/fm_action_bar.xml	(revision 3921)
+@@ -34,6 +34,20 @@
+                     android:enabled="true"/>
+           </menu>
+     </item>
++    <!-- lance add for bug 114259 start -->
++    <item 
++        android:id="@+id/fm_save_channel"
++        android:showAsAction ="never"
++        android:title="@string/fm_save_channel"/>
++    <item 
++        android:id="@+id/fm_delete_channel"
++        android:showAsAction ="never"
++        android:title="@string/fm_delete_channel"/>
++    <item 
++        android:id="@+id/fm_enter_frequency"
++        android:showAsAction ="never"
++        android:title="@string/fm_enter_frequency"/>
++    <!-- lance add for bug 114259 end -->
+     <item
+         android:id="@+id/fm_start_record"
+         android:showAsAction ="never"
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/layout/enter_frequency.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/layout/enter_frequency.xml	(revision 0)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/layout/enter_frequency.xml	(revision 3921)
+@@ -0,0 +1,63 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     Copyright (C) 2014 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:id="@+id/layout_enter_frequency"
++    android:layout_width="wrap_content"
++    android:layout_height="wrap_content"
++    android:paddingLeft="20dp"
++    android:paddingRight="20dp"
++    android:orientation="vertical">
++
++    <TextView
++        android:id="@+id/dlg_enter_frequency_limit"
++        android:layout_width="match_parent"
++        android:layout_height="48dip"
++        android:gravity="center_horizontal"
++        android:layout_marginTop="20dip"
++        android:text="@string/enter_frequency_limit"
++        android:textSize="16dp"
++        android:textColor="@color/grey_color" />
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="64dip"
++        android:layout_marginBottom="24dip"
++        android:layout_marginStart="24dip"
++        android:layout_marginEnd="24dip"
++        orientation="horizontal">
++        <EditText
++        android:id="@+id/dlg_enter_frequency_text"
++        android:layout_weight="1"
++        android:layout_width="match_parent"
++        android:inputType="numberDecimal"
++        android:layout_height="48dip"
++        android:singleLine="true"
++        android:alpha="0.87"
++        android:maxLength="5"
++        android:textSize="16dp"
++        android:textColor="@color/black_color" />
++        
++        <TextView
++        android:layout_weight="3"
++        android:gravity="end|center_horizontal"
++        android:layout_width="match_parent"
++        android:layout_height="48dip"
++        android:text="@string/freq_text"/>
++    </LinearLayout>
++
++</LinearLayout>
+Index: vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rHK/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rHK/strings.xml	(revision 3920)
++++ vendor/mediatek/proprietary/packages/apps/FMRadio/res/values-zh-rHK/strings.xml	(revision 3921)
+@@ -69,4 +69,12 @@
+     <string name="next_channel">"下一頻道"</string>
+     <string name="toast_fm_enter_airplane_mode">進入飛行模式，收音機將被關閉。</string>
+     <string name="not_available_airplanemode">飛行模式下，無法打開收音機。</string>
++    <string name="fm_enter_frequency">輸入頻率</string>
++    <string name="enter_frequency_limit">頻率區間（87.5 ~ 108 MHZ）</string>
++    <string name="ok">確定</string>
++    <string name="fm_save_channel">保存頻道</string>
++    <string name="fm_edit_channel_name">編輯頻道</string>
++    <string name="fm_delete_channel">刪除頻道</string>
++    <string name="fm_save_channel_success">此電臺已保存</string>
++    <string name="fm_delete_channel_success">此电台已刪除</string>
+ </resources>

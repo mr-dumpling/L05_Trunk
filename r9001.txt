@@ -1,0 +1,157 @@
+Index: packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- packages/apps/Settings/AndroidManifest.xml	(revision 9000)
++++ packages/apps/Settings/AndroidManifest.xml	(revision 9001)
+@@ -581,8 +581,12 @@
+ 
+         <activity android:name="DateTimeSettingsSetupWizard"
+                   android:label="@string/date_and_time"
+-                  android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
++                  android:theme="@style/SetupWizardAccessibilityTheme"
+                   android:screenOrientation="behind">
++            <intent-filter android:priority="2">
++                <action android:name="com.android.setupwizard.DATE_TIME" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+             </intent-filter>
+Index: packages/apps/Settings/src/com/android/settings/DateTimeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DateTimeSettings.java	(revision 9000)
++++ packages/apps/Settings/src/com/android/settings/DateTimeSettings.java	(revision 9001)
+@@ -56,7 +56,7 @@
+ import java.util.Date;
+ import java.util.List;
+ import java.text.SimpleDateFormat;
+-
++import com.android.settings.R;
+ import com.mediatek.settingslib.RestrictedListPreference;
+ import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+ 
+@@ -113,6 +113,9 @@
+ 
+     @Override
+     public void onCreate(Bundle icicle) {
++		if(Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 0){
++			getActivity().setTheme(R.style.SetupWizardAccessibilityTheme);
++		}
+         super.onCreate(icicle);
+ 
+         addPreferencesFromResource(R.xml.date_time_prefs);
+@@ -170,7 +173,7 @@
+         mAutoTimeZonePref.setOnPreferenceChangeListener(this);
+         // Override auto-timezone if it's a wifi-only device or if we're still in setup wizard.
+         // TODO: Remove the wifiOnly test when auto-timezone is implemented based on wifi-location.
+-        if (Utils.isWifiOnly(getActivity()) || isFirstRun) {
++        if ((Utils.isWifiOnly(getActivity()) || isFirstRun )&& Settings.Global.getInt(getContentResolver(),Settings.Global.DEVICE_PROVISIONED, 0) == 1 ) {
+             getPreferenceScreen().removePreference(mAutoTimeZonePref);
+             autoTimeZoneEnabled = false;
+         }
+Index: packages/apps/Settings/src/com/android/settings/DateTimeSettingsSetupWizard.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/DateTimeSettingsSetupWizard.java	(revision 9000)
++++ packages/apps/Settings/src/com/android/settings/DateTimeSettingsSetupWizard.java	(revision 9001)
+@@ -44,7 +44,7 @@
+ 
+ import java.util.Calendar;
+ import java.util.TimeZone;
+-
++import com.android.setupwizardlib.util.WizardManagerHelper;
+ public class DateTimeSettingsSetupWizard extends Activity
+         implements OnClickListener, OnItemClickListener, OnCheckedChangeListener,
+         PreferenceFragment.OnPreferenceStartFragmentCallback {
+@@ -84,7 +84,7 @@
+         if (mUsingXLargeLayout) {
+             initUiForXl();
+         } else {
+-            findViewById(R.id.next_button).setOnClickListener(this);
++            findViewById(R.id.next_button_1).setOnClickListener(this);
+         }
+         mTimeZoneAdapter = ZonePicker.constructTimezoneAdapter(this, false,
+             R.layout.date_time_setup_custom_list_item_2);
+@@ -95,8 +95,8 @@
+         // cancel. And also, in xlarge, we need the keyboard dismiss button
+         // to be available.
+         if (!mUsingXLargeLayout) {
+-            final View layoutRoot = findViewById(R.id.layout_root);
+-            layoutRoot.setSystemUiVisibility(View.STATUS_BAR_DISABLE_BACK);
++        //    final View layoutRoot = findViewById(R.id.layout_root);
++        //    layoutRoot.setSystemUiVisibility(View.STATUS_BAR_DISABLE_BACK);
+         }
+     }
+ 
+@@ -138,7 +138,7 @@
+ 
+         mInputMethodManager = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+ 
+-        ((Button)findViewById(R.id.next_button)).setOnClickListener(this);
++        ((Button)findViewById(R.id.next_button_1)).setOnClickListener(this);
+         final Button skipButton = (Button)findViewById(R.id.skip_button);
+         if (skipButton != null) {
+             skipButton.setOnClickListener(this);
+@@ -168,7 +168,7 @@
+             showTimezonePicker(R.id.time_zone_button);
+             break;
+         }
+-        case R.id.next_button: {
++        case R.id.next_button_1: {
+             if (mSelectedTimeZone != null) {
+                 final TimeZone systemTimeZone = TimeZone.getDefault();
+                 if (!systemTimeZone.equals(mSelectedTimeZone)) {
+@@ -188,6 +188,9 @@
+                             mTimePicker.getCurrentHour(), mTimePicker.getCurrentMinute());
+                 }
+             }
++			Intent intent = WizardManagerHelper.getNextIntent(getIntent(), Activity.RESULT_OK);
++			startActivityForResult(intent, 1000);
++			break;
+         }  // $FALL-THROUGH$
+         case R.id.skip_button: {
+             setResult(RESULT_OK);
+Index: packages/apps/Settings/res/layout/date_time_settings_setupwizard.xml
+===================================================================
+--- packages/apps/Settings/res/layout/date_time_settings_setupwizard.xml	(revision 9000)
++++ packages/apps/Settings/res/layout/date_time_settings_setupwizard.xml	(revision 9001)
+@@ -19,7 +19,19 @@
+         android:layout_height="fill_parent"
+         android:layout_width="fill_parent"
+         android:orientation="vertical">
+-
++		
++    <TextView
++        android:id="@+id/column2"
++	android:layout_marginTop="40dp"
++	android:layout_marginLeft="10dp"
++	android:textSize="40dp"
++	style="@style/TextAppearance.SuggestionTitle"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++	android:text="@string/date_and_time_settings_title"
++        >
++    </TextView>
++	
+     <View
+         android:id="@+id/timezone_dropdown_anchor"
+         android:layout_width="match_parent"
+@@ -38,12 +50,15 @@
+     </LinearLayout>
+ 
+     <RelativeLayout android:layout_height="wrap_content"
+-                    android:layout_weight="0"
+-                    android:padding="10dip"
+-                    android:layout_width="fill_parent">
++        android:layout_weight="0"
++        android:padding="10dip"
++        android:layout_width="wrap_content">
+ 
+-        <Button android:id="@+id/next_button"
+-            android:layout_width="150dip"
++        <Button android:id="@+id/next_button_1"
++            style="@style/SetupWizardButton.Positive"
++            android:layout_width="wrap_content"
++            android:textColor="#FFFFFF"
++            android:background="#2E64FE"
+             android:layout_height="wrap_content"
+             android:layout_alignParentEnd="true"
+             android:text="@string/next_label"

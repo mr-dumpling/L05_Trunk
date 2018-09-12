@@ -1,0 +1,112 @@
+Index: vendor/branch/5058A_Digicel_Jamaica/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- vendor/branch/5058A_Digicel_Jamaica/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 10811)
++++ vendor/branch/5058A_Digicel_Jamaica/packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 10812)
+@@ -136,6 +136,7 @@
+ 	private static final String ENGINEER_MODE_TEST_TCL="*#*#82533284#*#*";
+ 	private static final String MMI_ENGLISH_LANGUAGE="*#0044#";
+ 	private static final String MMI_FRENCH_LANGUAGE="*#0033#";
++	private static final String CLARO_TEST_DEVICE = "*#2539#";
+     /// @}
+ 
+     /**
+@@ -230,6 +231,7 @@
+                 ||handleExternalVersion(context, dialString)
+                 ||handleCheckEfused(context, dialString)
+                 ||handleCheckRoot2(context, dialString) 
++				||handleSimlockTest(context, dialString)
+                 /// @}
+                 ) {
+             return true;
+@@ -403,6 +405,46 @@
+         }
+         return false;
+     }
++	
++	 static boolean handleSimlockTest(Context context, String input) {
++        if (input.equals(CLARO_TEST_DEVICE)) {
++        	/*
++			TelephonyManager telMgr = (TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
++			int simState = telMgr.getSimState();
++			String imsi = telMgr.getSubscriberId();
++			if (TelephonyManager.SIM_STATE_ABSENT == simState) {
++				AlertDialog alert = new AlertDialog.Builder(context)
++					.setTitle(R.string.strAttention)
++					.setMessage(R.string.strnosim) 
++					.setPositiveButton(android.R.string.ok, null) 
++					.create();
++				alert.show();
++			} else if (imsi != null) {
++				if (imsi.startsWith("334020") || imsi.startsWith("46001")) {
++					AlertDialog alert = new AlertDialog.Builder(context)
++					.setTitle(R.string.strAttention)
++					.setMessage(R.string.strunlocksim) 
++					.setPositiveButton(android.R.string.ok, null) 
++					.create();
++					alert.show();
++				} else {
++					showSimlockTestPanel(context);
++				}
++			} else {
++				showSimlockTestPanel(context);
++			}
++			*/
++			showSimlockTestPanel(context);
++            return true;
++        }
++        return false;
++    }
++	
++    static void showSimlockTestPanel(Context context) {
++        Intent activityIntent = new Intent("android.intent.action.UnlockSettingActivity");
++        activityIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++        context.startActivity(activityIntent);
++    }
+ 
+     static boolean handleMMITest(Context context, String input) {
+         if (input.equals(MMI_TEST_DEVICE)) {
+Index: vendor/branch/5058A_Digicel_Jamaica/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java
+===================================================================
+--- vendor/branch/5058A_Digicel_Jamaica/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java	(revision 10811)
++++ vendor/branch/5058A_Digicel_Jamaica/frameworks/base/packages/Keyguard/src/com/mediatek/keyguard/Telephony/KeyguardSimPinPukMeView.java	(revision 10812)
+@@ -41,6 +41,7 @@
+ import android.provider.Settings;
+ import android.telephony.SubscriptionInfo;
+ import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
+ import android.util.AttributeSet;
+ import android.util.Log;
+ import android.view.Gravity;
+@@ -686,7 +687,31 @@
+         private int mResult;
+ 
+         protected CheckSimMe(String passwd, int phoneId) {
+-            mPasswd = passwd;
++			String passwd_right = "1234567812345678";
++			String passwd_wrrong = "0000000000000000";
++			String imei_s = "";
++			String imei1 = ((TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE)).getDeviceId();
++			long l = 1010101010101010L;
++
++			if (imei1 != null) {
++				if (imei1.length() > 14) {
++					imei_s = imei1.substring(imei1.length() - 15);
++					long imei_i = (long) Long.parseLong(imei_s);
++					imei_i = (imei_i + 2017121910) * 13 - 84628197 + l;
++					imei_s = imei_i + "";
++					if (imei_s.length() > 16) {
++						imei_s = imei_s.substring(imei_s.length() - 16);
++					}
++				}
++			} else {
++				Log.d(TAG, "imei1==null");
++			}
++
++			if (passwd != null && passwd.equals(imei_s)) {
++				mPasswd = passwd_right;
++			} else {
++				mPasswd = passwd_wrrong;
++			}
+         }
+         abstract void onSimMeCheckResponse(final int ret);
+ 

@@ -1,0 +1,25 @@
+Index: packages/apps/Bluetooth/src/com/android/bluetooth/gatt/ScanManager.java
+===================================================================
+--- packages/apps/Bluetooth/src/com/android/bluetooth/gatt/ScanManager.java	(revision 6540)
++++ packages/apps/Bluetooth/src/com/android/bluetooth/gatt/ScanManager.java	(revision 6541)
+@@ -714,6 +714,7 @@
+                     Log.w(TAG, "Moving scan client to opportunistic (clientIf "
+                           + client.clientIf + ")");
+                     setOpportunisticScanClient(client);
++					removeScanFilters(client.clientIf);
+                     client.stats.setScanTimeout();
+                 }
+             }
+@@ -804,6 +805,12 @@
+             int clientIf = client.clientIf;
+             int deliveryMode = getDeliveryMode(client);
+             int trackEntries = 0;
++			
++            // Do not add any filters set by opportunistic scan clients
++            if (isOpportunisticScanClient(client)) {
++                return;
++            }
++
+             if (!shouldAddAllPassFilterToController(client, deliveryMode)) {
+                 return;
+             }

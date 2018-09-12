@@ -1,0 +1,246 @@
+Index: packages/apps/Settings/src/com/android/settings/notification/CustomizedDialog.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/CustomizedDialog.java	(revision 6793)
++++ packages/apps/Settings/src/com/android/settings/notification/CustomizedDialog.java	(revision 6794)
+@@ -9,9 +9,11 @@
+ import android.view.Window;
+ import android.widget.ImageView;
+ import android.widget.TextView;
++import android.widget.GridLayout;
+ import android.content.Context;
+ 
+ import com.android.settings.R;
++import android.content.res.Configuration;
+ 
+ /**
+  * Created by liddo on 2017/8/23.
+@@ -72,7 +74,7 @@
+ 
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+-		Log.i(TAG,"onCreate()");
++		//Log.i(TAG,"onCreate()");
+         super.onCreate(savedInstanceState);
+         if (getArguments() != null) {
+             //defaultColor = getArguments().getInt(NOTIFICATION_DEFAULT_COLOR);
+@@ -79,36 +81,36 @@
+ 			pkg = getArguments().getString(NOTIFICATION_PACKAGE_NAME);
+ 			uid = getArguments().getInt(NOTIFICATION_UID);
+ 			defaultColor = mBackend.getNotificationColor(pkg, uid);
+-			Log.i("dongdong","onCreate defaultColor = " + defaultColor);
++			//Log.i("dongdong","onCreate defaultColor = " + defaultColor);
+         }
+ 		
+-		Log.i("dongdong","onCreate doneColor == 1" + "  " + (doneColor==1));
++		//Log.i("dongdong","onCreate doneColor == 1" + "  " + (doneColor==1));
+ 		
+ 		if (savedInstanceState != null) {
+ 			if (doneColor == 0){
+-				Log.i("dongdong","onCreate colorTmp ---1");
++				//Log.i("dongdong","onCreate colorTmp ---1");
+ 				colorTmp = savedInstanceState.getInt("color_tmp", 0);
+ 				savedInstanceState = null;
+ 			} else {
+-				Log.i("dongdong","onCreate colorTmp ---2");
++				//Log.i("dongdong","onCreate colorTmp ---2");
+ 				doneColor=0;
+ 			}
+ 		} else {
+ 			if(doneColor == 0){
+-				Log.i("dongdong","onCreate colorTmp ---3");
++				//Log.i("dongdong","onCreate colorTmp ---3");
+ 				colorTmp = defaultColor;
+ 			} else {
+-				Log.i("dongdong","onCreate colorTmp ---4");
++				//Log.i("dongdong","onCreate colorTmp ---4");
+ 				doneColor=0;
+ 			}
+ 		}
+ 		
+-		Log.i("dongdong","onCreate colorTmp =" + colorTmp);
++		//Log.i("dongdong","onCreate colorTmp =" + colorTmp);
+     }
+ 
+     @Override
+     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+-		Log.i(TAG,"onCreateView()");
++		//Log.i(TAG,"onCreateView()");
+         getDialog().requestWindowFeature(Window.FEATURE_NO_TITLE);
+         View view = inflater.inflate(R.layout.dialog_layout, null);
+ 
+@@ -130,7 +132,8 @@
+         }
+ 
+         setImageViewChecked(colorTmp-1);
+-
++		setImageWidth(view);
++		
+         return view;
+     }
+ 	
+@@ -137,8 +140,40 @@
+ 	@Override
+     public void onResume() {
+         super.onResume();
+-		Log.i(TAG,"onResume()");
++		//Log.i(TAG,"onResume()");
+     }
++	private void setImageWidth(View view){
++		GridLayout grd = (GridLayout) view.findViewById(R.id.gridLayout);
++		if(grd != null){
++			Configuration cfg = getResources().getConfiguration();
++			float scale = getResources().getDisplayMetrics().scaledDensity;
++			boolean bMultiW = getActivity().isInMultiWindowMode();
++			//Log.d(TAG, "javen setImageWidth scale = " + scale + ", cfg.orientation = " + cfg.orientation + ",bMultiW = " + bMultiW);
++			if (!bMultiW && cfg.orientation == cfg.ORIENTATION_LANDSCAPE) {
++				Log.e(TAG, "javen ORIENTATION_LANDSCAPE return");
++				return;
++			}
++			
++			int nItemW = 100;//circle_width def = 55*2.25(ppi)
++			if(bMultiW){
++				grd.setColumnCount(4);
++				nItemW = 60;
++			}
++			if(scale > 2.5f || bMultiW){
++				//int sc = getActivity().getWindowManager().getDefaultDisplay().getWidth();
++				//Log.d(TAG, "javen setImageWidth nItemW=" + nItemW + ", scale = " + scale + ",sc="+sc);
++				
++				for (int i = 0; i < grd.getChildCount(); i++) {
++					ImageView img = (ImageView) grd.getChildAt(i);
++					GridLayout.LayoutParams ll = (GridLayout.LayoutParams)img.getLayoutParams();
++					ll.width = nItemW;
++					ll.height = nItemW;
++					//Log.d(TAG, "javen setImageWidth nItemW = " + nItemW);
++					img.setLayoutParams(ll);
++				}
++			}
++		}
++	}
+ 
+     // set the selected image
+     private void setImageViewChecked(int colorNumber) {
+@@ -250,9 +285,9 @@
+                 this.dismiss();
+                 break;
+             case R.id.btn_done:
+-                Log.i("dongdong",getCheckedColor() + "");
++                //Log.i("dongdong",getCheckedColor() + "");
+ 				doneColor = 1;
+-				Log.i("dongdong","doneColor == 1" + "  " + (doneColor==1));
++				//Log.i("dongdong","doneColor == 1" + "  " + (doneColor==1));
+ 				if(linstener == null) linstener = linstener_copy;
+ 				defaultColor = getCheckedColor();
+ 				colorTmp = defaultColor;
+@@ -266,7 +301,7 @@
+ 
+ 	@Override
+     public void onSaveInstanceState(Bundle outState) {
+-		Log.i(TAG,"onSaveInstanceState()");
++		//Log.i(TAG,"onSaveInstanceState()");
+         outState.putInt("color_tmp", colorTmp);
+         super.onSaveInstanceState(outState);
+     }
+@@ -274,30 +309,30 @@
+ 	@Override
+     public void onStart() {
+         super.onStart();
+-		Log.i(TAG,"onStart()");
++		//Log.i(TAG,"onStart()");
+     }
+ 
+     @Override
+     public void onStop() {
+         super.onStop();
+-		Log.i(TAG,"onStop()");
++		//Log.i(TAG,"onStop()");
+     }
+ 
+     @Override
+     public void onDestroyView() {
+         super.onDestroyView();
+-		Log.i(TAG,"onDestoryView");
++		//Log.i(TAG,"onDestoryView");
+     }
+ 
+     @Override
+     public void onDetach() {
+         super.onDetach();
+-		Log.i(TAG,"onDetach()");
++		//Log.i(TAG,"onDetach()");
+     }
+ 
+     @Override
+     public void onAttach(Context context) {
+         super.onAttach(context);
+-		Log.i(TAG,"onAttach()");
++		//Log.i(TAG,"onAttach()");
+     }
+ }
+Index: packages/apps/Settings/res/layout/dialog_layout.xml
+===================================================================
+--- packages/apps/Settings/res/layout/dialog_layout.xml	(revision 6793)
++++ packages/apps/Settings/res/layout/dialog_layout.xml	(revision 6794)
+@@ -15,7 +15,15 @@
+         android:textColor="#000000"
+         android:typeface="normal" />
+ 
++    <ScrollView 
++		android:layout_width="wrap_content"
++		android:layout_height="wrap_content">
++	<LinearLayout
++		android:orientation="vertical"
++		android:layout_width="wrap_content"
++		android:layout_height="wrap_content">
+     <GridLayout
++		android:id="@+id/gridLayout"
+         android:layout_width="wrap_content"
+         android:layout_height="wrap_content"
+         android:layout_gravity="center"
+@@ -222,5 +230,7 @@
+             android:textSize="14sp" />
+ 
+     </RelativeLayout>
++	</LinearLayout>
++	</ScrollView>
+ 
+ </LinearLayout>
+\ No newline at end of file
+Index: packages/apps/Settings/res/layout-land/dialog_layout.xml
+===================================================================
+--- packages/apps/Settings/res/layout-land/dialog_layout.xml	(revision 6793)
++++ packages/apps/Settings/res/layout-land/dialog_layout.xml	(revision 6794)
+@@ -15,7 +15,16 @@
+         android:textColor="#000000"
+         android:typeface="normal" />
+ 
++	<ScrollView 
++		android:layout_width="wrap_content"
++		android:layout_height="wrap_content">
++	<LinearLayout
++		android:orientation="vertical"
++		android:layout_width="wrap_content"
++		android:layout_height="wrap_content">
++		
+     <GridLayout
++		android:id="@+id/gridLayout"
+         android:layout_width="wrap_content"
+         android:layout_height="wrap_content"
+         android:layout_gravity="center"
+@@ -194,6 +203,7 @@
+             android:background="@drawable/grey400_circle"
+             android:padding="1dp" />
+     </GridLayout>
++	
+ 
+     <RelativeLayout
+         android:layout_marginTop="24dp"
+@@ -222,5 +232,6 @@
+             android:textSize="14sp" />
+ 
+     </RelativeLayout>
+-
++	</LinearLayout>
++	</ScrollView>
+ </LinearLayout>
+\ No newline at end of file

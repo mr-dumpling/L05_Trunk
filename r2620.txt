@@ -1,0 +1,225 @@
+Index: vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/transaction/SmsMessageSender.java
+===================================================================
+--- vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/transaction/SmsMessageSender.java	(revision 2619)
++++ vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/transaction/SmsMessageSender.java	(revision 2620)
+@@ -48,7 +48,7 @@
+     protected final Context mContext;
+     protected final int mNumberOfDests;
+     private final String[] mDests;
+-    protected final String mMessageText;
++    protected String mMessageText;
+     protected final String mServiceCenter;
+     protected final long mThreadId;
+     protected int mSubId;
+@@ -98,11 +98,15 @@
+     private boolean queueMessage(long token) throws MmsException {
+         /// M:
+         MmsLog.i(MmsApp.TXN_TAG, "queueMessage()");
+-        if ((mMessageText == null) || mMessageText.isEmpty() || (mNumberOfDests == 0)) {
++        //if ((mMessageText == null) || mMessageText.isEmpty() || (mNumberOfDests == 0)) {
++        if (mNumberOfDests == 0) {
+             // Don't try to send an empty message.
+             throw new MmsException("Null message body or dest.");
+         }
+-
++        
++        if ((mMessageText == null) || mMessageText.isEmpty()){
++            mMessageText = " ";
++        }
+         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+         boolean requestDeliveryReport =
+             prefs.getBoolean(mSubId + "_" + SmsPreferenceActivity.SMS_DELIVERY_REPORT_MODE,
+Index: vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java
+===================================================================
+--- vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java	(revision 2619)
++++ vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java	(revision 2620)
+@@ -795,11 +795,14 @@
+      * to have text.
+      */
+     public boolean hasText() {
++        /*
+         if (requiresMms()) {
+             return mText != null && TextUtils.getTrimmedLength(mText) > 0;
+         } else {
+             return mText != null && !TextUtils.isEmpty(mText);
+         }
++        */
++        return true;
+     }
+ 
+     public void removeAttachment(boolean notify) {
+@@ -1046,7 +1049,7 @@
+                 + hasText() + ", hasSubject()=" + hasSubject()
+                 + ", hasAttachment()=" + hasAttachment() + ", hasSlideshow()=" + hasSlideshow());
+         // If it actually contains anything, it's of course not empty.
+-        if (hasText() || hasSubject() || hasAttachment() || hasSlideshow()) {
++        if (!TextUtils.isEmpty(mText) || hasSubject() || hasAttachment() || hasSlideshow()) {
+             return true;
+         }
+         // When saveAsMms() has been called, we set FORCE_MMS to represent
+Index: vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java
+===================================================================
+--- vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 2619)
++++ vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 2620)
+@@ -406,6 +406,8 @@
+     private AlertDialog mSmileyDialog;
+ 
+     private AlertDialog mDiscardDraftDialog;
++    
++    private AlertDialog mSendEmptyMessageConfirmDialog;
+ 
+     private boolean mWaitingForSubActivity;
+     private int mLastRecipientCount;    // Used for warning the user on too many recipients.
+@@ -1192,6 +1194,15 @@
+         }
+     }
+ 
++    private class SendEmptyMessageListener implements OnClickListener {
++        @Override
++        public void onClick(DialogInterface dialog, int whichButton) {
++            checkRecipientsCount();
++            dialog.dismiss();
++            mSendEmptyMessageConfirmDialog = null;
++        }
++    }
++    
+     private class SendIgnoreInvalidRecipientListener implements OnClickListener {
+         @Override
+         public void onClick(DialogInterface dialog, int whichButton) {
+@@ -4158,6 +4169,14 @@
+             mDiscardDraftDialog = null;
+         }
+     }
++    
++    private void dismissmSendEmptyMessageConfirmDialog() {
++        if (mSendEmptyMessageConfirmDialog != null && mSendEmptyMessageConfirmDialog.isShowing()) {
++            MmsLog.d(TAG, "dismissmSendEmptyMessageConfirmDialog");
++            mSendEmptyMessageConfirmDialog.dismiss();
++            mSendEmptyMessageConfirmDialog = null;
++        }
++    }
+ 
+     @Override
+     protected void onDestroy() {
+@@ -4167,6 +4186,7 @@
+             return;
+         }
+         dismissmDiscardDraftDialog();
++        dismissmSendEmptyMessageConfirmDialog();
+         /// it will not show draft icon in the conversationlist @{
+        if (!mWorkingMessage.isWorthSaving()) {
+                                    Log.i(TAG, "delete unsavedempty draft: ");
+@@ -4624,7 +4644,7 @@
+                 || ((mSubjectTextEditor == null || (mSubjectTextEditor != null
+                         && TextUtils.isEmpty(mSubjectTextEditor.getText().toString().trim())))
+                         && mTextEditor != null
+-                        && TextUtils.isEmpty(mTextEditor.getText().toString().trim())
++                        //&& TextUtils.isEmpty(mTextEditor.getText().toString().trim())
+                         && !mWorkingMessage.hasAttachment())
+                         || !mIsSmsEnabled) {
+             mSendButtonMms.setCompoundDrawablesWithIntrinsicBounds(null, null, null,
+@@ -4637,8 +4657,7 @@
+             hideButton = mSendButtonSms;
+         } else {
+             if (!mIpCompose.onIpShowSmsOrMmsSendButton(isMms)) {
+-                if ((mTextEditor.getText().toString().isEmpty())
+-                        || mSubCount == 0
++                if (mSubCount == 0
+                         || (isRecipientsEditorVisible()
+                                 && TextUtils.isEmpty(mRecipientsEditor.getText()))
+                         || recipientCount() > MmsConfig.getSmsRecipientLimit()
+@@ -6603,9 +6622,18 @@
+                 if (isPreparedForSending()) {
+                     /// M: Since sending message here, why not disable button 'Send'??
+                     updateSendButtonState(false);
+-                    checkRecipientsCount();
+-                    mUiHandler.sendEmptyMessageDelayed(MSG_RESUME_SEND_BUTTON,
+-                            RESUME_BUTTON_INTERVAL);
++                    if(TextUtils.isEmpty(mTextEditor.getText().toString().trim())){
++                        mSendEmptyMessageConfirmDialog = MessageUtils.showSendEmptyMessageConfirmDialog(this, new SendEmptyMessageListener());
++                        mSendEmptyMessageConfirmDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
++                            @Override
++                            public void onDismiss(DialogInterface dialog) {
++                                updateSendButtonState();
++                            }
++                        });
++                    }else{
++                        checkRecipientsCount();
++                    }
++                    mUiHandler.sendEmptyMessageDelayed(MSG_RESUME_SEND_BUTTON, RESUME_BUTTON_INTERVAL);
+                 } else {
+                     mSendButtonCanResponse = true;
+                     unpreparedForSendingAlert();
+Index: vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/mms/ui/DialogModeActivity.java
+===================================================================
+--- vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/mms/ui/DialogModeActivity.java	(revision 2619)
++++ vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/mms/ui/DialogModeActivity.java	(revision 2620)
+@@ -251,8 +251,10 @@
+ 
+     Runnable mResetMessageRunnable = new Runnable() {
+         public void run() {
+-            MmsLog.d(TAG, "mResetMessageRunnable.run");
+-            resetMessage();
++            if(mUris!= null && !mUris.isEmpty()){
++                MmsLog.d(TAG, "mResetMessageRunnable.run");
++                resetMessage();
++            }
+         }
+     };
+ 
+@@ -1956,7 +1958,7 @@
+         MmsLog.d(TAG, "DialogModeActivity.updateSendButtonState(): len = " + len);
+ 
+         if (mSendButton != null) {
+-            if (len > 0) {
++            if (len >= 0) {
+                 MmsLog.d(TAG, "updateSendButtonState(): mSubCount = " + mSubCount);
+ 
+                 /** M: MTK Encapsulation ITelephony */
+@@ -2336,7 +2338,9 @@
+ 
+     public void onPreMessageSent() {
+         MmsLog.d(TAG, "DialogModeActivity.onPreMessageSent");
+-        runOnUiThread(mResetMessageRunnable);
++        if(mUris!= null && !mUris.isEmpty()){
++            runOnUiThread(mResetMessageRunnable);
++        }
+     }
+ 
+     public void onMessageSent() {
+Index: vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/res/values-zh-rCN/strings.xml
+===================================================================
+--- vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/res/values-zh-rCN/strings.xml	(revision 2619)
++++ vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/res/values-zh-rCN/strings.xml	(revision 2620)
+@@ -391,4 +391,6 @@
+     <string name="delete_unsuccessful">删除失败！</string>
+     <string name="add_quick_text_successful">成功添加短语</string>
+     <string name="already_have_quick_text">此短语已存在！</string>
++    <string name="send_empty_message_title">空信息</string>
++    <string name="send_empty_message_message">是否发送空信息？</string>
+ </resources>
+Index: vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/res/values/strings.xml
+===================================================================
+--- vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/res/values/strings.xml	(revision 2619)
++++ vendor/branch/5058Y_EMEA/vendor/mediatek/proprietary/packages/apps/Mms/res/values/strings.xml	(revision 2620)
+@@ -845,5 +845,7 @@
+     <string name="hide_imm_cb_dialog">Hide</string>
+     <string name="title_imm_cb_dialog">Emergency Alert</string>
+     <!-- add lei.shi for [task1149499][CBC notification with pop up and tone alert + vibrate in CHILE] at 2015.12.14 end -->
++    <string name="send_empty_message_title">Empty Message</string>
++    <string name="send_empty_message_message">Send empty message?</string>
+ </resources>
+ 
+Index: vendor/branch/5058Y_EMEA/frameworks/opt/telephony/src/java/android/telephony/SmsManager.java
+===================================================================
+--- vendor/branch/5058Y_EMEA/frameworks/opt/telephony/src/java/android/telephony/SmsManager.java	(revision 2619)
++++ vendor/branch/5058Y_EMEA/frameworks/opt/telephony/src/java/android/telephony/SmsManager.java	(revision 2620)
+@@ -2044,7 +2044,7 @@
+             throw new IllegalArgumentException("Invalid destinationAddress");
+         }
+         if (parts == null || parts.size() < 1) {
+-            throw new IllegalArgumentException("Invalid message body");
++            //throw new IllegalArgumentException("Invalid message body");
+         }
+ 
+         return true;

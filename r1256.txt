@@ -1,0 +1,62 @@
+Index: packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1255)
++++ packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1256)
+@@ -69,8 +69,11 @@
+ import java.util.ArrayList;
+ import java.util.List;
+ import java.io.File;
++import java.io.FileReader;
++import java.io.IOException;
+ 
+ 
++
+ /**
+  * Helper class to listen for some magic character sequences
+  * that are handled specially by the dialer.
+@@ -116,7 +119,7 @@
+ 	private static final String MMI_TEST_FOR_TCL = "*#458#";	
+ 	private static final String INTERNAL_VER_FOR_TCL = "*#208*#";	
+ 	private static final String MMI_CHECK_ROOT= "*#858#";
+-	private static final String PRODUCT_INFO_NVRAM_PATH = "/data/nvram/APCFG/APRDEB/PRODUCT_INFO";
++	private static final String MMI_CHECK_Efused= "*#9463*5#";
+     /// @}
+ 
+     /**
+@@ -206,7 +209,7 @@
+                 ||handleCheckRoot(context, dialString)
+                 ||handleInternalVersion(context, dialString)
+                 ||handleExternalVersion(context, dialString)
+-                
++                ||handleCheckEfused(context, dialString)
+                 /// @}
+                 ) {
+             return true;
+@@ -656,6 +659,27 @@
+ 		}				 
+ 		return false;	   
+ 	}
++	static boolean handleCheckEfused(Context context, String input) {	 
++		if(input.equals(MMI_CHECK_Efused)) { 
++			int checkValue =-1;
++			File readFile = new File("proc/efuse_status");  
++        	FileReader inCmd;
++			try {
++				inCmd = new FileReader(readFile);
++				checkValue = inCmd.read();  
++			} catch (IOException e) {
++				e.printStackTrace();
++			}
++			AlertDialog alert = new AlertDialog.Builder(context)
++			.setTitle("Check Efuse")
++			.setMessage(checkValue ==1 ? "true" : "false")
++			.setPositiveButton(android.R.string.ok, null)
++			.setCancelable(false).create(); 
++			alert.show();
++			return true;
++		}		 
++		return false;	
++	}  
+ 	static boolean handleFactoryModeTest(Context context, String input) {	 
+ 		if(input.equals(MMI_TEST_FOR_TCL)) { 
+ 			Intent intent = new Intent(Intent.ACTION_MAIN); 

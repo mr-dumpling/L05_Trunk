@@ -1,0 +1,36 @@
+Index: frameworks/base/services/usb/java/com/android/server/usb/UsbSettingsManager.java
+===================================================================
+--- frameworks/base/services/usb/java/com/android/server/usb/UsbSettingsManager.java	(revision 4857)
++++ frameworks/base/services/usb/java/com/android/server/usb/UsbSettingsManager.java	(revision 4858)
+@@ -732,6 +732,16 @@
+         return matches;
+     }
+ 
++	//Qj modify for 115682 no usb icon show when usb-otg connected by zhangle at 2018/01/02 start.
++	private boolean isDeviceMouse(UsbDevice device) {
++		if(device != null && device.getProductName() != null && device.getProductName().toLowerCase().contains("mouse")) {
++            Slog.d(TAG,"[deviceAttached]device name = " + device.getProductName());
++			return true;
++        }
++		return false;
++	}
++	//Qj modify for 115682 no usb icon show when usb-otg connected by zhangle at 2018/01/02 end.
++
+     public void deviceAttached(UsbDevice device) {
+         final Intent intent = createDeviceAttachedIntent(device);
+ 
+@@ -738,6 +748,14 @@
+         // Send broadcast to running activity with registered intent
+         mUserContext.sendBroadcast(intent);
+ 
++		// Qj modify for 115682 no usb icon show when usb-otg connected by zhangle at 2018/01/02 start.
++		// WARNNING:For original code,only when device is storage or in MTP mode,system will update usb icon on status bar.
++		// This modification customized for 115682 to show usb icon when device name is "mouse".
++		if (isDeviceMouse(device)) {
++			mMtpNotificationManager.showNotification(device);
++		}
++		// Qj modify for 115682 no usb icon show when usb-otg connected by zhangle at 2018/01/02 end.
++
+         if (MtpNotificationManager.shouldShowNotification(mPackageManager, device)) {
+             // Show notification if the device is MTP storage.
+             mMtpNotificationManager.showNotification(device);

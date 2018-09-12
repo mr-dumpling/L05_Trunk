@@ -1,0 +1,523 @@
+Index: packages/apps/CarrierConfig/assets/carrier_config_71610.xml
+===================================================================
+--- packages/apps/CarrierConfig/assets/carrier_config_71610.xml	(revision 0)
++++ packages/apps/CarrierConfig/assets/carrier_config_71610.xml	(revision 6750)
+@@ -0,0 +1,6 @@
++<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
++<carrier_config_list>
++<carrier_config>
++<boolean name="carrier_avoid_cmas_list_bool" value="true" />
++</carrier_config>
++</carrier_config_list>
+\ No newline at end of file
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 6749)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 6750)
+@@ -213,6 +213,10 @@
+ 		if (CellBroadcastReceiverApp.isCellAreaInChile() && CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), message.getServiceCategory()) && isMessageEnabledByUser(cbm)) {
+ 			SystemProperties.set("persist.sys.cmasalert", "1");
+ 		}
++		
++		if (CellBroadcastReceiverApp.isCellAreaInPeru() && CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), message.getServiceCategory()) && isMessageEnabledByUser(cbm)) {
++			SystemProperties.set("persist.sys.cmasalert", "1");
++		}
+ 
+         // Check for duplicate message IDs according to CMAS carrier requirements. Message IDs
+         // are stored in volatile memory. If the maximum of 65535 messages is reached, the
+@@ -279,8 +283,9 @@
+         }	
+ 		
+ 		
+-		if (CellBroadcastReceiverApp.isCellAreaInChile() && CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), cbm.getServiceCategory())) {
+-			Log.e(TAG, "received CMAS Chile emergency cb message");
++		if ((CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) && 
++				CellBroadcastReceiverApp.isCmasDefaultChannel(getApplicationContext(), cbm.getServiceCategory())) {
++			Log.e(TAG, "received CMAS Chile/Pure emergency cb message");
+ 			return;
+ 		}
+ 
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 6749)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 6750)
+@@ -47,6 +47,9 @@
+     private static boolean sIsCellAreaInTw = false;
+     // For Chile SAE
+     private static boolean sIsCellAreaInChile = false;
++	// For Pure CMAS
++	private static boolean sIsCellAreaInPeru = false;
++	
+     @Override
+     public void onCreate() {
+         super.onCreate();
+@@ -77,7 +80,9 @@
+                         sIsCellAreaInChile = true;
+                     } else if (mcc.equals("732")) {
+                         sIsCellAreaInChile = true;
+-                    } else {
++                    } else if (mcc.equals("716")) {
++						sIsCellAreaInPeru = true;
++					} else {
+                         sIsCellAreaInTw = false;
+                         sIsCellAreaInChile = false;
+                     }
+@@ -101,6 +106,14 @@
+     public static boolean isCellAreaInChile() {
+         return sIsCellAreaInChile;
+     }
++	
++	/**
++     * Check if user in Pure or any other region.
++     * @return true if in Pure
++     */
++    public static boolean isCellAreaInPeru() {
++        return sIsCellAreaInPeru;
++    }
+ 
+     /** Set Cell area basedon MCC.
+      * @param mcc mcc from SIM Operator
+@@ -110,7 +123,9 @@
+             sIsCellAreaInTw = true;
+         } else if (mcc.equals("730")) {
+             sIsCellAreaInChile = true;
+-        }
++		} else if (mcc.equals("716")) {
++			sIsCellAreaInPeru = true;
++		}
+     }
+     // For Taiwan PWS-END
+ 
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/AndroidManifest.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/AndroidManifest.xml	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/AndroidManifest.xml	(revision 6750)
+@@ -32,6 +32,7 @@
+     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+     <uses-permission android:name="android.permission.INTERNAL_SYSTEM_WINDOW"/>
+     <uses-permission android:name="android.permission.READ_SEARCH_INDEXABLES" />
++	<uses-permission android:name="android.permission.DEVICE_POWER" />  
+ 
+     <application android:name="CellBroadcastReceiverApp"
+             android:label="@string/app_label"
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertLinearLayout.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertLinearLayout.java	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertLinearLayout.java	(revision 6750)
+@@ -22,7 +22,8 @@
+     @Override
+     public boolean dispatchKeyEvent(KeyEvent event) {
+         if (event.getAction() == KeyEvent.ACTION_DOWN &&
+-                !CellBroadcastReceiverApp.isCellAreaInChile()) {
++                !CellBroadcastReceiverApp.isCellAreaInChile() &&
++				!CellBroadcastReceiverApp.isCellAreaInPeru()) {
+             switch (event.getKeyCode()) {
+                 case KeyEvent.KEYCODE_VOLUME_UP:
+                 case KeyEvent.KEYCODE_VOLUME_DOWN:
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASUtils.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASUtils.java	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASUtils.java	(revision 6750)
+@@ -33,7 +33,7 @@
+     }
+ 
+     public static String convertMsgId2Str(int msgId) {
+-          if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++          if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
+             if (msgId == 919 || msgId == 921 || (msgId > 4370 && msgId < 4399) || msgId == 4411) {
+                 if (msgId == 919 || msgId == 921) {
+                     return "MsgId" + String.valueOf(msgId - 919 + 1);
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 6750)
+@@ -214,6 +214,10 @@
+ 		if (CellBroadcastReceiverApp.isCmasDefaultChannel(cbm.getServiceCategory()) && CellBroadcastReceiverApp.isCellAreaInChile() && isMessageEnabledByUser(cbm)) {
+ 			SystemProperties.set(PROPERTY_CMAS_ALERT, "1");
+ 		}
++		
++		if (CellBroadcastReceiverApp.isCmasDefaultChannel(cbm.getServiceCategory()) && CellBroadcastReceiverApp.isCellAreaInPeru() && isMessageEnabledByUser(cbm)) {
++			SystemProperties.set(PROPERTY_CMAS_ALERT, "1");
++		}
+ 
+         // write to database on a background thread
+         new CellBroadcastContentProvider.AsyncCellBroadcastTask(getContentResolver())
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 6750)
+@@ -373,9 +373,6 @@
+                 mEnableAudio = true;
+                 break;
+         }
+-        if (CellBroadcastReceiverApp.isCellAreaInChile()) {
+-            mEnableVibrate = true;
+-        }
+ 
+         ICmasMainSettingsExt optSetAlertAudioVibration = (ICmasMainSettingsExt)
+                 CellBroadcastPluginManager.getCellBroadcastPluginObject(
+@@ -385,7 +382,7 @@
+             mEnableVibrate = optSetAlertAudioVibration.setAlertVolumeVibrate(mMessageId, mEnableVibrate);
+ 		
+ 		// add by dongdongli for Ringtone & vibrate work on total silent mode
+-		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++		if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
+             mEnableAudio = true;
+             mEnableVibrate = true;
+         }	
+@@ -428,8 +425,7 @@
+         // stop() checks to see if we are already playing.
+         stop();
+ 
+-		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
+-			Log.i(TAG, "setStreamVolume " + mAudioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM));
++		if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
+             mAudioManager.setStreamVolume(AudioManager.STREAM_ALARM, mAudioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM) ,0);
+         }
+ 		
+@@ -441,7 +437,8 @@
+                     (mMessageId == 919 || mMessageId == 911)) {
+                 final long[] sVibratePattern919 = {0, 2000, 500, 500};
+                 mVibrator.vibrate(sVibratePattern919, -1);
+-            } else if(CellBroadcastReceiverApp.isCellAreaInChile() && CellBroadcastReceiverApp.isCmasDefaultChannel(mMessageId)){
++            } else if((CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) 
++						&& CellBroadcastReceiverApp.isCmasDefaultChannel(mMessageId)){
+ 				final long[] sVibratePattern4370 = {0, 2000, 500, 1000, 500, 1000, 500};
+ 				mVibrator.vibrate(sVibratePattern4370, 1);
+ 			}else {
+@@ -488,7 +485,7 @@
+                         (mMessageId == 919 || mMessageId == 911)) {
+                     setDataSourceFromResource(getResources(), mMediaPlayer,
+                             R.raw.pixiedust);
+-                } else  if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++                } else  if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
+                     setDataSourceFromResource(getResources(), mMediaPlayer,
+                             R.raw.tono_chile_sae);
+                } else {
+@@ -517,7 +514,10 @@
+         } else if (CellBroadcastReceiverApp.isCellAreaInChile()) {
+             // stop alert after the specified duration
+             mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_CONTINUE), 24*60*60*1000);
+-        } else {
++        } else if (CellBroadcastReceiverApp.isCellAreaInPeru()){
++			// stop alert after the peru specified duration (3min)
++            mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_STOP), 3*60*1000);
++		} else {
+              mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_FINISHED), mDuration);
+         }
+ 
+@@ -607,7 +607,7 @@
+      */
+     private void schedulePlay() {
+          //if (mAudioManager.getRingerMode() != AudioManager.RINGER_MODE_SILENT) {
+-             if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++             if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
+                 mEnableRepeat =  false;
+                 mHandler.sendMessageDelayed(mHandler.obtainMessage(ALERT_SOUND_STOP), 300000);
+             }
+@@ -633,7 +633,7 @@
+      * @return
+      */
+     private boolean forceAlert() {
+-		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++		if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
+             return true;
+         }
+         boolean isSilentMode = mAudioManager.getRingerMode() == AudioManager.RINGER_MODE_SILENT;
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CMASAlertFullWindow.java	(revision 6750)
+@@ -27,7 +27,9 @@
+ import com.mediatek.cmas.ext.DefaultCmasMessageInitiationExt.IAutoLinkClick;
+ import java.text.SimpleDateFormat;
+ import android.os.SystemProperties;
++import android.os.PowerManager;
+ 
++
+ public class CMASAlertFullWindow {
+ 
+     private static CMASAlertFullWindow sInstance = null;
+@@ -48,6 +50,7 @@
+     private static WindowManager sWindowManager;
+ 
+     private static final int CLEAR_SCREEN_FLAG = 1;
++	private static final int SCREEN_OFF_FLAG = 2;
+ 
+     private static final int ALERT_TIME_LENGTH = 10500; //10.5s
+ 
+@@ -90,6 +93,11 @@
+ 
+             }
+         }
++		
++		private void screenGoToSleep(){
++			PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
++			pm.goToSleep(SystemClock.uptimeMillis());
++		}
+ 
+         @Override
+         public void handleMessage(Message msg) {
+@@ -99,7 +107,11 @@
+                 case CLEAR_SCREEN_FLAG:
+                     clearWindowFlags((ViewInfo) msg.obj);
+                     break;
+-
++				case SCREEN_OFF_FLAG:
++					clearWindowFlags((ViewInfo) msg.obj);
++					
++					screenGoToSleep();
++                    break;
+                 default:
+                     break;
+             }
+@@ -145,7 +157,7 @@
+             public boolean onKey(View arg0, int arg1, KeyEvent arg2) {
+                 // TODO Auto-generated method stub
+                 Log.i(TAG, "onKey:: arg1 = " + arg1);
+-				if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++				if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
+ 					if(arg1==KeyEvent.KEYCODE_VOLUME_DOWN){
+ 						return true;
+ 					}
+@@ -247,11 +259,18 @@
+         sWindowManager.addView(view, lp);
+ 
+         Message msg = new Message();
+-        msg.what = CLEAR_SCREEN_FLAG;
++		if (CellBroadcastReceiverApp.isCellAreaInPeru()){
++			msg.what = SCREEN_OFF_FLAG;
++		} else {
++			msg.what = CLEAR_SCREEN_FLAG;
++		}
+         msg.obj = vInfo;
+ 		if (CellBroadcastReceiverApp.isCmasDefaultChannel(message.getServiceCategory()) && CellBroadcastReceiverApp.isCellAreaInChile()) {
+ 			mScreenOffHandler.sendMessageDelayed(msg, 24*60*60*1000);
+-		} else {	
++		} else if(CellBroadcastReceiverApp.isCmasDefaultChannel(message.getServiceCategory()) && CellBroadcastReceiverApp.isCellAreaInPeru()) {
++			Log.i("dongdong","set screenoff after 3min");
++			mScreenOffHandler.sendMessageDelayed(msg, 3*60*1000);
++		} else {
+ 			mScreenOffHandler.sendMessageDelayed(msg, ALERT_TIME_LENGTH);
+ 		}
+     }
+@@ -423,7 +442,8 @@
+         TextView titleTextView = (TextView) view.findViewById(R.id.alertTitle);
+         if (Comparer.getUpdateNumOfCb(message) > 0 &&
+                 !(CellBroadcastReceiverApp.isCellAreaInTw()) &&
+-                !(CellBroadcastReceiverApp.isCellAreaInChile())
++                !(CellBroadcastReceiverApp.isCellAreaInChile()) &&
++				!(CellBroadcastReceiverApp.isCellAreaInPeru())
+                 ) {
+             // >0 update message
+             Log.i(TAG, "updateAlertText::this is update message");
+@@ -434,7 +454,7 @@
+             titleTextView.setText(titleId);
+         }
+ 		
+-		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++		if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
+ 			titleTextView.setGravity(Gravity.CENTER);
+ 		}
+ 
+@@ -488,7 +508,7 @@
+             alertIcon.setImageDrawable(mContext.getResources().getDrawable(
+                     R.drawable.ic_dialog_alarm));
+         }
+-		if (CellBroadcastReceiverApp.isCellAreaInChile()) {
++		if (CellBroadcastReceiverApp.isCellAreaInChile() || CellBroadcastReceiverApp.isCellAreaInPeru()) {
+ 			alertIcon.setVisibility(View.GONE);
+ 		}
+     }
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastReceiverApp.java	(revision 6750)
+@@ -42,6 +42,8 @@
+     private static boolean sIsCellAreaInTw = false;
+     // For Chile SAE
+     private static boolean sIsCellAreaInChile = false;
++	// For Peru CMAS
++	private static boolean sIsCellAreaInPeru = false;
+ 
+     @Override
+     public void onCreate() {
+@@ -81,7 +83,9 @@
+                         sIsCellAreaInChile = true;
+                     } else if (mcc.equals("732")) {
+                         sIsCellAreaInChile = true;
+-                    } else {
++                    } else if (mcc.equals("716")) {
++						sIsCellAreaInPeru = true;
++					} else {
+                         sIsCellAreaInTw = false;
+                         sIsCellAreaInChile = false;
+                     }
+@@ -105,6 +109,14 @@
+     public static boolean isCellAreaInChile() {
+         return sIsCellAreaInChile;
+     }
++	
++	/**
++     * Check if user in Chile or any other region.
++     * @return true if in chile
++     */
++    public static boolean isCellAreaInPeru() {
++        return sIsCellAreaInPeru;
++    }
+ 
+     /** Set Cell area basedon MCC.
+      * @param mcc mcc from SIM Operator
+@@ -114,7 +126,9 @@
+             sIsCellAreaInTw = true;
+         } else if (mcc.equals("730")) {
+             sIsCellAreaInChile = true;
+-        }
++        } else if (mcc.equals("716")) {
++			sIsCellAreaInPeru = true;
++		}
+     }
+     // For Taiwan PWS-END
+ 
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastResources.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastResources.java	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastResources.java	(revision 6750)
+@@ -241,6 +241,32 @@
+        if (CellBroadcastReceiverApp.isCellAreaInChile()) {
+             return R.string.chile_emergency_alert;
+         }
++		
++		if (CellBroadcastReceiverApp.isCellAreaInPeru()) {
++			if (cbm.getServiceCategory() == 4370 || cbm.getServiceCategory() == 4383 || cbm.getServiceCategory() == 919) {
++				// Emergency Alert {Alerta de Emergencia(es)}
++				return R.string.peru_emergency_alert_4370_4383;
++			} else if (cbm.getServiceCategory() == 4382) {
++				// Informative Message {Mensaje Informativo(es)}
++				return R.string.peru_emergency_alert_4382;
++			} else if (cbm.getServiceCategory() == 4380) {
++				// Emergency Alert – Test message  {Alerta de Emergencia - mensaje de Prueba(es)}
++				return R.string.peru_emergency_alert_4380;
++			} else if (cbm.getServiceCategory() == 4381) {
++				// Emergency Alert – Exercise / Drill message  {Alerta de Emergencia – mensaje de Ejercicio / Simulacro (es)}
++				return R.string.peru_emergency_alert_4381;
++			} else if (cbm.getServiceCategory() == 4396 || cbm.getServiceCategory() == 4397 || 
++						cbm.getServiceCategory() == 4398 || cbm.getServiceCategory() == 4399) {
++				// Reserved {Reservado(es)}
++				return R.string.peru_emergency_alert_4396_4397_4398_4399;
++			} else {
++				if (CellBroadcastConfigService.isEmergencyAlertMessage(cbm)) {
++					return R.string.pws_other_message_identifiers;
++				} else {
++					return R.string.cb_other_message_identifiers;
++				}
++			}
++		}
+         // ETWS warning types
+         SmsCbEtwsInfo etwsInfo = cbm.getEtwsWarningInfo();
+         if (etwsInfo != null) {
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es/mtk_string.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es/mtk_string.xml	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es/mtk_string.xml	(revision 6750)
+@@ -47,4 +47,9 @@
+     <string name="alert_sound_volume">Volumen del sonido de alerta</string>
+     <string name="alert_volume_summary">Ajustar el volumen de sonido de alerta</string>
+ 	<string name="chile_emergency_alert">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4370_4383">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4382">Mensaje Informativo</string>
++	<string name="peru_emergency_alert_4380">Alerta de Emergencia \u2011 mensaje de Prueba</string>
++	<string name="peru_emergency_alert_4381">Alerta de Emergencia \u2011 mensaje de Ejercicio / Simulacro</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reservado</string>
+ </resources>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rES/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rES/strings.xml	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rES/strings.xml	(revision 6750)
+@@ -8,7 +8,7 @@
+     <string name="sms_cb_settings">Ajustes del interruptor de alertas</string>
+ 
+     <!-- Text for dismiss button in broadcast message view dialog. [CHAR LIMIT=25] -->
+-    <string name="button_dismiss">Aceptar</string>
++    <string name="button_dismiss">Ocultar</string>
+ 
+     <!-- Text for list view when empty (no broadcasts). [CHAR LIMIT=200] -->
+     <string name="no_cell_broadcasts">No hay alertas activas en su área. Puede cambiar los ajustes de alertas con la opción de menú Ajustes.</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rES/mtk_string.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rES/mtk_string.xml	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rES/mtk_string.xml	(revision 6750)
+@@ -40,5 +40,10 @@
+     <string name="alert_volume_summary">Ajustar volumen de alerta de sonido</string>
+ 	
+ 	<string name="chile_emergency_alert">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4370_4383">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4382">Mensaje Informativo</string>
++	<string name="peru_emergency_alert_4380">Alerta de Emergencia \u2011 mensaje de Prueba</string>
++	<string name="peru_emergency_alert_4381">Alerta de Emergencia \u2011 mensaje de Ejercicio / Simulacro</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reservado</string>
+     
+ </resources>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/mtk_string.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/mtk_string.xml	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values/mtk_string.xml	(revision 6750)
+@@ -40,5 +40,10 @@
+     <string name="alert_volume_summary">Adjust alert sound volume</string>
+ 	
+ 	<string name="chile_emergency_alert">Emergency Alert</string>
++	<string name="peru_emergency_alert_4370_4383">Emergency Alert</string>
++	<string name="peru_emergency_alert_4382">Informative Message</string>
++	<string name="peru_emergency_alert_4380">Emergency Alert – Test message</string>
++	<string name="peru_emergency_alert_4381">Emergency Alert – Exercise / Drill message</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reserved</string>
+     
+ </resources>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rMX/mtk_string.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rMX/mtk_string.xml	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rMX/mtk_string.xml	(revision 6750)
+@@ -40,5 +40,10 @@
+     <string name="alert_volume_summary">Ajustar volumen de sonido de alerta</string>
+ 	
+ 	<string name="chile_emergency_alert">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4370_4383">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4382">Mensaje Informativo</string>
++	<string name="peru_emergency_alert_4380">Alerta de Emergencia \u2011 mensaje de Prueba</string>
++	<string name="peru_emergency_alert_4381">Alerta de Emergencia \u2011 mensaje de Ejercicio / Simulacro</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reservado</string>
+     
+ </resources>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rMX/strings.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rMX/strings.xml	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rMX/strings.xml	(revision 6750)
+@@ -8,7 +8,7 @@
+     <string name="sms_cb_settings">Ajustes cambio de alerta</string>
+ 
+     <!-- Text for dismiss button in broadcast message view dialog. [CHAR LIMIT=25] -->
+-    <string name="button_dismiss">Aceptar</string>
++    <string name="button_dismiss">Ocultar</string>
+ 
+     <!-- Text for list view when empty (no broadcasts). [CHAR LIMIT=200] -->
+     <string name="no_cell_broadcasts">No hay alertas activas en su área. Puede cambiar los ajustes de alertas con la opción de menú Ajustes.</string>
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/mtk_string.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/mtk_string.xml	(revision 6749)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/res/values-es-rUS/mtk_string.xml	(revision 6750)
+@@ -40,5 +40,10 @@
+     <string name="alert_volume_summary">Ajustar volumen de sonido de alerta</string>
+ 	
+ 	<string name="chile_emergency_alert">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4370_4383">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4382">Mensaje Informativo</string>
++	<string name="peru_emergency_alert_4380">Alerta de Emergencia \u2011 mensaje de Prueba</string>
++	<string name="peru_emergency_alert_4381">Alerta de Emergencia \u2011 mensaje de Ejercicio / Simulacro</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reservado</string>
+     
+ </resources>
+\ No newline at end of file

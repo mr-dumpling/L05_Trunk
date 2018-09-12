@@ -1,0 +1,476 @@
+Index: frameworks/base/packages/SystemUI/src/com/face/scanner/LiteManager.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/face/scanner/LiteManager.java	(revision 7215)
++++ frameworks/base/packages/SystemUI/src/com/face/scanner/LiteManager.java	(revision 7216)
+@@ -75,7 +75,7 @@
+ 		String livePath1 = "";
+         String livePath2 = "";
+         File dir = mContext.getExternalFilesDir("megvii");
+-        if (!dir.exists()) {
++        if (dir == null || !dir.exists()) {
+             Log.i("zxp","dir.exists()");
+ 			return;
+         }
+Index: frameworks/base/packages/SystemUI
+===================================================================
+--- frameworks/base/packages/SystemUI	(revision 7215)
++++ frameworks/base/packages/SystemUI	(revision 7216)
+
+Property changes on: frameworks/base/packages/SystemUI
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/CMCC_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE/frameworks/base/packages/SystemUI:r7185-7194
+Index: frameworks/base/packages
+===================================================================
+--- frameworks/base/packages	(revision 7215)
++++ frameworks/base/packages	(revision 7216)
+
+Property changes on: frameworks/base/packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/CMCC_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE/frameworks/base/packages:r7185-7194
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 7215)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 7216)
+@@ -7186,8 +7186,9 @@
+ 	
+ 	
+ 	    private void startFaceVerify() { //startFaceVerifyInternal
++		Log.d(TAG,"startFaceVerify():keyguardOn()="+keyguardOn());
+ 	
+-        if (keyguardOn() /*&& !isSimPinKeyguardStart && !inCall() && !isSwitchingUser zxp*/) {
++        //if (keyguardOn() /*&& !isSimPinKeyguardStart && !inCall() && !isSwitchingUser zxp*/) {
+             String faceEnable = Settings.System.getStringForUser(mContext.getContentResolver(), Settings.System.FACE_STATE_ENABLED, 0);
+             int faceUnlockState = Settings.System.getInt(mContext.getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
+             if (faceEnable == null) {
+@@ -7200,9 +7201,9 @@
+                 }
+             }
+ 			Slog.d(TAG, "faceEnable = "+faceEnable);
+-        } else {
+-             Slog.d(TAG, "--can't bind FaceService mFaceVerifyRun:");
+-        }
++        //} else {
++         //    Slog.d(TAG, "--can't bind FaceService mFaceVerifyRun:");
++        //}
+     }
+     private void bindFaceService() {
+         Intent intent = new Intent();
+@@ -7234,7 +7235,8 @@
+     @Override
+     public void screenTurnedOff() {
+         if (DEBUG_WAKEUP) Slog.i(TAG, "Screen turned off...");
+-
++		Log.d("zxp","exitFaceVerify when screenTurnedOff ");
++		exitFaceVerify();
+         updateScreenOffSleepToken(true);
+         synchronized (mLock) {
+             mScreenOnEarly = false;
+Index: frameworks/base/services
+===================================================================
+--- frameworks/base/services	(revision 7215)
++++ frameworks/base/services	(revision 7216)
+
+Property changes on: frameworks/base/services
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/CMCC_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE/frameworks/base/services:r7185-7194
+Index: frameworks/base
+===================================================================
+--- frameworks/base	(revision 7215)
++++ frameworks/base	(revision 7216)
+
+Property changes on: frameworks/base
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/CMCC_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE/frameworks/base:r7185-7194
+Index: packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 7215)
++++ packages/apps/Settings/src/com/android/settings/faceunlock/FaceUnlockMainActivity.java	(revision 7216)
+@@ -74,9 +74,7 @@
+     private static final int FACE_REMOVE_REQUEST = 302;
+     private static final int FROM_SETTING = 400;
+ 
+-    private static final int REFLASUH_UI_ENTRY_FACEDATA_NUM = 11;
+-	private int isPrivacyMode = 0;  //added by iuv luyang
+-	private final PrivacyObserver mPrivacyObserver = new PrivacyObserver(); //added by iuv luyang
++    private static final int REFLASUH_UI_ENTRY_FACEDATA_NUM = 11; 
+ 	private Button start_btn;
+ 	private Context mcontext;
+ 	private ActionBar myactionbar;
+@@ -89,11 +87,10 @@
+ 			face_unlock_main_layout,circle_layout;
+ 	private ViewPager mPager;
+ 	public AlertDialog mAlertDialog;
+-	private MyFragmentPagerAdapter madapter;
++
+ 	private FragmentManager fm;
+ 	private LinearLayout face_unlock_manager_title, mLinearLayout;
+ 	
+-	/**IUV:add-start for faceLock use by yunlong.shen on 2017/06/30 */
+ 	private RelativeLayout face_security_layout, face_excrypted_content_layout, face_app_lock_layout;
+ 	private static final int INIT_ACTIONBAR_NUM = -1;
+ 	private static final int LAYOUT_SECURITY_SYSTEM_NUM = 1;
+@@ -105,19 +102,14 @@
+ 	private Fragment fragment_one, fragment_two;
+ 	private boolean isExistSafetyPwd = false;
+ 	private boolean verificationPassed = false;
+-	//IUV_ADD by weimingwei on 20170719
+ 	private boolean faceUnlockNew = false;
+     private boolean scannerStart = false;
+-	//IUV_END
+-
+ 	private ArrayList<Fragment> fragmentlists = new ArrayList<Fragment>();
+-	//Add by junwei.shen, for bug-100515, at 2017.7.5
+ 	private boolean faceIsDelSuccess = false;
+ 	private Handler mhandler = new Handler() {
+ 
+ 		@Override
+ 		public void handleMessage(Message msg) {
+-			// TODO Auto-generated method stub
+ 			super.handleMessage(msg);
+ 			switch (msg.what) {
+ 			case 0x01:
+@@ -126,7 +118,6 @@
+ 			case REFLASUH_UI_ENTRY_FACEDATA_NUM:
+ 				if(isExistFaceData()){
+ 					setBackgroundTheme();
+-					//setTheme(R.style.Theme_ShenSettings);
+ 					face_unlock_manager_title.setVisibility(View.VISIBLE);
+ 					face_unlock_manager_layout.setVisibility(View.VISIBLE);
+ 					face_unlock_main_layout.setVisibility(View.GONE);
+@@ -133,19 +124,13 @@
+ 					initCustomActionBar();
+ 				}else{
+ 					setBackgroundTheme();
+-					//setTheme(R.style.Theme_FaceUnlockNoStyle);
+ 					face_unlock_manager_title.setVisibility(View.GONE);
+ 					face_unlock_manager_layout.setVisibility(View.GONE);
+ 					face_unlock_main_layout.setVisibility(View.VISIBLE);
+-					//Begin: add by junwei.shen, for bug-100515, at 2017.7.5
+ 					if (faceIsDelSuccess == true) {
+ 						Toast.makeText(mcontext,R.string.delete_success,Toast.LENGTH_SHORT).show();
+ 						faceIsDelSuccess = false;
+ 					}
+-					if (faceIsDelSuccess == false) {
+-//                        Toast.makeText(mcontext,R.string.ic_is_privacy_mode_can_use,Toast.LENGTH_SHORT).show();
+-					}
+-					//End: add by junwei.shen, for bug-100515, at 2017.7.5
+ 				}
+ 				break;
+ 			default:
+@@ -157,9 +142,7 @@
+ 
+ 	@Override
+ 	protected void onResume() {
+-		// TODO Auto-generated method stub
+ 		super.onResume();
+-		//IUV_ADD by weimingwei on 20170719
+ 		if(isExistFaceData()){
+             if(!verificationPassed && !faceUnlockNew){
+ 			    verifypassword();			
+@@ -168,7 +151,6 @@
+ 
+ 		if(isExistFaceData()){
+ 			setBackgroundTheme();
+-			//setTheme(R.style.Theme_ShenSettings);
+ 			face_unlock_manager_title.setVisibility(View.VISIBLE);
+ 			face_unlock_manager_layout.setVisibility(View.VISIBLE);
+ 			face_unlock_main_layout.setVisibility(View.GONE);
+@@ -175,7 +157,6 @@
+ 			initCustomActionBar();
+ 		}else{
+ 			setBackgroundTheme();
+-			//setTheme(R.style.Theme_FaceUnlockNoStyle);
+ 			face_unlock_manager_title.setVisibility(View.GONE);
+ 			face_unlock_manager_layout.setVisibility(View.GONE);
+ 			face_unlock_main_layout.setVisibility(View.VISIBLE);
+@@ -194,7 +175,7 @@
+ 	protected void onCreate(Bundle savedInstanceState) {
+ 		super.onCreate(savedInstanceState);
+ 		mcontext = FaceUnlockMainActivity.this;
+-		mPrivacyObserver.register(true); //added by iuv luyang
++
+ 		if (!isExistFaceData()) {
+ 			setBackgroundTheme();
+ 		}
+@@ -232,39 +213,12 @@
+ 		fragmentlists.add(fragment_one);
+ 		fragmentlists.add(fragment_two);
+ 
+-		madapter = new MyFragmentPagerAdapter(fm, fragmentlists);
+ 
+-		mPager.setAdapter(madapter);
+-		mPager.setCurrentItem(0);
+-		mPager.setOnPageChangeListener(new MyOnPageChangeListener());
+-	}
+-	
+-	public class MyOnPageChangeListener implements OnPageChangeListener {
+ 
+-		@Override
+-		public void onPageScrollStateChanged(int arg0) {
+-			// TODO Auto-generated method stub
+-		}
+ 
+-		@Override
+-		public void onPageScrolled(int arg0, float arg1, int arg2) {
+-			// TODO Auto-generated method stub
+ 
+-		}
++	}
+ 
+-		@Override
+-		public void onPageSelected(int arg0) {
+-			// TODO Auto-generated method stub
+-
+-			if (arg0 == 0) {
+-				circle_01.setPressed(true);
+-				circle_03.setPressed(false);
+-			} else if (arg0 == 1) {
+-				circle_01.setPressed(false);
+-				circle_03.setPressed(true);
+-			}
+-		}
+-	}
+ 	
+ 
+ 	private void getViews() {
+@@ -272,52 +226,16 @@
+ 		start_btn = (Button) findViewById(R.id.face_unlock_main_start_btn);
+ 		start_btn.setTag(START_ENTRY_BTN_NUM);
+ 		start_btn.setOnClickListener(this);
+-		
+-		circle_01 = (ImageView)findViewById(R.id.circle_01);
+-		circle_01.setPressed(true);
+-		circle_03 = (ImageView)findViewById(R.id.circle_03);
+-		circle_layout= (RelativeLayout) findViewById(R.id.circle_layout);
+-
++	
+ 		face_unlock_manager_title = (LinearLayout) findViewById(R.id.face_unlock_manager_title);
+ 		face_unlock_manager_layout = (RelativeLayout) findViewById(R.id.face_unlock_manager_layout);
+ 		face_unlock_manager_layout.setTag(FACE_MANAGER_LAYOUT_NUM);
+ 		face_unlock_manager_layout.setOnClickListener(this);
+ 		face_unlock_main_layout = (RelativeLayout) findViewById(R.id.face_unlock_main_layout);
+-		/**IUV:add-end
+-
+-		face_security_layout = (RelativeLayout) findViewById(R.id.face_security_layout);
+-		face_security_layout.setOnClickListener(new MyFaceMainOnClick(LAYOUT_SECURITY_SYSTEM_NUM));
+-		face_excrypted_content_layout = (RelativeLayout) findViewById(R.id.face_excrypted_content_layout);
+-		face_excrypted_content_layout.setOnClickListener(new MyFaceMainOnClick(LAYOUT_EXCRPTED_CONTENT_NUM));
+-		face_app_lock_layout = (RelativeLayout) findViewById(R.id.face_app_lock_layout);
+-		face_app_lock_layout.setOnClickListener(new MyFaceMainOnClick(LAYOUT_APP_UNLOCK_NUM));
+-		
+-		
+-		face_unlock_private_model_title = (TextView)findViewById(R.id.face_unlock_private_model_title);zxp*/
+ 		face_unlock_demonstration_model_title = (TextView)findViewById(R.id.face_unlock_demonstration_model_title);
+-		/*
+-		private_model_layout = (RelativeLayout) findViewById(R.id.face_unlock_private_model_layout);
+-		private_model_layout.setTag(PRIVATE_MODEL_LAYOUT_NUM);
+-		private_model_layout.setOnClickListener(this);zxp*/
+-
+ 		demonstration_model_layout = (RelativeLayout) findViewById(R.id.face_unlock_demonstration_model_layout);
+ 		demonstration_model_layout.setTag(DEMONSTRATION_MODEL_LAYOUT_NUM);
+ 		demonstration_model_layout.setOnClickListener(this);
+-
+-		/*private_model_switch = (Switch) findViewById(R.id.face_unlock_private_model_items_switch);
+-		private_model_switch.setTag(PRIVATE_MODEL_SWITCH_NUM);
+-		private_model_switch.setOnCheckedChangeListener(this);*/
+-		/*added by iuv luyang*/
+-		/*isPrivacyMode = Settings.System.getInt(getContentResolver(),Settings.System.PRIVACY_PROTECTION_ENABLED, 0);
+-		if(isPrivacyMode == 1){
+-			private_model_switch.setChecked(true);
+-			face_unlock_private_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
+-		}else{
+-			private_model_switch.setChecked(false);
+-			//face_unlock_private_model_title.setTextColor(getColor(R.color.items_summary_color));
+-		}*/
+-		/*end by iuv luyang*/
+-
+ 		demonstration_model_switch = (Switch) findViewById(R.id.face_unlock_demonstration_model_switch);
+ 		demonstration_model_switch.setTag(DEMONSTRATION_MODEL_SWITCH_NUM);
+ 		demonstration_model_switch.setOnCheckedChangeListener(this);
+@@ -328,18 +246,7 @@
+ 			face_unlock_demonstration_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
+ 		}else{
+ 			demonstration_model_switch.setChecked(false);
+-			//face_unlock_demonstration_model_title.setTextColor(getColor(R.color.items_summary_color));
+ 		}
+-		/**IUV:add-end*/
+-		
+-		/*if(private_model_switch.isChecked() && isExistFaceData()){
+-			circle_layout.setVisibility(View.GONE);
+-			mPager.setVisibility(View.GONE);
+-		}else{
+-			circle_layout.setVisibility(View.GONE);
+-			mPager.setVisibility(View.GONE);
+-		}ZXP*/
+-
+ 		if (isExistFaceData()) {
+ 			face_unlock_manager_title.setVisibility(View.VISIBLE);
+ 			face_unlock_manager_layout.setVisibility(View.VISIBLE);
+@@ -352,45 +259,12 @@
+ 		}
+ 	}
+ 	
+-	class MyFragmentPagerAdapter extends FragmentPagerAdapter {
+ 
+-		public ArrayList<Fragment> listss;
+ 
+-		public MyFragmentPagerAdapter(FragmentManager fm) {
+-			super(fm);
+-			// TODO Auto-generated constructor stub
+-		}
+-
+-		public MyFragmentPagerAdapter(FragmentManager fm, ArrayList<Fragment> listss) {
+-			super(fm);
+-			this.listss = listss;
+-		}
+-
+-		@Override
+-		public Fragment getItem(int arg0) {
+-			// TODO Auto-generated method stub
+-			return listss.get(arg0);
+-		}
+-
+-		@Override
+-		public int getCount() {
+-			// TODO Auto-generated method stub
+-			return listss.size();
+-		}
+-
+-		@Override
+-		public int getItemPosition(Object object) {
+-			// TODO Auto-generated method stub
+-			return super.getItemPosition(object);
+-		}
+-
+-	}
+-
+ 	// Hide method
+ 	private void setBackgroundTheme() {
+ 
+ 		if(isExistFaceData()){
+-			//getWindow().setContentView(R.layout.face_unlock_main);
+ 			getActionBar().show();
+ 			getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+ 			getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+@@ -430,7 +304,6 @@
+ 	
+ 	@Override
+ 	public void onClick(View v) {
+-		// TODO Auto-generated method stub
+ 		switch ((int) v.getTag()) {
+ 		case ACTIONBAR_BACK_NUM:
+ 			if(mFromBootWizard){
+@@ -450,25 +323,9 @@
+ 				createNewPwd();
+ 			}
+ 			break;
+-		/*case PRIVATE_MODEL_LAYOUT_NUM:
+-			if(private_model_switch.isChecked() && isExistFaceData()){
+-				private_model_switch.setChecked(false);
+-				//face_unlock_private_model_title.setTextColor(getColor(R.color.items_summary_color));
+-				Settings.System
+-						.putInt(getContentResolver(), Settings.System.PRIVACY_PROTECTION_ENABLED, 0);
+-			}else{
+-				if(isExistFaceData()){
+-					private_model_switch.setChecked(true);
+-					face_unlock_private_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
+-					Settings.System
+-							.putInt(getContentResolver(), Settings.System.PRIVACY_PROTECTION_ENABLED, 1);
+-				}
+-			}
+-			break;zxp*/
+ 		case DEMONSTRATION_MODEL_LAYOUT_NUM:
+ 			if(demonstration_model_switch.isChecked() && isExistFaceData()){
+ 				demonstration_model_switch.setChecked(false);
+-				//face_unlock_demonstration_model_title.setTextColor(getColor(R.color.items_summary_color));
+ 				Settings.System
+ 						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);//IUV:add for faceLock use by yunlong.shen on 2017/07/01
+ 			}else{
+@@ -541,39 +398,22 @@
+ 
+ 	@Override
+ 	public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+-		// TODO Auto-generated method stub
+ 		if (isChecked && isExistFaceData()) {
+ 			if (((int) buttonView.getTag()) == PRIVATE_MODEL_SWITCH_NUM) {
+-				circle_layout.setVisibility(View.GONE);
+ 				mPager.setVisibility(View.GONE);
+-				/*Settings.System
+-						.putInt(getContentResolver(), Settings.System.PRIVACY_PROTECTION_ENABLED, 1);zxp*/
+ 			} else {
+ 				Settings.System
+-						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 1);//IUV:add for faceLock use by yunlong.shen on 2017/07/01
++						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 1);
+ 				face_unlock_demonstration_model_title.setTextColor(getColor(R.color.ic_default_title_text_color));
+ 			}
+ 		} else {
+-			/*added by iuv luyang*/
+ 			if(!isExistFaceData()){
+ 				buttonView.setChecked(false);
+-				//Begin: modify by junwei.shen, for bug-100515, at 2017.7.5
+-//				Toast.makeText(mcontext,R.string.ic_is_privacy_mode_can_use,Toast.LENGTH_SHORT).show();
+ 				updateStatus();
+-				//End: modify by junwei.shen, for bug-100515, at 2017.7.5
+ 			}
+-			/*end by iuv luyang*/
+-			if (((int) buttonView.getTag()) == PRIVATE_MODEL_SWITCH_NUM) {
+-				/*added by iuv luyang*/
+-				circle_layout.setVisibility(View.GONE);
+-				mPager.setVisibility(View.GONE);
+-				/*Settings.System
+-						.putInt(getContentResolver(), Settings.System.PRIVACY_PROTECTION_ENABLED, 0);zxp*/
+-			} else {;
++
+ 				Settings.System
+-						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);//IUV:add for faceLock use by yunlong.shen on 2017/07/01
+-				//face_unlock_demonstration_model_title.setTextColor(getColor(R.color.items_summary_color));
+-			}
++						.putInt(getContentResolver(), Settings.System.FACE_UNLOCK_STATE_ENABLED, 0);
+ 		}
+ 	}
+ 
+@@ -708,11 +548,8 @@
+             finish();
+         } else if (requestCode == FACE_REMOVE_REQUEST && resultCode  == Activity.RESULT_OK) {
+             updateStatus();
+-			//Begin: modify by junwei.shen, for bug-100515, at 2017.7.5
+-//			Toast.makeText(mcontext,R.string.delete_success,Toast.LENGTH_SHORT).show();
+ 			faceIsDelSuccess = true;
+ 			faceUnlockNew = false;
+-			//End: modify by junwei.shen, for bug-100515, at 2017.7.5
+         }
+     }
+ 
+Index: packages/apps/Settings/res/layout/face_unlock_main.xml
+===================================================================
+--- packages/apps/Settings/res/layout/face_unlock_main.xml	(revision 7215)
++++ packages/apps/Settings/res/layout/face_unlock_main.xml	(revision 7216)
+@@ -362,7 +362,7 @@
+         android:background="#fbfbfb"
+         android:flipInterval="30"
+         android:persistentDrawingCache="animation" />
+-
++<!--
+    <RelativeLayout
+        android:id="@+id/circle_layout"
+         android:layout_width="match_parent"
+@@ -395,5 +395,5 @@
+             android:background="@drawable/guide_bottom_circle_selector" />
+ 
+     </RelativeLayout>
+-
++-->
+ </LinearLayout>
+Index: packages/apps/Settings
+===================================================================
+--- packages/apps/Settings	(revision 7215)
++++ packages/apps/Settings	(revision 7216)
+
+Property changes on: packages/apps/Settings
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/CMCC_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE/packages/apps/Settings:r6964-7001

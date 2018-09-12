@@ -1,0 +1,68 @@
+Index: packages/apps/Settings/src/com/android/settings/wifi/p2p/WifiP2pSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/wifi/p2p/WifiP2pSettings.java	(revision 1435)
++++ packages/apps/Settings/src/com/android/settings/wifi/p2p/WifiP2pSettings.java	(revision 1436)
+@@ -55,6 +55,8 @@
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+ import com.android.settings.R;
+ import com.android.settings.SettingsPreferenceFragment;
++import android.text.TextWatcher;
++import android.text.Editable;
+ 
+ /*
+  * Displays Wi-fi p2p settings UI
+@@ -101,6 +103,7 @@
+     private WifiP2pDeviceList mPeers = new WifiP2pDeviceList();
+ 
+     private String mSavedDeviceName;
++    private AlertDialog mDialog;
+ 
+     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+         @Override
+@@ -479,6 +482,30 @@
+             mDeviceNameText = new EditText(getActivity());
+             mDeviceNameText.setFilters(new InputFilter[] {new InputFilter.LengthFilter(30)});
+             mDeviceNameText.setTextDirection(View.TEXT_DIRECTION_LOCALE);
++            mDeviceNameText.addTextChangedListener(new TextWatcher() {
++                @Override
++                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
++
++                }
++
++                @Override
++                public void onTextChanged(CharSequence s, int start, int before, int count) {
++
++                }
++
++                @Override
++                public void afterTextChanged(Editable s) {
++                    if (null != mDialog) {
++                        String name = mDeviceNameText.getText().toString();
++                        if ((null == name) || name.isEmpty()) {
++                            mDialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
++                        } else {
++                            mDialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
++                        }
++                    }
++                }
++            });
++
+             if (mSavedDeviceName != null) {
+                 mDeviceNameText.setText(mSavedDeviceName);
+                 mDeviceNameText.setSelection(mSavedDeviceName.length());
+@@ -487,13 +514,13 @@
+                 mDeviceNameText.setSelection(0, mThisDevice.deviceName.length());
+             }
+             mSavedDeviceName = null;
+-            AlertDialog dialog = new AlertDialog.Builder(getActivity())
++            mDialog = new AlertDialog.Builder(getActivity())
+                 .setTitle(R.string.wifi_p2p_menu_rename)
+                 .setView(mDeviceNameText)
+                 .setPositiveButton(getActivity().getString(R.string.dlg_ok), mRenameListener)
+                 .setNegativeButton(getActivity().getString(R.string.dlg_cancel), null)
+                 .create();
+-            return dialog;
++            return mDialog;
+         } else if (id == DIALOG_DELETE_GROUP) {
+             int stringId = R.string.wifi_p2p_delete_group_message;
+ 

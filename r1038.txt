@@ -1,0 +1,105 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1037)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 1038)
+@@ -1741,6 +1741,14 @@
+                         if (mNavigationBar != null && mNavigationBarPosition == NAV_BAR_BOTTOM) {
+                             requestTransientBars(mNavigationBar);
+                         }
++                        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++                        else {
++                            if(mDisplayRotation == Surface.ROTATION_0) {
++                                Log.d(TAG, "onSwipeFromBottom to showNavigationBar");
++                                showNavigationBar();
++                            }
++                        }
++                        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+                     }
+                     @Override
+                     public void onSwipeFromRight() {
+@@ -1749,6 +1757,14 @@
+                         if (mNavigationBar != null && mNavigationBarPosition == NAV_BAR_RIGHT) {
+                             requestTransientBars(mNavigationBar);
+                         }
++                        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++                        else {
++                            if(mDisplayRotation == Surface.ROTATION_90) {
++                                Log.d(TAG, "onSwipeFromBottom to showNavigationBar");
++                                showNavigationBar();
++                            }
++                        }
++                        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+                     }
+                     @Override
+                     public void onSwipeFromLeft() {
+@@ -1757,6 +1773,14 @@
+                         if (mNavigationBar != null && mNavigationBarPosition == NAV_BAR_LEFT) {
+                             requestTransientBars(mNavigationBar);
+                         }
++                        //ADD-S By Justin.Shen for Hide/Show navigation-bar
++                        else {
++                            if(mDisplayRotation == Surface.ROTATION_270) {
++                                Log.d(TAG, "onSwipeFromBottom to showNavigationBar");
++                                showNavigationBar();
++                            }
++                        }
++                        //ADD-E By Justin.Shen for Hide/Show navigation-bar
+                     }
+                     @Override
+                     public void onFling(int duration) {
+@@ -8628,5 +8652,24 @@
+         return false;
+     }
+     /// @}
++    
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    private void showNavigationBar(){
++        mHandler.post(new Runnable() {
++            @Override
++            public void run() {
++                try {
++                    IStatusBarService statusbar = getStatusBarService();
++                    if (statusbar != null) {
++                        statusbar.showNavigationBar();
++                    }
++                } catch (RemoteException e) {
++                    // re-acquire status bar service next time it is needed.
++                    mStatusBarService = null;
++                }
++            }
++        });
++    }
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ 
+ }
+Index: frameworks/base/services/core/java/com/android/server/statusbar/StatusBarManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/statusbar/StatusBarManagerService.java	(revision 1037)
++++ frameworks/base/services/core/java/com/android/server/statusbar/StatusBarManagerService.java	(revision 1038)
+@@ -1026,4 +1026,26 @@
+         return 0;
+     }
+     /// @}
++    
++    //ADD-S By Justin.Shen for Hide/Show navigation-bar
++    @Override
++    public void showNavigationBar() {
++        enforceStatusBar();
++        
++        synchronized(mLock) {
++            mHandler.post(new Runnable() {
++                public void run() {
++                    if (mBar != null) {
++                        try {
++                            Slog.d(TAG, "showNavigationBar: to showNavigationBar");
++                            mBar.showNavigationBar();
++                        } catch (RemoteException ex) {
++                            
++                        }
++                    }
++                }
++            });
++        }
++    }
++    //ADD-E By Justin.Shen for Hide/Show navigation-bar
+ }

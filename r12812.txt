@@ -1,0 +1,38 @@
+Index: packages/apps/ManagedProvisioning/src/com/android/managedprovisioning/CrossProfileIntentFiltersHelper.java
+===================================================================
+--- packages/apps/ManagedProvisioning/src/com/android/managedprovisioning/CrossProfileIntentFiltersHelper.java	(revision 12811)
++++ packages/apps/ManagedProvisioning/src/com/android/managedprovisioning/CrossProfileIntentFiltersHelper.java	(revision 12812)
+@@ -20,7 +20,7 @@
+ import android.content.pm.PackageManager;
+ import android.provider.AlarmClock;
+ import android.provider.MediaStore;
+-
++import android.provider.Settings;
+ import static android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH;
+ /**
+  * Class to set CrossProfileIntentFilters during managed profile creation, and reset them after an
+@@ -31,6 +31,15 @@
+     public static void setFilters(PackageManager pm, int parentUserId, int managedProfileUserId) {
+         ProvisionLogger.logd("Setting cross-profile intent filters");
+ 
++		// add by mzj for cts start
++		//Nfc
++		IntentFilter nfcpyment = new IntentFilter();
++		nfcpyment.addAction(Settings.ACTION_NFC_PAYMENT_SETTINGS);
++		nfcpyment.addCategory(Intent.CATEGORY_DEFAULT);
++		pm.addCrossProfileIntentFilter(nfcpyment, managedProfileUserId, parentUserId,
++		PackageManager.SKIP_CURRENT_PROFILE);
++		// add by mzj for cts end
++		
+         // All Emergency/privileged calls are sent directly to the parent user.
+         IntentFilter mimeTypeCallEmergency = new IntentFilter();
+         mimeTypeCallEmergency.addAction(Intent.ACTION_CALL_EMERGENCY);
+@@ -106,7 +115,7 @@
+         callButton.addCategory(Intent.CATEGORY_DEFAULT);
+         pm.addCrossProfileIntentFilter(callButton, managedProfileUserId, parentUserId,
+                 PackageManager.ONLY_IF_NO_MATCH_FOUND);
+-
++		
+         IntentFilter smsMms = new IntentFilter();
+         smsMms.addAction(Intent.ACTION_VIEW);
+         smsMms.addAction(Intent.ACTION_SENDTO);

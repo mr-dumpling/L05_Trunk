@@ -1,0 +1,84 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/widget/MmsWidgetService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/widget/MmsWidgetService.java	(revision 1125)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/widget/MmsWidgetService.java	(revision 1126)
+@@ -45,13 +45,9 @@
+ import com.android.mms.R;
+ import com.android.mms.ui.ConversationListItem;
+ import com.android.mms.ui.MessageUtils;
+-import com.android.mms.util.DraftCache;
+ import com.android.mms.util.MmsLog;
+-
+-import com.mediatek.ipmsg.util.IpMessageUtils;
+ import com.mediatek.mms.ext.IOpMmsWidgetServiceExt;
+ import com.mediatek.mms.folder.util.FolderModeUtils;
+-import com.mediatek.mms.ipmessage.IIpWidgetServiceExt;
+ import com.mediatek.mms.util.PermissionCheckUtil;
+ import com.mediatek.opmsg.util.OpMessageUtils;
+ 
+@@ -88,7 +84,6 @@
+         private static Cursor sConversationCursor;
+         private int mUnreadConvCount;
+         private AppWidgetManager mAppWidgetManager = null;
+-        private IIpWidgetServiceExt mIpWidgetServiceExt;
+ 
+         // Static colors
+         private static int SUBJECT_TEXT_COLOR_READ;
+@@ -117,9 +112,7 @@
+         public void onCreate() {
+             Log.i(TAG, "onCreate");
+             Contact.addListener(this);
+-            mOpMmsWidgetServiceExt =
+-                OpMessageUtils.getOpMessagePlugin().getOpMmsWidgetServiceExt();
+-            mIpWidgetServiceExt = IpMessageUtils.getIpMessagePlugin(mContext).getIpWidgetService();
++            mOpMmsWidgetServiceExt = OpMessageUtils.getOpMessagePlugin().getOpMmsWidgetServiceExt();
+         }
+ 
+         @Override
+@@ -141,11 +134,7 @@
+                 return;
+             }
+ 
+-            if (DraftCache.getInstance() == null) {
+-                MmsApp.getApplication().onRequestPermissionsResult();
+-            }
+-
+-            Log.i(TAG, "onDataSetChanged is called");
++            Log.v(TAG, "onDataSetChanged is called");
+             synchronized (sWidgetLock) {
+                 if (sConversationCursor != null) {
+                     sConversationCursor.close();
+@@ -162,15 +151,9 @@
+         }
+ 
+         private Cursor queryAllConversations() {
+-            Cursor cursor = mIpWidgetServiceExt.queryAllConversations(mContext,
+-                    Conversation.sAllThreadsUriExtend, Conversation.ALL_THREADS_PROJECTION_EXTEND);
+-            if (cursor != null) {
+-                return cursor;
+-            }
+-
+             return mContext.getContentResolver().query(
+                     Conversation.sAllThreadsUriExtend, Conversation.ALL_THREADS_PROJECTION_EXTEND,
+-                    Conversation.THREADS_WIDGET_SELECTION, null, null);
++                   null, null, null);
+         }
+ 
+         private int queryUnreadCount() {
+@@ -293,14 +276,9 @@
+                 // From
+                 int color = conv.hasUnreadMessages() ? SENDERS_TEXT_COLOR_UNREAD :
+                         SENDERS_TEXT_COLOR_READ;
+-                // add for ipMessage for format from
++                SpannableStringBuilder from = addColor(conv.getRecipients().formatNames(", "),
++                        color);
+ 
+-                String fromString = mIpWidgetServiceExt.getViewAt(conv.mIpConv);
+-                if (fromString == null) {
+-                    fromString = conv.getRecipients().formatNames(", ");
+-                }
+-                SpannableStringBuilder from = addColor(fromString, color);
+-
+                 /** M: do not show draft flag*/
+                 //start hongjian bug 111050
+                 if (conv.hasDraft()) {

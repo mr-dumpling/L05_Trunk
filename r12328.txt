@@ -1,0 +1,48 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java	(revision 12327)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java	(revision 12328)
+@@ -52,7 +52,7 @@
+ 	//private final NfcAdapter mNfcAdapter;
+ 	private static INfcAdapter sService;
+ 	private IntentFilter mIntentFilter;
+-	private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
++	private BroadcastReceiver mReceiver = new BroadcastReceiver() {
+         @Override
+         public void onReceive(Context context, Intent intent) {
+             String action = intent.getAction();
+@@ -64,19 +64,24 @@
+ 			else if(Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(action)){
+             	boolean airplaneMode = getAirplaneMode(context);
+ 				NfcAdapter mNfcAdapter = NfcAdapter.getDefaultAdapter(context);
+-				if (mNfcAdapter != null) {
+-					int state = mNfcAdapter.getAdapterState();;
+-					boolean switchState = mNfcStatePreference.getBoolean("NfcStateOn",false);
+-					if(airplaneMode == true && state == NfcAdapter.STATE_ON){
++				if (sService == null) sService = INfcAdapter.Stub.asInterface(ServiceManager.getService("nfc"));
++				try{
++					if (sService != null) {
++						int state = sService.getState();;
++						boolean switchState = mNfcStatePreference.getBoolean("NfcStateOn",false);
++						if(airplaneMode == true && state == NfcAdapter.STATE_ON){
+ 						mEditor.putBoolean("NfcStateOn",state==NfcAdapter.STATE_ON); 
+-						mNfcAdapter.disable();
+-					} else if(airplaneMode == false && switchState){
+-						mNfcAdapter.enable();
+-						mEditor.remove("NfcStateOn");
++							sService.disable(true);
++						} else if(airplaneMode == false && switchState){
++							sService.enable();
++							mEditor.remove("NfcStateOn");
++						}
++						mEditor.commit();
+ 					}
+-					mEditor.commit();
++				} catch (RemoteException e) {
++				} finally {
++					refreshState();
+ 				}
+-				refreshState();
+ 			}
+ 		}
+     };

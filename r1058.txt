@@ -1,0 +1,430 @@
+Index: packages/providers/MediaProvider/src/com/android/providers/media/RingtonePickerActivity.java
+===================================================================
+--- packages/providers/MediaProvider/src/com/android/providers/media/RingtonePickerActivity.java	(revision 1057)
++++ packages/providers/MediaProvider/src/com/android/providers/media/RingtonePickerActivity.java	(revision 1058)
+@@ -223,7 +223,7 @@
+ 
+         /// M: Get whether to show the 'More Ringtones' item
+         mHasMoreRingtonesItem = intent.getBooleanExtra(
+-                RingtoneManager.EXTRA_RINGTONE_SHOW_MORE_RINGTONES, false);
++                RingtoneManager.EXTRA_RINGTONE_SHOW_MORE_RINGTONES, true);//false
+ 
+         // Get whether to include DRM ringtones
+         final boolean includeDrm = intent.getBooleanExtra(
+Index: packages/providers/MediaProvider/res/values/mtk_strings.xml
+===================================================================
+--- packages/providers/MediaProvider/res/values/mtk_strings.xml	(revision 1057)
++++ packages/providers/MediaProvider/res/values/mtk_strings.xml	(revision 1058)
+@@ -16,5 +16,5 @@
+ 
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <!-- Add more ringtong from SD card -->
+-    <string name="Add_More_Ringtones">More Ringtones ...</string>
++    <string name="Add_More_Ringtones">Add from Music</string>
+ </resources>
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 1057)
++++ packages/apps/Settings/res/values/strings.xml	(revision 1058)
+@@ -2053,11 +2053,13 @@
+     <string name="home_settings">Home</string>
+     <string name="display_settings_title">Display</string>
+     <!-- Sound settings screen heading -->
+-    <string name="sound_settings">Sound</string>
++    <string name="sound_settings">Sound &amp; notification</string>
+     <!-- Sound settings screen, setting option summary text -->
+     <string name="ringtone_summary">""</string>
+     <!-- Sound settings screen, volume title -->
+     <string name="all_volume_title">Volumes</string>
++	<string name="sound_ringcategory_title">Sounds</string>
++	<string name="sound_modecategory_title">Mode</string>
+     <!-- Sound settings screen, music effects title [CHAR LIMIT=30]-->
+     <string name="musicfx_title">Music effects</string>
+     <!-- Sound settings screen, setting option name -->
+@@ -5996,6 +5998,7 @@
+     <!-- Sound: Dashboard summary example used in Setup Wizard preview screen. [CHAR LIMIT=100] -->
+     <string name="sound_settings_example_summary">Ring volume at 80%</string>
+ 
++    <string name="silent_mode_option_title">Silent mode</string>
+     <!-- Sound: Title for the option managing media volume. [CHAR LIMIT=30] -->
+     <string name="media_volume_option_title">Media volume</string>
+ 
+Index: packages/apps/Settings/res/xml/sound_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/sound_settings.xml	(revision 1057)
++++ packages/apps/Settings/res/xml/sound_settings.xml	(revision 1058)
+@@ -19,7 +19,14 @@
+         android:title="@string/sound_settings"
+         android:key="sound_settings"
+         settings:keywords="@string/keywords_sounds">
+-
++	<PreferenceCategory
++        android:key="sound_volume_category"
++        android:title="@string/all_volume_title">
++		
++		<!--Silent Mode  -->
++		<SwitchPreference
++                android:key="silent_mode"
++                android:title="@string/silent_mode_option_title" />
+         <!-- Media volume -->
+         <com.android.settings.notification.VolumeSeekBarPreference
+                 android:key="media_volume"
+@@ -43,21 +50,16 @@
+                 android:key="notification_volume"
+                 android:icon="@*android:drawable/ic_audio_ring_notif"
+                 android:title="@string/notification_volume_option_title" />
+-
++	</PreferenceCategory>
++	
++	<PreferenceCategory
++        android:key="sound_ring_category"
++        android:title="@string/sound_ringcategory_title">
+         <!-- Also vibrate for calls -->
+         <SwitchPreference
+                 android:key="vibrate_when_ringing"
+                 android:title="@string/vibrate_when_ringing_title" />
+-
+-
+-        <!-- Interruptions -->
+-        <com.android.settingslib.RestrictedPreference
+-                android:key="zen_mode"
+-                android:title="@string/zen_mode_settings_title"
+-                settings:useAdminDisabledSummary="true"
+-                settings:keywords="@string/keywords_sounds_and_notifications_interruptions"
+-                android:fragment="com.android.settings.notification.ZenModeSettings" />
+-
++				
+         <!-- Phone ringtone -->
+         <com.android.settings.DefaultRingtonePreference
+                 android:key="ringtone"
+@@ -80,7 +82,15 @@
+                 android:persistent="false"
+                 android:ringtoneType="alarm" />
+ 
+-        <com.android.settingslib.RestrictedPreference
++        <!-- Other sounds -->
++        <Preference
++                android:key="other_sounds"
++                android:title="@string/other_sound_settings"
++                android:persistent="false"
++                android:fragment="com.android.settings.notification.OtherSoundSettings" />
++	</PreferenceCategory>
++	
++	<com.android.settingslib.RestrictedPreference
+                 android:key="cell_broadcast_settings"
+                 android:title="@string/cell_broadcast_settings"
+                 settings:useAdminDisabledSummary="true">
+@@ -88,15 +98,18 @@
+                         android:action="android.intent.action.MAIN"
+                         android:targetPackage="com.android.cellbroadcastreceiver"
+                         android:targetClass="com.android.cellbroadcastreceiver.CellBroadcastSettings" />
+-        </com.android.settingslib.RestrictedPreference>
+-
+-        <!-- Other sounds -->
+-        <Preference
+-                android:key="other_sounds"
+-                android:title="@string/other_sound_settings"
+-                android:persistent="false"
+-                android:fragment="com.android.settings.notification.OtherSoundSettings" />
+-
++    </com.android.settingslib.RestrictedPreference>
++		
++	<PreferenceCategory
++        android:key="sound_mode_category"
++        android:title="@string/sound_modecategory_title">	
++		<!-- Interruptions -->
++        <com.android.settingslib.RestrictedPreference
++                android:key="zen_mode"
++                android:title="@string/zen_mode_settings_title"
++                settings:useAdminDisabledSummary="true"
++                settings:keywords="@string/keywords_sounds_and_notifications_interruptions"
++                android:fragment="com.android.settings.notification.ZenModeSettings" />
+         <!-- Cast -->
+         <PreferenceScreen
+                 android:key="wifi_display"
+@@ -108,5 +121,5 @@
+             android:fragment="com.mediatek.audioprofile.SoundEnhancement"
+             android:key="sound_enhancement"
+             android:title="@string/sound_enhancement_title" />
+-
++	</PreferenceCategory>
+ </PreferenceScreen>
+Index: packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1057)
++++ packages/apps/Settings/src/com/android/settings/notification/SoundSettings.java	(revision 1058)
+@@ -45,6 +45,10 @@
+ import android.provider.OpenableColumns;
+ import android.provider.SearchIndexableResource;
+ import android.provider.Settings;
++import android.provider.Settings.Global;
++import android.app.NotificationManager;
++
++import android.support.v14.preference.SwitchPreference;
+ import android.support.v7.preference.Preference;
+ import android.support.v7.preference.Preference.OnPreferenceChangeListener;
+ import android.support.v7.preference.TwoStatePreference;
+@@ -74,7 +78,8 @@
+ 
+ public class SoundSettings extends SettingsPreferenceFragment implements Indexable {
+     private static final String TAG = "SoundSettings";
+-
++	
++	private static final String KEY_SILENT_MODE = "silent_mode";
+     private static final String KEY_MEDIA_VOLUME = "media_volume";
+     private static final String KEY_ALARM_VOLUME = "alarm_volume";
+     private static final String KEY_RING_VOLUME = "ring_volume";
+@@ -111,11 +116,12 @@
+     private Vibrator mVibrator;
+     private AudioManager mAudioManager;
+     private VolumeSeekBarPreference mRingOrNotificationPreference;
+-
++	private VolumeSeekBarPreference mNotificationPreference;
+     private Preference mPhoneRingtonePreference;
+     private Preference mNotificationRingtonePreference;
+     private Preference mAlarmRingtonePreference;
+     private TwoStatePreference mVibrateWhenRinging;
++	private SwitchPreference mSilentModePreference;
+     private ComponentName mSuppressor;
+     private int mRingerMode = -1;
+ 
+@@ -123,6 +129,7 @@
+     private UserManager mUserManager;
+     private RingtonePreference mRequestPreference;
+ 
++	private static NotificationManager mNotificationManager;
+     private IAudioProfileExt mExt;
+ 
+     @Override
+@@ -141,6 +148,7 @@
+ 
+         mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+         mVibrator = (Vibrator) getActivity().getSystemService(Context.VIBRATOR_SERVICE);
++		mNotificationManager=NotificationManager.from(mContext);
+         if (mVibrator != null && !mVibrator.hasVibrator()) {
+             mVibrator = null;
+         }
+@@ -155,14 +163,13 @@
+             mRingOrNotificationPreference =
+                     initVolumePreference(KEY_RING_VOLUME, AudioManager.STREAM_RING,
+                             com.android.internal.R.drawable.ic_audio_ring_notif_mute);
+-            removePreference(KEY_NOTIFICATION_VOLUME);
+-        } else {
+-            mRingOrNotificationPreference =
+-                    initVolumePreference(KEY_NOTIFICATION_VOLUME, AudioManager.STREAM_NOTIFICATION,
++         // removePreference(KEY_NOTIFICATION_VOLUME);
++       } else {
++            /*mRingOrNotificationPreference*/
++          	removePreference(KEY_RING_VOLUME);
++       }
++		mNotificationPreference =initVolumePreference(KEY_NOTIFICATION_VOLUME, AudioManager.STREAM_NOTIFICATION,
+                             com.android.internal.R.drawable.ic_audio_ring_notif_mute);
+-            removePreference(KEY_RING_VOLUME);
+-        }
+-
+         // Enable link to CMAS app settings depending on the value in config.xml.
+         boolean isCellBroadcastAppLinkEnabled = this.getResources().getBoolean(
+                 com.android.internal.R.bool.config_cellBroadcastAppLinks);
+@@ -183,6 +190,7 @@
+         }
+         initRingtones();
+         initVibrateWhenRinging();
++		initSilentMode();
+         updateRingerMode();
+         updateEffectsSuppressor();
+ 
+@@ -204,6 +212,7 @@
+         updateEffectsSuppressor();
+         ///M: ALPS02723215 update the switch status when resume.
+         updateVibrateWhenRinging();
++		updateSilentMode();
+         for (VolumeSeekBarPreference volumePref : mVolumePrefs) {
+             volumePref.onActivityResume();
+         }
+@@ -354,6 +363,10 @@
+         @Override
+         public void onStreamValueChanged(int stream, int progress) {
+             // noop
++			final boolean mute = mAudioManager.isStreamMute(stream);
++			if(mute){
++				updateSilentMode();
++			}
+         }
+ 
+         public void stopSample() {
+@@ -479,7 +492,76 @@
+         mVibrateWhenRinging.setChecked(Settings.System.getInt(getContentResolver(),
+                 Settings.System.VIBRATE_WHEN_RINGING, 0) != 0);
+     }
++	
++	private void updateSilentMode() {
++        if (mSilentModePreference== null) return;
++		boolean silentMode=Settings.System.getInt(getContentResolver(),
++                Settings.System.VIBRATE_IN_SILENT, 0) != 0;
++		
++		if(silentMode){
++			//
++			setSilentMode();
++		}
++        mSilentModePreference.setChecked(silentMode);
++    }
++	
++	private void initSilentMode(){
++		mSilentModePreference=(SwitchPreference)getPreferenceScreen().findPreference(KEY_SILENT_MODE);
++		final int stream=mAudioManager.getRingerModeInternal();
++		if (mSilentModePreference== null) {
++            Log.i(TAG, "Preference not found: " + KEY_SILENT_MODE);
++            return;
++        }
++        if (!mVoiceCapable) {
++            getPreferenceScreen().removePreference(mSilentModePreference);
++            mSilentModePreference= null;
++            return;
++        }
++        mSilentModePreference.setPersistent(false);
++        updateSilentMode();
++        mSilentModePreference.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
++			
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++            	
++                final boolean val = (Boolean) newValue;
++				if(val){
++					if(stream==AudioManager.RINGER_MODE_SILENT){
++						updateSilentMode();
++					}
++					mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_SILENT);
++				}else{
++					if(stream==AudioManager.RINGER_MODE_SILENT){
++						updateSilentMode();
++						mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_NORMAL);
++					}else{
++						mAudioManager.setRingerModeInternal(stream);
++					}	
++					
++				}
++                return Settings.System.putInt(getContentResolver(),
++                        Settings.System.VIBRATE_IN_SILENT,
++                        val ? 1 : 0);
++            }
++        });
++			
++	}
+ 
++	private void setSilentMode(){
++		int zenMode=mNotificationManager.getZenMode();
++		switch (zenMode) {
++            case Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS://priority
++				mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_SILENT);
++				break;
++            case Global.ZEN_MODE_NO_INTERRUPTIONS://total
++                
++                break;
++            case Global.ZEN_MODE_ALARMS://Alarm only
++                mAudioManager.setRingerModeInternal(AudioManager.RINGER_MODE_SILENT);
++                break;
++        }
++	}
++	
+     // === Callbacks ===
+ 
+     private final class SettingsObserver extends ContentObserver {
+@@ -568,6 +650,7 @@
+                 mHandler.sendEmptyMessage(H.UPDATE_EFFECTS_SUPPRESSOR);
+             } else if (AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION.equals(action)) {
+                 mHandler.sendEmptyMessage(H.UPDATE_RINGER_MODE);
++				updateSilentMode();
+             }
+         }
+     }
+Index: frameworks/base/core/java/android/preference/SeekBarVolumizer.java
+===================================================================
+--- frameworks/base/core/java/android/preference/SeekBarVolumizer.java	(revision 1057)
++++ frameworks/base/core/java/android/preference/SeekBarVolumizer.java	(revision 1058)
+@@ -39,6 +39,7 @@
+ import android.widget.SeekBar.OnSeekBarChangeListener;
+ 
+ import com.android.internal.annotations.GuardedBy;
++import android.provider.Settings;
+ 
+ /**
+  * Turns a {@link SeekBar} into a volume control.
+@@ -119,7 +120,7 @@
+     }
+ 
+     private static boolean isNotificationOrRing(int stream) {
+-        return stream == AudioManager.STREAM_RING || stream == AudioManager.STREAM_NOTIFICATION;
++        return stream == AudioManager.STREAM_RING /*|| stream == AudioManager.STREAM_NOTIFICATION*/;
+     }
+ 
+     public void setSeekBar(SeekBar seekBar) {
+@@ -321,6 +322,7 @@
+         } else {
+             mVolumeBeforeMute = mSeekBar.getProgress();
+             mSeekBar.setProgress(0);
++			Settings.System.putInt(mContext.getContentResolver(),Settings.System.VIBRATE_IN_SILENT, 1);
+             postStopSample();
+             postSetVolume(0);
+         }
+@@ -351,6 +353,7 @@
+                     mLastProgress = msg.arg1;
+                     mLastAudibleStreamVolume = Math.abs(msg.arg2);
+                     final boolean muted = msg.arg2 < 0;
++					updateSilentSwitch(muted);
+                     if (muted != mMuted) {
+                         mMuted = muted;
+                         if (mCallback != null) {
+@@ -365,6 +368,7 @@
+         public void postUpdateSlider(int volume, int lastAudibleVolume, boolean mute) {
+             final int arg2 = lastAudibleVolume * (mute ? -1 : 1);
+             obtainMessage(UPDATE_SLIDER, volume, arg2).sendToTarget();
++			updateSilentSwitch(mute);
+         }
+     }
+ 
+@@ -435,9 +439,16 @@
+                     : (streamType == mStreamType);
+             if (mSeekBar != null && streamMatch && streamValue != -1) {
+                 final boolean muted = mAudioManager.isStreamMute(mStreamType)
+-                        || streamValue == 0;
++                        || streamValue < 0;
+                 mUiHandler.postUpdateSlider(streamValue, mLastAudibleStreamVolume, muted);
+             }
+         }
+     }
++	private void updateSilentSwitch(boolean mute){
++		if(mute){
++		 	Settings.System.putInt(mContext.getContentResolver(),Settings.System.VIBRATE_IN_SILENT,1);
++		 }else{						
++			Settings.System.putInt(mContext.getContentResolver(),Settings.System.VIBRATE_IN_SILENT,0);
++		}
++	}
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/DndTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/DndTile.java	(revision 1057)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/DndTile.java	(revision 1058)
+@@ -40,7 +40,10 @@
+ import com.android.systemui.qs.QSTile;
+ import com.android.systemui.statusbar.policy.ZenModeController;
+ import com.android.systemui.volume.ZenModePanel;
++import android.util.Log;
++import android.provider.Settings;
+ 
++
+ /** Quick settings tile: Do not disturb **/
+ public class DndTile extends QSTile<QSTile.BooleanState> {
+ 
+@@ -121,10 +124,12 @@
+         MetricsLogger.action(mContext, getMetricsCategory(), !mState.value);
+         if (mState.value) {
+             mController.setZen(Global.ZEN_MODE_OFF, null, TAG);
++			Settings.System.putInt(mContext.getContentResolver(),Settings.System.VIBRATE_IN_SILENT, 0);
+         } else {
+             showDetail(true);
+             int zen = Prefs.getInt(mContext, Prefs.Key.DND_FAVORITE_ZEN, Global.ZEN_MODE_ALARMS);
+             mController.setZen(zen, null, TAG);
++			Settings.System.putInt(mContext.getContentResolver(),Settings.System.VIBRATE_IN_SILENT, 1);
+         }
+     }
+ 

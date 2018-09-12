@@ -1,0 +1,661 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 1539)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/FuncListAdapter.java	(revision 1540)
+@@ -101,11 +101,19 @@
+                         }
+                     } else if (viewType == AppUtils.APPS) {
+                         if (FuncSettings.defaultNum == 5) {
+-                           String msg=mContext.getResources().getString(R.string.func_max_num);
++							String msg=mContext.getResources().getString(R.string.func_max_num);
+                             AppUtils.showDialog(mContext,msg);
+                         } else {
+-                            
+-                            addData(position);
++							// modify for 110918 by dongdongli 20171115 start {
++                            if (isInDefaultAppInfoList(data.get(position).getPackerName())) {
++								String msg=mContext.getResources().getString(R.string.func_add_exist_app);
++								AppUtils.showDialog(mContext,msg);
++								data.remove(position);
++								notifyDataSetChanged();
++							} else {
++								addData(position);
++							}
++							// modify for 110918 by dongdongli 20171115 end }
+                         }
+                     }
+                     
+@@ -160,9 +168,13 @@
+ 
+     public void deleteData(int pos) {
+         AppInfo info = data.get(pos);
+-        info.setIndex(AppUtils.APPS);
++		// modify for 110918 by dongdongli 20171115 start {
++		if(!isInAvailabelAppInfoList(info.getPackerName())){
++			data.add(data.size()-1 , info);
++		}
++		info.setIndex(AppUtils.APPS);
+         data.remove(pos);
+-        data.add(data.size() - 1, info);
++		// modify for 110918 by dongdongli 20171115 end }
+         FuncSettings.defaultNum--;
+         notifyDataSetChanged();
+     }
+@@ -175,6 +187,26 @@
+         FuncSettings.defaultNum++;
+         notifyDataSetChanged();
+     }
++	
++	private boolean isInDefaultAppInfoList(String packageName) {
++		ArrayList<AppInfo> defaultInfoList = new ArrayList<>();
++		for(AppInfo appinfo:data) {
++			if(appinfo.getIndex() == AppUtils.DEFAULT_APPS && packageName.equals(appinfo.getPackerName())) {
++				return true;
++			}
++		}
++		return false;
++	}
++	
++	private boolean isInAvailabelAppInfoList(String packageName) {
++		ArrayList<AppInfo> defaultInfoList = new ArrayList<>();
++		for(AppInfo appinfo:data) {
++			if(appinfo.getIndex() == AppUtils.APPS && packageName.equals(appinfo.getPackerName())) {
++				return true;
++			}
++		}
++		return false;
++	}
+ 
+     public class AppInfoHodler extends RecyclerView.ViewHolder {
+         public TextView title;
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppInfo.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppInfo.java	(revision 1539)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppInfo.java	(revision 1540)
+@@ -11,8 +11,15 @@
+ public class AppInfo implements Serializable{
+     private int icon;
+     private boolean isContanin;
+-
+-    public boolean isContanin() {
++    private String appName;
++    private Drawable drawable;
++    private String packerName;
++    private int rightIcon;
++    /*0default apps title 1:default apps 2:apps title 3:apps */
++    private int index;
++	private String introduction;
++    
++	public boolean isContanin() {
+         return isContanin;
+     }
+ 
+@@ -19,14 +26,8 @@
+     public void setContanin(boolean contanin) {
+         isContanin = contanin;
+     }
+-
+-    private String appName;
+-    private Drawable drawable;
+-    private String  packerName;
+-    private int rightIcon;
+-    /*0default apps title 1:default apps 2:apps title 3:apps */
+-    private int index;
+-    public String getIntroduction() {
++	
++	public String getIntroduction() {
+         if(introduction==null){
+             introduction="";
+         }
+@@ -37,8 +38,6 @@
+         this.introduction = introduction;
+     }
+ 
+-    private String introduction;
+-
+     public Drawable getDrawable() {
+         return drawable;
+     }
+@@ -90,5 +89,4 @@
+         this.index = index;
+     }
+ 
+-
+ }
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 1539)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/funcsetting/AppUtils.java	(revision 1540)
+@@ -196,6 +196,7 @@
+             }
+         }.start();
+     }
++	
+     public static void showDialog(final Context context, String content){
+         AlertDialog.Builder dialog=new AlertDialog.Builder(context,R.style.Theme_AppCompat_Light_Dialog_Alert_Self);
+         dialog.setMessage(content);
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1539)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBottomAreaView.java	(revision 1540)
+@@ -312,7 +312,8 @@
+ 		initView();
+ 	   	initData();
+     }
+-public  void initData() {
++	
++	public void initData() {
+ 		mLeftAffordanceView.setVisibility(View.GONE);
+ 		mCameraImageView.setVisibility(View.GONE);
+         
+@@ -320,124 +321,148 @@
+ 		if(func_switch==null){
+ 			func_switch="false";
+ 		}
++		
+ 		if(func_switch.equals("true")){
+ 			list = getLockIconData();
+-			
+-			
+         	if(list==null||list.size()==0){
+ 				mFuncLayout.setVisibility(View.GONE);
+ 				mPreviewContainer.setVisibility(View.GONE);
+ 			}else{
+-			//list.get(0).setPackerName(TORCH);
+-			for (int i = 0; i <list.size() ; i++) {	
+-				AppInfo info=list.get(i);
+-                if(info.getPackerName().equals(TORCH)){
++				//list.get(0).setPackerName(TORCH);
++				for (int i = 0; i <list.size() ; i++) {	
++					AppInfo info=list.get(i);
++					if(info.getPackerName().equals(TORCH)) {
+ 					
+-					
+-					mTorchIndex=i;
+-					if(mFlashlightController==null){
+-						
+-						mFlashlightController=new FlashlightController(mContext);
+-					}
+-					mEnable=mContext.getDrawable(R.drawable.ic_signal_flashlight_enable);
+-					mDisable=mContext.getDrawable(R.drawable.ic_signal_flashlight_disable);
+-       		 		
+-            		info.setDrawable( mFlashlightController.getState() ? mDisable : mEnable);
++						mTorchIndex=i;
++						if(mFlashlightController==null){
++							mFlashlightController=new FlashlightController(mContext);
++						}
++						mEnable=mContext.getDrawable(R.drawable.ic_signal_flashlight_enable);
++						mDisable=mContext.getDrawable(R.drawable.ic_signal_flashlight_disable);
++						info.setDrawable( mFlashlightController.getState() ? mDisable : mEnable);
+         			
+-					mAppInfo=info;
+-            	}
+-				else if(info.getPackerName().equals(AppUtils.CONTACTS)){
+-					String url =Settings.System.getString(mContext.getContentResolver(),AppUtils.CONTANCTS_URI);
+-					
+-					//String url="content://com.android.contacts/contacts/lookup/3176r1-4F4F4B4B/1";
+-					if(url!=null&&!url.isEmpty()){
+-						getPhoneContacts(Uri.parse(url));
+-						if(!mContactId.isEmpty()){
+-							info=getContactImage(info,mContactId);
+-						}	
++						mAppInfo=info;
++					} else if(info.getPackerName().equals(AppUtils.CONTACTS)) {
++						String url =Settings.System.getString(mContext.getContentResolver(),AppUtils.CONTANCTS_URI);
++						//String url="content://com.android.contacts/contacts/lookup/3176r1-4F4F4B4B/1";
++						if(url!=null&&!url.isEmpty()){
++							getPhoneContacts(Uri.parse(url));
++							if(!mContactId.isEmpty()){
++								info=getContactImage(info,mContactId);
++							}	
++						}
++					} else if(info.getPackerName().equals(GOOGLE_SEARCH)) {
++						info.setDrawable(mContext.getDrawable(R.drawable.ic_mic_26dp));
+ 					}
+-				}else if(info.getPackerName().equals(GOOGLE_SEARCH)){
+-					info.setDrawable(mContext.getDrawable( R.drawable.ic_mic_26dp));
+ 				}
+-        	}
+ 				initIcon();
+ 			}
+-		}else{
++		} else {
+ 			mFuncLayout.setVisibility(View.GONE);
+ 		}
+-		
+     }
++	
+ 	public void initIcon(){
+-				mFuncLayout.setVisibility(View.VISIBLE);	
+-				mPreviewContainer.setVisibility(View.VISIBLE);
+-        		mFirstIcon.setImageDrawable(list.get(0).getDrawable());
+-        		mFirstIcon.setOnClickListener(new OnClik(0));
+-        		if (list.size() == 2) {
+-            		mFifthLayout.setVisibility(View.VISIBLE);
+-            		mFifthIcon.setImageDrawable(list.get(1).getDrawable());
+-           			mFifthIcon.setOnClickListener(new OnClik(1));
+-					mFourthLayout.setVisibility(View.GONE);
+-					mSecondLayout.setVisibility(View.GONE);
+-           			mThirdLayout.setVisibility(View.GONE);
+-        		}
+-        		if (list.size() == 3) {
+-            		mFourthLayout.setVisibility(View.VISIBLE);
+-            		mFifthLayout.setVisibility(View.VISIBLE);
+-					mSecondLayout.setVisibility(View.GONE);
+-            		mThirdLayout.setVisibility(View.GONE);
+-            		mFourthIcon.setImageDrawable(list.get(1).getDrawable());
+-            		mFifthIcon.setImageDrawable(list.get(2).getDrawable());
+-            		mFourthIcon.setOnClickListener(new OnClik(1));
+-            		mFifthIcon.setOnClickListener(new OnClik(2));
+-        		}
+-        		if (list.size() == 4) {
+-            		mSecondLayout.setVisibility(View.VISIBLE);
+-            		mFourthLayout.setVisibility(View.VISIBLE);
+-            		mFifthLayout.setVisibility(View.VISIBLE);			
+-           			mThirdLayout.setVisibility(View.GONE);
+-            		mSecondIcon.setImageDrawable(list.get(1).getDrawable());
+-            		mFourthIcon.setImageDrawable(list.get(2).getDrawable());
+-            		mFifthIcon.setImageDrawable(list.get(3).getDrawable());
+-            		mSecondIcon.setOnClickListener(new OnClik(1));
+-            		mFourthIcon.setOnClickListener(new OnClik(2));
+-            		mFifthIcon.setOnClickListener(new OnClik(3));
+-       		 	}
+-        		if (list.size() == 5) {
+-            		mSecondLayout.setVisibility(View.VISIBLE);
+-            		mThirdLayout.setVisibility(View.VISIBLE);
+-            		mFourthLayout.setVisibility(View.VISIBLE);
+-            		mFifthLayout.setVisibility(View.VISIBLE);
+-            		mSecondIcon.setImageDrawable(list.get(1).getDrawable());
+-            		mThirdIcon.setImageDrawable(list.get(2).getDrawable());
+-            		mFourthIcon.setImageDrawable(list.get(3).getDrawable());
+-            		mFifthIcon.setImageDrawable(list.get(4).getDrawable());
+-            		mSecondIcon.setOnClickListener(new OnClik(1));
+-            		mThirdIcon.setOnClickListener(new OnClik(2));
+-            		mFourthIcon.setOnClickListener(new OnClik(3));
+-            		mFifthIcon.setOnClickListener(new OnClik(4));
+-        		}
++		mFuncLayout.setVisibility(View.VISIBLE);	
++		mPreviewContainer.setVisibility(View.VISIBLE);
++		switch (list.size()) {
++			case 1:
++				mFirstLayout.setVisibility(View.GONE);
++				mSecondLayout.setVisibility(View.GONE);
++				mThirdLayout.setVisibility(View.VISIBLE);
++				mFourthLayout.setVisibility(View.GONE);
++				mFifthLayout.setVisibility(View.GONE);
++				mThirdIcon.setImageDrawable(list.get(0).getDrawable());
++				mThirdIcon.setOnClickListener(new OnClik(0));
++				break;
++			case 2:
++				mFirstLayout.setVisibility(View.VISIBLE);
++				mSecondLayout.setVisibility(View.GONE);
++				mThirdLayout.setVisibility(View.GONE);
++				mFourthLayout.setVisibility(View.GONE);
++				mFifthLayout.setVisibility(View.VISIBLE);
++				mFirstIcon.setImageDrawable(list.get(0).getDrawable());
++				mFifthIcon.setImageDrawable(list.get(1).getDrawable());
++				mFirstIcon.setOnClickListener(new OnClik(0));
++				mFifthIcon.setOnClickListener(new OnClik(1));
++				break;
++			case 3:
++				mFirstLayout.setVisibility(View.VISIBLE);
++				mSecondLayout.setVisibility(View.GONE);
++				mThirdLayout.setVisibility(View.VISIBLE);
++				mFourthLayout.setVisibility(View.GONE);
++				mFifthLayout.setVisibility(View.VISIBLE);
++				mFirstIcon.setImageDrawable(list.get(0).getDrawable());
++				mThirdIcon.setImageDrawable(list.get(1).getDrawable());
++				mFifthIcon.setImageDrawable(list.get(2).getDrawable());
++				mFirstIcon.setOnClickListener(new OnClik(0));
++				mThirdIcon.setOnClickListener(new OnClik(1));
++				mFifthIcon.setOnClickListener(new OnClik(2));
++				break;
++			case 4:
++				mFirstLayout.setVisibility(View.VISIBLE);
++				mSecondLayout.setVisibility(View.VISIBLE);
++				mThirdLayout.setVisibility(View.VISIBLE);
++				mFourthLayout.setVisibility(View.VISIBLE);
++				mFifthLayout.setVisibility(View.GONE);
++				mFirstIcon.setImageDrawable(list.get(0).getDrawable());
++				mSecondIcon.setImageDrawable(list.get(1).getDrawable());
++				mThirdIcon.setImageDrawable(list.get(2).getDrawable());
++				mFourthIcon.setImageDrawable(list.get(3).getDrawable());
++				mFirstIcon.setOnClickListener(new OnClik(0));
++				mSecondIcon.setOnClickListener(new OnClik(1));
++				mThirdIcon.setOnClickListener(new OnClik(2));
++				mFourthIcon.setOnClickListener(new OnClik(3));
++				break;
++			case 5:
++				mFirstLayout.setVisibility(View.VISIBLE);
++				mSecondLayout.setVisibility(View.VISIBLE);
++				mThirdLayout.setVisibility(View.VISIBLE);
++				mFourthLayout.setVisibility(View.VISIBLE);
++				mFifthLayout.setVisibility(View.VISIBLE);
++				mFirstIcon.setImageDrawable(list.get(0).getDrawable());
++				mSecondIcon.setImageDrawable(list.get(1).getDrawable());
++				mThirdIcon.setImageDrawable(list.get(2).getDrawable());
++				mFourthIcon.setImageDrawable(list.get(3).getDrawable());
++				mFifthIcon.setImageDrawable(list.get(4).getDrawable());
++				mFirstIcon.setOnClickListener(new OnClik(0));
++				mSecondIcon.setOnClickListener(new OnClik(1));
++				mThirdIcon.setOnClickListener(new OnClik(2));
++				mFourthIcon.setOnClickListener(new OnClik(3));
++				mFifthIcon.setOnClickListener(new OnClik(4));
++				break;
++			default:
++				mFirstLayout.setVisibility(View.GONE);
++				mSecondLayout.setVisibility(View.GONE);
++				mThirdLayout.setVisibility(View.GONE);
++				mFourthLayout.setVisibility(View.GONE);
++				mFifthLayout.setVisibility(View.GONE);
++				break;
++		}
+ 	}
++	
+ 	private void initView() {
+-		   mFuncLayout = (LinearLayout) findViewById(R.id.func_layout);
+-		   mFirstLayout = (RelativeLayout) findViewById(R.id.first_layout);
+-		   mFirstIcon = (KeyguardAffordanceView) findViewById(R.id.first_icon);
+-		   mSecondLayout = (RelativeLayout) findViewById(R.id.second_layout);
+-		   mSecondIcon = (KeyguardAffordanceView) findViewById(R.id.second_icon);
+-		   mThirdLayout = (RelativeLayout) findViewById(R.id.third_layout);
+-		   mThirdIcon = (KeyguardAffordanceView) findViewById(R.id.third_icon);
+-		   mFourthLayout = (RelativeLayout) findViewById(R.id.fourth_layout);
+-		   mFourthIcon = (KeyguardAffordanceView) findViewById(R.id.fourth_icon);
+-		   mFifthLayout = (RelativeLayout) findViewById(R.id.fifth_layout);
+-		   mFifthIcon = (KeyguardAffordanceView) findViewById(R.id.fifth_icon);
+-	   }
++		mFuncLayout = (LinearLayout) findViewById(R.id.func_layout);
++		mFirstLayout = (RelativeLayout) findViewById(R.id.first_layout);
++		mFirstIcon = (KeyguardAffordanceView) findViewById(R.id.first_icon);
++		mSecondLayout = (RelativeLayout) findViewById(R.id.second_layout);
++		mSecondIcon = (KeyguardAffordanceView) findViewById(R.id.second_icon);
++		mThirdLayout = (RelativeLayout) findViewById(R.id.third_layout);
++		mThirdIcon = (KeyguardAffordanceView) findViewById(R.id.third_icon);
++		mFourthLayout = (RelativeLayout) findViewById(R.id.fourth_layout);
++		mFourthIcon = (KeyguardAffordanceView) findViewById(R.id.fourth_icon);
++		mFifthLayout = (RelativeLayout) findViewById(R.id.fifth_layout);
++		mFifthIcon = (KeyguardAffordanceView) findViewById(R.id.fifth_icon);
++	}
+ 	
+-	   public List<AppInfo> getLockIconData() {
+-		   DBManager manager = new DBManager(mContext);
+-		   manager.openDatabase();
+-		   db = AppDB.getInstance();
+-		   list = db.getDefaultApp(DEFAULT_TABLE);
+-		   return AppUtils.getAppInfo( mContext, list);
+-	   }
++	public List<AppInfo> getLockIconData() {
++		DBManager manager = new DBManager(mContext);
++		manager.openDatabase();
++		db = AppDB.getInstance();
++		list = db.getDefaultApp(DEFAULT_TABLE);
++		return AppUtils.getAppInfo( mContext, list);
++	}
++	
+     private void initAccessibility() {
+         mLockIcon.setAccessibilityDelegate(mAccessibilityDelegate);
+         mLeftAffordanceView.setAccessibilityDelegate(mAccessibilityDelegate);
+@@ -518,7 +543,7 @@
+     public void setUserSetupComplete(boolean userSetupComplete) {
+         mUserSetupComplete = userSetupComplete;
+         updateCameraVisibility();
+-       // updateLeftAffordanceIcon();
++        //updateLeftAffordanceIcon();
+     }
+ 
+     private Intent getCameraIntent() {
+@@ -527,7 +552,7 @@
+                 KeyguardUpdateMonitor.getCurrentUser());
+         boolean secure = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser());
+         return (secure && !canSkipBouncer) ? SECURE_CAMERA_INTENT : INSECURE_CAMERA_INTENT;
+-    }
++	}
+ 
+     /**
+      * Resolves the intent to launch the camera application.
+@@ -552,7 +577,7 @@
+                 && !PhoneStatusBar.sInSuperMode //modified by bing.wang.hz for Task4940849
+                 && mUserSetupComplete;
+         //mCameraImageView.setVisibility(visible ? View.VISIBLE : View.GONE);
+-		 mCameraImageView.setVisibility( View.GONE);
++		mCameraImageView.setVisibility( View.GONE);
+     }
+ 
+     private void updateLeftAffordanceIcon() {
+@@ -568,7 +593,7 @@
+             drawableId = R.drawable.ic_phone_24dp;
+             contentDescription = R.string.accessibility_phone_button;
+         }
+-       // mLeftAffordanceView.setVisibility(visible ? View.VISIBLE : View.GONE);
++        // mLeftAffordanceView.setVisibility(visible ? View.VISIBLE : View.GONE);
+ 		mLeftAffordanceView.setVisibility(View.GONE);
+         mLeftAffordanceView.setImageDrawable(mContext.getDrawable(drawableId));
+         mLeftAffordanceView.setContentDescription(mContext.getString(contentDescription));
+@@ -678,7 +703,7 @@
+         boolean wouldLaunchResolverActivity = PreviewInflater.wouldLaunchResolverActivity(
+                 mContext, intent, KeyguardUpdateMonitor.getCurrentUser());
+         if (intent == SECURE_CAMERA_INTENT && !wouldLaunchResolverActivity) {
+-            AsyncTask.execute(new Runnable() {
++			AsyncTask.execute(new Runnable() {
+                 @Override
+                 public void run() {
+                     int result = ActivityManager.START_CANCELED;
+@@ -717,7 +742,6 @@
+                 }
+             });
+         } else {
+-
+             // We need to delay starting the activity because ResolverActivity finishes itself if
+             // launched behind lockscreen.
+             mActivityStarter.startActivity(intent, false /* dismissShade */,
+@@ -978,6 +1002,7 @@
+         mEmergencyButtonExt.setEmergencyButtonVisibility(mEmergencyButton, alpha);
+     }
+     /// @}
++	
+ 	public void startApp(String packageName){
+         Intent intent = new Intent(packageName)
+ 				.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+@@ -990,6 +1015,7 @@
+             }
+         });
+     }
++	
+ 	public void startFunc(String packageName){
+         Intent intent = new Intent(packageName)
+ 				.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+@@ -1003,22 +1029,19 @@
+             }
+         });
+     }
++	
+ 	public void startApp(Context mContext,String packageName){
+ 		mActivityStarter.startActivity(AppUtils.startApp(mContext,packagerName),false);
+-		/*
+-		mActivityStarter.startActivity(AppUtils.startApp(mContext,packagerName),false,new ActivityStarter.Callback() {
+-			@Override
+-			public void onActivityStarted(int resultCode) {
+-				//unbindCameraPrewarmService(isSuccessfulLaunch(resultCode));
+-			}
+-		});*/
+ 	}
++	
+ 	class OnClik implements View.OnClickListener {
+         int index;
+-        public OnClik(int index) {
++        
++		public OnClik(int index) {
+             this.index = index;
+         }
+-        @Override
++        
++		@Override
+         public void onClick(View v) {
+             if (view == null) {
+                 view = v;
+@@ -1079,10 +1102,8 @@
+ 								Intent intent=new Intent(Intent.ACTION_CALL,Uri.parse("tel:" +mContactPhone));
+ 								mContext.startActivity(intent);
+ 							}
+-
+ 						}else{
+-								startApp(mContext,packagerName);
+-																						
++							startApp(mContext,packagerName);															
+ 						}
+                     }
+                 }
+@@ -1089,6 +1110,7 @@
+             }
+         }
+     }
++	
+ 	private void changeTorchMode(boolean isChecked) {	
+ 		mFlashlightController.setFlashlight(isChecked);
+ 
+@@ -1095,30 +1117,27 @@
+ 	} 
+ 
+ 	private void getPhoneContacts(Uri uri){ 
+-		   ContentResolver cr = mContext.getContentResolver();
++		ContentResolver cr = mContext.getContentResolver();
+ 		   
+-		   Cursor cursor=cr.query(uri,null,null,null,null);
+-		   if(cursor!=null)
+-		   {
+-			   cursor.moveToFirst();
++		Cursor cursor=cr.query(uri,null,null,null,null);
++		if(cursor!=null) {
++			cursor.moveToFirst();
+ 			  
+-			   int nameFieldColumnIndex=cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME);
+-			   mContactName=cursor.getString(nameFieldColumnIndex);
++			int nameFieldColumnIndex=cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME);
++			mContactName=cursor.getString(nameFieldColumnIndex);
+ 			   
+-			   mContactId = cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts._ID));
+-			   Cursor phone = cr.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null,
++			mContactId = cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts._ID));
++			Cursor phone = cr.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null,
+ 					   ContactsContract.CommonDataKinds.Phone.CONTACT_ID + "=" + mContactId, null, null);
+-			   if(phone != null){
+-				   phone.moveToFirst();
+-				   mContactPhone = phone.getString(phone.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER));
+-			   }
+-			   
+-			   phone.close();
+-			   cursor.close();
+-			   
+-		   }
+-		  
+-	   }
++			if(phone != null){
++				phone.moveToFirst();
++				mContactPhone = phone.getString(phone.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER));
++			}   
++			phone.close();
++			cursor.close();	   
++		}	  
++	}
++	   
+ 	private AppInfo getContactImage(AppInfo info,String contactId){
+ 		ContentResolver cr = mContext.getContentResolver();
+ 		Cursor dataCursor = cr.query(ContactsContract.Data.CONTENT_URI,
+@@ -1126,19 +1145,19 @@
+ 				  ContactsContract.Data.CONTACT_ID + "=?" + " AND "
+ 						  + ContactsContract.Data.MIMETYPE + "='" + ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE + "'",
+ 				  new String[]{String.valueOf(contactId)}, null);
+-				   if (dataCursor != null) {
+-						if (dataCursor.getCount() > 0) {
+-							   dataCursor.moveToFirst();
+-							   byte[] bytes = dataCursor.getBlob(dataCursor.getColumnIndex("data15"));
+-						   if (bytes != null) {
+-							   Bitmap photo = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+-							   if (photo != null) 
+-							   	info.setDrawable(new BitmapDrawable(photo));
+-						   }
+-					   }
+-					   dataCursor.close();
+-				   }
++		if (dataCursor != null) {
++			if (dataCursor.getCount() > 0) {
++				dataCursor.moveToFirst();
++				byte[] bytes = dataCursor.getBlob(dataCursor.getColumnIndex("data15"));
++				if (bytes != null) {
++					Bitmap photo = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
++					if (photo != null) 
++						info.setDrawable(new BitmapDrawable(photo));
++				}
++			}
++			dataCursor.close();
++		}
+ 		return info;		   
+-
+ 	}
++	
+ }
+Index: frameworks/base/packages/SystemUI/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 1539)
++++ frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 1540)
+@@ -1688,8 +1688,9 @@
+ 	<string name="func_on">"On"</string>	
+ 	<string name="func_title">"Func shortcuts"</string>
+ 	<string name="func_off_content">"Func lets you open app functions directly from\nthe lock screen."</string>
+-	<string name="func_max_num">"Maximum of 5 shortcuts reached.\nRemove an active one first."</string>
+-	<string name="func_remove_all">"You removed the Func settings\nshortcut from your lock screen. You\ncan always customise the Func\nsettings by going to Settings > Lock\nscreen > Func."</string>
++	<string name="func_max_num">"Maximum of 5 shortcuts reached. Remove an active one first."</string>
++	<string name="func_remove_all">"You removed the Func settings shortcut from your lock screen. You can always customise the Func settings by going to Settings > Lock screen > Func."</string>
++	<string name="func_add_exist_app">"The app you want to add already exists in the default list."</string>
+ 	<string name="func_add_app">"Add app shortcuts"</string>
+ 	<string name="torch_text">"Torch"</string>
+ 	<string name="default_apps_title">"Shortcut on lock screen"</string>
+Index: frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml	(revision 1539)
++++ frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml	(revision 1540)
+@@ -665,8 +665,9 @@
+ 	<string name="func_on">"开启"</string>	
+ 	<string name="func_title">"快捷功能"</string>
+ 	<string name="func_off_content">"快捷功能可以让你直接从锁定屏幕打开应用程序功能。"</string>
+-	<string name="func_max_num">"最多达到5个快捷方式。\n 先删除一个活动的快捷方式。"</string>
+-	<string name="func_remove_all">"您从锁定屏幕中删除了快捷功能设置快捷方式。\n 您可以随时自定义快捷功能设置转到设置>锁定\屏幕>功能。"</string>
++	<string name="func_max_num">"最多达到5个快捷方式。先删除一个活动的快捷方式。"</string>
++	<string name="func_remove_all">"您从锁定屏幕中删除了快捷功能设置快捷方式。您可以随时自定义快捷功能设置转到设置>锁定>屏幕>功能。"</string>
++	<string name="func_add_exist_app">"你想要添加的应用在快捷功能列表中已存在。"</string>
+ 	<string name="func_add_app">"添加应用快捷方式"</string>
+ 	<string name="torch_text">"手电筒"</string>
+ 	<string name="default_apps_title">"锁屏快捷功能"</string>
+Index: frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml	(revision 1539)
++++ frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml	(revision 1540)
+@@ -661,8 +661,9 @@
+ 	<string name="func_on">"開啟"</string>	
+ 	<string name="func_title">"快捷功能"</string>
+ 	<string name="func_off_content">"快捷功能可以讓你直接從鎖定屏幕打開應用程序功能。"</string>
+-	<string name="func_max_num">"最多達到5個快捷方式。\n 先刪除一個活動的快捷方式。"</string>
+-	<string name="func_remove_all">"您從鎖定屏幕中刪除了快捷功能設置快捷方式。\n 您可以隨時自定義快捷功能設置轉到設置>鎖定\屏幕>功能。"</string>
++	<string name="func_max_num">"最多達到5個快捷方式。先刪除一個活動的快捷方式。"</string>
++	<string name="func_remove_all">"您從鎖定屏幕中刪除了快捷功能設置快捷方式。您可以隨時自定義快捷功能設置轉到設置>鎖定屏幕>功能。"</string>
++	<string name="func_add_exist_app">"你想要添加的應用在快捷功能列表中已存在。"</string>
+ 	<string name="func_add_app">"添加應用快捷方式"</string>
+ 	<string name="torch_text">"手電筒"</string>
+ 	<string name="default_apps_title">"鎖屏快捷功能"</string>
+Index: frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml	(revision 1539)
++++ frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml	(revision 1540)
+@@ -663,8 +663,9 @@
+ 	<string name="func_on">"開啟"</string>	
+ 	<string name="func_title">"快捷功能"</string>
+ 	<string name="func_off_content">"快捷功能可以讓你直接從鎖定屏幕打開應用程序功能。"</string>
+-	<string name="func_max_num">"最多達到5個快捷方式。\n 先刪除一個活動的快捷方式。"</string>
+-	<string name="func_remove_all">"您從鎖定屏幕中刪除了快捷功能設置快捷方式。\n 您可以隨時自定義快捷功能設置轉到設置>鎖定\屏幕>功能。"</string>
++	<string name="func_max_num">"最多達到5個快捷方式。先刪除一個活動的快捷方式。"</string>
++	<string name="func_remove_all">"您從鎖定屏幕中刪除了快捷功能設置快捷方式。您可以隨時自定義快捷功能設置轉到設置>鎖定屏幕>功能。"</string>
++	<string name="func_add_exist_app">"你想要添加的應用在快捷功能列表中已存在。"</string>
+ 	<string name="func_add_app">"添加應用快捷方式"</string>
+ 	<string name="torch_text">"手電筒"</string>
+ 	<string name="default_apps_title">"鎖屏快捷功能"</string>

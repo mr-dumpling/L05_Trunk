@@ -1,0 +1,951 @@
+Index: packages/apps/fcidtvtest/Android.mk
+===================================================================
+--- packages/apps/fcidtvtest/Android.mk	(revision 0)
++++ packages/apps/fcidtvtest/Android.mk	(revision 4607)
+@@ -0,0 +1,45 @@
++
++LOCAL_PATH := $(call my-dir)
++include $(CLEAR_VARS)
++
++LOCAL_MODULE_TAGS := optional
++
++LOCAL_SRC_FILES := $(call all-java-files-under, src)
++
++LOCAL_DEX_PREOPT := false
++LOCAL_PROGUARD_ENABLED := disabled
++LOCAL_PACKAGE_NAME := fcimini
++LOCAL_CERTIFICATE := platform
++
++LOCAL_STATIC_JAVA_LIBRARIES += classes
++
++LOCAL_PREBUILT_JNI_LIBS := libs/armeabi/libavcodec-56.so \
++                           libs/armeabi/libavfilter-5.so \
++                           libs/armeabi/libavformat-56.so \
++                           libs/armeabi/libavutil-54.so \
++                           libs/armeabi/libbaseband_jni.so \
++                           libs/armeabi/libFaudio.so \
++                           libs/armeabi/libFciIsdbtCoreTV.so \
++                           libs/armeabi/libswresample-1.so \
++                           libs/armeabi/libswscale-3.so 
++
++
++
++#LOCAL_ARM_MODE := arm
++LOCAL_MULTILIB := 32
++
++include $(BUILD_PACKAGE)
++
++
++
++include $(CLEAR_VARS)
++
++LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES += classes:libs/classes.jar
++
++include $(BUILD_MULTI_PREBUILT)
++
++
++
++include $(call all-makefiles-under,$(LOCAL_PATH))
++
++
+Index: packages/apps/fcidtvtest/AndroidManifest.xml
+===================================================================
+--- packages/apps/fcidtvtest/AndroidManifest.xml	(revision 0)
++++ packages/apps/fcidtvtest/AndroidManifest.xml	(revision 4607)
+@@ -0,0 +1,35 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="kr.co.fci.tv.factory"
++
++    android:sharedUserId="android.uid.system" 
++
++    android:versionCode="2"
++    android:versionName="1.1">
++
++    <uses-permission android:name="android.permission.STORAGE" />
++    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
++    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
++    <uses-permission android:name="android.permission.WAKE_LOCK" />
++    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
++
++    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
++
++    <application
++	android:screenOrientation="portrait"
++        android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
++        android:label="@string/app_name" >
++        <activity
++            android:name=".MainActivity"
++            android:label="@string/app_name"
++            android:screenOrientation="portrait" >
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++        
++    </application>
++
++</manifest>
+Index: packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/AudioOut.java
+===================================================================
+--- packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/AudioOut.java	(revision 0)
++++ packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/AudioOut.java	(revision 4607)
+@@ -0,0 +1,86 @@
++package kr.co.fci.tv.factory;
++
++import android.content.Context;
++import android.media.AudioManager;
++import android.util.Log;
++
++import java.lang.reflect.Method;
++
++// audioSystem parameters
++public class AudioOut {
++
++    private static final String TAG = "FCI_TV_Factory";
++    AudioManager am;
++
++    Class<?> audioSystem;
++    public AudioOut(Context _cont) {
++        am= (AudioManager)_cont.getSystemService(Context.AUDIO_SERVICE);
++
++        try {
++             audioSystem = Class.forName("android.media.AudioSystem");
++
++        } catch (Exception e) {
++            Log.i(TAG, "setDeviceConnectionState failed: " + e);
++        }
++
++        int result = am.requestAudioFocus(afChangeListener, am.STREAM_MUSIC, am.AUDIOFOCUS_GAIN);
++    }
++
++    public void setSpeakerMode( boolean _onOff)
++    {
++        Method setForceUse;
++
++        try {
++            setForceUse = audioSystem.getMethod(
++                    "setForceUse", int.class, int.class);
++            if(_onOff ==true ) {
++                setForceUse.invoke(null,1, 1);
++            }else
++            {
++                setForceUse.invoke(null,1, 2);
++            }
++        } catch (Exception e) {
++            Log.i(TAG, "setForceUse failed: " + e);
++        }
++
++    }
++
++    public void audioModeReturn()
++    {
++        Method setForceUse;
++        Log.i(TAG, "Return   audioMode" );
++        try {
++            setForceUse = audioSystem.getMethod(
++                    "setForceUse", int.class, int.class);
++
++            setForceUse.invoke(null,1, 0);
++
++        } catch (Exception e) {
++            Log.i(TAG, "setForceUse failed: " + e);
++        }
++    }
++
++    AudioManager.OnAudioFocusChangeListener afChangeListener = new AudioManager.OnAudioFocusChangeListener() {
++
++
++        public void onAudioFocusChange(int focusChange) {
++        if (focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) { //pause
++            // Pause playback
++            Log.i(TAG, "AUDIOFOCUS_LOSS_TRANSIENT Pause >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
++            FCI_TVi.AVStop();
++        } else if (focusChange == AudioManager.AUDIOFOCUS_GAIN) { //unmute
++            // Resume playback
++            Log.i(TAG, "AUDIOFOCUS_GAIN Resume >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ");
++            FCI_TVi.AVStart(0);
++        } else if (focusChange == AudioManager.AUDIOFOCUS_LOSS) { //mute
++            Log.i(TAG, "AUDIOFOCUS_LOSS stop >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ");
++            FCI_TVi.AVStop();
++        } else if (focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) {
++
++        }
++        }
++    };
++}
++
++
++
+Index: packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/MainActivity.java
+===================================================================
+--- packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/MainActivity.java	(revision 0)
++++ packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/MainActivity.java	(revision 4607)
+@@ -0,0 +1,208 @@
++package kr.co.fci.tv.factory;
++
++import android.app.Activity;
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.graphics.Color;
++import android.os.Bundle;
++import android.os.Handler;
++import android.util.Log;
++import android.view.SurfaceHolder;
++import android.view.SurfaceView;
++import android.view.WindowManager;
++import android.widget.TextView;
++
++import android.widget.Button;
++import android.view.View.OnClickListener;
++import android.view.View;
++import kr.co.fci.tv.factory.R;
++
++
++public class MainActivity extends Activity implements SurfaceHolder.Callback {
++
++    private static String TAG = "FCI_TV_Factory";
++    private Handler mSignalHandler = null;
++    private Runnable mSignalHandlerTask = null;
++
++    private TextView _bbstat_text_view;
++
++
++    Button bt_left = null;
++    Button bt_right = null;
++    private final int RESULT_OK = 1;
++    private final int RESULT_NG = 0;
++
++
++    private SurfaceView sv;
++    private SurfaceHolder videoSurfaceHolder;
++
++    //Broadcast Event
++    private SysBroadcastReceiver mSysReceiver;
++
++    private AudioOut audioOut;
++
++    @Override
++    public void surfaceCreated(SurfaceHolder holder) {
++        int nRet;
++        Log.i(TAG, "==========surfaceCreated   ======================");
++        FCI_TVi.setSuface(holder.getSurface());
++	//begin-20160108-yuduan.xie-modify-for-DTV
++        //nRet = FCI_TVi.playFrequency(629143); //channel 40.
++	nRet = FCI_TVi.playFrequency(635143);
++	//end-20160108-yuduan.xie-modify-for-DTV
++
++        if (nRet == 0) {
++            Log.e(TAG, "playFrequency() OK!!!");
++            FCI_TVi.AVStart(0);
++	    //begin-add
++	    Log.d("yuduan.xie","ok5");
++		//end-add
++            mSignalHandler.postDelayed(mSignalHandlerTask, 1000);
++        }
++        else {
++            Log.e(TAG, "playFrequency() failed!!!");
++        }
++    }
++
++    @Override
++    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
++        Log.i("TAG  ", "===== surfaceChanged============ width = " + width + " height =" + height);
++    }
++
++    @Override
++    public void surfaceDestroyed(SurfaceHolder holder) {
++
++        Log.i(TAG, "==========surfaceDestroyed   ======================");
++        FCI_TVi.AVStop();
++        mSignalHandler.removeCallbacks(mSignalHandlerTask);
++    }
++
++    @Override
++    protected void onDestroy(){
++        Log.d(TAG,"onDestory");
++        unregisterReceiver(mSysReceiver);
++        super.onDestroy();
++        FCI_TVi.deInit();;
++        audioOut.audioModeReturn();
++    }
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++
++        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
++
++        setContentView(R.layout.main);
++
++        // Broadcast Receiver Register
++        mSysReceiver = new SysBroadcastReceiver();
++        IntentFilter filter = new IntentFilter();
++        filter.addAction(Intent.ACTION_HEADSET_PLUG);
++
++        registerReceiver(mSysReceiver, filter);
++
++        _bbstat_text_view = (TextView)findViewById(R.id.bbstatistic);
++        sv = (SurfaceView) findViewById(R.id.video_surface);
++
++
++	    bt_left = (Button) findViewById(R.id.bt_left);
++        bt_right = (Button) findViewById(R.id.bt_right);
++        bt_left.setText("Pass");
++		//Intent it = new Intent();
++	   bt_left.setOnClickListener(new OnClickListener() {
++		@Override
++		public void onClick(View v) {
++			setResult(RESULT_OK);
++			finish();
++		}
++	});
++
++	    bt_right.setText("Fail");
++	    bt_right.setOnClickListener(new OnClickListener() {
++		@Override
++		public void onClick(View v) {
++			setResult(RESULT_NG);
++			finish();
++		}
++	});
++	    bt_left.setEnabled(true);
++	    bt_right.setEnabled(true);
++
++
++
++        videoSurfaceHolder = sv.getHolder();
++        int h = sv.getMeasuredHeight();
++        int w = sv.getMeasuredWidth();
++
++        videoSurfaceHolder.setFixedSize(w, h);
++
++	//begin-add
++	Log.d("yuduan.xie","ok1");
++	//end-add
++        videoSurfaceHolder.addCallback(this);
++	//begin-add
++	Log.d("yuduan.xie","ok2");
++	//end-add
++        audioOut = new AudioOut(this);
++
++        //audioOut.setSpeakerMode(true);
++	audioOut.setSpeakerMode(false);//begin-20160415-yuduan.xie-modify-for-DTV headset voice-end
++
++        //FCI_TVi.setContext(this);
++	//begin-add
++	Log.d("yuduan.xie","ok3");
++	//end-add
++        FCI_TVi.init(this.getPackageName());
++	//begin-add
++	Log.d("yuduan.xie","ok4");
++	//end-add
++        mSignalHandler = new Handler();
++        mSignalHandlerTask = new Runnable() {
++            public void run() {
++                int more_signal[] = FCI_TVi.GetMoreSignalVal();
++                int valueBER = more_signal[0];
++                int valuePER = more_signal[1];
++                int valueRSSI = more_signal[2];
++                Log.d(TAG, "BER " +  valueBER + " PER " + valuePER + " RSSI" +  valueRSSI);
++
++                String strtmp = String.format("BER %d, PER %d, RSSI %d", valueBER, valuePER, valueRSSI);
++                if (valueBER > 500) {
++                    _bbstat_text_view.setTextColor(Color.RED);
++                }
++                else if (valueBER <= 500 && valueBER >= 100) {
++                    _bbstat_text_view.setTextColor(Color.YELLOW);
++                }
++                if (valueBER < 100) {
++                    _bbstat_text_view.setTextColor(Color.WHITE);
++                }
++                _bbstat_text_view.setText(strtmp);
++                mSignalHandler.postDelayed(mSignalHandlerTask, 1000);
++            }
++        };
++    }
++
++
++    private class SysBroadcastReceiver extends BroadcastReceiver {
++        @Override
++        public void onReceive (Context _ctx, Intent _intent) {
++            String action =_intent.getAction();
++
++            if (action.equals(Intent.ACTION_HEADSET_PLUG)) {
++                int state = _intent.getIntExtra("state", -1);
++
++                switch(state) {
++                    case 0: //disconnected
++                    case 1: //connected
++                            //audioOut.setSpeakerMode(true);
++			    audioOut.setSpeakerMode(false);//begin-20160415-yuduan.xie-modify-for-DTV headset voice-end
++                        break;
++
++                    default:
++                        break;
++                }
++            }
++        }
++    }
++}
+Index: packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/FCI_TVi.java
+===================================================================
+--- packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/FCI_TVi.java	(revision 0)
++++ packages/apps/fcidtvtest/src/kr/co/fci/tv/factory/FCI_TVi.java	(revision 4607)
+@@ -0,0 +1,97 @@
++package kr.co.fci.tv.factory;
++
++
++import android.util.Log;
++import android.view.Surface;
++
++import com.fci.tv.FCI_TV;
++
++public class FCI_TVi {
++
++
++    private static String TAG = "FCI_TV_Factory";
++    private static FCI_TV itv= null;
++
++    private static void setCallback()
++    {
++        itv.setCallback(new FCI_TV.Callback() {
++            public void Cb(int _result, int arg1, int arg2, String arg3, Object arg4 ){
++                switch (_result) {
++
++                    case FCI_TV.MSG_FIRST_VIDEO_START: {
++                        Log.i(TAG, " MSG_FIRST_VIDEO_START ");
++                    }
++                    break;
++
++                    case FCI_TV.MSG_LOW_BUFFER: {
++
++                        Log.i(TAG, " MSG_LOW_BUFFER ");
++                    }
++                    break;
++
++                    case FCI_TV.MSG_PROGRAM_NOT_AVAILABLE_NOTIFY: {
++                        Log.i(TAG, " MSG_PROGRAM_NOT_AVAILABLE_NOTIFY ");
++                    }
++
++                    default:
++                    break;
++                }
++            }
++        });
++    }
++
++
++    public static void setSuface(Surface _sur) {
++
++        if(itv != null && _sur !=null) {
++            itv.setSurface(_sur);
++        }
++
++    }
++
++    public static void init(String _name) {
++
++       if(itv == null) {
++           itv = new FCI_TV();
++       }
++        setCallback();
++        itv.init(_name);
++    }
++
++
++    public static void deInit() {
++        itv.deInit();
++        itv= null;
++    }
++
++    public static void AVStart(int _ID) {
++        if (itv != null) {
++            itv.AVStart(_ID);
++        }
++    }
++
++
++    public static void AVStop() {
++        if (itv != null) {
++            itv.AVStop();
++        }
++    }
++
++    public static int playFrequency(long _freqKHz) {
++        if (itv != null) {
++            return itv.playFrequency(_freqKHz);
++        }
++
++        return -1;
++    }
++
++    public static int[] GetMoreSignalVal() {
++       if (itv != null) {
++		    return itv.GetMoreSignalVal();
++        }
++        else {
++            int[] ret = {0, 0, 0};
++            return ret;
++        }
++    }
++}
+Index: packages/apps/fcidtvtest/libs/classes.jar
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/classes.jar
+===================================================================
+--- packages/apps/fcidtvtest/libs/classes.jar	(revision 0)
++++ packages/apps/fcidtvtest/libs/classes.jar	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/classes.jar
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/libs/Android.mk3
+===================================================================
+--- packages/apps/fcidtvtest/libs/Android.mk3	(revision 0)
++++ packages/apps/fcidtvtest/libs/Android.mk3	(revision 4607)
+@@ -0,0 +1,113 @@
++
++
++   LOCAL_PATH := $(call my-dir)
++   
++#########################################
++   include $(CLEAR_VARS)
++   LOCAL_MODULE := libbaseband_jni
++   LOCAL_SRC_FILES_32 := libbaseband_jni.so
++   LOCAL_MULTILIB := 32
++   LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++   LOCAL_MODULE_SUFFIX := .so
++#LOCAL_ARM_MODE := arm
++   include $(BUILD_PREBUILT)
++
++#########################################
++
++   include $(CLEAR_VARS)
++   LOCAL_MODULE := libFciIsdbtCoreTV
++   LOCAL_SRC_FILES_32 := libFciIsdbtCoreTV.so
++   LOCAL_MULTILIB := 32
++   LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++   LOCAL_MODULE_SUFFIX := .so
++#LOCAL_ARM_MODE := arm
++   include $(BUILD_PREBUILT)
++
++#########################################
++
++
++   include $(CLEAR_VARS)
++#LOCAL_MODULE_TAGS := optional
++   LOCAL_MODULE := libFaudio
++   LOCAL_SRC_FILES_32 := libFaudio.so
++   LOCAL_MULTILIB := 32
++   LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++   LOCAL_MODULE_SUFFIX := .so
++#LOCAL_ARM_MODE := arm
++   include $(BUILD_PREBUILT)
++
++#########################################
++   include $(CLEAR_VARS)
++   LOCAL_MODULE := libavcodec-56
++   LOCAL_SRC_FILES_32 := libavcodec-56.so
++   LOCAL_MULTILIB := 32
++   LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++   LOCAL_MODULE_SUFFIX := .so
++#LOCAL_ARM_MODE := arm
++   include $(BUILD_PREBUILT)
++
++#########################################
++
++#########################################
++   include $(CLEAR_VARS)
++   LOCAL_MODULE := libavfilter-5
++   LOCAL_SRC_FILES_32 := libavfilter-5.so
++   LOCAL_MULTILIB := 32
++   LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++   LOCAL_MODULE_SUFFIX := .so
++#LOCAL_ARM_MODE := arm
++   include $(BUILD_PREBUILT)
++
++#########################################
++
++#########################################
++   include $(CLEAR_VARS)
++   LOCAL_MODULE := libavformat-56
++   LOCAL_SRC_FILES_32 := libavformat-56.so
++   LOCAL_MULTILIB := 32
++   LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++   LOCAL_MODULE_SUFFIX := .so
++#LOCAL_ARM_MODE := arm
++   include $(BUILD_PREBUILT)
++
++#########################################
++
++#########################################
++   include $(CLEAR_VARS)
++   LOCAL_MODULE := libavutil-54
++   LOCAL_SRC_FILES_32 := libavutil-54.so
++   LOCAL_MULTILIB := 32
++   LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++   LOCAL_MODULE_SUFFIX := .so
++#LOCAL_ARM_MODE := arm
++   include $(BUILD_PREBUILT)
++
++#########################################
++
++#########################################
++   include $(CLEAR_VARS)
++   LOCAL_MODULE := libswresample-1
++   LOCAL_SRC_FILES_32 := libswresample-1.so
++   LOCAL_MULTILIB := 32
++   LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++   LOCAL_MODULE_SUFFIX := .so
++#LOCAL_ARM_MODE := arm
++   include $(BUILD_PREBUILT)
++
++#########################################
++
++#########################################
++   include $(CLEAR_VARS)
++   LOCAL_MODULE := libswscale-3
++   LOCAL_SRC_FILES_32 := libswscale-3.so
++   LOCAL_MULTILIB := 32
++   LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++   LOCAL_MODULE_SUFFIX := .so
++#LOCAL_ARM_MODE := arm
++   include $(BUILD_PREBUILT)
++
++#########################################
++
++#LOCAL_MODULE_PATH := $(TARGET_OUT)/lib
++
++
+Index: packages/apps/fcidtvtest/libs/armeabi/libFaudio.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/armeabi/libFaudio.so
+===================================================================
+--- packages/apps/fcidtvtest/libs/armeabi/libFaudio.so	(revision 0)
++++ packages/apps/fcidtvtest/libs/armeabi/libFaudio.so	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/armeabi/libFaudio.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/libs/armeabi/libavformat-56.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/armeabi/libavformat-56.so
+===================================================================
+--- packages/apps/fcidtvtest/libs/armeabi/libavformat-56.so	(revision 0)
++++ packages/apps/fcidtvtest/libs/armeabi/libavformat-56.so	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/armeabi/libavformat-56.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/libs/armeabi/libFciIsdbtCoreTV.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/armeabi/libFciIsdbtCoreTV.so
+===================================================================
+--- packages/apps/fcidtvtest/libs/armeabi/libFciIsdbtCoreTV.so	(revision 0)
++++ packages/apps/fcidtvtest/libs/armeabi/libFciIsdbtCoreTV.so	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/armeabi/libFciIsdbtCoreTV.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/libs/armeabi/libavutil-54.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/armeabi/libavutil-54.so
+===================================================================
+--- packages/apps/fcidtvtest/libs/armeabi/libavutil-54.so	(revision 0)
++++ packages/apps/fcidtvtest/libs/armeabi/libavutil-54.so	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/armeabi/libavutil-54.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/libs/armeabi/libavcodec-56.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/armeabi/libavcodec-56.so
+===================================================================
+--- packages/apps/fcidtvtest/libs/armeabi/libavcodec-56.so	(revision 0)
++++ packages/apps/fcidtvtest/libs/armeabi/libavcodec-56.so	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/armeabi/libavcodec-56.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/libs/armeabi/libavfilter-5.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/armeabi/libavfilter-5.so
+===================================================================
+--- packages/apps/fcidtvtest/libs/armeabi/libavfilter-5.so	(revision 0)
++++ packages/apps/fcidtvtest/libs/armeabi/libavfilter-5.so	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/armeabi/libavfilter-5.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/libs/armeabi/libbaseband_jni.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/armeabi/libbaseband_jni.so
+===================================================================
+--- packages/apps/fcidtvtest/libs/armeabi/libbaseband_jni.so	(revision 0)
++++ packages/apps/fcidtvtest/libs/armeabi/libbaseband_jni.so	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/armeabi/libbaseband_jni.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/libs/armeabi/libswresample-1.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/armeabi/libswresample-1.so
+===================================================================
+--- packages/apps/fcidtvtest/libs/armeabi/libswresample-1.so	(revision 0)
++++ packages/apps/fcidtvtest/libs/armeabi/libswresample-1.so	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/armeabi/libswresample-1.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/libs/armeabi/libswscale-3.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: packages/apps/fcidtvtest/libs/armeabi/libswscale-3.so
+===================================================================
+--- packages/apps/fcidtvtest/libs/armeabi/libswscale-3.so	(revision 0)
++++ packages/apps/fcidtvtest/libs/armeabi/libswscale-3.so	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest/libs/armeabi/libswscale-3.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: packages/apps/fcidtvtest/res/layout/main.xml
+===================================================================
+--- packages/apps/fcidtvtest/res/layout/main.xml	(revision 0)
++++ packages/apps/fcidtvtest/res/layout/main.xml	(revision 4607)
+@@ -0,0 +1,58 @@
++<?xml version="1.0" encoding="utf-8"?>
++<RelativeLayout
++android:id="@+id/widget110"
++android:layout_width="fill_parent"
++android:layout_height="fill_parent"
++xmlns:android="http://schemas.android.com/apk/res/android"
++>
++
++    <TextView
++        android:id="@+id/tv_epg_title"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content" />
++
++
++        <SurfaceView
++            android:id="@+id/video_surface"
++            android:layout_width="640px"
++            android:layout_height="480px"
++            android:layout_centerVertical="true"
++            android:layout_centerHorizontal="true" />
++
++    <TextView
++        android:id="@+id/bbstatistic"
++        android:layout_width="fill_parent"
++        android:layout_marginTop="30dp"
++        android:layout_height="wrap_content"
++        android:gravity="center"
++        android:textSize="20dp"
++        android:textColor="#ffffff"
++        android:singleLine="true"
++        android:layout_below="@+id/video_surface"
++        android:text="@string/null_text" />
++
++    <LinearLayout
++        android:id="@+id/button_zone"
++        android:layout_width="fill_parent"
++        android:layout_height="wrap_content"
++        android:layout_alignParentBottom="true"
++        android:gravity="bottom"
++        android:orientation="horizontal" >
++
++        <Button
++            android:id="@+id/bt_left"
++            android:layout_width="fill_parent"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:gravity="center" />
++
++        <Button
++            android:id="@+id/bt_right"
++            android:layout_width="fill_parent"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:gravity="center" />
++    </LinearLayout>
++
++    </RelativeLayout>
++
+Index: packages/apps/fcidtvtest/res/values/dimens.xml
+===================================================================
+--- packages/apps/fcidtvtest/res/values/dimens.xml	(revision 0)
++++ packages/apps/fcidtvtest/res/values/dimens.xml	(revision 4607)
+@@ -0,0 +1,5 @@
++<resources>
++    <!-- Default screen margins, per the Android Design guidelines. -->
++    <dimen name="activity_horizontal_margin">16dp</dimen>
++    <dimen name="activity_vertical_margin">16dp</dimen>
++</resources>
+Index: packages/apps/fcidtvtest/res/values/strings.xml
+===================================================================
+--- packages/apps/fcidtvtest/res/values/strings.xml	(revision 0)
++++ packages/apps/fcidtvtest/res/values/strings.xml	(revision 4607)
+@@ -0,0 +1,47 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="app_name">ISDBTFactoryApp</string>
++    <string name="app_tv">TV Channel List</string>
++    <string name="app_search">Search Service</string>
++    <string name="app_setting">Configuration</string>
++     <string name="app_box">ISDBT contents</string>
++     <string name="app_vplayer">ISDBT Player</string> 
++     <string name="app_fullscreen"></string>
++     <string name="alert_dialog_title_error">Notify</string>
++    <string name="alert_dialog_msg_error">No Service found!</string>   
++    <string name="alert_dialog_msg_error_2">Please select the service</string>
++     <string name="alert_dialog_msg_error_more">No Service found! Go to Service Search</string>     
++    <string name="alert_dialog_ok">OK</string>
++    <string name="alert_dialog_stop_scan">Stop scan</string>
++    <string name="alert_dialog_title_scan">Search Service</string> 
++	
++    <string name="app_file">Filesystem Explorer</string>
++    <string name="no_files">This directory is empty</string>
++    <string name="to_top">[Back to Top]</string>
++    <string name="tvservice">TV Service</string>
++    <string name="search">Ch. Search</string>
++    <string name="filebox">File Box</string>
++    <string name="settings">Settings</string>
++    <string name="channelcount">TV channel count : 0</string>
++    <string name="play">Play</string>
++    <string name="scan">Scan</string>
++    <string name="prev">&lt;&lt;</string>
++    <string name="next">&gt;&gt;</string>
++    <string name="chup">CH.up</string>
++    <string name="chdown">CH.down</string>
++    <string name="rec">REC</string>
++    <string name="pause">Pause</string>
++    <string name="capture">Capture</string>
++    <string name="recstop">REC Stop</string>
++    <string name="resume">Resume</string>
++    <string name="fullscreen">Full scr</string>
++    <string name="epg">EPG</string>
++    <string name="volumeup">VolumeUp</string>
++    <string name="volumedown">VolumeDown</string>
++    <string name="null_text"/>
++    <string name="title_activity_epg">EPGActivity</string>
++
++    <string name="hello_world">Hello world!</string>
++    <string name="action_settings">Settings</string>
++    <string name="factory_isdbt">ISDBT</string>
++</resources>
+Index: packages/apps/fcidtvtest/res/values-w820dp/dimens.xml
+===================================================================
+--- packages/apps/fcidtvtest/res/values-w820dp/dimens.xml	(revision 0)
++++ packages/apps/fcidtvtest/res/values-w820dp/dimens.xml	(revision 4607)
+@@ -0,0 +1,6 @@
++<resources>
++    <!-- Example customization of dimensions originally defined in res/values/dimens.xml
++         (such as screen margins) for screens with more than 820dp of available width. This
++         would include 7" and 10" devices in landscape (~960dp and ~1280dp respectively). -->
++    <!-- <dimen name="activity_horizontal_margin">64dp</dimen> -->
++</resources>
+Index: packages/apps/fcidtvtest
+===================================================================
+--- packages/apps/fcidtvtest	(revision 0)
++++ packages/apps/fcidtvtest	(revision 4607)
+
+Property changes on: packages/apps/fcidtvtest
+___________________________________________________________________
+Added: svn:mergeinfo
+   Merged /L05A/Custom_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE_Mini/packages/apps/fcidtvtest:r4482
+Index: packages/apps
+===================================================================
+--- packages/apps	(revision 4606)
++++ packages/apps	(revision 4607)
+
+Property changes on: packages/apps
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Custom_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE_Mini/packages/apps:r4482
+Index: packages
+===================================================================
+--- packages	(revision 4606)
++++ packages	(revision 4607)
+
+Property changes on: packages
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Custom_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE_Mini/packages:r4482
+Index: build/target/product/core.mk
+===================================================================
+--- build/target/product/core.mk	(revision 4606)
++++ build/target/product/core.mk	(revision 4607)
+@@ -64,7 +64,9 @@
+ 	nfc_nci.pn54x.default \
+ 	NfcNci \
+ 	Tag \
+-	com.android.nfc_extras
++	com.android.nfc_extras\
++	fcimini
++	
+ PRODUCT_COPY_FILES += \
+ 	#external/libnfc-nci/libpn548ad_fw.so:system/vendor/firmware/libpn548ad_fw.so\
+ 	frameworks/native/data/etc/com.nxp.mifare.xml:system/etc/permissions/com.nxp.mifare.xml \
+Index: .
+===================================================================
+--- .	(revision 4606)
++++ .	(revision 4607)
+
+Property changes on: .
+___________________________________________________________________
+Modified: svn:mergeinfo
+   Merged /L05A/Custom_Version/ALPS-MP-N1.MP18-V1_AUS6739_66_N1_INHOUSE_Mini:r4482

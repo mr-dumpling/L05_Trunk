@@ -1,0 +1,39 @@
+Index: packages/apps/Email/UnifiedEmail/src/com/android/mail/utils/NotificationUtils.java
+===================================================================
+--- packages/apps/Email/UnifiedEmail/src/com/android/mail/utils/NotificationUtils.java	(revision 8509)
++++ packages/apps/Email/UnifiedEmail/src/com/android/mail/utils/NotificationUtils.java	(revision 8510)
+@@ -14,7 +14,7 @@
+  * limitations under the License.
+  */
+ package com.android.mail.utils;
+-
++import android.os.PowerManager;
+ import android.app.Notification;
+ import android.app.PendingIntent;
+ import android.content.ContentResolver;
+@@ -96,7 +96,7 @@
+ 
+     /** Contains a list of <(account, label), unread conversations> */
+     private static NotificationMap sActiveNotificationMap = null;
+-
++	private static long lastLightTime = 0;
+     private static final SparseArray<Bitmap> sNotificationIcons = new SparseArray<Bitmap>();
+     private static WeakReference<Bitmap> sDefaultWearableBg = new WeakReference<Bitmap>(null);
+ 
+@@ -487,6 +487,16 @@
+     public static void sendSetNewEmailIndicatorIntent(Context context, final int unreadCount,
+             final int unseenCount, final Account account, final Folder folder,
+             final boolean getAttention) {
++		if(System.currentTimeMillis() - lastLightTime >= 3000){
++			PowerManager mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
++			PowerManager.WakeLock screenOnLock = mPowerManager.newWakeLock(
++							PowerManager.FULL_WAKE_LOCK
++							| PowerManager.ACQUIRE_CAUSES_WAKEUP
++							| PowerManager.ON_AFTER_RELEASE, LOG_TAG + ":screenOn");
++			screenOnLock.acquire();
++			screenOnLock.release();
++			lastLightTime = System.currentTimeMillis();
++		}
+         LogUtils.i(LOG_TAG, "sendSetNewEmailIndicator account: %s, folder: %s",
+                 LogUtils.sanitizeName(LOG_TAG, account.getEmailAddress()),
+                 LogUtils.sanitizeName(LOG_TAG, folder.name));

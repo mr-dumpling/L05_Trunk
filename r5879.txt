@@ -1,0 +1,100 @@
+Index: vendor/branch/5058A_Claro_Ecuador/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058A_Claro_Ecuador/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 5878)
++++ vendor/branch/5058A_Claro_Ecuador/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 5879)
+@@ -559,6 +559,9 @@
+         getContentResolver().registerContentObserver(
+                 Settings.Global.getUriFor(Settings.Global.ENHANCED_4G_MODE_ENABLED),
+                 true, mContentObserver);
++        getContentResolver().registerContentObserver(
++                Settings.Global.getUriFor(Settings.Global.ENHANCED_4G_MODE_ENABLED_SIM2),
++                true, mContentObserver);
+         if (DBG) log("onCreate:-");
+     }
+ 
+@@ -2121,7 +2124,7 @@
+             // show "VOLTE" for CT SIM
+             if (TelephonyUtilsEx.isCtVolteEnabled()
+                     && TelephonyUtilsEx.isCtSim(mPhone.getSubId())) {
+-                mEnhancedButton4glte.setTitle(R.string.wfc_volte_switch_title);
++                mEnhancedButton4glte.setTitle(R.string.hd_voice_switch_title);
+             } else {
+                 PersistableBundle carrierConfig =
+                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+@@ -2168,13 +2171,14 @@
+                 }
+             }
+             if (findPreference(BUTTON_4G_LTE_KEY) != null) {
+-                if (DBG) {
+-                    log("[updateEnhanced4GLteSwitchPreference] SubId = " + mPhone.getSubId());
+-                }
+                 mEnhancedButton4glte.setSubId(mPhone.getSubId());
+                 boolean enh4glteMode = ImsManager.isEnhanced4gLteModeSettingEnabledByUser(this,
+                         mPhone.getPhoneId())
+                         && ImsManager.isNonTtyOrTtyOnVolteEnabled(this, mPhone.getPhoneId());
++                if (DBG) {
++                    log("[updateEnhanced4GLteSwitchPreference] SubId = " + mPhone.getSubId()
++                        + ", enh4glteMode=" + enh4glteMode);
++                }
+                 mEnhancedButton4glte.setChecked(enh4glteMode);
+                 /// M: update enabled state
+                 updateEnhanced4glteEnableState();
+@@ -2221,21 +2225,28 @@
+      * @return
+      */
+     private boolean onPreferenceChangeMTK(Preference preference, Object objValue) {
+-        log("[onPreferenceChangeMTK] preference = " + preference.getTitle());
+-        if (mEnhancedButton4glte == preference) {
++        String volteTitle = getResources().getString(R.string.hd_voice_switch_title);
++        String lteTitle = getResources().getString(R.string.enhanced_4g_lte_mode_title);
++        log("[onPreferenceChangeMTK] Preference = " + preference.getTitle());
++
++        if ((mEnhancedButton4glte == preference) || preference.getTitle().equals(volteTitle)
++                || preference.getTitle().equals(lteTitle)) {
++            Enhanced4GLteSwitchPreference ltePref = (Enhanced4GLteSwitchPreference) preference;
+             if (DBG) {
+-                log("[onPreferenceChangeMTK] IsChecked = " + mEnhancedButton4glte.isChecked());
++                log("[onPreferenceChangeMTK] IsChecked = " + ltePref.isChecked());
+             }
+-            Enhanced4GLteSwitchPreference ltePref = (Enhanced4GLteSwitchPreference) preference;
++
+             /// M: [CT VOLTE] @{
+             if (TelephonyUtilsEx.isCtVolteEnabled() && TelephonyUtilsEx.isCtSim(mPhone.getSubId())
+-                    && !mEnhancedButton4glte.isChecked()) {
++                    && !ltePref.isChecked()) {
+                 int type = TelephonyManager.getDefault().getNetworkType(mPhone.getSubId());
+                 if (DBG) {
+                     log("network type = " + type);
+                 }
+                 if (TelephonyManager.NETWORK_TYPE_LTE != type
+-                        && !TelephonyUtilsEx.isRoaming(mPhone)) {
++                        && !TelephonyUtilsEx.isRoaming(mPhone)
++                        && (TelephonyUtilsEx.getMainPhoneId() == mPhone.getPhoneId()
++                        || TelephonyUtilsEx.isBothslotCt4gSim(mSubscriptionManager))) {
+                     showVolteUnavailableDialog();
+                     return false;
+                 }
+@@ -2266,20 +2277,19 @@
+                             log("dialog cancel mEnhanced4GLteSwitchPreference.setchecked  = "
+                                 + !mEnhancedButton4glte.isChecked());
+                         }
+-                        mEnhancedButton4glte.setChecked(!mEnhancedButton4glte.isChecked());
++                        mEnhancedButton4glte.setChecked(false);
+ 
+                     }
+                 }).setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+             @Override
+             public void onClick(DialogInterface dialog, int which) {
+-                mEnhancedButton4glte.setChecked(mEnhancedButton4glte.isChecked());
++                mEnhancedButton4glte.setChecked(true);
+                 if (DBG) {
+                     log("dialog ok" + " ims set " + mEnhancedButton4glte.isChecked() + " mSlotId = "
+                         + SubscriptionManager.getPhoneId(mPhone.getSubId()));
+                 }
+                 ImsManager.setEnhanced4gLteModeSetting(MobileNetworkSettings.this,
+-                        mEnhancedButton4glte.isChecked(),
+-                        SubscriptionManager.getPhoneId(mPhone.getSubId()));
++                        mEnhancedButton4glte.isChecked(), mPhone.getPhoneId());
+             }
+         }).create();
+         dialog.setCanceledOnTouchOutside(false);

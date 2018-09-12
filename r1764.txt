@@ -1,0 +1,147 @@
+Index: frameworks/base/core/java/android/app/ApplicationPackageManager.java
+===================================================================
+--- frameworks/base/core/java/android/app/ApplicationPackageManager.java	(revision 1763)
++++ frameworks/base/core/java/android/app/ApplicationPackageManager.java	(revision 1764)
+@@ -98,6 +98,8 @@
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
++import com.android.internal.telephony.TelephonyProperties;
++import android.telephony.SubscriptionManager;
+ 
+ /** @hide */
+ public class ApplicationPackageManager extends PackageManager {
+@@ -1499,6 +1501,22 @@
+                         + "resid: " + resid);
+         CharSequence text = getCachedString(name);
+         if (text != null) {
++			if(isSupportedRenameStk()){
++                if(SubscriptionManager.getDefaultSubId() == 0 && packageName.equals(PACKAGE_NAME_STK)){
++                    if(SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA) !=""
++                        && SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA).length() > 1){
++                        String mStkAppName = SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA);
++                        text = (CharSequence)mStkAppName;
++                    }
++                }
++                if(SubscriptionManager.getDefaultSubId() == 1 && packageName.equals(PACKAGE_NAME_STK1)){
++                    if(SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2) !=""
++                        && SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2).length() > 1){
++                        String mStk1AppName = SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2);
++                        text = (CharSequence)mStk1AppName;
++                    }
++                }
++            }
+             return text;
+         }
+         if (appInfo == null) {
+@@ -1513,6 +1531,22 @@
+         try {
+             Resources r = getResourcesForApplication(appInfo);
+             text = r.getText(resid);
++			if(isSupportedRenameStk()){
++                if(SubscriptionManager.getDefaultSubId() == 0 && packageName.equals(PACKAGE_NAME_STK)){
++                    if(SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA) !=""
++                        && SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA).length() >1){
++                        String mStkAppName = SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA);
++                        text = mStkAppName;
++                    }
++                }
++                if(SubscriptionManager.getDefaultSubId() == 1 && packageName.equals(PACKAGE_NAME_STK1)){
++                    if(SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2) !=""
++                        && SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2).length() >1){
++                        String mStk1AppName = SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2);
++                        text = mStk1AppName;
++                    }
++                }
++            }
+             putCachedString(name, text);
+             if (false) Log.d("PackageManager", "return text:  " + text + "for package: " + packageName);
+             return text;
+@@ -1529,6 +1563,13 @@
+         if (false) Log.w("PackageManager", "return null text for package: " + packageName);
+         return null;
+     }
++	
++    private static final String PACKAGE_NAME_STK = "com.android.stk";
++    private static final String PACKAGE_NAME_STK1 = "com.android.stk";
++	
++	private boolean isSupportedRenameStk(){
++        return true;
++    }
+ 
+     @Override
+     public XmlResourceParser getXml(String packageName, @XmlRes int resid,
+Index: frameworks/base/core/java/android/content/pm/ResolveInfo.java
+===================================================================
+--- frameworks/base/core/java/android/content/pm/ResolveInfo.java	(revision 1763)
++++ frameworks/base/core/java/android/content/pm/ResolveInfo.java	(revision 1764)
+@@ -28,6 +28,9 @@
+ 
+ import java.text.Collator;
+ import java.util.Comparator;
++import android.os.SystemProperties;
++import android.telephony.SubscriptionManager;
++import com.android.internal.telephony.TelephonyProperties;
+ 
+ /**
+  * Information that is returned from resolving an intent
+@@ -193,6 +196,22 @@
+         if (resolvePackageName != null && labelRes != 0) {
+             label = pm.getText(resolvePackageName, labelRes, null);
+             if (label != null) {
++				if(isSupportedRenameStk()){
++                    if(SubscriptionManager.getDefaultSubId() == 0 &&resolvePackageName.equals(PACKAGE_NAME_STK)){
++                        if(SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA) !=""
++                            && SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA).length() >1){
++                            String mStkAppName = SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA);
++                            label = mStkAppName;
++                        }
++                    }
++                    if(SubscriptionManager.getDefaultSubId() == 1 && resolvePackageName.equals(PACKAGE_NAME_STK1)){
++                        if(SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2) !=""
++                            && SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2).length() >1){
++                            String mStk1AppName = SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2);
++                            label = mStk1AppName;
++                        }
++                    }
++                }
+                 return label.toString().trim();
+             }
+         }
+@@ -201,6 +220,22 @@
+         if (labelRes != 0) {
+             label = pm.getText(ci.packageName, labelRes, ai);
+             if (label != null) {
++				if(isSupportedRenameStk()){
++                    if(SubscriptionManager.getDefaultSubId() == 0 &&resolvePackageName.equals(PACKAGE_NAME_STK)){
++                        if(SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA) !=""
++                            && SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA).length() >1){
++                            String mStkAppName = SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA);
++                            label = mStkAppName;
++                        }
++                    }
++                    if(SubscriptionManager.getDefaultSubId() == 1 && resolvePackageName.equals(PACKAGE_NAME_STK1)){
++                        if(SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2) !=""
++                            && SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2).length() >1){
++                            String mStk1AppName = SystemProperties.get(TelephonyProperties.PROPERTY_OPERATOR_ALPHA_2);
++                            label = mStk1AppName;
++                        }
++                    }
++                }
+                 return label.toString().trim();
+             }
+         }
+@@ -210,6 +245,13 @@
+         if (data != null) data = data.toString().trim();
+         return data;
+     }
++	
++	
++	private static final String PACKAGE_NAME_STK = "com.android.stk";
++    private static final String PACKAGE_NAME_STK1 = "com.android.stk";
++	private boolean isSupportedRenameStk(){
++        return true;
++    }
+ 
+     /**
+      * Retrieve the current graphical icon associated with this resolution.  This

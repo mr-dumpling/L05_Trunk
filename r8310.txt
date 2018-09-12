@@ -1,0 +1,55 @@
+Index: vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 8309)
++++ vendor/branch/5058I_ALWE/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 8310)
+@@ -510,6 +510,15 @@
+     private void addApnToList(ApnPreference pref, ArrayList<Preference> mnoList,
+                               ArrayList<Preference> mvnoList, IccRecords r, String mvnoType,
+                               String mvnoMatchData) {
++        //modified for SIM upc cablecom/AT SIM card with roaming IMSI
++        boolean isSwitzerlandSpecialSIM = (ApnSetting.mvnoMatches(r,  "gid", "75636831") &&
++                   ApnSetting.mvnoMatches(r,  "imsi", "206018012xxxxxx"))
++                  || (ApnSetting.mvnoMatches(r,  "gid", "75617431") && 
++                  ApnSetting.mvnoMatches(r,  "imsi", "206018014xxxxxx"));
++        Log.d(TAG, "isSwitzerlandSpecialSIM = " + isSwitzerlandSpecialSIM);
++        if (isSwitzerlandSpecialSIM) {
++            mvnoType = "imsi";
++        }
+         Log.d(TAG, "mvnoType = " + mvnoType + ", mvnoMatchData = " + mvnoMatchData);
+         if (r != null && !TextUtils.isEmpty(mvnoType) && !TextUtils.isEmpty(mvnoMatchData)) {
+             if (ApnSetting.mvnoMatches(r, mvnoType, mvnoMatchData)) {
+Index: vendor/branch/5058I_ALWE/device/mediatek/common/apns-conf.xml
+===================================================================
+--- vendor/branch/5058I_ALWE/device/mediatek/common/apns-conf.xml	(revision 8309)
++++ vendor/branch/5058I_ALWE/device/mediatek/common/apns-conf.xml	(revision 8310)
+@@ -2855,5 +2855,9 @@
+      <apn carrier="o2 Internet IA" mcc="262" mnc="07" apn="" type="ia"/>
+      <apn carrier="Truphone IA" mcc="262" mnc="42" apn="" type="ia"/>
+ 
++     <!--add apn for SIM upc cablecom SIM card with roaming IMSI -->
++     <apn carrier="upcnet" mcc="206" mnc="01" apn="internet.ch.upcmobile.com" type="" mvno_type="imsi" mvno_match_data="206018012xxxxxx"/>
++    <apn carrier="upcmms" mcc="206" mnc="01" apn="mms.ch.upcmobile.com" type="" port="" mmsc="http://mms.ch.upcmobile.com:8080/servlets/mms" mmsproxy="62.179.127.18"  mmsport="8080" mvno_type="imsi" mvno_match_data="206018012xxxxxx"/>
++
+   </apns>
+ 
+Index: vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java
+===================================================================
+--- vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 8309)
++++ vendor/branch/5058I_ALWE/frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 8310)
+@@ -2690,7 +2690,15 @@
+                 }
+ 
+                 if (apn.hasMvnoParams()) {
+-                    if (r != null && ApnSetting.mvnoMatches(r, apn.mvnoType, apn.mvnoMatchData)) {
++                    //modified for SIM upc cablecom/AT SIM card with roaming IMSI
++                    boolean isSwitzerlandSpecialSIM = (ApnSetting.mvnoMatches(r,  "gid", "75636831") && ApnSetting.mvnoMatches(r,  "imsi", "206018012xxxxxx"))
++                                || (ApnSetting.mvnoMatches(r,  "gid", "75617431") && ApnSetting.mvnoMatches(r,  "imsi", "206018014xxxxxx"));
++                    log("chh createApnList: isSwitzerlandSpecialSIM =" + isSwitzerlandSpecialSIM); 
++                    if (isSwitzerlandSpecialSIM) {
++                        if (r != null && ApnSetting.mvnoMatches(r, "imsi", apn.mvnoMatchData)) {
++                            mvnoApns.add(apn);
++                        }
++                    } else if (r != null && ApnSetting.mvnoMatches(r, apn.mvnoType, apn.mvnoMatchData)) {
+                         mvnoApns.add(apn);
+                     }
+                 } else {

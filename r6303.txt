@@ -1,0 +1,206 @@
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertDialog.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertDialog.java	(revision 6302)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertDialog.java	(revision 6303)
+@@ -360,14 +360,12 @@
+     private void updateAlertText(CellBroadcastMessage message) {
+         int titleId = CellBroadcastResources.getDialogTitleResource(
+                 getApplicationContext(), message);
+-         if (message ==null) {
+-    	    setTitle("XXXXCb");
+-           ((TextView) findViewById(R.id.alertTitle)).setText("xxxxmessage");
+-           ((TextView) findViewById(R.id.message)).setText("jsjjsjjjs");
+-           // Set alert reminder depending on user preference
+-           CellBroadcastAlertReminder.queueAlertReminder(this, true);
+-	}
+-        
++        setTitle(titleId);
++        ((TextView) findViewById(R.id.alertTitle)).setText(titleId);
++        ((TextView) findViewById(R.id.message)).setText(message.getMessageBody());
++
++        // Set alert reminder depending on user preference
++        CellBroadcastAlertReminder.queueAlertReminder(this, true);
+     }
+ 
+     /**
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertAudio.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 6302)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertAudio.java	(revision 6303)
+@@ -41,11 +41,9 @@
+ import android.telephony.TelephonyManager;
+ import android.util.Log;
+ 
+-import java.util.ArrayList;
+ import java.util.Locale;
+ import java.util.MissingResourceException;
+ 
+-import android.telephony.CellBroadcastMessage;
+ import static com.android.cellbroadcastreceiver.CellBroadcastReceiver.DBG;
+ 
+ /**
+@@ -111,7 +109,7 @@
+     private AudioManager mAudioManager;
+     private TelephonyManager mTelephonyManager;
+     private int mInitialCallState;
+-  
++
+     private PendingIntent mPlayReminderIntent;
+ 
+     public enum ToneType {
+@@ -308,7 +306,6 @@
+         mMessageDefaultLanguage = intent.getStringExtra(ALERT_AUDIO_MESSAGE_DEFAULT_LANGUAGE);
+ 
+         mEnableVibrate = intent.getBooleanExtra(ALERT_AUDIO_VIBRATE_EXTRA, true);
+-        mEnableVibrate = true;
+         if (intent.getBooleanExtra(ALERT_AUDIO_ETWS_VIBRATE_EXTRA, false)) {
+             mEnableVibrate = true;  // force enable vibration for ETWS alerts
+         }
+@@ -352,13 +349,6 @@
+                 toneType = (ToneType) intent.getSerializableExtra(ALERT_AUDIO_TONE_TYPE);
+             }
+             playAlertTone(toneType);
+-            CellBroadcastMessage cbm = (CellBroadcastMessage) intent.getParcelableExtra("message");
+-            ArrayList<CellBroadcastMessage> messageList = new ArrayList<CellBroadcastMessage>(1);
+-            messageList.add(cbm);
+-            Intent alertDialogIntent = createDisplayMessageIntent(this, CellBroadcastAlertDialog.class,
+-                    messageList);
+-            alertDialogIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+-            startActivity(alertDialogIntent);
+         } else {
+             stopSelf();
+             return START_NOT_STICKY;
+@@ -371,7 +361,7 @@
+         return START_STICKY;
+     }
+ 
+-   // Volume suggested by media team for in-call alarms.
++    // Volume suggested by media team for in-call alarms.
+     private static final float IN_CALL_VOLUME = 0.125f;
+ 
+     /**
+@@ -378,7 +368,7 @@
+      * Start playing the alert sound.
+      * @param toneType the alert tone type (e.g. default, earthquake, tsunami, etc..)
+      */
+-    private void playAlertTone  (ToneType toneType) {
++    private void playAlertTone(ToneType toneType) {
+         // stop() checks to see if we are already playing.
+         stop();
+ 
+@@ -471,14 +461,6 @@
+         mState = STATE_ALERTING;
+     }
+ 
+-    static Intent createDisplayMessageIntent(Context context, Class intentClass,
+-            ArrayList<CellBroadcastMessage> messageList) {
+-        // Trigger the list activity to fire up a dialog that shows the received messages
+-        Intent intent = new Intent(context, intentClass);
+-        intent.putParcelableArrayListExtra(CellBroadcastMessage.SMS_CB_MESSAGE_EXTRA, messageList);
+-        return intent;
+-    }
+-    
+     private static void setDataSourceFromResource(Resources resources,
+             MediaPlayer player, int res) throws java.io.IOException {
+         AssetFileDescriptor afd = resources.openRawResourceFd(res);
+Index: packages/apps/CellBroadcastReceiver/res/values/customer.xml
+===================================================================
+--- packages/apps/CellBroadcastReceiver/res/values/customer.xml	(revision 6302)
++++ packages/apps/CellBroadcastReceiver/res/values/customer.xml	(revision 6303)
+@@ -1,20 +1,5 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<!-- Copyright (C) 2011 The Android Open Source Project
+-
+-     Licensed under the Apache License, Version 2.0 (the "License");
+-     you may not use this file except in compliance with the License.
+-     You may obtain a copy of the License at
+-
+-          http://www.apache.org/licenses/LICENSE-2.0
+-
+-     Unless required by applicable law or agreed to in writing, software
+-     distributed under the License is distributed on an "AS IS" BASIS,
+-     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-     See the License for the specific language governing permissions and
+-     limitations under the License.
+--->
+-
+-<resources>
++<?xml version="1.0" encoding="utf-8" standalone="no"?>
++<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <!-- Whether to enable 5058i_alav settings -->
+-	<bool name="project_5058i_alav_cb">false</bool>
++	<bool name="project_5058i_alav_cb">true</bool>
+ </resources>
+\ No newline at end of file
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java	(revision 6302)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbsettings/CellBroadcastSettings.java	(revision 6303)
+@@ -1240,27 +1240,15 @@
+     }
+ 	
+ 	private boolean isCmasDefaultChannel(int channelId) {
+-        if (((channelId >= 4370) && (channelId <= 4381)) || ((channelId >= 4383) && (channelId <= 4394))) {
++        if ((channelId == 4356) || (channelId == 4355) || (channelId == 4352) || (channelId == 4353) 
++				|| (channelId == 4354) || (channelId == 4370) || (channelId == 4371) || (channelId == 4372)
++				|| (channelId == 4373) || (channelId == 4374) || (channelId == 4375) || (channelId == 4376)
++				|| (channelId == 4377) || (channelId == 4378) || (channelId == 4379) || (channelId == 4383)
++				|| (channelId == 4384) || (channelId == 4385) || (channelId == 4386) || (channelId == 4387)
++				|| (channelId == 4388) || (channelId == 4389) || (channelId == 4390) || (channelId == 4391)
++				|| (channelId == 4392) || (channelId == 919) || (channelId == 921) || (channelId == 4411)) {
+             return true;
+         }
+         return false;
+     }
+-	private int getChannelLevel(int channelId) {
+-		if ((channelId == 4370) || (channelId == 4383)) {
+-            return 1;
+-        }
+-		if ((channelId == 4371) || (channelId == 4384)) {
+-            return 2;
+-        }
+-		if ((channelId == 4379) || (channelId == 4392)) {
+-            return 4;
+-        }
+-		if ((channelId == 4380) || (channelId == 4393)) {
+-            return 5;
+-        }
+-		if ((channelId == 4381) || (channelId == 4394)) {
+-            return 6;
+-        }
+-		return isCmasDefaultChannel(channelId) ? 3 : 0;
+-	}
+ }
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/xml/mms_config.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/xml/mms_config.xml	(revision 6302)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/xml/mms_config.xml	(revision 6303)
+@@ -51,7 +51,7 @@
+     <int name="maxMessageCountPerThread">10000</int>
+ 
+     <!-- UAProf URL -->
+-    <string name="uaProfUrl">http://www-ccpp.tcl-ta.com/files/5058i.xml</string>
++    <string name="uaProfUrl">http://www-ccpp.tcl-ta.com/files/5058a.xml</string>
+ 
+     <!-- Maximum number of recipients allowed per message. Use a value of -1
+          to indicate no limit. -->
+@@ -77,7 +77,7 @@
+ 
+     <!-- User-Agent parameter used in MMS http request -->
+     <!-- this is default to "Android-Mms/0.1". Override if necessary. Optional -->
+-    <string name="userAgent">5058I-MMS/2.0</string>
++    <string name="userAgent">5058A-MMS/2.0</string>
+ 
+     <!-- UAProf parameter tag name -->
+     <!-- this is default to "x-wap-profile". Override if necessary. Optional -->
+Index: vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 6302)
++++ vendor/mediatek/proprietary/packages/apps/Mms/res/values/config.xml	(revision 6303)
+@@ -14,5 +14,5 @@
+     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+     <bool name="isTablet">false</bool>
+     <bool name="isWVGAScreen">false</bool>
+-	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">false</bool>
++	<bool name="def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile">true</bool>
+ </resources>

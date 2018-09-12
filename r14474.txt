@@ -1,0 +1,902 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 0)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 14474)
+@@ -0,0 +1,637 @@
++package com.android.settings;
++
++/**
++ * Created by Administrator on 2017/12/4.
++ */
++
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++
++import android.net.Uri;
++import android.os.PersistableBundle;
++import android.os.ServiceManager;
++import android.support.v4.app.Fragment;
++import android.app.Activity;
++import android.os.Bundle;
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.PreferenceGroup;
++import android.telephony.CarrierConfigManager;
++import android.text.TextUtils;
++import android.view.LayoutInflater;
++import android.view.Menu;
++import android.view.MenuItem;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.ArrayAdapter;
++import android.widget.ListAdapter;
++import android.widget.ListView;
++import android.widget.SimpleAdapter;
++import android.os.Build;
++import android.widget.AdapterView;
++import android.widget.AdapterView.OnItemClickListener;
++import android.provider.Telephony;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.content.Context;
++import android.os.UserManager;
++import android.util.Log;
++import android.content.ContentResolver;
++import android.database.Cursor;
++import android.widget.Button;
++import android.view.View.OnClickListener;
++import android.view.View;
++import android.widget.Toast;
++import android.content.ContentValues;
++import android.os.SystemProperties;
++import android.provider.Settings;
++
++
++import com.android.internal.telephony.ITelephony;
++import com.android.internal.telephony.PhoneConstants;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.internal.telephony.TelephonyProperties;
++import com.android.internal.telephony.uicc.IccRecords;
++import com.android.internal.telephony.uicc.UiccController;
++import com.mediatek.settings.FeatureOption;
++import com.mediatek.settings.cdma.CdmaApnSetting;
++import com.mediatek.settings.cdma.CdmaUtils;
++import com.mediatek.settings.ext.IApnSettingsExt;
++import com.mediatek.settings.ext.IRcseOnlyApnExt;
++import com.mediatek.settings.ext.IRcseOnlyApnExt.OnRcseOnlyApnStateChangedListener;
++import com.mediatek.settings.sim.SimHotSwapHandler;
++import com.mediatek.settings.sim.TelephonyUtils;
++import com.mediatek.telephony.TelephonyManagerEx;
++import com.android.internal.logging.MetricsProto.MetricsEvent;
++import com.android.internal.telephony.PhoneConstants;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.internal.telephony.dataconnection.ApnSetting;
++import com.android.internal.telephony.uicc.IccRecords;
++import com.android.internal.telephony.uicc.UiccController;
++import com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
++import com.mediatek.settings.UtilsExt;
++import com.mediatek.settings.sim.SimHotSwapHandler.OnSimHotSwapListener;
++
++public class ApnSelectionActivity extends Activity implements
++        Preference.OnPreferenceChangeListener{
++
++    private SubscriptionInfo sir;
++    private SubscriptionInfo mSubscriptionInfo;
++    private SubscriptionInfo mSubscriptionInfo1;
++    private List<SubscriptionInfo> mAvailableSubInfos = null;
++    private String mSelectedKey;
++//    private UiccController mUiccController;
++    private boolean mUnavailable;
++//    private boolean mHideImsApn;
++    public static final String PREFERRED_APN_URI =
++            "content://telephony/carriers/preferapn";
++    public static final String MVNO_TYPE = "mvno_type";
++    public static final String MVNO_MATCH_DATA = "mvno_match_data";
++    public static final String APN_ID = "apn_id";
++    public static final String SUB_ID = "sub_id";
++    private static final String TAG = "ApnSelectionActivity";
++    /// M: add for SVLTE project to update preferred APN @{
++    private static final String CT_NUMERIC_CDMA = "46003";
++    private static final String CT_NUMERIC_LTE = "46011";
++    private static final int ID_INDEX = 0;
++    private static final int NAME_INDEX = 1;
++    private static final int APN_INDEX = 2;
++    private static final int TYPES_INDEX = 3;
++    private static final int SOURCE_TYPE_INDEX = 4;
++    Button apnBtn = null;
++    ListView listmenu_mms = null;
++    ListView menuListView = null;
++    ArrayList list = new ArrayList();
++
++    List<Map<String, Object>> list_apn = new ArrayList<Map<String, Object>>();
++    List<Map<String, Object>> list_sms = new ArrayList<Map<String, Object>>();
++    /// @}
++    SimpleAdapter adapter;
++    private UserManager mUm;
++    private IApnSettingsExt mApnExt;
++    private IRcseOnlyApnExt mRcseExt;
++    private ContentResolver mContentResolver;
++
++
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.apn_activity);
++        final int subId = getIntent().getIntExtra(SUB_ID,
++                SubscriptionManager.INVALID_SUBSCRIPTION_ID);
++//        mSubscriptionInfo = SubscriptionManager.from(this).getActiveSubscriptionInfo(subId);
++////        mUiccController = UiccController.getInstance();
++//        if (mSubscriptionInfo == null) {
++//            Log.d(TAG, "onCreate()... Invalid subId: " + subId);
++//            finish();
++//        }
++        apnBtn = (Button) findViewById(R.id.btn_apn);
++        TelephonyManager telephonyManager = TelephonyManager.getDefault();
++        ITelephony iTelephony =
++                ITelephony.Stub.asInterface(ServiceManager.getService("phone"));
++        final int numSlots = telephonyManager.getSimCount();
++
++        mAvailableSubInfos = new ArrayList<SubscriptionInfo>();
++        for (int i = 0; i < numSlots; i++) {
++            sir = findRecordBySlotId(ApnSelectionActivity.this, i);
++            Log.d(TAG, "mSubscriptionInfomSubscriptionInfo==" + mSubscriptionInfo);
++            if (sir != null) {
++                Log.d(TAG, "mSubscriptionInfo==" + mSubscriptionInfo);
++                mAvailableSubInfos.add(sir);
++            }
++        }
++        for (int i = 0; i < mAvailableSubInfos.size(); i++) {
++            mSubscriptionInfo = mAvailableSubInfos.get(i);
++            Log.d(TAG, "mAvailableSubInfos.get(i)==" + mAvailableSubInfos.get(i) + "mSubscriptionInfo==" + mSubscriptionInfo);
++        }
++
++        Log.d(TAG, "mAvailableSubInfos.size()==" + mAvailableSubInfos.size() + "mSubscriptionInfo1==" + mSubscriptionInfo);
++
++        Log.d(TAG, "numSlots=" + numSlots);
++        mUm = (UserManager) getSystemService(Context.USER_SERVICE);
++
++        mApnExt = UtilsExt.getApnSettingsPlugin(this);
++        mApnExt.updateTetherState();
++
++        mRcseExt = UtilsExt.getRcseApnPlugin(this);
++        mRcseExt.onCreate(new OnRcseOnlyApnStateChangedListener() {
++            @Override
++            public void OnRcseOnlyApnStateChanged() {
++                Log.d(TAG, "OnRcseOnlyApnStateChanged()");
++                if (mSubscriptionInfo.getSubscriptionId() !=
++                        SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
++                    fillList(0);
++                }
++            }
++        }, subId);
++        if(mAvailableSubInfos.size()>1){
++            apnBtn.setText(this.getString(R.string.next_label));//next_label
++        }
++        fillList(0);
++        menuListView = (ListView) findViewById(R.id.listmenu);
++        menuListView.setAdapter((ListAdapter) new ArrayAdapter<String>(this,
++                android.R.layout.simple_list_item_single_choice, list));
++        menuListView.setItemChecked(0, true);///
++
++        menuListView.setOnItemClickListener(new OnItemClickListener() {
++            @Override
++            public void onItemClick(AdapterView<?> arg0, View view, int position, long arg3) {
++                Log.d(TAG, "position=" + position);
++                Log.d(TAG, "mSubscriptionInfo=" + mSubscriptionInfo);
++                String name = list.get(position).toString();
++                String key = "";
++
++                for (Map<String, Object> map : list_apn) {
++                    for (String k : map.keySet()) {
++                        if (map.get(k).equals(name)) {
++                            key = map.get("key").toString();
++                            ;
++                        }
++                        Log.d("TAG", "map.get(k)=" + map.get(k));
++                    }
++
++                }
++
++                Log.d("TAG", "view.getText()=" + name);
++                setSelectedApnKey(key);
++            }
++        });
++
++        listmenu_mms = (ListView) findViewById(R.id.listmenu_mms);
++        adapter = new SimpleAdapter(this, list_sms, R.layout.listmenu,
++                new String[]{"name", "apn"},
++                new int[]{R.id.title, R.id.summary});
++        listmenu_mms.setAdapter(adapter);
++        apnBtn.setOnClickListener(new OnClickListener() {
++            @Override
++            public void onClick(View v) {
++                Toast.makeText(ApnSelectionActivity.this, R.string.dashboard_title,
++                        Toast.LENGTH_SHORT).show();
++                if (apnBtn.getText().equals(getResources().getString(R.string.next_label))) {
++                    fillList(1);
++                    ArrayAdapter sAdapter = (ArrayAdapter) menuListView.getAdapter();
++                    sAdapter.notifyDataSetChanged();
++                    SimpleAdapter sAdapter_sms = (SimpleAdapter) listmenu_mms.getAdapter();
++                    sAdapter_sms.notifyDataSetChanged();
++                    apnBtn.setText(getResources().getString(R.string.finish_button_label));//getResources().getString
++                } else {
++                    finish();
++                }
++
++            }
++        });
++        if (!(list_apn.size()>1))finish();
++       /* CarrierConfigManager configManager = (CarrierConfigManager)
++                getSystemService(Context.CARRIER_CONFIG_SERVICE);
++        PersistableBundle b = configManager.getConfig();
++        mHideImsApn = b.getBoolean(CarrierConfigManager.KEY_HIDE_IMS_APN_BOOL);*/
++    }
++
++    @Override
++    public void onResume() {
++
++        super.onResume();
++    }
++
++
++
++
++    private void setSelectedApnKey(String key) {
++        mSelectedKey = key;
++        ContentResolver resolver = getContentResolver();
++
++        ContentValues values = new ContentValues();
++        values.put(APN_ID, mSelectedKey);
++
++        /// M: add sub id for prefer APN
++        // resolver.update(PREFERAPN_URI, values, null, null);
++        resolver.update(getPreferApnUri(mSubscriptionInfo.getSubscriptionId()), values,
++                null, null);
++    }
++
++    private Uri getPreferApnUri(int subId) {
++        Uri preferredUri = Uri.withAppendedPath(Uri.parse(PREFERRED_APN_URI), "/subId/" + subId);
++        Log.d(TAG, "getPreferredApnUri: " + preferredUri);
++        /// M: for plug-in
++        preferredUri = mApnExt.getPreferCarrierUri(preferredUri, subId);
++        return preferredUri;
++    }
++    /*private void fillList() {
++        final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++        String mccmnc = mSubscriptionInfo == null ? ""
++                : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
++
++        /// M: for plug-in @{
++        // use mcc&mnc in IMPI to query apn.
++        Log.d(TAG, "before plugin, mccmnc = " + mccmnc);
++        mccmnc = mApnExt.getOperatorNumericFromImpi(mccmnc,
++                SubscriptionManager.getPhoneId(mSubscriptionInfo.getSubscriptionId()));
++        /// @}
++
++        Log.d(TAG, "mccmnc = " + mccmnc);
++
++        String where = "numeric=\"" + mccmnc + "\"";
++        /// M: for [C2K APN Customization] @{
++        if (mSubscriptionInfo != null) {
++            int subId = mSubscriptionInfo.getSubscriptionId();
++            if (CdmaUtils.isSupportCdma(subId)) {
++                where = CdmaApnSetting.customizeQuerySelectionforCdma(where, mccmnc, subId);
++            }
++        }
++        /// @}
++
++        where += " AND NOT (type='ia' AND (apn=\"\" OR apn IS NULL)) AND user_visible!=0";
++
++        /// M: for VoLTE, do not show ims apn for non-VoLTE project @{
++        *//*
++        if (mHideImsApn) {
++            where.append(" AND NOT (type='ims')");
++        }
++        *//*
++        if (!FeatureOption.MTK_VOLTE_SUPPORT || mHideImsApn) {
++            where += " AND NOT (type='ims' OR type='ia,ims')";
++        }
++        /// @}
++
++        /// M: for plug-in
++        where = mApnExt.getFillListQuery(where, mccmnc);
++
++        Log.d(TAG, "fillList where: " + where);
++
++        /// M: for CU default APN set.
++        *//*
++        Cursor cursor = getContentResolver().query(Telephony.Carriers.CONTENT_URI, new String[] {
++                "_id", "name", "apn", "type", "mvno_type", "mvno_match_data"}, where.toString(),
++                null, Telephony.Carriers.DEFAULT_SORT_ORDER);
++        *//*
++        String order = mApnExt.getApnSortOrder(Telephony.Carriers.DEFAULT_SORT_ORDER);
++        Log.d(TAG, "fillList sort: " + order);
++        Cursor cursor = getContentResolver().query(
++                Telephony.Carriers.CONTENT_URI,
++                new String[] { "_id", "name", "apn", "type", "mvno_type", "mvno_match_data",
++                        "sourcetype" }, where, null, order);
++        /// @}
++
++        if (cursor != null) {
++            Log.d(TAG, "fillList, cursor count: " + cursor.getCount());
++            IccRecords r = null;
++            if (mUiccController != null && mSubscriptionInfo != null) {
++                r = mUiccController.getIccRecords(SubscriptionManager.getPhoneId(
++                        mSubscriptionInfo.getSubscriptionId()), UiccController.APP_FAM_3GPP);
++            }
++            PreferenceGroup apnList = (PreferenceGroup) findPreference("apn_list");
++            apnList.removeAll();
++
++            /// M: for plug-in, use Preference instead ApnPreference for the
++            // convenience of plug-in side
++            ArrayList<Preference> mnoApnList = new ArrayList<Preference>();
++            ArrayList<Preference> mvnoApnList = new ArrayList<Preference>();
++            ArrayList<Preference> mnoMmsApnList = new ArrayList<Preference>();
++            ArrayList<Preference> mvnoMmsApnList = new ArrayList<Preference>();
++
++            mSelectedKey = getSelectedApnKey();
++            cursor.moveToFirst();
++
++            while (!cursor.isAfterLast()) {
++                String name = cursor.getString(NAME_INDEX);
++                String apn = cursor.getString(APN_INDEX);
++                String key = cursor.getString(ID_INDEX);
++                String type = cursor.getString(TYPES_INDEX);
++                String mvnoType = cursor.getString(MVNO_TYPE_INDEX);
++                String mvnoMatchData = cursor.getString(MVNO_MATCH_DATA_INDEX);
++                /// M: check source type, some types are not editable
++                int sourcetype = cursor.getInt(SOURCE_TYPE_INDEX);
++
++                /// M: skip specific APN type
++                if(shouldSkipApn(type)) {
++                    cursor.moveToNext();
++                    continue;
++                }
++
++                /// M: for plug-in
++                name = mApnExt.updateApnName(name, sourcetype);
++
++                ApnPreference pref = new ApnPreference(getApplicationContext());
++
++                pref.setKey(key);
++                pref.setTitle(name);
++                pref.setSummary(apn);
++                pref.setPersistent(false);
++                pref.setOnPreferenceChangeListener(this);
++
++                /// M: for [Read Only APN]
++                pref.setApnEditable(mApnExt.isAllowEditPresetApn(type, apn, mccmnc, sourcetype));
++                pref.setSubId(mSubscriptionInfo == null ? null : mSubscriptionInfo
++                        .getSubscriptionId());
++
++                /// M: for ALPS02500557, do not select emergency APN
++                boolean selectable = ((type == null) || (!type.equals("mms")
++                        && !type.equals("ia") && !type.equals("ims")&& !type.equals("emergency")))
++                        /// M: for plug-in
++                        && mApnExt.isSelectable(type);
++                pref.setSelectable(selectable);
++                Log.d(TAG, "mSelectedKey = " + mSelectedKey + " key = " + key + " name = " + name +
++                        " selectable=" + selectable);
++                if (selectable) {
++                    /// M: select prefer APN later, as the apn list are not solid now @{
++                    *//*
++                    if ((mSelectedKey != null) && mSelectedKey.equals(key)) {
++                        pref.setChecked();
++                    }
++                    *//*
++                    /// @}
++                    addApnToList(pref, mnoApnList, mvnoApnList, r, mvnoType, mvnoMatchData);
++                    /// M: For CT feature,when apns-conf.xml add type extra value "supl",
++                    //     selectable maybe ture when 46011 mms, so need this method.
++                    mApnExt.customizeUnselectableApn(type, mvnoType, mvnoMatchData, mnoApnList, mvnoApnList,
++                            mSubscriptionInfo == null ? null : mSubscriptionInfo
++                                    .getSubscriptionId());
++                } else {
++                    addApnToList(pref, mnoMmsApnList, mvnoMmsApnList, r, mvnoType, mvnoMatchData);
++                    /// M: for plug-in
++                    mApnExt.customizeUnselectableApn(type, mvnoType, mvnoMatchData, mnoMmsApnList, mvnoMmsApnList,
++                            mSubscriptionInfo == null ? null : mSubscriptionInfo
++                                    .getSubscriptionId());
++                }
++                cursor.moveToNext();
++            }
++            cursor.close();
++
++            if (!mvnoApnList.isEmpty()) {
++                mnoApnList = mvnoApnList;
++                mnoMmsApnList = mvnoMmsApnList;
++
++                // Also save the mvno info
++            }
++
++            for (Preference preference : mnoApnList) {
++                apnList.addPreference(preference);
++            }
++            for (Preference preference : mnoMmsApnList) {
++                apnList.addPreference(preference);
++            }
++
++            /// M: always set a prefer APN
++            setPreferApnChecked(mnoApnList);
++
++            /// M: update screen enable state according to airplane mode, SIM radio status, etc.
++            updateScreenEnableState(pref);
++        }
++    }*/
++    private void fillList(int id){
++        final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
++
++        if(mAvailableSubInfos == null || mAvailableSubInfos.size() == 0){
++            return ;
++        }
++
++        mSubscriptionInfo = mAvailableSubInfos.get(id);
++        if(mSubscriptionInfo !=null){
++            setTitle(mSubscriptionInfo.getCarrierName());
++        }
++
++        final String mccmnc = mSubscriptionInfo == null ? ""
++                : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
++        Log.d(TAG,"mccmnc="+mccmnc+"mSubscriptionInfo.getSubscriptionId()=="+mSubscriptionInfo.getSubscriptionId());
++        String where1 = "numeric=\'" + android.os.SystemProperties.get(TelephonyProperties.PROPERTY_ICC_OPERATOR_NUMERIC, "")+ "\'";
++        String where = mApnExt.getFillListQuery(where1,mccmnc);
++        Log.d(TAG,"where1="+where1);
++        Log.d(TAG,"where="+where);
++        where += " AND NOT (type='ia' AND (apn=\'\' OR apn IS NULL))";
++        where1 +=" AND NOT (type='ia' AND (apn=\'\' OR apn IS NULL))";
++        Log.d(TAG,"where1="+where1);
++        Log.d(TAG,"where="+where);
++
++        /// M: for CU default APN set.
++       /* Cursor cursor = getContentResolver().query(Telephony.Carriers.CONTENT_URI, new String[] {
++                        "_id", "name", "apn", "type", "mvno_type", "mvno_match_data"}, where.toString(),
++                null, Telephony.Carriers.DEFAULT_SORT_ORDER);*/
++        String order = mApnExt.getApnSortOrder(Telephony.Carriers.DEFAULT_SORT_ORDER);
++        Log.d(TAG, "fillList sort: " + order);
++        Cursor cursor = getContentResolver().query(
++                Telephony.Carriers.CONTENT_URI,
++                new String[] { "_id", "name", "apn", "type", "mvno_type", "mvno_match_data",
++                        "sourcetype" }, where, null, order);
++        /// @}
++        if(id==1){
++            list.clear();
++            list_apn.clear();
++            list_sms.clear();
++        }
++       /* while (cursor == null){
++            cursor = getContentResolver().query(
++                    Telephony.Carriers.CONTENT_URI, new String[] {
++                            "_id", "name", "apn", "type", "sourcetype"}, where, null, null);
++            cursor = mApnExt.customizeUnselectableApn(type, mvnoType, mvnoMatchData, mnoMmsApnList, mvnoMmsApnList,
++                    mSubscriptionInfo == null ? null : mSubscriptionInfo
++                            .getSubscriptionId());
++
++        }*/
++        if (cursor != null) {
++
++            // M: define tmp select key
++            String selectedKey = null;
++            cursor.moveToFirst();
++            while (!cursor.isAfterLast()) {
++                String name = cursor.getString(NAME_INDEX);
++                String apn = cursor.getString(APN_INDEX);
++                String key = cursor.getString(ID_INDEX);
++                String type = cursor.getString(TYPES_INDEX);
++                int sourcetype = cursor.getInt(SOURCE_TYPE_INDEX);
++
++                /// M: All tether apn will be selectable for otthers , mms will not be selectable.
++                boolean selectable = mApnExt.isSelectable(type);
++                if (type.contains("default")){
++                if(selectable){
++                    list.add(name);
++                    Map<String, Object> map = new HashMap<String, Object>();
++                    map.put("name", name);
++                    map.put("key", key);
++                    list_apn.add(map);
++                }else{
++                    Map<String, Object> map_sms = new HashMap<String, Object>();
++                    map_sms.put("name", name);
++                    map_sms.put("apn", apn);
++                    list_sms.add(map_sms);
++                }}
++
++                if (shouldSkipApn(type)) {
++                    cursor.moveToNext();
++                    continue;
++                }
++
++                /// M: All tether apn will be selectable for otthers , mms will not be selectable.
++                // boolean selectable = mApnExt.isSelectable(type);
++
++                Log.d(TAG,"mSelectedKey = " + mSelectedKey + " key = " + key + " name = " + name);
++
++                cursor.moveToNext();
++            }
++            cursor.close();
++
++        }
++
++    }
++   /* private void addApnToList(ApnPreference pref, ArrayList<Preference> mnoList,
++                              ArrayList<Preference> mvnoList, IccRecords r, String mvnoType,
++                              String mvnoMatchData) {
++        Log.d(TAG, "mvnoType = " + mvnoType + ", mvnoMatchData = " + mvnoMatchData);
++        if (r != null && !TextUtils.isEmpty(mvnoType) && !TextUtils.isEmpty(mvnoMatchData)) {
++            if (ApnSetting.mvnoMatches(r, mvnoType, mvnoMatchData)) {
++                mvnoList.add(pref);
++                // Since adding to mvno list, save mvno info
++                mMvnoType = mvnoType;
++                mMvnoMatchData = mvnoMatchData;
++                Log.d(TAG, "mvnoMatches...");
++            }
++        } else {
++            mnoList.add(pref);
++        }
++    }*/
++
++    private void setPreferApnChecked(ArrayList<Preference> apnList) {
++        if (apnList == null || apnList.isEmpty()) {
++            return;
++        }
++
++        String selectedKey = null;
++        if (mSelectedKey != null) {
++            for (Preference pref : apnList) {
++                if (mSelectedKey.equals(pref.getKey())) {
++                    ((ApnPreference) pref).setChecked();
++                    selectedKey = mSelectedKey;
++                }
++            }
++        }
++
++        // can't find prefer APN in the list, reset to the first one
++        if (selectedKey == null && apnList.get(0) != null) {
++            ((ApnPreference) apnList.get(0)).setChecked();
++            selectedKey = apnList.get(0).getKey();
++        }
++
++        // save the new APN
++        if (selectedKey != null && selectedKey != mSelectedKey) {
++            setSelectedApnKey(selectedKey);
++            mSelectedKey = selectedKey;
++        }
++
++        Log.d(TAG, "setPreferApnChecked, APN = " + mSelectedKey);
++    }
++    @Override
++    public void onDestroy() {
++        super.onDestroy();
++
++        mRcseExt.onDestory();
++    }
++
++
++    private String getSelectedApnKey() {
++        String key = null;
++
++        /// M: add sub id for prefer APN @{
++        /*
++        Cursor cursor = getContentResolver().query(PREFERAPN_URI, new String[] {"_id"},
++                null, null, Telephony.Carriers.DEFAULT_SORT_ORDER);
++                */
++        int subId = mSubscriptionInfo.getSubscriptionId();
++        Cursor cursor = getContentResolver().query(getPreferApnUri(subId), new String[] { "_id" },
++                null, null, Telephony.Carriers.DEFAULT_SORT_ORDER);
++        /// @}
++        if (cursor.getCount() > 0) {
++            cursor.moveToFirst();
++            key = cursor.getString(ID_INDEX);
++        }
++        cursor.close();
++        Log.d(TAG,"getSelectedApnKey(), key = " + key);
++        return key;
++    }
++
++    public static SubscriptionInfo findRecordBySlotId(Context context, final int slotId) {
++        final List<SubscriptionInfo> subInfoList =
++                SubscriptionManager.from(context).getActiveSubscriptionInfoList();
++        if (subInfoList != null) {
++            final int subInfoLength = subInfoList.size();
++
++            for (int i = 0; i < subInfoLength; ++i) {
++                final SubscriptionInfo sir = subInfoList.get(i);
++                if (sir.getSimSlotIndex() == slotId) {
++                    //Right now we take the first subscription on a SIM.
++                    return sir;
++                }
++            }
++        }
++
++        return null;
++    }
++    public boolean onPreferenceChange(Preference preference, Object newValue) {
++        Log.d(TAG, "onPreferenceChange(): Preference - " + preference
++                + ", newValue - " + newValue + ", newValue type - "
++                + newValue.getClass());
++        if (newValue instanceof String) {
++            setSelectedApnKey((String) newValue);
++        }
++
++        return true;
++    }
++    public boolean shouldSkipApn(String type) {
++        /// M: for plug-in
++        return "cmmail".equals(type) || !mRcseExt.isRcseOnlyApnEnabled(type);
++    }
++    /*private void updateScreenEnableState(Context context) {
++        int subId = mSubscriptionInfo.getSubscriptionId();
++        boolean simReady = TelephonyManager.SIM_STATE_READY == TelephonyManager.getDefault()
++                .getSimState(SubscriptionManager.getSlotId(subId));
++        boolean airplaneModeEnabled = android.provider.Settings.System.getInt(context
++                .getContentResolver(), android.provider.Settings.System.AIRPLANE_MODE_ON, -1) == 1;
++
++        boolean enable = !airplaneModeEnabled && simReady;
++        Log.d(TAG, "updateScreenEnableState(), subId = " + subId + " ,airplaneModeEnabled = "
++                + airplaneModeEnabled + " ,simReady = " + simReady);
++        context.setEnabled(
++                /// M: for plug-in
++                enable && mApnExt.getScreenEnableState(subId, this));
++
++    }*/
++}
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/sim/SimSelectNotification.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/sim/SimSelectNotification.java	(revision 0)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/sim/SimSelectNotification.java	(revision 14474)
+@@ -0,0 +1,255 @@
++/*
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.settings.sim;
++
++import com.android.internal.telephony.IccCardConstants;
++import com.android.internal.telephony.TelephonyIntents;
++import com.android.settings.R;
++import com.android.settings.Settings.SimSettingsActivity;
++import com.mediatek.settings.UtilsExt;
++import com.mediatek.settings.cdma.CdmaUtils;
++import com.mediatek.settings.cdma.OmhEventHandler;
++import com.mediatek.settings.ext.ISettingsMiscExt;
++import com.mediatek.settings.sim.TelephonyUtils;
++
++import android.app.NotificationManager;
++import android.app.PendingIntent;
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.res.Resources;
++import android.os.Handler;
++import android.os.Message;
++import android.os.SystemProperties;
++import android.provider.Settings;
++import android.support.v4.app.NotificationCompat;
++import android.telephony.SubscriptionInfo;
++import android.telephony.SubscriptionManager;
++import android.telephony.TelephonyManager;
++import android.util.Log;
++
++import java.util.List;
++
++public class SimSelectNotification extends BroadcastReceiver {
++    private static final String TAG = "SimSelectNotification";
++    private static final int NOTIFICATION_ID = 1;
++
++    private static final int START_ACTIVITY = 1000;
++    // start apn slection activity, search the apn database take a few seconds.
++    private static final int DELAY_TIME = 7 * 1000;
++    private Context mContext;
++    Handler mHandler = new Handler(){
++        @Override
++        public void handleMessage(Message msg) {
++            super.handleMessage(msg);
++            if(msg.what == START_ACTIVITY){
++                Intent startIntent = new Intent();
++                startIntent.setAction("android.apn.action.APN_SELECTION");
++                mContext.startActivity(startIntent);
++            }
++        }
++    };
++
++    @Override
++    public void onReceive(Context context, Intent intent) {
++
++        mContext = context;
++
++        /// M: add for auto sanity @{
++        if (UtilsExt.shouldDisableForAutoSanity()) {
++            return;
++        }
++        /// @}
++
++        /// M: for 02811539, airplane mode on not allow SIM switch, so ignore the event @{
++        if(TelephonyUtils.isAirplaneModeOn(context)) {
++            Log.d(TAG, "airplane mode is on, ignore!");
++            return;
++        }
++        /// @}
++
++        /// M: for [C2K 2 SIM Warning] @{
++        // can not listen to SIM_STATE_CHANGED because it happened even when SIM switch
++        // (switch default data), in which case should not show the C2K 2 SIM warning
++        // SIM_STATE_CHANGED is not exact, maybe ICC is ready or absent,
++        // but SubscriptionController is not ready.
++        List<SubscriptionInfo> subs = SubscriptionManager.from(context)
++                .getActiveSubscriptionInfoList();
++        final int detectedType = intent.getIntExtra(
++                SubscriptionManager.INTENT_KEY_DETECT_STATUS, 0);
++        Log.d(TAG, "sub info update, type = " + detectedType + ", subs = " + subs);
++        if (detectedType == SubscriptionManager.EXTRA_VALUE_NOCHANGE) {
++            return;
++        }
++
++        if (subs != null && subs.size() > 1) {
++            CdmaUtils.checkCdmaSimStatus(context, subs.size());
++        }
++        /// @}
++
++        final TelephonyManager telephonyManager = (TelephonyManager)
++                context.getSystemService(Context.TELEPHONY_SERVICE);
++        final SubscriptionManager subscriptionManager = SubscriptionManager.from(context);
++        final int numSlots = telephonyManager.getSimCount();
++        final boolean isInProvisioning = Settings.Global.getInt(context.getContentResolver(),
++                Settings.Global.DEVICE_PROVISIONED, 0) == 0;
++    
++        mHandler.sendEmptyMessageDelayed(START_ACTIVITY, DELAY_TIME);
++        
++        // Do not create notifications on single SIM devices or when provisioning i.e. Setup Wizard.
++        if (numSlots < 2 || isInProvisioning) {
++            return;
++        }
++
++        // Cancel any previous notifications
++        cancelNotification(context);
++
++        List<SubscriptionInfo> sil = subscriptionManager.getActiveSubscriptionInfoList();
++        if (sil == null || sil.size() < 1) {
++            Log.d(TAG, "Subscription list is empty");
++            return;
++        }
++
++        /// M: Ignore this broadcast when the SIM count is changed again. @{
++        final int numSims = intent.getIntExtra(
++                SubscriptionManager.INTENT_KEY_SIM_COUNT, sil.size());
++        if (numSims != sil.size()) {
++            Log.d(TAG, "SIM count is changed again, extraSimCount=" + numSims
++                    + ", currentSimCount=" + sil.size());
++            return;
++        }
++        /// @}
++
++        // Clear defaults for any subscriptions which no longer exist
++        subscriptionManager.clearDefaultsForInactiveSubIds();
++
++        boolean dataSelected = SubscriptionManager.isUsableSubIdValue(
++                SubscriptionManager.getDefaultDataSubscriptionId());
++        boolean smsSelected = SubscriptionManager.isUsableSubIdValue(
++                SubscriptionManager.getDefaultSmsSubscriptionId());
++        Log.d(TAG, "dataSelected = " + dataSelected + " smsSelected = " + smsSelected);
++
++        // If data and sms defaults are selected, dont show notification (Calls default is optional)
++        if (dataSelected && smsSelected) {
++            Log.d(TAG, "Data & SMS default sims are selected. No notification");
++            return;
++        }
++
++        // Create a notification to tell the user that some defaults are missing
++        createNotification(context);
++
++        /// M: for plug-in and CT 6M
++        if (!isSimDialogNeeded(context)) {
++            Log.d(TAG, "sim dialog not needed, RETURN!");
++            return;
++        }
++
++        if (sil.size() == 1) {
++            /// M: For Op01 open market,show no notification. @{
++                if (SystemProperties.get("ro.cmcc_light_cust_support").equals("1")) {
++                    Log.d(TAG, "size == 1,show no notification");
++                    return;
++                }
++            /// @}
++
++            // If there is only one subscription, ask if user wants to use if for everything
++            Log.d(TAG, "sim size == 1, SimDialogActivity shown");
++            Intent newIntent = new Intent(context, SimDialogActivity.class);
++            newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
++                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
++            newIntent.putExtra(SimDialogActivity.DIALOG_TYPE_KEY, SimDialogActivity.PREFERRED_PICK);
++            newIntent.putExtra(SimDialogActivity.PREFERRED_SIM, sil.get(0).getSimSlotIndex());
++            context.startActivity(newIntent);
++            /// M: for [C2K OMH Warning]
++            OmhEventHandler.getInstance(context).sendEmptyMessage(OmhEventHandler.SET_BUSY);
++        } else if (!dataSelected ||
++            /// M: Op01 open market request. @{
++                SystemProperties.get("ro.cmcc_light_cust_support").equals("1")) {
++            /// @}
++            // If there are multiple, ensure they pick default data
++            Log.d(TAG, "SimDialogActivity shown for multiple sims");
++            Intent newIntent = new Intent(context, SimDialogActivity.class);
++            newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
++                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
++            newIntent.putExtra(SimDialogActivity.DIALOG_TYPE_KEY, SimDialogActivity.DATA_PICK);
++            context.startActivity(newIntent);
++            /// M: for [C2K OMH Warning]
++            OmhEventHandler.getInstance(context).sendEmptyMessage(OmhEventHandler.SET_BUSY);
++        }
++    }
++
++    private void createNotification(Context context){
++        final Resources resources = context.getResources();
++        NotificationCompat.Builder builder =
++                new NotificationCompat.Builder(context)
++                .setSmallIcon(R.drawable.ic_sim_card_alert_white_48dp)
++                .setColor(context.getColor(R.color.sim_noitification))
++                .setContentTitle(resources.getString(R.string.sim_notification_title))
++                .setContentText(resources.getString(R.string.sim_notification_summary));
++
++        /// M: for plug-in
++        customizeSimDisplay(context, builder);
++
++        Intent resultIntent = new Intent(context, SimSettingsActivity.class);
++        resultIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++        PendingIntent resultPendingIntent = PendingIntent.getActivity(context, 0, resultIntent,
++                PendingIntent.FLAG_CANCEL_CURRENT);
++        builder.setContentIntent(resultPendingIntent);
++        NotificationManager notificationManager =
++                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
++        notificationManager.notify(NOTIFICATION_ID, builder.build());
++    }
++
++    public static void cancelNotification(Context context) {
++        NotificationManager notificationManager =
++                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
++        notificationManager.cancel(NOTIFICATION_ID);
++    }
++
++    ///---------------------------------------MTK-------------------------------------------------
++
++    /**
++     * only for plug-in, change "SIM" to "UIM/SIM".
++     * @param context the context.
++     * @param builder the notification builder.
++     */
++    private void customizeSimDisplay(
++                    Context context,
++                    NotificationCompat.Builder builder) {
++        Resources resources = context.getResources();
++        String title = resources.getString(R.string.sim_notification_title);
++        String text = resources.getString(R.string.sim_notification_summary);
++
++        ISettingsMiscExt miscExt = UtilsExt.getMiscPlugin(context);
++        title = miscExt.customizeSimDisplayString(
++                            title,
++                            SubscriptionManager.INVALID_SUBSCRIPTION_ID);
++        text = miscExt.customizeSimDisplayString(
++                            text,
++                            SubscriptionManager.INVALID_SUBSCRIPTION_ID);
++        builder.setContentTitle(title);
++        builder.setContentText(text);
++    }
++
++    /**
++     *  add for plug-in and CT 6M.
++     *  whether allowed show data pick dailog and preferred sim dialog.
++     */
++    private boolean isSimDialogNeeded(Context context) {
++        return UtilsExt.getSimManagmentExtPlugin(context).isSimDialogNeeded();
++    }
++}

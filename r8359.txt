@@ -1,0 +1,75 @@
+Index: frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java
+===================================================================
+--- frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 8358)
++++ frameworks/base/packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java	(revision 8359)
+@@ -100,7 +100,7 @@
+ import android.content.SharedPreferences;
+ import android.os.SystemProperties;
+ import android.content.pm.PackageManager.NameNotFoundException;
+-
++import android.os.PowerManager;
+ /**
+  * Watches for updates that may be interesting to the keyguard, and provides
+  * the up to date information as well as a registration for callbacks that care
+@@ -572,10 +572,15 @@
+     }
+ 
+     private void handleFingerprintError(int msgId, String errString) {
++		boolean bFrPj_alae = mContext.getResources().getBoolean(com.android.internal.R.bool.FR_FINGER_PRINT_ERROR_5TIMES_SCREEN_ON);
+         if (msgId == FingerprintManager.FINGERPRINT_ERROR_CANCELED
+                 && mFingerprintRunningState == FINGERPRINT_STATE_CANCELLING_RESTARTING) {
+             setFingerprintRunningState(FINGERPRINT_STATE_STOPPED);
+             startListeningForFingerprint();
++		}else if (msgId == FingerprintManager.FINGERPRINT_ERROR_LOCKOUT && bFrPj_alae){//javen add for feature:  
++			if(unlockScreen() == false){
++				setFingerprintRunningState(FINGERPRINT_STATE_STOPPED);
++			}
+         } else {
+             setFingerprintRunningState(FINGERPRINT_STATE_STOPPED);
+         }
+@@ -586,7 +591,19 @@
+             }
+         }
+     }
++	private boolean unlockScreen(){
++		PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
++		boolean screenOn = pm.isScreenOn();
++		if (!screenOn) {            
++			PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "bright");
++			wl.acquire(5000); 
++			wl.release();
++			return true;
++        }                 
++        return false;
++	}
+ 
++
+     private void handleFingerprintLockoutReset() {
+         updateFingerprintListeningState();
+     }
+Index: frameworks/base/core/res/res/values/features.xml
+===================================================================
+--- frameworks/base/core/res/res/values/features.xml	(revision 8358)
++++ frameworks/base/core/res/res/values/features.xml	(revision 8359)
+@@ -29,6 +29,9 @@
+ 	<!-- feature for emc call will show Police,Fire,Ambulance Fr -->
+ 	<bool name="FR_EMC_CALL_INFO_IN_INDIA">false</bool>
+ 	
++	<!-- feature for finger print 5 times wrong and wake the screen on, bug: 119982 -->
++	<bool name="FR_FINGER_PRINT_ERROR_5TIMES_SCREEN_ON">false</bool>
++	
+ 	<!-- feature for other -->
+ 	<bool name="FR_OTHER_TEST">false</bool>
+     
+Index: frameworks/base/core/res/res/values/symbols.xml
+===================================================================
+--- frameworks/base/core/res/res/values/symbols.xml	(revision 8358)
++++ frameworks/base/core/res/res/values/symbols.xml	(revision 8359)
+@@ -2816,6 +2816,7 @@
+   <java-symbol type="bool" name="FR_GPS_AIRPLANE_OFF_BUG" />
+   <java-symbol type="bool" name="FR_EMC_CALL_ALWAYS_ON_SECRITY" />
+   <java-symbol type="bool" name="FR_EMC_CALL_INFO_IN_INDIA" />
++  <java-symbol type="bool" name="FR_FINGER_PRINT_ERROR_5TIMES_SCREEN_ON" />
+   <java-symbol type="bool" name="FR_OTHER_TEST" />
+   <!-- feature techain end -->
+ 

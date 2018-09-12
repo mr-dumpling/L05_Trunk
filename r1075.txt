@@ -1,0 +1,74 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/GlobalActions.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/GlobalActions.java	(revision 1074)
++++ frameworks/base/services/core/java/com/android/server/policy/GlobalActions.java	(revision 1075)
+@@ -375,7 +375,7 @@
+         @Override
+         public void onPress() {
+             // shutdown by making sure radio and power are handled accordingly.
+-            mWindowManagerFuncs.shutdown(false /* confirm */);
++            mWindowManagerFuncs.shutdown(true /* confirm */);
+         }
+     }
+ 
+@@ -406,7 +406,7 @@
+ 
+         @Override
+         public void onPress() {
+-            mWindowManagerFuncs.reboot(false /* confirm */);
++            mWindowManagerFuncs.reboot(true /* confirm */);
+         }
+     }
+ 
+Index: packages/apps/Settings/src/com/android/settings/PrivacySettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/PrivacySettings.java	(revision 1074)
++++ packages/apps/Settings/src/com/android/settings/PrivacySettings.java	(revision 1075)
+@@ -65,6 +65,7 @@
+     private static final String DATA_MANAGEMENT = "data_management";
+     private static final String BACKUP_INACTIVE = "backup_inactive";
+     private static final String FACTORY_RESET = "factory_reset";
++	private static final String NETWORK_RESET = "network_reset";
+     private static final String TAG = "PrivacySettings";
+     private IBackupManager mBackupManager;
+     private PreferenceScreen mBackup;
+@@ -124,9 +125,9 @@
+ 
+         updateToggles();
+         /// M: Check Drm compile option for DRM settings @{
+-        if (!FeatureOption.MTK_DRM_APP) {
++        //if (!FeatureOption.MTK_DRM_APP) {
+             screen.removePreference(findPreference(DRM_RESET));
+-        }
++        //}
+         /// @}
+     }
+ 
+@@ -304,5 +305,9 @@
+                 UserManager.DISALLOW_FACTORY_RESET, UserHandle.myUserId())) {
+             nonVisibleKeys.add(FACTORY_RESET);
+         }
++		if (RestrictedLockUtils.hasBaseUserRestriction(context,
++			    UserManager.DISALLOW_NETWORK_RESET, UserHandle.myUserId())) {
++			    nonVisibleKeys.add(NETWORK_RESET);
++		}
+     }
+ }
+Index: packages/apps/Settings/res/xml/privacy_settings.xml
+===================================================================
+--- packages/apps/Settings/res/xml/privacy_settings.xml	(revision 1074)
++++ packages/apps/Settings/res/xml/privacy_settings.xml	(revision 1075)
+@@ -50,6 +50,13 @@
+         android:enabled="false"
+         android:selectable="false" />
+ 
++    <com.android.settingslib.RestrictedPreference
++        android:key="network_reset"
++        android:title="@string/reset_network_title"
++        settings:keywords="@string/keywords_network_reset"
++        settings:userRestriction="no_network_reset"
++        settings:useAdminDisabledSummary="true"
++        android:fragment="com.android.settings.ResetNetwork" />
+ <!--M: add DRM Settings start-->
+ <PreferenceScreen
+         android:key="drm_settings"

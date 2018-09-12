@@ -1,0 +1,145 @@
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/nfc/Nfc.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/nfc/Nfc.java	(revision 5068)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/nfc/Nfc.java	(revision 5069)
+@@ -54,7 +54,9 @@
+ 		//intent.setClassName("com.android.nfctester", "com.android.nfctester.SimpleListViewActivity");
+ 		//intent.setClassName("com.brcm.nfcutil", "com.brcm.nfcutil.NfcUtilActivity");
+ 		intent.setClassName("com.techain.nfctest", "com.techain.nfctest.NfcTest");
+-		startActivity(intent);
++		startActivityForResult(intent, MMITestDevice.TESTITEM_NFC);
++					finish();
++		//startActivity(intent);
+ 	}
+ 	@Override
+ 	protected void onRestart() {
+Index: vendor/mediatek/proprietary/packages/apps/NfcTest/src/com/techain/nfctest/NfcTest.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/NfcTest/src/com/techain/nfctest/NfcTest.java	(revision 5068)
++++ vendor/mediatek/proprietary/packages/apps/NfcTest/src/com/techain/nfctest/NfcTest.java	(revision 5069)
+@@ -21,7 +21,9 @@
+ import android.os.Bundle;
+ import android.util.Log;
+ import android.view.View;
++import android.view.View.OnClickListener;
+ import android.widget.TextView;
++import android.widget.Button;
+ 
+ import java.util.Arrays;
+ 
+@@ -30,7 +32,7 @@
+  * Date:   2016/9/8
+  * Email:  zhouqing.qiu@techainsh.com
+  */
+-public class NfcTest extends Activity {
++public class NfcTest extends Activity  implements OnClickListener{
+ 
+     private static final String LOG_TAG = "NfcTest";
+ 
+@@ -42,6 +44,8 @@
+     private String[][] mTechList;
+ 
+     private TextView mTipTv;
++	private Button bt_base_left;
++	private Button bt_base_right;	
+ 
+     private String mId;
+     private String mType;
+@@ -76,6 +80,13 @@
+                 new String[]{NfcBarcode.class.getName()}
+         };
+         mTipTv = (TextView) findViewById(R.id.tip);
++		bt_base_left = (Button) findViewById(R.id.bt_base_left);
++		bt_base_right = (Button) findViewById(R.id.bt_base_right);
++		bt_base_left.setText("pass");
++		bt_base_right.setText("fail");
++		bt_base_left.setEnabled(false);
++		bt_base_left.setOnClickListener(this);
++		bt_base_right.setOnClickListener(this);	
+     }
+ 
+     @Override
+@@ -114,9 +125,10 @@
+         super.onNewIntent(intent);
+         Log.d(LOG_TAG, "onNewIntent");
+         processIntent(intent);
++		bt_base_left.setEnabled(true);
+ 
+         mTipTv.setVisibility(View.GONE);
+-        getFragmentManager().beginTransaction().replace(R.id.content, mTagInfoFragment).commit();
++        getFragmentManager().beginTransaction().replace(R.id.content1, mTagInfoFragment).commit();
+         mTagInfoFragment.setId(mId);
+         mTagInfoFragment.setType(mType);
+         mTagInfoFragment.setClasses(mClasses);
+@@ -158,4 +170,23 @@
+         return out;
+     }
+ 
++	@Override
++	public void onClick(View v) {
++		switch (v.getId()) {
++		case R.id.bt_base_left: {
++			Intent intent = new Intent();
++			intent.setClassName("com.android.mmi", "com.android.mmi.MMITestDevice");
++			setResult(RESULT_OK, intent);
++				finish();
++			break;
++			}
++		case R.id.bt_base_right: {
++			 Intent intent = new Intent();
++			 intent.setClassName("com.android.mmi", "com.android.mmi.MMITestDevice");
++			 setResult(RESULT_CANCELED, intent);
++				finish();
++			break;
++			}
++		}
++	}
+ }
+Index: vendor/mediatek/proprietary/packages/apps/NfcTest/res/layout/activity_main.xml
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/NfcTest/res/layout/activity_main.xml	(revision 5068)
++++ vendor/mediatek/proprietary/packages/apps/NfcTest/res/layout/activity_main.xml	(revision 5069)
+@@ -4,6 +4,10 @@
+     android:layout_height="match_parent"
+     android:id="@+id/content">
+ 
++<RelativeLayout
++	android:layout_width="wrap_content"
++    android:layout_height="wrap_content"
++    android:id="@+id/content1">
+     <TextView
+         android:id="@+id/tip"
+         android:layout_centerInParent="true"
+@@ -12,5 +16,31 @@
+         android:textColor="#636363"
+         android:text="@string/nfc_tip"
+         style="@android:style/TextAppearance.Material.Large"/>
++</RelativeLayout>
+ 
++    <LinearLayout 
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:layout_alignParentBottom="true"
++    android:gravity="center"
++    android:orientation="horizontal" >
++    <Button
++        android:id="@+id/bt_base_left"
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:layout_margin="5dp"
++        android:layout_weight="1"
++        android:gravity="center"
++        android:textColor="#ff00ff00"
++        />
++    <Button
++        android:id="@+id/bt_base_right"
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:layout_margin="5dp"
++        android:layout_weight="1"
++        android:gravity="center"
++        android:textColor="#ffff0000"
++        />
++</LinearLayout>    
+ </RelativeLayout>
+\ No newline at end of file

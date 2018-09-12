@@ -1,0 +1,36 @@
+Index: frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 5003)
++++ frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java	(revision 5004)
+@@ -6739,15 +6739,22 @@
+                 }
+                 break;
+             }
+-			//add by wqq start{
+-			case KeyEvent.KEYCODE_U:		
+-					int doubleTapEnabled = Secure.getInt(
+-                    	mContext.getContentResolver(), Secure.DOUBLE_TAP_SCREEN_ENABLE, 0);
+-					if(!mPowerManager.isScreenOn() && (doubleTapEnabled==1)){
+-						mPowerManager.wakeUp(SystemClock.uptimeMillis());
+-					}
+-				break;
+-		 //add by wqq end}
++            //add by wqq start{
++            case KeyEvent.KEYCODE_U:
++                int doubleTapEnabled = Secure.getInt(
++                        mContext.getContentResolver(), Secure.DOUBLE_TAP_SCREEN_ENABLE, 0);
++                if(!mPowerManager.isScreenOn() && (doubleTapEnabled==1)){
++                    mPowerManager.wakeUp(SystemClock.uptimeMillis());
++                    mHandler.postDelayed(new Runnable() {
++                        @Override
++                        public void run() {
++                            Slog.d(TAG, "--start face verify when double tap");
++                            startFaceVerify();
++                        }
++                    }, START_FACE_VERIFY_DELAY);
++                }
++                break;
++                //add by wqq end}
+         }
+ 
+         if (useHapticFeedback) {

@@ -1,0 +1,51 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 1086)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java	(revision 1087)
+@@ -126,6 +126,7 @@
+ 
+ import static android.service.notification.NotificationListenerService.Ranking.IMPORTANCE_HIGH;
+ 
++
+ public abstract class BaseStatusBar extends SystemUI implements
+         CommandQueue.Callbacks, ActivatableNotificationView.OnActivatedListener,
+         ExpandableNotificationRow.ExpansionLogger, NotificationData.Environment,
+@@ -225,6 +226,7 @@
+     private boolean mLockscreenPublicMode = false;
+     private final SparseBooleanArray mUsersAllowingPrivateNotifications = new SparseBooleanArray();
+     private final SparseBooleanArray mUsersAllowingNotifications = new SparseBooleanArray();
++    private  PowerManager.WakeLock  mNotificationWakeLock;
+ 
+     private UserManager mUserManager;
+     private int mDensity;
+@@ -727,6 +729,8 @@
+         mDreamManager = IDreamManager.Stub.asInterface(
+                 ServiceManager.checkService(DreamService.DREAM_SERVICE));
+         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
++	 mNotificationWakeLock = mPowerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP 
++		    | PowerManager.ON_AFTER_RELEASE |PowerManager.FULL_WAKE_LOCK,TAG);
+ 
+         mContext.getContentResolver().registerContentObserver(
+                 Settings.Global.getUriFor(Settings.Global.DEVICE_PROVISIONED), true,
+@@ -2262,6 +2266,11 @@
+         // Add the expanded view and icon.
+         mNotificationData.add(entry, ranking);
+         updateNotifications();
++	if(!mPowerManager.isScreenOn() && entry.key!= null && (entry.key.contains("com.android.mms") || entry.key.contains("com.tencent.mm"))){
++		mNotificationWakeLock.acquire(6000);
++	}
++	 
++	
+     }
+ 
+     /**
+@@ -2492,6 +2501,9 @@
+         final RemoteViews headsUpContentView = entry.cachedHeadsUpContentView;
+         final RemoteViews publicContentView = entry.cachedPublicContentView;
+ 
++	 if(!mPowerManager.isScreenOn() && entry.key!= null && (entry.key.contains("com.android.mms") || entry.key.contains("com.tencent.mm"))){
++		mNotificationWakeLock.acquire(6000);
++	}
+         // Reapply the RemoteViews
+         contentView.reapply(mContext, entry.getContentView(), mOnClickHandler);
+         if (bigContentView != null && entry.getExpandedContentView() != null) {

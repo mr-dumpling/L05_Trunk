@@ -1,0 +1,152 @@
+Index: vendor/customer/apps/FingerprintEneoll_7.0/FingerprintEneoll_7.0.apk
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/customer/apps/FingerprintEneoll_7.0/FingerprintEneoll_7.0.apk
+===================================================================
+--- vendor/customer/apps/FingerprintEneoll_7.0/FingerprintEneoll_7.0.apk	(revision 0)
++++ vendor/customer/apps/FingerprintEneoll_7.0/FingerprintEneoll_7.0.apk	(revision 13638)
+
+Property changes on: vendor/customer/apps/FingerprintEneoll_7.0/FingerprintEneoll_7.0.apk
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: vendor/customer/apps/FingerprintEneoll_7.0/Android.mk
+===================================================================
+--- vendor/customer/apps/FingerprintEneoll_7.0/Android.mk	(revision 0)
++++ vendor/customer/apps/FingerprintEneoll_7.0/Android.mk	(revision 13638)
+@@ -0,0 +1,19 @@
++LOCAL_PATH := $(call my-dir)
++
++include $(CLEAR_VARS)
++
++# Module name should match apk name to be installed
++
++LOCAL_MODULE := FingerprintEneoll_7.0
++
++LOCAL_MODULE_TAGS := optional
++
++LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
++
++LOCAL_MODULE_CLASS := APPS
++
++LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
++
++LOCAL_CERTIFICATE := platform
++
++include $(BUILD_PREBUILT) 
+\ No newline at end of file
+Index: vendor/customer/custom.mk
+===================================================================
+--- vendor/customer/custom.mk	(revision 13637)
++++ vendor/customer/custom.mk	(revision 13638)
+@@ -36,7 +36,8 @@
+                     MotocrossTrialExtreme \
+                     PuzzlePets \
+                     ModernCombat4 \
+-                    Gboard
++                    Gboard \
++					FingerprintEneoll_7.0
+ 
+ # Overrides
+ PRODUCT_PROPERTY_OVERRIDES +=
+Index: vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/fingerprint/Fingerprint.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/fingerprint/Fingerprint.java	(revision 13637)
++++ vendor/mediatek/proprietary/packages/apps/MMITestDevice/src/com/android/mmi/fingerprint/Fingerprint.java	(revision 13638)
+@@ -36,6 +36,7 @@
+ import java.io.FileNotFoundException;
+ import java.io.FileReader;
+ import java.io.IOException;
++import java.io.File;
+ public class Fingerprint extends Activity implements OnClickListener{
+ 	private static final int PROGRESS_BAR_MAX = 10000;
+ 	private boolean result4Flag = false;
+@@ -91,7 +92,7 @@
+         i.putExtra("hw_auth_token", token);
+         i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      //  startActivity(i);
+-
++		Checkfp();
+ 		
+ 		bt_base_left = (Button) findViewById(R.id.bt_base_left);
+ 		bt_base_left.setText(R.string.bt_pass);
+@@ -126,12 +127,17 @@
+ 	}
+ 	
+ 	
+-	public void testFinish() {
++	public void testsuccess() {
+ 				bt_base_left.setEnabled(true);
+ 				Intent intentResult = new Intent(Fingerprint.this, MMITestDevice.class);
+ 				setResult(RESULT_OK,intentResult);
+ 				finish();
+ 	}
++	public void testfail() {
++			Intent intent = new Intent(Fingerprint.this, MMITestDevice.class);
++			setResult(RESULT_CANCELED, intent);
++				finish();
++	}
+ 
+ 
+ 	@Override
+@@ -232,4 +238,43 @@
+                 }  
+             }  
+         }).start();}
++	public void Checkfp() {  
++		int checkValue =-100;
++		File readFile = new File("dev/cs_spi");	
++		FileReader inCmd;
++		try {
++			inCmd = new FileReader(readFile);
++			if(inCmd !=null){
++			Intent intent = new Intent();
++            intent.setClassName("chipsailing.fingerprint", "chipsailing.fingerprint.MainActivity");       
++            startActivityForResult(intent, 1);
+ }
++		} catch (IOException e) {
++			e.printStackTrace();
++		}
++    } 
++	@Override		
++		protected void onActivityResult(int requestCode, int resultCode, Intent data) {			 
++		Log.d("csjava","resultCode="+resultCode);		 
++		Log.d("csjava","requestCode="+requestCode);			
++		if (resultCode == 1&&requestCode==1) {				
++			Log.d("csjava","data="+data);				
++			if((data!=null)&&data.hasExtra("test_result")){
++				int result=data.getIntExtra("test_result",0);
++				Log.i("csjava", "result="+result);
++				if( result != 1){
++					Log.i("csjava", "fail");
++					testfail();
++					}
++				else if(result == 1){
++					Log.i("csjava", "success");
++					testsuccess();
++				}	
++					}
++					else{
++						Log.i("csjava", "fail B");
++						testfail();
++						}
++					}
++		}
++	} 
+Index: vendor/branch/5058A_Argentina_OpenMarket/vendor/customer/custom.mk
+===================================================================
+--- vendor/branch/5058A_Argentina_OpenMarket/vendor/customer/custom.mk	(revision 13637)
++++ vendor/branch/5058A_Argentina_OpenMarket/vendor/customer/custom.mk	(revision 13638)
+@@ -39,7 +39,8 @@
+                     MotocrossTrialExtreme \
+                     PuzzlePets \
+                     ModernCombat4 \
+-                    Toolkit
++                    Toolkit \
++					FingerprintEneoll_7.0
+ 
+ # Overrides
+ PRODUCT_PROPERTY_OVERRIDES +=

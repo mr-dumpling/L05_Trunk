@@ -1,0 +1,133 @@
+Index: vendor/customer/apps/CameraTcl/Android.mk
+===================================================================
+--- vendor/customer/apps/CameraTcl/Android.mk	(revision 4238)
++++ vendor/customer/apps/CameraTcl/Android.mk	(revision 4239)
+@@ -6,7 +6,7 @@
+ LOCAL_SRC_FILES := Camera_v8.0.4.0.0025.0.apk
+ LOCAL_MODULE_CLASS := APPS
+ LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
+-LOCAL_CERTIFICATE := PRESIGNED
++LOCAL_CERTIFICATE := platform
+ LOCAL_PRIVILEGED_MODULE := true
+ LOCAL_DEX_PREOPT := true
+ LOCAL_TARGET_CPU_ABI := armeabi-v7a
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/devicemgr/CamDeviceManagerImp.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/devicemgr/CamDeviceManagerImp.cpp	(revision 4238)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/devicemgr/CamDeviceManagerImp.cpp	(revision 4239)
+@@ -269,7 +269,14 @@
+         pInfo->iHasFlashLight       = pMetadataProvider->getDeviceHasFlashLight();
+ #endif
+         //
+-        i4DeviceNum++;
++        //i4DeviceNum++;
++		// main2 sensor is invisible to users above Camera HAL
++		uint32_t curDevIdx = pHalSensorList->querySensorDevIdx(i);
++		if(curDevIdx == SENSOR_DEV_MAIN_2){
++			MY_LOGD("skip main2 when enumerating camera devices");
++		}else{
++			i4DeviceNum++;
++		}
+     }
+     //
+     // mATV
+Index: frameworks/base/core/jni/android_hardware_Camera.cpp
+===================================================================
+--- frameworks/base/core/jni/android_hardware_Camera.cpp	(revision 4238)
++++ frameworks/base/core/jni/android_hardware_Camera.cpp	(revision 4239)
+@@ -1466,7 +1466,7 @@
+ //-------------------------------------------------
+ 
+ static const JNINativeMethod camMethods[] = {
+-  { "getNumberOfCameras",
++  { "_getNumberOfCameras",
+     "()I",
+     (void *)android_hardware_Camera_getNumberOfCameras },
+   { "_getCameraInfo",
+Index: frameworks/base/core/java/android/hardware/Camera.java
+===================================================================
+--- frameworks/base/core/java/android/hardware/Camera.java	(revision 4238)
++++ frameworks/base/core/java/android/hardware/Camera.java	(revision 4239)
+@@ -67,8 +67,6 @@
+ import android.hardware.camera2.CaptureResult;
+ import android.hardware.camera2.CameraCharacteristics;
+ //!--
+-
+-
+ import static android.system.OsConstants.*;
+ 
+ /**
+@@ -383,7 +381,18 @@
+     /**
+      * Returns the number of physical cameras available on this device.
+      */
+-    public native static int getNumberOfCameras();
++	 
++	//add by mzj for cts 
++    //public native static int getNumberOfCameras();
++	private native static int _getNumberOfCameras();
++    public static int getNumberOfCameras() {
++         int cameraNum = _getNumberOfCameras();
++         String packageName = ActivityThread.currentOpPackageName();
++         if (packageName != null  && packageName.contains(".tct.") || packageName.contains(".mediatek.")) {
++             return 3;
++         } 
++         return cameraNum;
++    }
+ 
+     /**
+      * Returns the information about a particular camera.
+@@ -390,6 +399,15 @@
+      * If {@link #getNumberOfCameras()} returns N, the valid id is 0 to N-1.
+      */
+     public static void getCameraInfo(int cameraId, CameraInfo cameraInfo) {
++		Log.d("mzj", "getCameraInfo init ="+cameraId);
++		if (cameraId == 2) {
++            SystemProperties.set("debug.camera.open", "2");
++            Log.d("mzj", "getCameraInfo " +"debug.camera.open 2");
++            cameraId = 0; 
++        } else {
++			SystemProperties.set("debug.camera.open", "-1"); 
++			Log.d("mzj", "getCameraInfo " +"debug.camera.open -1");
++		}
+         _getCameraInfo(cameraId, cameraInfo);
+         IBinder b = ServiceManager.getService(Context.AUDIO_SERVICE);
+         IAudioService audioService = IAudioService.Stub.asInterface(b);
+@@ -558,8 +576,16 @@
+         if (halVersion < CAMERA_HAL_API_VERSION_1_0) {
+             throw new IllegalArgumentException("Invalid HAL version " + halVersion);
+         }
+-
+-        return new Camera(cameraId, halVersion);
++		Log.d("mzj", "openLegacy cameraId init ="+cameraId);
++		if (cameraId == 2) {
++              SystemProperties.set("debug.camera.open", "2");
++              Log.d("mzj", "openLegacy set" +"debug.camera.open 2");
++              cameraId = 0; 
++        } else {
++			SystemProperties.set("debug.camera.open", "-1");
++			Log.d("mzj", "openLegacy set" +"debug.camera.open -1");
++		}
++		return new Camera(cameraId, halVersion);
+     }
+ 
+     /**
+@@ -615,7 +641,7 @@
+         } else {
+             mEventHandler = null;
+         }
+-
++		Log.d("mzj", "cameraInitVersion cameraId init ="+cameraId);
+         return native_setup(new WeakReference<Camera>(this), cameraId, halVersion,
+                 ActivityThread.currentOpPackageName());
+     }
+Index: device/mediatek/common/sepolicy/basic/platform_app.te
+===================================================================
+--- device/mediatek/common/sepolicy/basic/platform_app.te	(revision 4238)
++++ device/mediatek/common/sepolicy/basic/platform_app.te	(revision 4239)
+@@ -70,3 +70,5 @@
+ # Purpose : Engineering mode need access for aee commmand
+ # Package: MTKLogger/Debugutils
+ allow platform_app debuggerd_socket:unix_stream_socket connectto;
++# add by mzj for cts
++allow platform_app debug_prop:property_service set;

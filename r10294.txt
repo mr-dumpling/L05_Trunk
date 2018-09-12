@@ -1,0 +1,95 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/ImageWallpaper.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/ImageWallpaper.java	(revision 10293)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/ImageWallpaper.java	(revision 10294)
+@@ -574,6 +574,7 @@
+          * If loading is already in-flight, subsequent loads are ignored (but needDraw is or-ed to
+          * the active request).
+          */
++        private boolean loadWallpaperPending = false;
+         private void loadWallpaper(boolean needsDraw) {
+             if(firstLoad){
+                 if(wallpapaerLoading||wallpapaerLoaded)return;
+@@ -581,6 +582,60 @@
+                 firstLoad=false;
+             }
+             mNeedsDrawAfterLoadingWallpaper |= needsDraw;
++            if(!loadWallpaperPending){
++                loadWallpaperPending = true;
++                mBackground = null;
++                mBackgroundWidth = -1;
++                mBackgroundHeight = -1;
++                Bitmap bt = null;
++                Throwable exception = null;
++                try {
++                    //if (needsReset) {
++                        mWallpaperManager.forgetLoadedWallpaper();
++                    //}
++                    bt = mWallpaperManager.getBitmap();
++                } catch (RuntimeException | OutOfMemoryError e) {
++                    exception = e;
++                }
++                if (exception != null) {
++                    // Note that if we do fail at this, and the default wallpaper can't
++                    // be loaded, we will go into a cycle. Don't do a build where the
++                    // default wallpaper can't be loaded.
++                    Log.w(TAG, "Unable to load wallpaper!", exception);
++                    try {
++                        mWallpaperManager.clear();
++                    } catch (IOException ex) {
++                        // now we're really screwed.
++                        Log.w(TAG, "Unable reset to default wallpaper!", ex);
++                    }
++                    try {
++                        bt = mWallpaperManager.getBitmap();
++                    } catch (RuntimeException | OutOfMemoryError e) {
++                        Log.w(TAG, "Unable to load default wallpaper!", e);
++                    }
++                }
++                if (bt != null) {
++                    mBackground = bt;
++                    mBackgroundWidth = mBackground.getWidth();
++                    mBackgroundHeight = mBackground.getHeight();
++                }
++                loadWallpaperPending = false;
++
++                if (DEBUG) {
++                    Log.d(TAG, "Wallpaper loaded: " + mBackground);
++                }
++                updateSurfaceSize(getSurfaceHolder(), getDefaultDisplayInfo(),
++                    false /* forDraw */);
++                if (needsDraw) {
++                    drawFrame();
++                } 
++            }else{
++                if (DEBUG) {
++                    Log.d(TAG, "Skipping loadWallpaper, already in flight ");
++                }
++                return;
++            }
++           /* mNeedsDrawAfterLoadingWallpaper |= needsDraw;
+             if (mLoader != null) {
+                 if (DEBUG) {
+                     Log.d(TAG, "Skipping loadWallpaper, already in flight ");
+@@ -633,9 +688,9 @@
+                     if (DEBUG) {
+                         Log.d(TAG, "Wallpaper loaded: " + mBackground);
+                     }
+-                    updateSurfaceSize(getSurfaceHolder(), getDefaultDisplayInfo(),
+-                            false /* forDraw */);
+-                    if (mNeedsDrawAfterLoadingWallpaper) {
++                    updateSurfaceSize(getSurfaceHolder(), getDefaultDisplayInfo(),*/
++                   //         false /* forDraw */);
++                   /* if (mNeedsDrawAfterLoadingWallpaper) {
+                         drawFrame();
+                     }
+ 
+@@ -642,7 +697,7 @@
+                     mLoader = null;
+                     mNeedsDrawAfterLoadingWallpaper = false;
+                 }
+-            }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
++            }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);*/
+         }
+ 
+         @Override

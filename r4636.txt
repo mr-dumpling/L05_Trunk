@@ -1,0 +1,132 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java	(revision 4635)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/data/WorkingMessage.java	(revision 4636)
+@@ -1125,7 +1125,7 @@
+             if (mSlideshow != null && mSlideshow.size() > 0) {
+                 /// M: Code analyze 034, For new feature ALPS00231349,  add vCard support. @{
+                 if (mOpWorkingMessageExt.removeAllAttachFiles()) {
+-                    mSlideshow.removeAllAttachFiles();
++                    //mSlideshow.removeAllAttachFiles();//lance modify for bug 117676
+                 }
+                 mSlideshow.clear();
+                 mSlideshow = null;
+@@ -1178,7 +1178,12 @@
+         }
+ 
+         // Remove any previous attachments.
+-        removeSlideAttachments(slide);
++        //lance modify for bug 117676 @{
++        //removeSlideAttachments(slide);
++        slide.removeImage();
++        slide.removeVideo();
++        slide.removeAudio();
++        // @}
+ 
+         slide.add(media);
+ 
+@@ -1251,7 +1256,7 @@
+         slide.add(media);
+ 
+         /// M: for vcard, since we append a media, remove vCard
+-        removeAllFileAttaches();
++        //removeAllFileAttaches(); //lance modify for bug 117676
+ 
+         // For video and audio, set the duration of the slide to
+         // that of the attachment.
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageListItem.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageListItem.java	(revision 4635)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/MessageListItem.java	(revision 4636)
+@@ -869,12 +869,21 @@
+                     // show file attachment view
+                     showFileAttachmentView(mMessageItem.mSlideshow.getAttachFiles());
+                 } else {
+-                    /// M: OP01 add for VCard and VCanlendar
+-                    if (!mOpMessageListItemExt.showOrHideFileAttachmentView(
++                    /// M: OP01 add for VCard and VCanlendar\
++                    //lance modify for bug 117676 @{
++                    ArrayList<FileAttachmentModel> attachedFiles = mMessageItem.mSlideshow.getAttachFiles();
++                    if (attachedFiles != null && attachedFiles.size() > 0) {
++                        showFileAttachmentView(mMessageItem.mSlideshow.getAttachFiles());
++                    } else {
++                        hideFileAttachmentViewIfNeeded();
++                        MmsLog.i(TAG, "mMmsAttachmentEnhancePlugin= null");
++                    } 
++                    /*if (!mOpMessageListItemExt.showOrHideFileAttachmentView(
+                             mMessageItem.mSlideshow.getAttachFiles())) {
+                         hideFileAttachmentViewIfNeeded();
+                         MmsLog.i(TAG, "mMmsAttachmentEnhancePlugin= null");
+-                    }
++                    }*/
++                    // @}
+                     setImage(null, null);
+ 
+                     drawPlaybackButton(mMessageItem);
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 4635)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/ComposeMessageActivity.java	(revision 4636)
+@@ -4928,7 +4928,7 @@
+                 // Launch the add-attachment list dialog
+                 /// M: Code analyze 051, Hide input keyboard.@{
+                 hideInputMethod();
+-                showAddAttachmentDialog(!mWorkingMessage.hasAttachedFiles());
++                showAddAttachmentDialog(/*!mWorkingMessage.hasAttachedFiles()*/true);//lance modify for bug 117676
+                 MmsLog.d(TAG, "Attach: showAddAttachmentDialog(!hasAttachedFiles)");
+                 break;
+             /// M: Code analyze 014, Add quick text. @{
+@@ -9975,11 +9975,14 @@
+             // if (mAttachmentTypeSelectorAdapter == null) {
+             // add for vcard, if there is a real slideshow, hide vCard
+             int mode = AttachmentTypeSelectorAdapter.MODE_WITH_SLIDESHOW;
+-            if (mWorkingMessage.hasSlideshow()) {
++            //lance modify for bug 117676 @{
++            mode |= AttachmentTypeSelectorAdapter.MODE_WITH_FILE_ATTACHMENT; 
++            /*if (mWorkingMessage.hasSlideshow()) {
+                 mode |= AttachmentTypeSelectorAdapter.MODE_WITHOUT_FILE_ATTACHMENT;
+             } else {
+                 mode |= AttachmentTypeSelectorAdapter.MODE_WITH_FILE_ATTACHMENT;
+-            }
++            }*/
++            // @}
+             if (MessageUtils.isVCalendarAvailable(ComposeMessageActivity.this)) {
+                 mode |= AttachmentTypeSelectorAdapter.MODE_WITH_VCALENDAR;
+             }
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/AttachmentEditor.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/AttachmentEditor.java	(revision 4635)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/ui/AttachmentEditor.java	(revision 4636)
+@@ -114,7 +114,7 @@
+         try {
+             /// M: fix bug ALPS00947784, check and remove FileAttachment
+             if (!mOpAttachmentEditorExt.update()) {
+-                checkFileAttacment(msg);
++                //checkFileAttacment(msg); //lance modify for bug 117676
+             }
+             /// M: for vcard: file attachment view and other views are exclusive to each other
+             if (mSlideshow.sizeOfFilesAttach() > 0) {
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/mms/util/FileAttachmentUtils.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/mms/util/FileAttachmentUtils.java	(revision 4635)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/mms/util/FileAttachmentUtils.java	(revision 4636)
+@@ -124,7 +124,8 @@
+         slideshow.checkAttachmentSize(fileAttach.getAttachSize(), append, textSize);
+ 
+         /// M: Modify ALPS00474719
+-        if (!mOpFileAttachmentUtilsExt.setOrAppendFileAttachment(append)) {
++        //lance modify for bug 117676 @{
++        /*if (!mOpFileAttachmentUtilsExt.setOrAppendFileAttachment(append)) {
+             SlideModel slide = slideshow.get(0);
+             slide.removeImage();
+             slide.removeVideo();
+@@ -134,7 +135,8 @@
+                 slideshow.remove(i);
+             }
+             MmsLog.d(TAG, "Replace vcard or vcalender or Not OP01");
+-        }
++        }*/
++        // @}
+ 
+         // Add file attachments
+         if (append) {

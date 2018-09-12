@@ -1,0 +1,63 @@
+Index: packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 1532)
++++ packages/apps/Settings/src/com/android/settings/NightModeTypeSettings.java	(revision 1533)
+@@ -69,7 +69,7 @@
+ 			String nightModeSwitch= Settings.System.getString(mContentResolver,NIGHT_MODE_SWITCH);
+ 			boolean mode= Boolean.parseBoolean(nightModeSwitch);
+ 			manuallyEnablePreference.setChecked(mode);
+-        	manuallyPreference.setEnabled(mode);
++        	
+ 			if(mode&&!PictureQuality.isBlueLightEnabled()){
+ 				PictureQuality.enableBlueLight(true);
+ 				
+@@ -95,6 +95,11 @@
+ 			}else{
+ 				schedulePlanPreference.setSummary(R.string.sunset2sunrise_title);
+ 			}
++			if(automateSchedulePreference.isChecked()||manuallyEnablePreference.isChecked()){
++				manuallyPreference.setEnabled(true);
++			}else{
++				manuallyPreference.setEnabled(false);
++			}
+ 		 }
+ 
+    /*display attribute list*/
+@@ -153,15 +158,22 @@
+           	modePrenference.edit().putBoolean(SETTING_TIME,Boolean.parseBoolean(newValue.toString())).commit();
+ 				if(Boolean.parseBoolean(newValue.toString())){
+ 					schedulePlanPreference.setEnabled(true);	
++					manuallyPreference.setEnabled(true);
+ 					if(manuallyEnablePreference.isChecked()){
+ 						manuallyEnablePreference.setChecked(false);
+ 						PictureQuality.enableBlueLight(false);
+-						manuallyPreference.setEnabled(false);
++						
+ 						Settings.System.putString(mContentResolver,NIGHT_MODE_SWITCH,"false");
+ 						//modePrenference.edit().putBoolean(NIGHT_MODE_ON_OROFF,false).commit();
+ 					}
+ 				}else{
+ 					schedulePlanPreference.setEnabled(false);
++					if(manuallyEnablePreference.isChecked()){
++						manuallyPreference.setEnabled(true);
++					}else{
++						manuallyPreference.setEnabled(false);
++					}
++					
+ 				}
+ 				return true;
+             }
+@@ -186,7 +198,12 @@
+ 				}else{
+ 					
+ 					PictureQuality.enableBlueLight(false);
+-					manuallyPreference.setEnabled(false);
++					if(automateSchedulePreference.isChecked()){
++						manuallyPreference.setEnabled(true);
++
++					}else{
++						manuallyPreference.setEnabled(false);
++					}
+ 					/*manuallyPreference.setTitleColor();*/
+ 
+ 				}

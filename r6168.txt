@@ -1,0 +1,88 @@
+Index: frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java
+===================================================================
+--- frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 6167)
++++ frameworks/opt/telephony/src/java/com/android/internal/telephony/dataconnection/DcTracker.java	(revision 6168)
+@@ -204,7 +204,14 @@
+ 
+     private static final String INTENT_DATA_STALL_ALARM =
+             "com.android.internal.telephony.data-stall";
++    // add for FDN
++    Cursor cursor = null;
+ 
++    private static final String[] COLUMN_NAMES = new String[] {
++            "index"/*MTK*/,
++            "name",
++            "number"
++    };
+     @VisibleForTesting
+     public static class DataAllowFailReason {
+         private HashSet<DataAllowFailReasonType> mDataAllowFailReasonSet = new HashSet<>();
+@@ -3571,8 +3578,7 @@
+         if (isFdnEnableSupport()) {
+             logd("onFdnChanged");
+             if (getFdnStatus()) {
+-                logd("fdn enabled, cleanUpAllConnections!");
+-                cleanUpAllConnections(true, Phone.REASON_FDN_ENABLED);
++				checkFdnList();
+             } else {
+                 logd("fdn disabled, setupDataOnConnectableApns!");
+                 setupDataOnConnectableApns(Phone.REASON_FDN_DISABLED);
+@@ -3581,6 +3587,45 @@
+             logd("not support fdn enabled, skip onFdnChanged");
+         }
+     }
++    private Uri getUri(int subId){
++		Uri fdnContentUri;    
++        fdnContentUri = Uri.parse("content://icc/fdn/subId/"+subId);
++        return fdnContentUri;
++	}
++   
++	private void checkFdnList(){
++		new Thread(new Runnable() {
++            @Override
++            public void run() {
++                try {
++                    cursor = mResolver.query(getUri(mPhone.getSubId()),COLUMN_NAMES,null,null,null);
++                    if(cursor != null){
++						List<String> numberList = new ArrayList<String>();
++                        cursor.moveToFirst();
++                        do{
++						   numberList.add(cursor.getString(2));
++                           android.util.Log.i("cursor.count && number",cursor.getCount()+"***"+cursor.getString(2));
++                        }while (cursor.moveToNext());
++						if(numberList != null){
++						if (numberList.contains("*99#")){
++                               setupDataOnConnectableApns(Phone.REASON_FDN_DISABLED);
++                           }else{
++							   cleanUpAllConnections(true, Phone.REASON_FDN_ENABLED);
++						   }
++						}
++                    }
++                } catch (Exception e) {
++                    e.printStackTrace();
++                } finally {
++                    if(cursor != null){
++                        cursor.close();
++                    }
++                }
++            }
++        }).start();
++	}
++	
++	
+     //MTK END: Support FDN
+ 
+     public void setApnsEnabledByCarrier(boolean enabled) {
+Index: vendor/mediatek/proprietary/frameworks/base/packages/FwkPlugin/src/com/mediatek/op/telephony/GsmDCTExt.java
+===================================================================
+--- vendor/mediatek/proprietary/frameworks/base/packages/FwkPlugin/src/com/mediatek/op/telephony/GsmDCTExt.java	(revision 6167)
++++ vendor/mediatek/proprietary/frameworks/base/packages/FwkPlugin/src/com/mediatek/op/telephony/GsmDCTExt.java	(revision 6168)
+@@ -76,7 +76,7 @@
+ 
+     public boolean isFdnEnableSupport() {
+         // Default is return false, set to true if needed
+-        return false;
++        return true;
+     }
+ 
+     /** IPV6RA feature. */

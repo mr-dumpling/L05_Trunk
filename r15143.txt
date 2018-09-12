@@ -1,0 +1,131 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 15142)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 15143)
+@@ -417,7 +417,12 @@
+                     cursor.moveToNext();
+                     continue;
+                 }
+-
++				//M: Skip BT APN, it is same with EE. Although we skip BT in apnlists, 
++				//we still need to display in SIM provider activity ！！！
++				if (shouldSkipBTApn(mccmnc, spn)) {
++					cursor.moveToNext();
++                    continue;
++				}
+                 /// M: for plug-in
+                 name = mApnExt.updateApnName(name, sourcetype);
+ 
+@@ -512,7 +517,7 @@
+ 						String spn = ((ApnPreference) preference).getPersistedString(preference.getKey());
+ 						Log.d(TAG,"spn:"+spn);
+ 						if (!TextUtils.isEmpty(mnoSpn) && !TextUtils.isEmpty(spn) 
+-							&& mnoSpn.equals(spn)){
++							&& mnoSpn.equalsIgnoreCase(spn)){
+ 								tempMmsApnList.add(preference);
+ 							}					
+ 					}
+@@ -860,7 +865,11 @@
+         /// M: for plug-in
+         return "cmmail".equals(type) || !mRcseApnExt.isRcseOnlyApnEnabled(type);
+     }
+-
++	
++	public boolean shouldSkipBTApn(String mccmnc, String spn) {
++		
++		return "23430".equals(mccmnc) && "BT".equals(spn);
++	}
+     @Override
+     public void onPrepareOptionsMenu(Menu menu) {
+         int size = menu.size();
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 15142)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 15143)
+@@ -206,6 +206,12 @@
+                 }
+ 
+                 Log.d("TAG", "view.getText()=" + name);
++				if ("BT".equals(name)) {
++					//Mark the skip apn :BT  Get the value in MobileNetworkSettings.java#getSelectedApnSpnName()
++					Settings.System.putInt(ApnSelectionActivity.this.getContentResolver(),"skipApn",1);					
++				} else {
++					Settings.System.putInt(ApnSelectionActivity.this.getContentResolver(),"skipApn",0);
++				}
+                 setSelectedApnKey(key);
+ 				Settings.System.putInt(ApnSelectionActivity.this.getContentResolver(),"seletedApn",0);
+             }
+Index: vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 15142)
++++ vendor/branch/5058Y_ALGB/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 15143)
+@@ -646,7 +646,7 @@
+ 		if (Settings.System.getInt(this.getContentResolver(),"def_roam_state_with_expection_apn",0) == 0) {
+ 			mPhone.setDataRoamingEnabled(false);
+ 			log("===setDataRoamingEnabled(false)===");
+-			String selectedApnSpnName = getSelectedApnSpnName();
++			String selectedApnSpnName = getSelectedApnSpnName(mNumeric);
+ 			if (!TextUtils.isEmpty(mNumeric) && (("23430".equals(mNumeric) && !TextUtils.isEmpty(selectedApnSpnName) && selectedApnSpnName.contains("EE")) 
+ 				|| "23433".equals(mNumeric))) {			
+ 				mPhone.setDataRoamingEnabled(true);
+@@ -694,7 +694,7 @@
+         super.onPause();
+     }
+ 
+-	private String getSelectedApnSpnName() {
++	private String getSelectedApnSpnName(String Numeric) {
+         String spn = null;
+ 
+         /// M: add sub id for prefer APN @{
+@@ -712,6 +712,11 @@
+             spn = cursor.getString(0);
+         }
+         cursor.close();
++		//Get the skip apn 
++		int skipApn = Settings.System.getInt(this.getContentResolver(),"skipApn",0);
++		if (!TextUtils.isEmpty(Numeric) && "23430".equals(Numeric) && skipApn == 1) {
++			spn = "BT";
++		}
+         Log.d(LOG_TAG,"getSelectedApnKey(), spn = " + spn);
+         return spn;
+     }
+Index: vendor/branch/5058Y_ALGB/device/mediatek/common/apns-conf.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/device/mediatek/common/apns-conf.xml	(revision 15142)
++++ vendor/branch/5058Y_ALGB/device/mediatek/common/apns-conf.xml	(revision 15143)
+@@ -2829,7 +2829,7 @@
+         type="mms"
+         user="eesecure" />
+ 
+-    <!-- <apn
++    <apn
+         apn="eezone"
+         authtype="1"
+         bearer_bitmask=""
+@@ -2850,7 +2850,7 @@
+         server=""
+         spn="BT"
+         type="mms"
+-        user="eesecure" /> -->
++        user="eesecure" />
+ 
+     <apn
+         apn="mms.btonephone.com"
+@@ -4538,7 +4538,7 @@
+         type="dun"
+         user="orange" />
+ 
+-    <!-- <apn
++    <apn
+         apn="everywhere"
+         authtype="1"
+         bearer_bitmask=""
+@@ -4559,7 +4559,7 @@
+         server=""
+         spn="BT"
+         type="default,supl"
+-        user="eesecure" /> -->
++        user="eesecure" />
+ 
+     <apn
+         apn="internet.btonephone.com"

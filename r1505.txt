@@ -1,0 +1,49 @@
+Index: packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java
+===================================================================
+--- packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 1504)
++++ packages/apps/Settings/src/com/android/settings/fingerprint/FingerprintSettings.java	(revision 1505)
+@@ -185,6 +185,9 @@
+ 		public static SwitchPreference mFunctionShortcut;
+ 		static SharedPreferences mFuncPreference ;
+     	Editor mEditor;
++		// add by dongdongli for 112587	20171114 start
++		private Context mContext;
++		// add by dongdongli for 112587	 20171114 end
+ 		
+         private AuthenticationCallback mAuthCallback = new AuthenticationCallback() {
+             @Override
+@@ -459,7 +462,9 @@
+ 			mFunctionShortcut=(SwitchPreference)mFunctionsCategory.findPreference(KEY_FINGERPRINTS_LAUNCHER_SHORTCUTS);
+ 			mFunctionShortcut.setChecked(mFuncPreference.getBoolean("mState", false));
+ 			mFunctionShortcut.setOnPreferenceChangeListener(this);
+-			
++			// add by dongdongli for 112587 20171114 start {
++			mContext = root.getContext();
++			// add by dongdongli for 112587 20171114 end }
+         }
+ 
+         private void updatePreferences() {
+@@ -623,6 +628,13 @@
+         private void deleteFingerPrint(Fingerprint fingerPrint) {
+             mFingerprintManager.remove(fingerPrint, mUserId, mRemoveCallback);
+         }
++		
++		// add by dongdongli for 112587 20171114 start {
++		private void deleteLastFingerPrint() {
++			Settings.System.putInt(mContext.getContentResolver(), Settings.System.FINGERPRINTS_UNCLOCK_DEVICE, 0);
++			mUnclockPreference.setChecked(false);
++		}
++		// add by dongdongli for 112587 20171114 end }
+ 
+         private void renameFingerPrint(int fingerId, String newName) {
+             mFingerprintManager.rename(fingerId, mUserId, newName);
+@@ -767,6 +779,9 @@
+                                         FingerprintSettingsFragment parent
+                                                 = (FingerprintSettingsFragment) getTargetFragment();
+                                         parent.deleteFingerPrint(mFp);
++										// add by dongdongli for 112587 20171114 start {
++										parent.deleteLastFingerPrint();
++										// add by dongdongli for 112587 20171114 end }
+                                         dialog.dismiss();
+                                     }
+                                 })

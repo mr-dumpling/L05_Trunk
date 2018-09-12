@@ -1,0 +1,189 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessageReceiverService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessageReceiverService.java	(revision 7643)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/mediatek/cb/cbmsg/CbMessageReceiverService.java	(revision 7644)
+@@ -192,6 +192,12 @@
+             MmsLog.e(MmsApp.TXN_TAG, "received SMS_CB_RECEIVED_ACTION with no extras!");
+             return;
+         }
++	
++	Boolean chile_919 = getResources().getBoolean(R.bool.def_mms_cb_popup_and_toneAlert_vibrate_for_919_921_chile);
++	if (message.getServiceCategory() == 919 && chile_919) {
++	    MmsLog.e(MmsApp.TXN_TAG, "chile 919 disable");
++            return;	
++	}
+ 
+         int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                 SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+@@ -253,7 +259,7 @@
+             if (cbPopupAndToneVibrateForChile919And921) {
+                 int channelId = message.getServiceCategory();
+                 MmsLog.i(TAG, "CBMessageReceiverService_handleCBMessage_channelId: " + channelId);
+-                if (channelId != 919 && channelId != 921) {
++                if (/*channelId != 919 && */channelId != 921) {
+                     cbPopupAndToneVibrateForChile919And921 = false;
+                 }
+             }
+Index: vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 7643)
++++ vendor/mediatek/proprietary/packages/apps/CMASReceiver/src/com/mediatek/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 7644)
+@@ -382,10 +382,24 @@
+ 			return true;
+ 		}
+ 		
+-		if (message.getServiceCategory() == 919 && CellBroadcastReceiverApp.isCellAreaInChile()) {
++		if (message.getServiceCategory() == 919 && (CellBroadcastReceiverApp.isCellAreaInChile() || 
++			CellBroadcastReceiverApp.isCellAreaInPeru())) {
+ 			return false;
+ 		}
++
+ 		
++		if (getResources().getConfiguration().locale.getLanguage().equals("en") && CellBroadcastReceiverApp.isCellAreaInPeru() &&
++			((message.getServiceCategory() == 4370) || (message.getServiceCategory() == 919))) {
++			Log.i(TAG,"disable 4370/919 when the device language is en");
++			return false;		
++		}
++
++		if (getResources().getConfiguration().locale.getLanguage().equals("es") && CellBroadcastReceiverApp.isCellAreaInPeru() &&
++			(message.getServiceCategory() == 4383)) {
++			Log.i(TAG,"disable 4383 when the device language is es");
++			return false;		
++		}
++		
+ 		if (((message.getServiceCategory() == 4380) || (message.getServiceCategory() == 4381)) && 
+ 				CellBroadcastReceiverApp.isCellAreaInPeru()) {
+ 			return true;
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 7643)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastAlertService.java	(revision 7644)
+@@ -323,9 +323,21 @@
+                 CellBroadcastSettings.isFeatureEnabled(this,
+                         CarrierConfigManager.KEY_CARRIER_FORCE_DISABLE_ETWS_CMAS_TEST_BOOL, false);
+ 
+-		if (message.getServiceCategory() == 919 && CellBroadcastReceiverApp.isCellAreaInChile()) {
++		if (message.getServiceCategory() == 919 && (CellBroadcastReceiverApp.isCellAreaInChile() || 
++			CellBroadcastReceiverApp.isCellAreaInPeru())) {
+ 			return false;
+ 		}
++	if (getResources().getConfiguration().locale.getLanguage().equals("en") && CellBroadcastReceiverApp.isCellAreaInPeru() &&
++		((message.getServiceCategory() == 4370) || (message.getServiceCategory() == 919))) {
++		Log.i(TAG,"disable 4370/919 when the device language is en");
++		return false;		
++	}
++
++	if (getResources().getConfiguration().locale.getLanguage().equals("es") && CellBroadcastReceiverApp.isCellAreaInPeru() &&
++		(message.getServiceCategory() == 4383)) {
++		Log.i(TAG,"disable 4383 when the device language is es");
++		return false;		
++	}
+ 						
+         if (message.isEtwsTestMessage()) {
+             return emergencyAlertEnabled &&
+Index: packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastResources.java
+===================================================================
+--- packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastResources.java	(revision 7643)
++++ packages/apps/CellBroadcastReceiver/src/com/android/cellbroadcastreceiver/CellBroadcastResources.java	(revision 7644)
+@@ -245,7 +245,26 @@
+     }
+ 
+     public static int getDialogTitleResource(Context context, CellBroadcastMessage cbm) {
+-        // ETWS warning types
++	if (CellBroadcastReceiverApp.isCellAreaInPeru() && cbm != null) {
++		if (cbm.getServiceCategory() == 4370 || cbm.getServiceCategory() == 4383 || cbm.getServiceCategory() == 919) {
++			// Emergency Alert {Alerta de Emergencia(es)}
++			return R.string.peru_emergency_alert_4370_4383;
++		} else if (cbm.getServiceCategory() == 4382) {
++			// Informative Message {Mensaje Informativo(es)}
++			return R.string.peru_emergency_alert_4382;
++		} else if (cbm.getServiceCategory() == 4380) {
++			// Emergency Alert �C Test message  {Alerta de Emergencia - mensaje de Prueba(es)}
++			return R.string.peru_emergency_alert_4380;
++		} else if (cbm.getServiceCategory() == 4381) {
++			// Emergency Alert �C Exercise / Drill message  {Alerta de Emergencia �C mensaje de Ejercicio / Simulacro (es)}
++			return R.string.peru_emergency_alert_4381;
++		} else if (cbm.getServiceCategory() == 4396 || cbm.getServiceCategory() == 4397 || cbm.getServiceCategory() == 4398 || cbm.getServiceCategory() == 4399) {
++			// Reserved {Reservado(es)}
++			return R.string.peru_emergency_alert_4396_4397_4398_4399;
++		}
++	}        
++
++	// ETWS warning types
+ 		SmsCbEtwsInfo etwsInfo = null;
+ 		if (cbm != null) {
+ 			etwsInfo = cbm.getEtwsWarningInfo();
+Index: packages/apps/CellBroadcastReceiver/res/values-es-rES/strings.xml
+===================================================================
+--- packages/apps/CellBroadcastReceiver/res/values-es-rES/strings.xml	(revision 7643)
++++ packages/apps/CellBroadcastReceiver/res/values-es-rES/strings.xml	(revision 7644)
+@@ -264,4 +264,9 @@
+         <item>500</item>
+         <item>1000</item>
+     </integer-array>
++	<string name="peru_emergency_alert_4370_4383">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4382">Mensaje Informativo</string>
++	<string name="peru_emergency_alert_4380">Alerta de Emergencia \u2011 mensaje de Prueba</string>
++	<string name="peru_emergency_alert_4381">Alerta de Emergencia \u2011 mensaje de Ejercicio / Simulacro</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reservado</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/CellBroadcastReceiver/res/values-es-rMX/strings.xml
+===================================================================
+--- packages/apps/CellBroadcastReceiver/res/values-es-rMX/strings.xml	(revision 7643)
++++ packages/apps/CellBroadcastReceiver/res/values-es-rMX/strings.xml	(revision 7644)
+@@ -264,4 +264,9 @@
+         <item>500</item>
+         <item>1000</item>
+     </integer-array>
++	<string name="peru_emergency_alert_4370_4383">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4382">Mensaje Informativo</string>
++	<string name="peru_emergency_alert_4380">Alerta de Emergencia \u2011 mensaje de Prueba</string>
++	<string name="peru_emergency_alert_4381">Alerta de Emergencia \u2011 mensaje de Ejercicio / Simulacro</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reservado</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/CellBroadcastReceiver/res/values-es-rUS/strings.xml
+===================================================================
+--- packages/apps/CellBroadcastReceiver/res/values-es-rUS/strings.xml	(revision 7643)
++++ packages/apps/CellBroadcastReceiver/res/values-es-rUS/strings.xml	(revision 7644)
+@@ -267,4 +267,9 @@
+         <item>500</item>
+         <item>1000</item>
+     </integer-array>
++	<string name="peru_emergency_alert_4370_4383">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4382">Mensaje Informativo</string>
++	<string name="peru_emergency_alert_4380">Alerta de Emergencia \u2011 mensaje de Prueba</string>
++	<string name="peru_emergency_alert_4381">Alerta de Emergencia \u2011 mensaje de Ejercicio / Simulacro</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reservado</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/CellBroadcastReceiver/res/values/strings.xml
+===================================================================
+--- packages/apps/CellBroadcastReceiver/res/values/strings.xml	(revision 7643)
++++ packages/apps/CellBroadcastReceiver/res/values/strings.xml	(revision 7644)
+@@ -275,4 +275,9 @@
+         <item>500</item>
+         <item>1000</item>
+     </integer-array>
++    <string name="peru_emergency_alert_4370_4383">Emergency Alert</string>
++	<string name="peru_emergency_alert_4382">Informative Message</string>
++	<string name="peru_emergency_alert_4380">Emergency Alert – Test message</string>
++	<string name="peru_emergency_alert_4381">Emergency Alert – Exercise / Drill message</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reserved</string>
+ </resources>
+\ No newline at end of file
+Index: packages/apps/CellBroadcastReceiver/res/values-es/strings.xml
+===================================================================
+--- packages/apps/CellBroadcastReceiver/res/values-es/strings.xml	(revision 7643)
++++ packages/apps/CellBroadcastReceiver/res/values-es/strings.xml	(revision 7644)
+@@ -116,4 +116,9 @@
+   </string-array>
+ 
+     <string name="sim_selected_dialog_title">Seleccionar tarjeta SIM</string>
++	<string name="peru_emergency_alert_4370_4383">Alerta de Emergencia</string>
++	<string name="peru_emergency_alert_4382">Mensaje Informativo</string>
++	<string name="peru_emergency_alert_4380">Alerta de Emergencia \u2011 mensaje de Prueba</string>
++	<string name="peru_emergency_alert_4381">Alerta de Emergencia \u2011 mensaje de Ejercicio / Simulacro</string>
++	<string name="peru_emergency_alert_4396_4397_4398_4399">Reservado</string>
+ </resources>

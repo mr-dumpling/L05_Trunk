@@ -1,0 +1,30 @@
+Index: packages/apps/Nfc/src/com/android/nfc/P2pLinkManager.java
+===================================================================
+--- packages/apps/Nfc/src/com/android/nfc/P2pLinkManager.java	(revision 11659)
++++ packages/apps/Nfc/src/com/android/nfc/P2pLinkManager.java	(revision 11660)
+@@ -73,6 +73,7 @@
+ import java.io.PrintWriter;
+ import java.io.UnsupportedEncodingException;
+ import java.util.List;
++import android.app.ActivityManager;
+ 
+ /**
+  * Interface to listen for P2P events.
+@@ -568,13 +569,15 @@
+             // fall back to default NDEF for the foreground activity, unless the
+             // application disabled this explicitly in their manifest.
+             String[] pkgs = mPackageManager.getPackagesForUid(foregroundUids.get(0));
++			ActivityManager activityManager = (ActivityManager)mContext.getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE);
++			String dirPkg = activityManager.getRunningTasks(1).get(0).topActivity.getPackageName();
+             if (pkgs != null && pkgs.length >= 1) {
+-                if (!generatePlayLink || beamDefaultDisabled(pkgs[0])) {
++                if (!generatePlayLink || beamDefaultDisabled(dirPkg)) {
+                     if (DBG) Log.d(TAG, "Disabling default Beam behavior");
+                     mMessageToSend = null;
+                     mUrisToSend = null;
+                 } else {
+-                    mMessageToSend = createDefaultNdef(pkgs[0]);
++                    mMessageToSend = createDefaultNdef(dirPkg);
+                     mUrisToSend = null;
+                 }
+             }

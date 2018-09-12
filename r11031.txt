@@ -1,0 +1,173 @@
+Index: vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java
+===================================================================
+--- vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 11030)
++++ vendor/branch/5058I_ALRU/packages/apps/Settings/src/com/android/settings/sim/SimSettings.java	(revision 11031)
+@@ -258,20 +258,11 @@
+     }
+ 
+     private void updateServiceDataValues() {
+-        /* 
+-         * 3G/4G Service Mode:
+-         * -1: Default
+-         *  0: OFF
+-         *  1: SIM1
+-         *  2: SIM2
+-         */
+-        int serviceMode = Settings.Global.getInt(
+-                mContext.getContentResolver(), KEY_SERVICE_DATA, -1);
+-        if (DBG) log("[updateServiceDataValues] serviceMode=" + serviceMode);
+ 
+         final CheckBoxPreference cbPref =
+                 (CheckBoxPreference) findPreference(KEY_DATA_FOLLOW_SERVICE);
+         if (cbPref != null) {
++            /*
+             if (serviceMode == 0) {
+                 cbPref.setChecked(false);
+                 cbPref.setEnabled(false);
+@@ -283,22 +274,49 @@
+                 cbPref.setChecked(checked == 1);
+                 cbPref.setEnabled(true);
+             }
++            */
++            int checked = Settings.Global.getInt(
++                    getContentResolver(), KEY_DATA_FOLLOW_SERVICE, 1);
++            cbPref.setChecked(checked == 1);
+         }
+ 
++        /* 
++         * 3G/4G Service Mode:
++         * -1: OFF
++         *  1: SIM1
++         *  2: SIM2
++         */
++        int serviceMode = Settings.Global.getInt(
++                mContext.getContentResolver(), KEY_SERVICE_DATA, -1);
++        if (DBG) log("[updateServiceDataValues] serviceMode=" + serviceMode);
++
+         final Preference simPref = findPreference(KEY_SERVICE_DATA);
+         if (simPref != null) {
+-            SubscriptionInfo sir = mSubscriptionManager.getDefaultDataSubscriptionInfo();         
+-            if (serviceMode == 0) {
++            //SubscriptionInfo sir = mSubscriptionManager.getDefaultDataSubscriptionInfo();         
++            if (serviceMode == -1) {
+                 simPref.setSummary(R.string.sim_service_data_mode_off);
+             } else {
+-                if (sir != null) {
++                final int selectableSubInfoLength =
++                        mSelectableSubInfos == null ? 0 : mSelectableSubInfos.size();
++                CharSequence displayName = null;
++                SubscriptionInfo sir = null;
++                for (int i = 0; i < selectableSubInfoLength; i++) {
++                    sir = mSelectableSubInfos.get(i);
++                    if (serviceMode == sir.getSubscriptionId()) {
++                        displayName = sir.getDisplayName();
++                        if (displayName == null) {
++                            displayName = "";
++                        }
++                        break;
++                    }
++                }
++
++                if (displayName != null && sir != null) {
+                     simPref.setSummary(sir.getDisplayName());
+                 } else {
+                     simPref.setSummary(R.string.sim_service_data_mode_off);
+-                    if (cbPref != null) {
+-                        cbPref.setChecked(false);
+-                        cbPref.setEnabled(false);
+-                    }
++                    Settings.Global.putInt(
++                            mContext.getContentResolver(), KEY_SERVICE_DATA, -1);
+                 }
+             }
+         }
+@@ -489,6 +507,26 @@
+         return mPhoneStateListener[phoneId];
+     }
+ 
++    private void resetCellularDataValues() {
++        int serviceMode = Settings.Global.getInt(
++                mContext.getContentResolver(), KEY_SERVICE_DATA, -1);
++        final int selectableSubInfoLength =
++                mSelectableSubInfos == null ? 0 : mSelectableSubInfos.size();
++        boolean isValid = false;
++        for (int i = 0; i < selectableSubInfoLength; i++) {
++            SubscriptionInfo sir = mSelectableSubInfos.get(i);
++            if (serviceMode == sir.getSubscriptionId()) {
++                isValid = true;
++                break;
++            }
++        }
++        if (isValid) {
++            if (DBG) log("resetCellularDataValues: subId=" + serviceMode);
++            mSubscriptionManager.setDefaultDataSubId(serviceMode);
++            updateCellularDataValues(); 
++        }
++    }
++
+     @Override
+     public boolean onPreferenceTreeClick(final Preference preference) {
+         final Context context = mContext;
+@@ -503,8 +541,12 @@
+             intent.putExtra(SimDialogActivity.DIALOG_TYPE_KEY, SimDialogActivity.DATA_PICK);
+             context.startActivity(intent);
+         } else if (findPreference(KEY_DATA_FOLLOW_SERVICE) == preference) {
++            boolean isChecked = ((CheckBoxPreference) preference).isChecked();
+             Settings.Global.putInt(getContentResolver(), KEY_DATA_FOLLOW_SERVICE,
+-                    ((CheckBoxPreference) preference).isChecked() ? 1 : 0);
++                    isChecked ? 1 : 0);
++			if (isChecked) {
++                resetCellularDataValues();
++			}
+         } else if (findPreference(KEY_SERVICE_DATA) == preference) {
+             showServiceModeDialog(context);
+         } else if (findPreference(KEY_CALLS) == preference) {
+@@ -552,13 +594,17 @@
+             @Override
+             public void onClick(DialogInterface dialog, int which) {
+                 // Save service mode
++                int subId = which == 0 ? -1: mSelectableSubInfos.get(which - 1).getSubscriptionId();
+                 Settings.Global.putInt(
+-                        mContext.getContentResolver(), KEY_SERVICE_DATA, which);
++                        mContext.getContentResolver(), KEY_SERVICE_DATA, subId);
++                /*
+                 // Set default data sub and update preferred network type
+                 if(((CheckBoxPreference)(findPreference(KEY_DATA_FOLLOW_SERVICE))).isChecked()) {
+                     setDefaultSubId(Integer.parseInt(serviceModeValues[which]));
+                 }
+                 // Update preference summary
++                */
++                setDefaultSubId(subId);
+                 updateServiceModeSummary(which);
+                 dialog.dismiss();
+             }
+@@ -573,7 +619,11 @@
+                 mSelectableSubInfos == null ? 0 : mSelectableSubInfos.size();
+ 
+         if (subId != -1) {
+-            mSubscriptionManager.setDefaultDataSubId(subId);
++            int checked = Settings.Global.getInt(
++                    getContentResolver(), KEY_DATA_FOLLOW_SERVICE, 1);
++            if (checked == 1) {
++                mSubscriptionManager.setDefaultDataSubId(subId);
++            }
+             Toast.makeText(mContext, R.string.data_switch_started, Toast.LENGTH_LONG).show();
+             // Update both SIMs' preferred network type
+             for (int i = 0; i < selectableSubInfoLength; i++) {
+@@ -599,12 +649,12 @@
+         if (simPref != null) {
+             if (which != 0) {
+                 simPref.setSummary(mSelectableSubInfos.get(which - 1).getDisplayName());
+-                cbPref.setEnabled(true);
+-                cbPref.setChecked(true);
++                //cbPref.setEnabled(true);
++                //cbPref.setChecked(true);
+             } else {
+                 simPref.setSummary(R.string.sim_service_data_mode_off);
+-                cbPref.setEnabled(false);
+-                cbPref.setChecked(false);
++                //cbPref.setEnabled(false);
++                //cbPref.setChecked(false);
+             }
+         }
+     }

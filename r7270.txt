@@ -1,0 +1,71 @@
+Index: packages/services/Telecomm/src/com/android/server/telecom/HeadsetMediaButton.java
+===================================================================
+--- packages/services/Telecomm/src/com/android/server/telecom/HeadsetMediaButton.java	(revision 7269)
++++ packages/services/Telecomm/src/com/android/server/telecom/HeadsetMediaButton.java	(revision 7270)
+@@ -30,6 +30,9 @@
+ import android.os.Message;
+ import android.view.KeyEvent;
+ 
++import java.lang.Runnable;
++
++
+ /**
+  * Static class to handle listening to the headset media buttons.
+  */
+@@ -39,7 +42,8 @@
+     static final int SHORT_PRESS = 1;
+     static final int LONG_PRESS = 2;
+ 	private long mLastClickTime = 0;
+-	private static boolean mDown= false;
++	private static int  keyCount=0;
++	private Handler mHandlerChangCall;
+ 	private final static String changeCallAction="com.android.server.telecom.CHANGECALL";
+ 
+     private static final AudioAttributes AUDIO_ATTRIBUTES = new AudioAttributes.Builder()
+@@ -125,18 +129,35 @@
+ 		long eventtime = event.getEventTime();// CallCardFragment.java
+         if (event.isLongPress()) {
+             return mCallsManager.onMediaButton(LONG_PRESS);
+-        } else if (event.getAction() == KeyEvent.ACTION_UP && event.getRepeatCount() == 0) {
+-        	return mCallsManager.onMediaButton(SHORT_PRESS);
+-        }else if(event.getAction() == KeyEvent.ACTION_DOWN){
+-			if(eventtime -mLastClickTime < 300 && keycode == KeyEvent.KEYCODE_HEADSETHOOK){
+-				Intent callIntent=new Intent(changeCallAction);
+-				mContext.sendBroadcast(callIntent);
+-				mLastClickTime=0;
+-				return true;
+-			}else{
+-				mLastClickTime=eventtime;
++        } else if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
++        	if(keycode == KeyEvent.KEYCODE_HEADSETHOOK){
++				if(eventtime -mLastClickTime < 300){
++					keyCount++;
++				}else{
++					mLastClickTime=eventtime;
++				}
++				if(mHandlerChangCall==null){
++					mHandlerChangCall=new Handler();
++					mHandlerChangCall.postDelayed(new Runnable() {
++					@Override
++					public void run() {
++						if(keyCount==0){
++							mLastClickTime = 0;
++							keyCount=0;
++							mCallsManager.onMediaButton(SHORT_PRESS);
++						}else if(keyCount==1){
++							Intent callIntent=new Intent(changeCallAction);
++							mContext.sendBroadcast(callIntent);
++							mLastClickTime=0;
++							keyCount=0;
++						}
++						mHandlerChangCall=null;
++					}
++				}, 500);
+ 			}
+-		}
++			return true;
++		   }
++        }
+ 		return true;
+ 	}
+ 

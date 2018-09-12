@@ -1,0 +1,680 @@
+Index: frameworks/native/cmds/installd/commands.cpp
+===================================================================
+--- frameworks/native/cmds/installd/commands.cpp	(revision 7413)
++++ frameworks/native/cmds/installd/commands.cpp	(revision 7414)
+@@ -1633,6 +1633,33 @@
+     bool do_cleanup_;
+ };
+ 
++/**
++*if the pacakge in white list then return 1 else return 0
++* you can add other package in white list
++*/
++static int shouldUseInterpreterOnly(const char *pkgName){
++    char whiteList[4][30]={
++        "com.antutu.ABenchMark",
++        "com.imangi.templerun", 
++        "com.tencent.tmgp.sgame",
++        "\0"
++    };
++/*
++    char *str[]=whiteList;
++
++    while(**str !="\0"){
++        if(strstr(*str,pkgName) != NULl)
++            return 1;
++        str++;
++    }
++*/
++    for (int i=0; i<4; i++) {
++        if(strstr(whiteList[i],pkgName) != NULL)
++            return 1;
++    }
++    return 0;
++}
++
+ int dexopt(const char* apk_path, uid_t uid, const char* pkgname, const char* instruction_set,
+            int dexopt_needed, const char* oat_dir, int dexopt_flags, const char* compiler_filter,
+            const char* volume_uuid ATTRIBUTE_UNUSED, const char* shared_libraries)
+@@ -1801,6 +1828,8 @@
+         } else if (dexopt_needed == DEXOPT_DEX2OAT_NEEDED) {
+             // Pass dex2oat the relative path to the input file.
+             const char *input_file_name = get_location_from_path(input_file);
++            //modify by wenju:if the pkg is in white list then use interpret-only
++            const char *compiler_filter_ = shouldUseInterpreterOnly(pkgname)?"interpret-only":compiler_filter;
+             run_dex2oat(input_fd.get(),
+                         out_fd.get(),
+                         image_fd.get(),
+@@ -1808,7 +1837,7 @@
+                         out_path,
+                         swap_fd.get(),
+                         instruction_set,
+-                        compiler_filter,
++                        compiler_filter_,
+                         vm_safe_mode,
+                         debuggable,
+                         boot_complete,
+Index: frameworks/base/core/java/com/mediatek/perfservice/PerfServiceWrapper.java
+===================================================================
+--- frameworks/base/core/java/com/mediatek/perfservice/PerfServiceWrapper.java	(revision 7413)
++++ frameworks/base/core/java/com/mediatek/perfservice/PerfServiceWrapper.java	(revision 7414)
+@@ -64,7 +64,7 @@
+     private int setTid = 0;
+     private long mPreviousTime = 0;
+     private static final int RENDER_THREAD_UPDATE_DURATION = 400;
+-    private static final int AMS_BOOST_TIME = 2000;
++    private static final int AMS_BOOST_TIME = 20000;
+     private static final int GLSURFACE_BOOST_TIME = 10;
+ 
+     public static native int nativeGetPid();
+@@ -574,9 +574,9 @@
+ 
+     public void amsBoostStop() {
+         //log("amsBoostStop");
+-        boostDisable(IPerfServiceWrapper.SCN_PROCESS_CREATE);
+-        boostDisable(IPerfServiceWrapper.SCN_APP_SWITCH);
+-        boostDisable(IPerfServiceWrapper.SCN_PACKAGE_SWITCH);
++//        boostDisable(IPerfServiceWrapper.SCN_PROCESS_CREATE);
++  //      boostDisable(IPerfServiceWrapper.SCN_APP_SWITCH);
++    //    boostDisable(IPerfServiceWrapper.SCN_PACKAGE_SWITCH);
+         Trace.asyncTraceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER, "amPerfBoost", 0);
+     }
+ 
+Index: device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7413)
++++ device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7414)
+@@ -401,7 +401,7 @@
+ MTK_GAUGE_VERSION = 30
+ MTK_GLOBAL_PQ_SUPPORT = no
+ MTK_GMO_RAM_OPTIMIZE = no
+-MTK_GMO_ROM_OPTIMIZE = yes
++MTK_GMO_ROM_OPTIMIZE = no
+ MTK_GOOGLEOTA_SUPPORT = no
+ MTK_GOOGLE_TRUSTY_SUPPORT = no
+ MTK_GPS_CHIP = MTK_GPS_MT6631
+@@ -579,7 +579,7 @@
+ MTK_ROTATION_OFFSET_SUPPORT = no
+ MTK_RSDM_APP = no
+ MTK_RTP_OVER_RTSP_SUPPORT = yes
+-MTK_RUNNING_BOOSTER_DEFAULT_ON = no
++MTK_RUNNING_BOOSTER_DEFAULT_ON = yes
+ MTK_RUNNING_BOOSTER_SUPPORT = yes
+ MTK_RUNNING_BOOSTER_UPGRADE = yes
+ MTK_RUNTIME_PERMISSION_SUPPORT = no
+Index: device/mediatek/common/device.mk
+===================================================================
+--- device/mediatek/common/device.mk	(revision 7413)
++++ device/mediatek/common/device.mk	(revision 7414)
+@@ -3226,3 +3226,8 @@
+   PRODUCT_PACKAGES += FullscreenMode
+   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ endif
++
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
++endif
++
+Index: kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig
+===================================================================
+--- kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7413)
++++ kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7414)
+@@ -462,7 +462,6 @@
+ CONFIG_MMC_MTK_PRO=y
+ CONFIG_MTK_EMMC_SUPPORT=y
+ CONFIG_MTK_EMMC_CACHE=y
+-CONFIG_MTK_EMMC_CQ_SUPPORT=y
+ CONFIG_NEW_LEDS=y
+ CONFIG_LEDS_CLASS=y
+ CONFIG_LEDS_TRIGGERS=y
+Index: kernel-4.4/arch/arm/configs/aus6739_36_n1_defconfig
+===================================================================
+--- kernel-4.4/arch/arm/configs/aus6739_36_n1_defconfig	(revision 7413)
++++ kernel-4.4/arch/arm/configs/aus6739_36_n1_defconfig	(revision 7414)
+@@ -471,7 +471,7 @@
+ CONFIG_SYNC=y
+ CONFIG_SW_SYNC=y
+ CONFIG_SW_SYNC_USER=y
+-CONFIG_MTK_GMO_RAM_OPTIMIZE=y
++CONFIG_MTK_GMO_RAM_OPTIMIZE=n
+ CONFIG_ION=y
+ CONFIG_MTK_ION=y
+ CONFIG_ANDROID=y
+Index: kernel-4.4/drivers/staging/android/lowmemorykiller.c
+===================================================================
+--- kernel-4.4/drivers/staging/android/lowmemorykiller.c	(revision 7413)
++++ kernel-4.4/drivers/staging/android/lowmemorykiller.c	(revision 7414)
+@@ -50,6 +50,10 @@
+ static u32 in_lowmem;
+ #endif
+ 
++#ifdef CONFIG_COMPACTION
++#include <linux/compaction.h>
++#endif
++
+ #ifdef CONFIG_MTK_ION
+ #include "mtk/ion_drv.h"
+ #endif
+@@ -105,6 +109,34 @@
+ 			pr_info(x);			\
+ 	} while (0)
+ 
++/* Force LMK to kill process if lower zones are under fragmentation */
++static short aggressive_lmk_for_frag(struct shrink_control *sc, short adj)
++{
++#ifdef CONFIG_COMPACTION
++	enum zone_type high_zoneidx;
++	struct pglist_data *pgdat;
++	struct zone *z;
++	enum zone_type zoneidx;
++
++	if (current_is_kswapd())
++		return adj;
++
++	high_zoneidx = gfp_zone(sc->gfp_mask);
++	if (high_zoneidx > ZONE_NORMAL)
++		return adj;
++
++	/* Is there any zone under fragmentation for THREAD_SIZE_ORDER */
++	for_each_online_pgdat(pgdat) {
++		for (zoneidx = 0; zoneidx <= high_zoneidx; zoneidx++) {
++			z = pgdat->node_zones + zoneidx;
++			if (fragmentation_index(z, THREAD_SIZE_ORDER) > sysctl_extfrag_threshold)
++				return 0;
++		}
++	}
++#endif
++	return adj;
++}
++
+ static unsigned long lowmem_count(struct shrinker *s,
+ 				  struct shrink_control *sc)
+ {
+@@ -153,7 +185,7 @@
+ 	static unsigned long lowmem_print_extra_info_timeout;
+ 	enum zone_type high_zoneidx = gfp_zone(sc->gfp_mask);
+ 	int unreclaimable_zones = 0;
+-#if defined(CONFIG_SWAP) && defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
++#if defined(CONFIG_SWAP)
+ 	int to_be_aggressive = 0;
+ 	unsigned long swap_pages = 0;
+ #endif
+@@ -244,7 +276,7 @@
+ 	}
+ #endif
+ 
+-#if defined(CONFIG_SWAP) && defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
++#if defined(CONFIG_SWAP)
+ 	swap_pages = atomic_long_read(&nr_swap_pages);
+ 	/* More than 1/2 swap usage */
+ 	if (swap_pages * 2 < total_swap_pages)
+@@ -261,7 +293,7 @@
+ 	for (i = 0; i < array_size; i++) {
+ 		minfree = lowmem_minfree[i];
+ 		if (other_free < minfree && other_file < minfree) {
+-#if defined(CONFIG_SWAP) && defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
++#if defined(CONFIG_SWAP)
+ 			if (to_be_aggressive != 0 && i > 3) {
+ 				i -= to_be_aggressive;
+ 				if (i < 3)
+@@ -273,6 +305,10 @@
+ 		}
+ 	}
+ 
++	/* Check whether the system is under fragmentation */
++	if (min_score_adj < OOM_SCORE_ADJ_MAX)
++		min_score_adj = aggressive_lmk_for_frag(sc, min_score_adj);
++
+ 	/* Promote its priority */
+ 	if (unreclaimable_zones > 0)
+ 		min_score_adj = lowmem_adj[0];
+Index: art/dex2oat/dex2oat.cc
+===================================================================
+--- art/dex2oat/dex2oat.cc	(revision 7413)
++++ art/dex2oat/dex2oat.cc	(revision 7414)
+@@ -534,7 +534,7 @@
+       verification_results_(nullptr),
+       method_inliner_map_(),
+       runtime_(nullptr),
+-      thread_count_(sysconf(_SC_NPROCESSORS_CONF)),
++      thread_count_(2),
+       start_ns_(NanoTime()),
+       oat_fd_(-1),
+       zip_fd_(-1),
+@@ -1223,8 +1223,64 @@
+ 
+     // Insert some compiler things.
+     InsertCompileOptions(argc, argv);
++  
++  #ifdef __ANDROID__
++    adjustCompilerOptions();
++  #endif
++
+   }
+ 
++#ifdef __ANDROID__
++
++/**
++*if the pacakge in white list then return 1 else return 0
++* you can add other package in white list
++*/
++int shouldUseInterpreterOnly(const char *pkgName){
++     char whiteList[4][30]={
++        "com.antutu.ABenchMark",
++        "com.imangi.templerun",
++        "com.tencent.tmgp.sgame",
++        "\0"
++    };
++    //char str[2][30] = whiteList;
++/*
++    while(whiteList !="\0"){
++        if(strstr(*whiteList,pkgName) != NULl)
++            return 1;
++        whiteList++;
++    }
++*/
++    for (int i=0; i<4; i++) {
++        if(strstr(whiteList[i],pkgName) != NULL)
++            return 1;
++    }
++    return 0;
++}
++
++void adjustCompilerOptions(){
++			  
++	  if(dex_filenames_.empty()){
++		  return;
++	  }
++	  
++	  int needSet = 0;
++	  for (size_t i = 0, size = dex_filenames_.size(); i != size; ++i) {
++		  const char *dexFileName = dex_filenames_[i];
++		  if (shouldUseInterpreterOnly(dexFileName)) {
++				  needSet = 1;
++				  break;
++		    } 
++      }
++	  
++	  if(needSet){
++	  	PLOG(INFO)<<"force it to interpret-only";
++		  compiler_options_->SetCompilerFilter(CompilerFilter::kInterpretOnly);
++	  }
++   
++  }
++#endif
++
+   // Check whether the oat output files are writable, and open them for later. Also open a swap
+   // file, if a name is given.
+   bool OpenFile() {
+Index: vendor/mediatek/proprietary/hardware/perfservice/mt6739/scn_tbl/perfservscntbl.txt
+===================================================================
+--- vendor/mediatek/proprietary/hardware/perfservice/mt6739/scn_tbl/perfservscntbl.txt	(revision 7413)
++++ vendor/mediatek/proprietary/hardware/perfservice/mt6739/scn_tbl/perfservscntbl.txt	(revision 7414)
+@@ -1,6 +1,7 @@
+ CMD_SET_SCN_VALID, SCN_SW_FRAME_UPDATE, 0
+ CMD_SET_CLUSTER_CPU_CORE_MIN, SCN_APP_SWITCH, 0, 4
+ CMD_SET_CLUSTER_CPU_FREQ_MIN, SCN_APP_SWITCH, 0, 3000000
++CMD_SET_VCORE_MIN, SCN_APP_SWITCH, 0
+ CMD_SET_TA_BOOST_VALUE, SCN_APP_SWITCH, 1100
+ CMD_SET_CLUSTER_CPU_CORE_MIN, SCN_PACKAGE_SWITCH, 0, 4
+ CMD_SET_CLUSTER_CPU_FREQ_MIN, SCN_PACKAGE_SWITCH, 0, 3000000
+Index: vendor/branch/5058A_Telcel/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A_Telcel/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7413)
++++ vendor/branch/5058A_Telcel/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7414)
+@@ -401,7 +401,7 @@
+ MTK_GAUGE_VERSION = 30
+ MTK_GLOBAL_PQ_SUPPORT = no
+ MTK_GMO_RAM_OPTIMIZE = no
+-MTK_GMO_ROM_OPTIMIZE = yes
++MTK_GMO_ROM_OPTIMIZE = no
+ MTK_GOOGLEOTA_SUPPORT = no
+ MTK_GOOGLE_TRUSTY_SUPPORT = no
+ MTK_GPS_CHIP = MTK_GPS_MT6631
+@@ -579,7 +579,7 @@
+ MTK_ROTATION_OFFSET_SUPPORT = no
+ MTK_RSDM_APP = no
+ MTK_RTP_OVER_RTSP_SUPPORT = yes
+-MTK_RUNNING_BOOSTER_DEFAULT_ON = no
++MTK_RUNNING_BOOSTER_DEFAULT_ON = yes
+ MTK_RUNNING_BOOSTER_SUPPORT = yes
+ MTK_RUNNING_BOOSTER_UPGRADE = yes
+ MTK_RUNTIME_PERMISSION_SUPPORT = no
+Index: vendor/branch/5058A_Telcel/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058A_Telcel/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058A_Telcel/device/mediatek/common/device.mk	(revision 7414)
+@@ -3229,3 +3229,5 @@
+   PRODUCT_PACKAGES += libifaa_jni
+ endif
+ 
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
+Index: vendor/branch/5058Y/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058Y/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7413)
++++ vendor/branch/5058Y/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7414)
+@@ -401,7 +401,7 @@
+ MTK_GAUGE_VERSION = 30
+ MTK_GLOBAL_PQ_SUPPORT = no
+ MTK_GMO_RAM_OPTIMIZE = no
+-MTK_GMO_ROM_OPTIMIZE = yes
++MTK_GMO_ROM_OPTIMIZE = no
+ MTK_GOOGLEOTA_SUPPORT = no
+ MTK_GOOGLE_TRUSTY_SUPPORT = no
+ MTK_GPS_CHIP = MTK_GPS_MT6631
+@@ -579,7 +579,7 @@
+ MTK_ROTATION_OFFSET_SUPPORT = no
+ MTK_RSDM_APP = no
+ MTK_RTP_OVER_RTSP_SUPPORT = yes
+-MTK_RUNNING_BOOSTER_DEFAULT_ON = no
++MTK_RUNNING_BOOSTER_DEFAULT_ON = yes
+ MTK_RUNNING_BOOSTER_SUPPORT = yes
+ MTK_RUNNING_BOOSTER_UPGRADE = yes
+ MTK_RUNTIME_PERMISSION_SUPPORT = no
+Index: vendor/branch/5058Y/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig
+===================================================================
+--- vendor/branch/5058Y/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7413)
++++ vendor/branch/5058Y/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7414)
+@@ -462,7 +462,6 @@
+ CONFIG_MMC_MTK_PRO=y
+ CONFIG_MTK_EMMC_SUPPORT=y
+ CONFIG_MTK_EMMC_CACHE=y
+-CONFIG_MTK_EMMC_CQ_SUPPORT=y
+ CONFIG_NEW_LEDS=y
+ CONFIG_LEDS_CLASS=y
+ CONFIG_LEDS_TRIGGERS=y
+Index: vendor/branch/5058A_Telefonica/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A_Telefonica/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7413)
++++ vendor/branch/5058A_Telefonica/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7414)
+@@ -401,7 +401,7 @@
+ MTK_GAUGE_VERSION = 30
+ MTK_GLOBAL_PQ_SUPPORT = no
+ MTK_GMO_RAM_OPTIMIZE = no
+-MTK_GMO_ROM_OPTIMIZE = yes
++MTK_GMO_ROM_OPTIMIZE = no
+ MTK_GOOGLEOTA_SUPPORT = no
+ MTK_GOOGLE_TRUSTY_SUPPORT = no
+ MTK_GPS_CHIP = MTK_GPS_MT6631
+@@ -579,7 +579,7 @@
+ MTK_ROTATION_OFFSET_SUPPORT = no
+ MTK_RSDM_APP = no
+ MTK_RTP_OVER_RTSP_SUPPORT = yes
+-MTK_RUNNING_BOOSTER_DEFAULT_ON = no
++MTK_RUNNING_BOOSTER_DEFAULT_ON = yes
+ MTK_RUNNING_BOOSTER_SUPPORT = yes
+ MTK_RUNNING_BOOSTER_UPGRADE = yes
+ MTK_RUNTIME_PERMISSION_SUPPORT = no
+Index: vendor/branch/5058A_Telefonica/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058A_Telefonica/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058A_Telefonica/device/mediatek/common/device.mk	(revision 7414)
+@@ -3227,3 +3227,8 @@
+   PRODUCT_PACKAGES += FullscreenMode
+   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ endif
++
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
++endif
++
+Index: vendor/branch/5058A_Entel_Chile/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058A_Entel_Chile/device/mediatek/common/device.mk	(revision 7414)
+@@ -3229,3 +3229,8 @@
+   PRODUCT_PACKAGES += FullscreenMode
+   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ endif
++
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
++endif
++
+Index: vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7413)
++++ vendor/branch/5058A_Entel_Chile/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7414)
+@@ -401,7 +401,7 @@
+ MTK_GAUGE_VERSION = 30
+ MTK_GLOBAL_PQ_SUPPORT = no
+ MTK_GMO_RAM_OPTIMIZE = no
+-MTK_GMO_ROM_OPTIMIZE = yes
++MTK_GMO_ROM_OPTIMIZE = no
+ MTK_GOOGLEOTA_SUPPORT = no
+ MTK_GOOGLE_TRUSTY_SUPPORT = no
+ MTK_GPS_CHIP = MTK_GPS_MT6631
+@@ -579,7 +579,7 @@
+ MTK_ROTATION_OFFSET_SUPPORT = no
+ MTK_RSDM_APP = no
+ MTK_RTP_OVER_RTSP_SUPPORT = yes
+-MTK_RUNNING_BOOSTER_DEFAULT_ON = no
++MTK_RUNNING_BOOSTER_DEFAULT_ON = yes
+ MTK_RUNNING_BOOSTER_SUPPORT = yes
+ MTK_RUNNING_BOOSTER_UPGRADE = yes
+ MTK_RUNTIME_PERMISSION_SUPPORT = no
+Index: vendor/branch/5058A/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058A/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7413)
++++ vendor/branch/5058A/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7414)
+@@ -401,7 +401,7 @@
+ MTK_GAUGE_VERSION = 30
+ MTK_GLOBAL_PQ_SUPPORT = no
+ MTK_GMO_RAM_OPTIMIZE = no
+-MTK_GMO_ROM_OPTIMIZE = yes
++MTK_GMO_ROM_OPTIMIZE = no
+ MTK_GOOGLEOTA_SUPPORT = no
+ MTK_GOOGLE_TRUSTY_SUPPORT = no
+ MTK_GPS_CHIP = MTK_GPS_MT6631
+@@ -579,7 +579,7 @@
+ MTK_ROTATION_OFFSET_SUPPORT = no
+ MTK_RSDM_APP = no
+ MTK_RTP_OVER_RTSP_SUPPORT = yes
+-MTK_RUNNING_BOOSTER_DEFAULT_ON = no
++MTK_RUNNING_BOOSTER_DEFAULT_ON = yes
+ MTK_RUNNING_BOOSTER_SUPPORT = yes
+ MTK_RUNNING_BOOSTER_UPGRADE = yes
+ MTK_RUNTIME_PERMISSION_SUPPORT = no
+Index: vendor/branch/5058A/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig
+===================================================================
+--- vendor/branch/5058A/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7413)
++++ vendor/branch/5058A/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7414)
+@@ -461,7 +461,6 @@
+ CONFIG_MMC_MTK_PRO=y
+ CONFIG_MTK_EMMC_SUPPORT=y
+ CONFIG_MTK_EMMC_CACHE=y
+-CONFIG_MTK_EMMC_CQ_SUPPORT=y
+ CONFIG_NEW_LEDS=y
+ CONFIG_LEDS_CLASS=y
+ CONFIG_LEDS_TRIGGERS=y
+Index: vendor/branch/5058J_Brazil_OpenMarket/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058J_Brazil_OpenMarket/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058J_Brazil_OpenMarket/device/mediatek/common/device.mk	(revision 7414)
+@@ -3228,3 +3228,8 @@
+   PRODUCT_PACKAGES += FullscreenMode
+   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ endif
++
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
++endif
++
+Index: vendor/branch/5058A_Cable_Bahamas/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058A_Cable_Bahamas/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058A_Cable_Bahamas/device/mediatek/common/device.mk	(revision 7414)
+@@ -3230,3 +3230,5 @@
+   PRODUCT_PACKAGES += libifaa_jni
+ endif
+ 
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
+Index: vendor/branch/5058A_CNT_Ecuador/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058A_CNT_Ecuador/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058A_CNT_Ecuador/device/mediatek/common/device.mk	(revision 7414)
+@@ -3227,3 +3227,8 @@
+   PRODUCT_PACKAGES += FullscreenMode
+   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ endif
++
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
++endif
++
+Index: vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7413)
++++ vendor/branch/5058I/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7414)
+@@ -401,7 +401,7 @@
+ MTK_GAUGE_VERSION = 30
+ MTK_GLOBAL_PQ_SUPPORT = no
+ MTK_GMO_RAM_OPTIMIZE = no
+-MTK_GMO_ROM_OPTIMIZE = yes
++MTK_GMO_ROM_OPTIMIZE = no
+ MTK_GOOGLEOTA_SUPPORT = no
+ MTK_GOOGLE_TRUSTY_SUPPORT = no
+ MTK_GPS_CHIP = MTK_GPS_MT6631
+@@ -579,7 +579,7 @@
+ MTK_ROTATION_OFFSET_SUPPORT = no
+ MTK_RSDM_APP = no
+ MTK_RTP_OVER_RTSP_SUPPORT = yes
+-MTK_RUNNING_BOOSTER_DEFAULT_ON = no
++MTK_RUNNING_BOOSTER_DEFAULT_ON = yes
+ MTK_RUNNING_BOOSTER_SUPPORT = yes
+ MTK_RUNNING_BOOSTER_UPGRADE = yes
+ MTK_RUNTIME_PERMISSION_SUPPORT = no
+Index: vendor/branch/5058I/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig
+===================================================================
+--- vendor/branch/5058I/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7413)
++++ vendor/branch/5058I/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7414)
+@@ -461,7 +461,6 @@
+ CONFIG_MMC_MTK_PRO=y
+ CONFIG_MTK_EMMC_SUPPORT=y
+ CONFIG_MTK_EMMC_CACHE=y
+-CONFIG_MTK_EMMC_CQ_SUPPORT=y
+ CONFIG_NEW_LEDS=y
+ CONFIG_LEDS_CLASS=y
+ CONFIG_LEDS_TRIGGERS=y
+Index: vendor/branch/5058J/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058J/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7413)
++++ vendor/branch/5058J/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7414)
+@@ -401,7 +401,7 @@
+ MTK_GAUGE_VERSION = 30
+ MTK_GLOBAL_PQ_SUPPORT = no
+ MTK_GMO_RAM_OPTIMIZE = no
+-MTK_GMO_ROM_OPTIMIZE = yes
++MTK_GMO_ROM_OPTIMIZE = no
+ MTK_GOOGLEOTA_SUPPORT = no
+ MTK_GOOGLE_TRUSTY_SUPPORT = no
+ MTK_GPS_CHIP = MTK_GPS_MT6631
+@@ -579,7 +579,7 @@
+ MTK_ROTATION_OFFSET_SUPPORT = no
+ MTK_RSDM_APP = no
+ MTK_RTP_OVER_RTSP_SUPPORT = yes
+-MTK_RUNNING_BOOSTER_DEFAULT_ON = no
++MTK_RUNNING_BOOSTER_DEFAULT_ON = yes
+ MTK_RUNNING_BOOSTER_SUPPORT = yes
+ MTK_RUNNING_BOOSTER_UPGRADE = yes
+ MTK_RUNTIME_PERMISSION_SUPPORT = no
+Index: vendor/branch/5058J/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig
+===================================================================
+--- vendor/branch/5058J/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7413)
++++ vendor/branch/5058J/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7414)
+@@ -461,7 +461,6 @@
+ CONFIG_MMC_MTK_PRO=y
+ CONFIG_MTK_EMMC_SUPPORT=y
+ CONFIG_MTK_EMMC_CACHE=y
+-CONFIG_MTK_EMMC_CQ_SUPPORT=y
+ CONFIG_NEW_LEDS=y
+ CONFIG_LEDS_CLASS=y
+ CONFIG_LEDS_TRIGGERS=y
+Index: vendor/branch/5058A_Claro/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058A_Claro/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058A_Claro/device/mediatek/common/device.mk	(revision 7414)
+@@ -3220,3 +3220,8 @@
+   PRODUCT_PACKAGES += FullscreenMode
+   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ endif
++
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
++endif
++
+Index: vendor/branch/5058I_ALWE/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058I_ALWE/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058I_ALWE/device/mediatek/common/device.mk	(revision 7414)
+@@ -3229,3 +3229,8 @@
+   PRODUCT_PACKAGES += FullscreenMode
+   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ endif
++
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
++endif
++
+Index: vendor/branch/5058A_WOM/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058A_WOM/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058A_WOM/device/mediatek/common/device.mk	(revision 7414)
+@@ -3221,3 +3221,8 @@
+   PRODUCT_PACKAGES += FullscreenMode
+   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ endif
++
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
++endif
++
+Index: vendor/branch/5058A_Claro_Ecuador/device/mediatek/common/device.mk
+===================================================================
+--- vendor/branch/5058A_Claro_Ecuador/device/mediatek/common/device.mk	(revision 7413)
++++ vendor/branch/5058A_Claro_Ecuador/device/mediatek/common/device.mk	(revision 7414)
+@@ -3221,3 +3221,8 @@
+   PRODUCT_PACKAGES += FullscreenMode
+   PRODUCT_PACKAGES += FullscreenSwitchProvider
+ endif
++
++ifeq ($TARGET_BUILD_VARIANT), user)
++  PRODUCT_PROPERTY_OVERRIDES += persist.dbg.anrflow = 2
++endif
++
+Index: vendor/branch/5058T/device/ausshine/aus6739_66_n1/ProjectConfig.mk
+===================================================================
+--- vendor/branch/5058T/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7413)
++++ vendor/branch/5058T/device/ausshine/aus6739_66_n1/ProjectConfig.mk	(revision 7414)
+@@ -401,7 +401,7 @@
+ MTK_GAUGE_VERSION = 30
+ MTK_GLOBAL_PQ_SUPPORT = no
+ MTK_GMO_RAM_OPTIMIZE = no
+-MTK_GMO_ROM_OPTIMIZE = yes
++MTK_GMO_ROM_OPTIMIZE = no
+ MTK_GOOGLEOTA_SUPPORT = no
+ MTK_GOOGLE_TRUSTY_SUPPORT = no
+ MTK_GPS_CHIP = MTK_GPS_MT6631
+@@ -579,7 +579,7 @@
+ MTK_ROTATION_OFFSET_SUPPORT = no
+ MTK_RSDM_APP = no
+ MTK_RTP_OVER_RTSP_SUPPORT = yes
+-MTK_RUNNING_BOOSTER_DEFAULT_ON = no
++MTK_RUNNING_BOOSTER_DEFAULT_ON = yes
+ MTK_RUNNING_BOOSTER_SUPPORT = yes
+ MTK_RUNNING_BOOSTER_UPGRADE = yes
+ MTK_RUNTIME_PERMISSION_SUPPORT = no
+Index: vendor/branch/5058T/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig
+===================================================================
+--- vendor/branch/5058T/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7413)
++++ vendor/branch/5058T/kernel-4.4/arch/arm64/configs/aus6739_66_n1_defconfig	(revision 7414)
+@@ -461,7 +461,6 @@
+ CONFIG_MMC_MTK_PRO=y
+ CONFIG_MTK_EMMC_SUPPORT=y
+ CONFIG_MTK_EMMC_CACHE=y
+-CONFIG_MTK_EMMC_CQ_SUPPORT=y
+ CONFIG_NEW_LEDS=y
+ CONFIG_LEDS_CLASS=y
+ CONFIG_LEDS_TRIGGERS=y

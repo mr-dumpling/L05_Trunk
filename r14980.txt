@@ -1,0 +1,817 @@
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/AndroidManifest.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/AndroidManifest.xml	(revision 14979)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/AndroidManifest.xml	(revision 14980)
+@@ -3594,9 +3594,11 @@
+      
+       <!-- wizard for apn selection when multiple choice found by auto-selection -->
+         <activity android:name="ApnSelectionActivity"
+-            android:label="@string/apn_settings"
++            android:label="@string/sim_provider"
+             android:theme="@*android:style/Theme.Material.Light.Dialog.Alert"
+-            android:finishOnCloseSystemDialogs="true">
++            android:finishOnCloseSystemDialogs="true"
++			android:launchMode="singleTask"
++			android:process="com.android.phone">
+             <intent-filter>
+                 <action android:name="android.apn.action.APN_SELECTION" />
+                 <category android:name="android.intent.category.DEFAULT" />
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 14979)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSelectionActivity.java	(revision 14980)
+@@ -24,6 +24,7 @@
+ import android.view.MenuItem;
+ import android.view.View;
+ import android.view.ViewGroup;
++import android.view.Window;
+ import android.widget.ArrayAdapter;
+ import android.widget.ListAdapter;
+ import android.widget.ListView;
+@@ -82,9 +83,9 @@
+     private SubscriptionInfo mSubscriptionInfo1;
+     private List<SubscriptionInfo> mAvailableSubInfos = null;
+     private String mSelectedKey;
+-//    private UiccController mUiccController;
++    private UiccController mUiccController;
+     private boolean mUnavailable;
+-//    private boolean mHideImsApn;
++    private boolean mHideImsApn;
+     public static final String PREFERRED_APN_URI =
+             "content://telephony/carriers/preferapn";
+     public static final String MVNO_TYPE = "mvno_type";
+@@ -101,12 +102,17 @@
+     private static final int NAME_INDEX = 1;
+     private static final int APN_INDEX = 2;
+     private static final int TYPES_INDEX = 3;
+-    private static final int SOURCE_TYPE_INDEX = 4;
+-    Button apnBtn = null;
++	private static final int MVNO_TYPE_INDEX = 4;
++    private static final int MVNO_MATCH_DATA_INDEX = 5;
++    private static final int SOURCE_TYPE_INDEX = 6;	
++	private static final int SPN_INDEX = 7;
++    //Button apnBtn = null;
++	private Button mOkButton;
++	private Button mCancelButton;
+     ListView listmenu_mms = null;
+     ListView menuListView = null;
+     ArrayList list = new ArrayList();
+-
++	ArrayList mvonlist = new ArrayList();
+     List<Map<String, Object>> list_apn = new ArrayList<Map<String, Object>>();
+     List<Map<String, Object>> list_sms = new ArrayList<Map<String, Object>>();
+     /// @}
+@@ -119,16 +125,21 @@
+ 
+     protected void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
++		requestWindowFeature(Window.FEATURE_NO_TITLE);
+         setContentView(R.layout.apn_activity);
++		//do not finish activity when touch outside
++		this.setFinishOnTouchOutside(false);
+         final int subId = getIntent().getIntExtra(SUB_ID,
+                 SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+-//        mSubscriptionInfo = SubscriptionManager.from(this).getActiveSubscriptionInfo(subId);
+-////        mUiccController = UiccController.getInstance();
++        mSubscriptionInfo = SubscriptionManager.from(this).getActiveSubscriptionInfo(subId);
++        mUiccController = UiccController.getInstance();
+ //        if (mSubscriptionInfo == null) {
+ //            Log.d(TAG, "onCreate()... Invalid subId: " + subId);
+ //            finish();
+ //        }
+-        apnBtn = (Button) findViewById(R.id.btn_apn);
++        //apnBtn = (Button) findViewById(R.id.btn_apn);
++		mOkButton = (Button) findViewById(R.id.btn_ok);
++		mCancelButton = (Button) findViewById(R.id.btn_cancel);
+         TelephonyManager telephonyManager = TelephonyManager.getDefault();
+         ITelephony iTelephony =
+                 ITelephony.Stub.asInterface(ServiceManager.getService("phone"));
+@@ -168,7 +179,7 @@
+             }
+         }, subId);
+         if(mAvailableSubInfos.size()>1){
+-            apnBtn.setText(this.getString(R.string.next_label));//next_label
++            //apnBtn.setText(this.getString(R.string.next_label));//next_label
+         }
+         fillList(0);
+         menuListView = (ListView) findViewById(R.id.listmenu);
+@@ -188,7 +199,6 @@
+                     for (String k : map.keySet()) {
+                         if (map.get(k).equals(name)) {
+                             key = map.get("key").toString();
+-                            ;
+                         }
+                         Log.d("TAG", "map.get(k)=" + map.get(k));
+                     }
+@@ -197,6 +207,7 @@
+ 
+                 Log.d("TAG", "view.getText()=" + name);
+                 setSelectedApnKey(key);
++				Settings.System.putInt(ApnSelectionActivity.this.getContentResolver(),"seletedApn",0);
+             }
+         });
+ 
+@@ -205,11 +216,11 @@
+                 new String[]{"name", "apn"},
+                 new int[]{R.id.title, R.id.summary});
+         listmenu_mms.setAdapter(adapter);
+-        apnBtn.setOnClickListener(new OnClickListener() {
++        /* apnBtn.setOnClickListener(new OnClickListener() {
+             @Override
+             public void onClick(View v) {
+-                /* Toast.makeText(ApnSelectionActivity.this, R.string.dashboard_title,
+-                        Toast.LENGTH_SHORT).show(); */
++                Toast.makeText(ApnSelectionActivity.this, R.string.dashboard_title,
++                        Toast.LENGTH_SHORT).show(); 
+                 if (apnBtn.getText().equals(getResources().getString(R.string.next_label))) {
+                     fillList(1);
+                     ArrayAdapter sAdapter = (ArrayAdapter) menuListView.getAdapter();
+@@ -222,12 +233,27 @@
+                 }
+ 
+             }
+-        });
+-        if (!(list_apn.size()>1))finish();
+-       /* CarrierConfigManager configManager = (CarrierConfigManager)
++        }); */
++		mOkButton.setOnClickListener(new OnClickListener() {
++			@Override
++            public void onClick(View v) {				
++				Settings.System.putInt(ApnSelectionActivity.this.getContentResolver(),"seletedApn",0);
++				finish();
++			}	
++		});
++		mCancelButton.setOnClickListener(new OnClickListener() {
++			@Override
++            public void onClick(View v) {
++				Settings.System.putInt(ApnSelectionActivity.this.getContentResolver(),"seletedApn",1);
++				finish();
++			}	
++		});
++        //if (!(list_apn.size()>1))finish();
++		if (!(list.size()>1))finish();
++       CarrierConfigManager configManager = (CarrierConfigManager)
+                 getSystemService(Context.CARRIER_CONFIG_SERVICE);
+         PersistableBundle b = configManager.getConfig();
+-        mHideImsApn = b.getBoolean(CarrierConfigManager.KEY_HIDE_IMS_APN_BOOL);*/
++        mHideImsApn = b.getBoolean(CarrierConfigManager.KEY_HIDE_IMS_APN_BOOL);
+     }
+ 
+     @Override
+@@ -423,28 +449,43 @@
+     }*/
+     private void fillList(int id){
+         final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+-
++		String mccmnc = mSubscriptionInfo == null ? ""
++                : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
+         if(mAvailableSubInfos == null || mAvailableSubInfos.size() == 0){
+             return ;
+         }
+-
++		Log.d(TAG, "apnSelected mccmnc = " + mccmnc);
+         mSubscriptionInfo = mAvailableSubInfos.get(id);
+         if(mSubscriptionInfo !=null){
+             setTitle(mSubscriptionInfo.getCarrierName());
+         }
+ 
+-        final String mccmnc = mSubscriptionInfo == null ? ""
+-                : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
+-        Log.d(TAG,"mccmnc="+mccmnc+"mSubscriptionInfo.getSubscriptionId()=="+mSubscriptionInfo.getSubscriptionId());
+-        String where1 = "numeric=\'" + android.os.SystemProperties.get(TelephonyProperties.PROPERTY_ICC_OPERATOR_NUMERIC, "")+ "\'";
+-        String where = mApnExt.getFillListQuery(where1,mccmnc);
+-        Log.d(TAG,"where1="+where1);
+-        Log.d(TAG,"where="+where);
+-        where += " AND NOT (type='ia' AND (apn=\'\' OR apn IS NULL))";
+-        where1 +=" AND NOT (type='ia' AND (apn=\'\' OR apn IS NULL))";
+-        Log.d(TAG,"where1="+where1);
+-        Log.d(TAG,"where="+where);
++        String where = "numeric=\"" + mccmnc + "\"";
++        /// M: for [C2K APN Customization] @{
++        if (mSubscriptionInfo != null) {
++            int subId = mSubscriptionInfo.getSubscriptionId();
++            if (CdmaUtils.isSupportCdma(subId)) {
++                where = CdmaApnSetting.customizeQuerySelectionforCdma(where, mccmnc, subId);
++            }
++        }
++        /// @}
+ 
++        where += " AND NOT (type='ia' AND (apn=\"\" OR apn IS NULL)) AND user_visible!=0";
++
++        /// M: for VoLTE, do not show ims apn for non-VoLTE project @{
++        /*
++        if (mHideImsApn) {
++            where.append(" AND NOT (type='ims')");
++        }
++        */
++        if (!FeatureOption.MTK_VOLTE_SUPPORT || mHideImsApn) {
++            where += " AND NOT (type='ims' OR type='ia,ims')";
++        }
++        /// @}
++
++        /// M: for plug-in
++        where = mApnExt.getFillListQuery(where, mccmnc);
++		Log.d(TAG, "apnSelected fillList where: " + where);
+         /// M: for CU default APN set.
+        /* Cursor cursor = getContentResolver().query(Telephony.Carriers.CONTENT_URI, new String[] {
+                         "_id", "name", "apn", "type", "mvno_type", "mvno_match_data"}, where.toString(),
+@@ -454,7 +495,7 @@
+         Cursor cursor = getContentResolver().query(
+                 Telephony.Carriers.CONTENT_URI,
+                 new String[] { "_id", "name", "apn", "type", "mvno_type", "mvno_match_data",
+-                        "sourcetype" }, where, null, DEFAULT_SORT_ORDER);
++                        "sourcetype", "spn" }, where, null, DEFAULT_SORT_ORDER);
+         /// @}
+         if(id==1){
+             list.clear();
+@@ -471,7 +512,12 @@
+ 
+         }*/
+         if (cursor != null) {
+-
++			Log.d(TAG, "apnSeletedactivity, cursor count: " + cursor.getCount());
++			IccRecords r = null;
++            if (mUiccController != null && mSubscriptionInfo != null) {
++                r = mUiccController.getIccRecords(SubscriptionManager.getPhoneId(
++                        mSubscriptionInfo.getSubscriptionId()), UiccController.APP_FAM_3GPP);
++            }
+             // M: define tmp select key
+             String selectedKey = null;
+             cursor.moveToFirst();
+@@ -480,23 +526,34 @@
+                 String apn = cursor.getString(APN_INDEX);
+                 String key = cursor.getString(ID_INDEX);
+                 String type = cursor.getString(TYPES_INDEX);
++				String mvnoType = cursor.getString(MVNO_TYPE_INDEX);
++                String mvnoMatchData = cursor.getString(MVNO_MATCH_DATA_INDEX);
+                 int sourcetype = cursor.getInt(SOURCE_TYPE_INDEX);
+-
++				String spn = cursor.getString(SPN_INDEX);
+                 /// M: All tether apn will be selectable for otthers , mms will not be selectable.
+                 boolean selectable = mApnExt.isSelectable(type);
+-                if (type.contains("default")){
+-                if(selectable){
+-                    list.add(name);
+-                    Map<String, Object> map = new HashMap<String, Object>();
+-                    map.put("name", name);
+-                    map.put("key", key);
+-                    list_apn.add(map);
+-                }else{
+-                    Map<String, Object> map_sms = new HashMap<String, Object>();
+-                    map_sms.put("name", name);
+-                    map_sms.put("apn", apn);
+-                    list_sms.add(map_sms);
+-                }}
++                if (type.contains("default")) {
++					if (selectable) {
++						//list.add(spn);
++						Map<String, Object> map = new HashMap<String, Object>();
++						map.put("name", name);
++						map.put("key", key);
++						map.put("spn", spn);
++						list_apn.add(map);
++						if ("23410".equals(mccmnc) || "23415".equals(mccmnc) || "23420".equals(mccmnc) ||
++						    "23430".equals(mccmnc) || "20601".equals(mccmnc)) {
++								addApnToList(spn, list, mvonlist, r, mvnoType, mvnoMatchData);
++						} else {
++							list.add(name);
++						}						
++					} else {
++						Map<String, Object> map_sms = new HashMap<String, Object>();
++						map_sms.put("name", name);
++						map_sms.put("apn", apn);
++						map_sms.put("spn", spn);
++						list_sms.add(map_sms);
++					}
++				}
+ 
+                 if (shouldSkipApn(type)) {
+                     cursor.moveToNext();
+@@ -506,17 +563,19 @@
+                 /// M: All tether apn will be selectable for otthers , mms will not be selectable.
+                 // boolean selectable = mApnExt.isSelectable(type);
+ 
+-                Log.d(TAG,"mSelectedKey = " + mSelectedKey + " key = " + key + " name = " + name);
++                Log.d(TAG,"mSelectedKey = " + mSelectedKey + " key = " + key + " name = " + name + " spn = " + spn);
+ 
+                 cursor.moveToNext();
+             }
+             cursor.close();
+-
++			if (!mvonlist.isEmpty()) {
++                list = mvonlist;
++            }
+         }
+ 
+     }
+-   /* private void addApnToList(ApnPreference pref, ArrayList<Preference> mnoList,
+-                              ArrayList<Preference> mvnoList, IccRecords r, String mvnoType,
++    private void addApnToList(String pref, ArrayList mnoList,
++                              ArrayList mvnoList, IccRecords r, String mvnoType,
+                               String mvnoMatchData) {
+         Log.d(TAG, "mvnoType = " + mvnoType + ", mvnoMatchData = " + mvnoMatchData);
+         if (r != null && !TextUtils.isEmpty(mvnoType) && !TextUtils.isEmpty(mvnoMatchData)) {
+@@ -523,14 +582,14 @@
+             if (ApnSetting.mvnoMatches(r, mvnoType, mvnoMatchData)) {
+                 mvnoList.add(pref);
+                 // Since adding to mvno list, save mvno info
+-                mMvnoType = mvnoType;
+-                mMvnoMatchData = mvnoMatchData;
++                /* mMvnoType = mvnoType;
++                mMvnoMatchData = mvnoMatchData; */
+                 Log.d(TAG, "mvnoMatches...");
+             }
+         } else {
+             mnoList.add(pref);
+         }
+-    }*/
++    }
+ 
+     private void setPreferApnChecked(ArrayList<Preference> apnList) {
+         if (apnList == null || apnList.isEmpty()) {
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnPreference.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnPreference.java	(revision 14979)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnPreference.java	(revision 14980)
+@@ -23,6 +23,8 @@
+ import android.provider.Telephony;
+ import android.support.v7.preference.Preference;
+ import android.support.v7.preference.PreferenceViewHolder;
++import android.content.SharedPreferences;
++import android.support.v7.preference.PreferenceManager;
+ import android.util.AttributeSet;
+ import android.util.Log;
+ import android.view.View;
+@@ -126,11 +128,25 @@
+             }
+         }
+     }
+-
++	
++	public boolean persistString(String key, String value) {
++        SharedPreferences sp = getContext().getSharedPreferences("settings_spn", getContext().MODE_PRIVATE);
++		SharedPreferences.Editor editor = sp.edit();
++		editor.putString(key, value);
++		editor.commit();;
++        return true;
++    }
++	
++	public String getPersistedString(String key) {
++		SharedPreferences sp = getContext().getSharedPreferences("settings_spn", getContext().MODE_PRIVATE);	
++		return sp.getString(key,"");
++    }
++	
++	
+     public void setSelectable(boolean selectable) {
+         mSelectable = selectable;
+     }
+-
++	
+     public boolean getSelectable() {
+         return mSelectable;
+     }
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 14979)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/src/com/android/settings/ApnSettings.java	(revision 14980)
+@@ -105,7 +105,8 @@
+     private static final int MVNO_MATCH_DATA_INDEX = 5;
+     /// M: check source type, some types are not editable
+     private static final int SOURCE_TYPE_INDEX = 6;
+-
++	private static final int SPN_INDEX = 7;
++	
+     private static final int MENU_NEW = Menu.FIRST;
+     private static final int MENU_RESTORE = Menu.FIRST + 1;
+ 
+@@ -327,7 +328,7 @@
+         final TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+         String mccmnc = mSubscriptionInfo == null ? ""
+             : tm.getSimOperator(mSubscriptionInfo.getSubscriptionId());
+-
++		
+         /// M: for plug-in @{
+         // use mcc&mnc in IMPI to query apn.
+         Log.d(TAG, "before plugin, mccmnc = " + mccmnc);
+@@ -376,7 +377,7 @@
+         Cursor cursor = getContentResolver().query(
+                 Telephony.Carriers.CONTENT_URI,
+                 new String[] { "_id", "name", "apn", "type", "mvno_type", "mvno_match_data",
+-                        "sourcetype" }, where, null, DEFAULT_SORT_ORDER/* order */);
++                        "sourcetype", "spn" }, where, null, DEFAULT_SORT_ORDER/* order */);
+         /// @}
+ 
+         if (cursor != null) {
+@@ -409,7 +410,8 @@
+                 String mvnoMatchData = cursor.getString(MVNO_MATCH_DATA_INDEX);
+                 /// M: check source type, some types are not editable
+                 int sourcetype = cursor.getInt(SOURCE_TYPE_INDEX);
+-
++				String spn = cursor.getString(SPN_INDEX);
++				Log.d(TAG,"fulllist spn:"+spn);
+                 /// M: skip specific APN type
+                 if(shouldSkipApn(type)) {
+                     cursor.moveToNext();
+@@ -426,7 +428,7 @@
+                 pref.setSummary(apn);
+                 pref.setPersistent(false);
+                 pref.setOnPreferenceChangeListener(this);
+-				
++				pref.persistString(key, spn);
+ 				boolean isEditable = mApnExt.isAllowEditPresetApn(type, apn, mccmnc, sourcetype);
+                 Log.d(TAG, "apn name = " + name + ", sourcetype = " + sourcetype + ", isEditable = " + isEditable);
+                 
+@@ -487,7 +489,38 @@
+ 
+             /// M: always set a prefer APN
+             setPreferApnChecked(mnoApnList);
+-
++			int seletedApn = Settings.System.getInt(this.getContentResolver(),"seletedApn",0);
++			if (seletedApn != 1) {
++				//if click ok in sim provider activity, only list the selected apn
++				ArrayList<Preference> tempmnoApnList = new ArrayList<Preference>();
++				ArrayList<Preference> tempMmsApnList = new ArrayList<Preference>();
++				if (mSelectedKey != null) {
++					String mnoSpn = null;
++					for (Preference pref : mnoApnList) {
++						if (mSelectedKey.equals(pref.getKey())) {
++							((ApnPreference) pref).setChecked();
++							mnoSpn = ((ApnPreference) pref).getPersistedString(pref.getKey());
++							Log.d(TAG,"mnoSpn:"+mnoSpn);
++							tempmnoApnList.add(pref);
++						}
++					}
++					apnList.removeAll();
++					for (Preference preference : tempmnoApnList) {
++						apnList.addPreference(preference);					
++					}
++					for (Preference preference : mnoMmsApnList) {
++						String spn = ((ApnPreference) preference).getPersistedString(preference.getKey());
++						Log.d(TAG,"spn:"+spn);
++						if (!TextUtils.isEmpty(mnoSpn) && !TextUtils.isEmpty(spn) 
++							&& mnoSpn.equals(spn)){
++								tempMmsApnList.add(preference);
++							}					
++					}
++					for (Preference preference : tempMmsApnList) {
++						apnList.addPreference(preference);	
++					}
++				}				
++			}
+             /// M: update screen enable state according to airplane mode, SIM radio status, etc.
+             updateScreenEnableState(getActivity());
+         }
+Index: vendor/branch/5058Y_ALGB/packages/apps/Settings/res/layout/apn_activity.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/packages/apps/Settings/res/layout/apn_activity.xml	(revision 14979)
++++ vendor/branch/5058Y_ALGB/packages/apps/Settings/res/layout/apn_activity.xml	(revision 14980)
+@@ -5,7 +5,7 @@
+     android:background="#ffffff"
+     android:orientation="vertical" >
+ 
+-    <TextView
++    <!-- <TextView
+         android:id="@+id/titlebar"
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+@@ -13,10 +13,9 @@
+         android:layout_marginBottom="3dp"
+         android:gravity="center"
+         android:text="@string/lockpattern_retry_button_text"
+-        android:textColor="#ffffff"
+         android:textSize="20sp"
+         android:textStyle="bold"
+-        android:visibility="gone"/>
++        />
+ 
+     <TextView
+         android:id="@+id/menuconfigerro"
+@@ -25,8 +24,24 @@
+         android:layout_centerVertical="true"
+         android:gravity="center"
+         android:textColor="#ffffff"
+-        android:visibility="gone" />
+-
++        /> -->
++	<LinearLayout
++		android:layout_width="match_parent"
++        android:layout_height="60dp"
++		android:orientation="vertical"
++		android:background="#000000"
++		>
++		<TextView
++			android:id="@+id/title"
++			android:layout_width="match_parent"
++			android:layout_height="match_parent"
++			android:gravity="left|center_vertical"
++			android:layout_marginLeft="25dp"			
++			android:textColor="#ffffff"
++			android:textSize="20sp"
++			android:text="@string/sim_provider"
++			/>
++	</LinearLayout>
+     <LinearLayout
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+@@ -57,10 +72,28 @@
+         </ListView>
+     </LinearLayout>
+ 
+-    <Button
++    <!-- <Button
+         android:id="@+id/btn_apn"
+         android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:text="@string/finish_button_label" /> -->
++	<LinearLayout
++		android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++		android:orientation="horizontal"
++		>
++	<Button
++        android:id="@+id/btn_ok"
++        android:layout_width="match_parent"
+         android:layout_height="60dp"
+-        android:text="@string/finish_button_label" />
++		android:layout_weight="1"
++        android:text="@string/apn_selection_ok" />
++	<Button
++        android:id="@+id/btn_cancel"
++        android:layout_width="match_parent"
++        android:layout_height="60dp"
++		android:layout_weight="1"
++        android:text="@string/apn_selection_cancel" />	
++	</LinearLayout>
+ 
+ </LinearLayout>
+\ No newline at end of file
+Index: vendor/branch/5058Y_ALGB/device/mediatek/common/apns-conf.xml
+===================================================================
+--- vendor/branch/5058Y_ALGB/device/mediatek/common/apns-conf.xml	(revision 14979)
++++ vendor/branch/5058Y_ALGB/device/mediatek/common/apns-conf.xml	(revision 14980)
+@@ -294,7 +294,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="O2 Pay Monthly"
+         type="default,supl,mms"
+         user="o2" />    
+ 
+@@ -1606,32 +1606,9 @@
+         server=""
+         spn=""
+         type="default"
+-        user="" />
++        user="" />    
+ 
+     <apn
+-        apn="id"
+-        authtype="0"
+-        bearer_bitmask=""
+-        carrier="iD"
+-        csdnum="0"
+-        mcc="234"
+-        mmsc="http://mms.um.idmobile.co.uk:10021/mmsc"
+-        mmsport="8799"
+-        mmsproxy="mms.idmobile.co.uk"
+-        mnc="20"
+-        mvno_match_data=""
+-        mvno_type=""
+-        password=""
+-        port=""
+-        protocol="IP"
+-        proxy=""
+-        roaming_protocol="IP"
+-        server=""
+-        spn="iD"
+-        type="default,supl,mms"
+-        user="" />
+-
+-    <apn
+         apn="ims"
+         bearer_bitmask=""
+         carrier="IMS"
+@@ -2894,7 +2871,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="BT OnePhone UK"
++        spn="BT OnePhone"
+         type="mms"
+         user="" />
+ 
+@@ -2917,7 +2894,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="ASDA Mobile"
++        spn="Asda Mobile"
+         type="mms"
+         user="eesecure" />
+ 
+@@ -2963,7 +2940,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="Virgin"
++        spn="Virgin Mobile"
+         type="default,supl,mms"
+         user="user" />
+ 
+@@ -3658,7 +3635,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="Tesco Mobile"
+         type="default,mms"
+         user="" />
+ 
+@@ -4376,7 +4353,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="O2 Pay As You Go"
+         type="default,supl,mms"
+         user="o2" />
+ 
+@@ -4603,7 +4580,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="BT OnePhone UK"
++        spn="BT OnePhone"
+         type="default,supl"
+         user="" />    
+ 	
+@@ -5768,7 +5745,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="vodafone UK"
++        spn="Vodafone Contract"
+         type="default,mms,supl"
+         user="wap" />
+ 
+@@ -31036,7 +31013,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="vodafone UK"
++        spn="Vodafone PAYG"
+         type="default,mms,supl"
+         user="wap" />
+ 
+@@ -35761,7 +35738,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="Talkmobile Contract"
+         type="mms"
+         user="wap" />
+ 
+@@ -35784,7 +35761,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="Talkmobile"
++        spn="Talkmobile Contract"
+         type="default,supl"
+         user="" />
+ 
+@@ -35807,7 +35784,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="Talkmobile PAYG"
+         type="mms"
+         user="wap" />
+ 
+@@ -35830,7 +35807,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="Talkmobile"
++        spn="Talkmobile PAYG"
+         type="default,supl"
+         user="" />
+ 
+@@ -44879,10 +44856,33 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="3"
+         type="default,supl,mms"
+         user="" />
+-
++		
++	<apn
++        apn="id"
++        authtype="0"
++        bearer_bitmask=""
++        carrier="iD"
++        csdnum="0"
++        mcc="234"
++        mmsc="http://mms.um.idmobile.co.uk:10021/mmsc"
++        mmsport="8799"
++        mmsproxy="mms.idmobile.co.uk"
++        mnc="20"
++        mvno_match_data=""
++        mvno_type=""
++        password=""
++        port=""
++        protocol="IP"
++        proxy=""
++        roaming_protocol="IP"
++        server=""
++        spn="iD"
++        type="default,supl,mms"
++        user="" />
++		
+     <apn
+         apn="ctnet"
+         bearer_bitmask=""
+@@ -48767,7 +48767,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="Sainsbury&apos;s"
++        spn="Sainsburys Contract"
+         type="default,supl"
+         user="" />
+ 	
+@@ -48790,7 +48790,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn="Sainsbury&apos;s"
++        spn="Sainsburys PAYG"
+         type="default,supl"
+         user="" />
+ 	
+@@ -48813,7 +48813,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="Lebara"
+         type="default,supl,mms"
+         user="wap" />
+ 
+@@ -48836,7 +48836,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="TalkTalk"
+         type="default,supl,mms"
+         user="" />
+ 	
+@@ -48845,7 +48845,7 @@
+ 		mcc="234" 
+ 		mnc="15" 
+ 		apn="mobilebysainsburys.co.uk" 
+-		spn="Sainsbury's" 
++		spn="Sainsburys Contract" 
+ 		user="wap" 
+ 		password="wap" 
+ 		server="" 
+@@ -50489,7 +50489,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="TESCO"
+         type="default,supl,mms"
+         user="" />
+ 	
+@@ -51448,7 +51448,7 @@
+         proxy=""
+         roaming_protocol="IP"
+         server=""
+-        spn=""
++        spn="Sainsburys PAYG"
+         type="mms"
+         user="wap" />
+ 
+Index: packages/apps/Settings/res/values/strings.xml
+===================================================================
+--- packages/apps/Settings/res/values/strings.xml	(revision 14979)
++++ packages/apps/Settings/res/values/strings.xml	(revision 14980)
+@@ -7958,5 +7958,9 @@
+     <!-- add for 5058Y_ALIE end  -->
+ 	<string name="sim_calls_cellular_data_disabled">Turn off data</string>
+ 	<string name="ALBR_Remains">"(Remains: "</string>
+-	<string name="policy">"Privacy policy"</string>
++	<string name="policy">"Privacy policy"</string>
++	
++	<string name="apn_selection_ok">"OK"</string>
++	<string name="apn_selection_cancel">"CANCEL"</string>
++	<string name="sim_provider">"SIM provider"</string>
+ </resources>
+\ No newline at end of file

@@ -1,0 +1,57 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java	(revision 11942)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java	(revision 11943)
+@@ -71,7 +71,13 @@
+ 
+     @Override
+     protected void handleClick() {
+-        boolean newState = !mState.value;
++		int nfcState=getNfcState();
++		if (nfcState == NfcAdapter.STATE_OFF || nfcState ==  NfcAdapter.STATE_TURNING_OFF) {
++			mState.value = false;
++		} else if (nfcState == NfcAdapter.STATE_ON || nfcState ==  NfcAdapter.STATE_TURNING_ON){
++			mState.value = true;
++		}
++		boolean newState = !mState.value;
+ 		try{
+ 			if(newState){
+ 				sService.enable();
+@@ -81,7 +87,6 @@
+ 		}catch (RemoteException e) {
+ 				
+ 		}
+-		
+ 		refreshState(newState);
+     }
+ 
+@@ -92,19 +97,21 @@
+ 
+     @Override
+     protected void handleUpdateState(BooleanState state, Object arg) {
+-		boolean enabled =  false;
+ 		final Resources r = mContext.getResources();
+ 		state.label = r.getString(R.string.quick_settings_nfc_label);
+ 		state.icon = ResourceIcon.get(R.drawable.ic_qs_nfc_on);
+ 		int nfcState=getNfcState();
+-		if (nfcState == NfcAdapter.STATE_OFF || nfcState ==  NfcAdapter.STATE_TURNING_OFF) {
+-			enabled = false;
+-		} else if (nfcState == NfcAdapter.STATE_ON || nfcState ==  NfcAdapter.STATE_TURNING_ON){
+-			enabled = true;
+-		}
+-        state.value = enabled;
++		if (arg instanceof Boolean) {
++            state.value = (boolean) arg;
++        } else {
++			if (nfcState == NfcAdapter.STATE_OFF || nfcState ==  NfcAdapter.STATE_TURNING_OFF) {
++				state.value = false;
++			} else if (nfcState == NfcAdapter.STATE_ON || nfcState ==  NfcAdapter.STATE_TURNING_ON){
++				state.value = true;
++			}
++        }
+ 		state.label = r.getString(R.string.quick_settings_nfc_label);
+-        if (enabled) {
++        if (state.value) {
+             state.icon = ResourceIcon.get(R.drawable.ic_qs_nfc_on);
+             state.contentDescription = r.getString(
+                     R.string.accessibility_quick_settings_nfc_on);

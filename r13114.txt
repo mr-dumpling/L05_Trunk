@@ -1,0 +1,124 @@
+Index: vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java
+===================================================================
+--- vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 13113)
++++ vendor/branch/5058Y_ALIE/packages/services/Telephony/src/com/android/phone/MobileNetworkSettings.java	(revision 13114)
+@@ -851,7 +851,7 @@
+                             R.array.enabled_networks_cdma_values);
+                 } else {
+                     int select = (mShow4GForLTE == true) ? R.array.enabled_networks_4g_choices_alie
+-                            : R.array.enabled_networks_choices;
++                            : R.array.enabled_networks_4g_choices_alie;
+                     mButtonEnabledNetworks.setEntries(select);
+                     mExt.changeEntries(mButtonEnabledNetworks);
+                     /// Add for C2K @{
+@@ -863,7 +863,7 @@
+                                 R.array.enabled_networks_values_c2k);
+                     } else {
+                         mButtonEnabledNetworks.setEntryValues(
+-                                R.array.enabled_networks_values);
++                                R.array.enabled_networks_values_alie);
+                     }
+                     /// @}
+                 }
+@@ -1414,6 +1414,10 @@
+                 mButtonEnabledNetworks.setSummary(R.string.network_3G_alie);
+                 break;
+             case Phone.NT_MODE_WCDMA_ONLY:
++				mButtonEnabledNetworks.setValue(
++                            Integer.toString(Phone.NT_MODE_WCDMA_ONLY));
++                    mButtonEnabledNetworks.setSummary(R.string.network_3G_alwe);
++                break;
+             case Phone.NT_MODE_GSM_UMTS:
+             case Phone.NT_MODE_WCDMA_PREF:
+                 if (!mIsGlobalCdma) {
+@@ -1430,7 +1434,7 @@
+                 if (!mIsGlobalCdma) {
+                     mButtonEnabledNetworks.setValue(
+                             Integer.toString(Phone.NT_MODE_GSM_ONLY));
+-                    mButtonEnabledNetworks.setSummary(R.string.network_3G_alwe);
++                    mButtonEnabledNetworks.setSummary(R.string.network_2G);
+                 } else {
+                     mButtonEnabledNetworks.setValue(
+                             Integer.toString(Phone.NT_MODE_LTE_CDMA_EVDO_GSM_WCDMA));
+@@ -1451,7 +1455,7 @@
+                     mButtonEnabledNetworks.setValue(
+                             Integer.toString(Phone.NT_MODE_LTE_GSM_WCDMA));
+                     mButtonEnabledNetworks.setSummary((mShow4GForLTE == true)
+-                            ? R.string.network_4G : R.string.network_lte);
++                            ? R.string.network_4G_alie : R.string.network_lte);
+                 } else {
+                     mButtonEnabledNetworks.setValue(
+                             Integer.toString(Phone.NT_MODE_LTE_CDMA_EVDO_GSM_WCDMA));
+@@ -1563,7 +1567,7 @@
+                         mButtonEnabledNetworks.setSummary(R.string.network_global);
+                     } else {
+                         mButtonEnabledNetworks.setSummary((mShow4GForLTE == true)
+-                                ? R.string.network_4G : R.string.network_lte);
++                                ? R.string.network_4G_alie : R.string.network_lte);
+                     }
+                 }
+                 break;
+@@ -1915,11 +1919,11 @@
+                     + settingsNetworkMode + "; currRat = " + currRat);
+             }
+             if ((currRat & RadioAccessFamily.RAF_LTE) == RadioAccessFamily.RAF_LTE) {
+-                int select = mShow4GForLTE ? R.array.enabled_networks_4g_choices_alie
++                int select = mShow4GForLTE ? R.array.enabled_networks_4g_choices
+                         : R.array.enabled_networks_choices;
+                 mButtonEnabledNetworks.setEntries(select);
+                 mButtonEnabledNetworks.setEntryValues(isC2kLteSupport() ?
+-                        R.array.enabled_networks_values_c2k : R.array.enabled_networks_values);
++                        R.array.enabled_networks_values_c2k : R.array.enabled_networks_values_alie);
+                 if (DBG) {
+                     log("updateNetworkModeForLwDsds mShow4GForLTE = " + mShow4GForLTE);
+                 }
+@@ -1947,7 +1951,11 @@
+                         mButtonEnabledNetworks.setValue(
+                                 Integer.toString(Phone.NT_MODE_WCDMA_PREF));
+                     }
++                    if (settingsNetworkMode == Phone.NT_MODE_WCDMA_ONLY){
++                        mButtonEnabledNetworks.setSummary(R.string.network_3G_alwe);
++                    }else {
+                     mButtonEnabledNetworks.setSummary(R.string.network_3G_alie);
++                    }
+                 } else {
+                     if (DBG) {
+                         log("updateNetworkModeForLwDsds set to what user select. ");
+@@ -1959,7 +1967,7 @@
+                 if (DBG) {
+                     log("updateNetworkModeForLwDsds set to 2G only.");
+                 }
+-                mButtonEnabledNetworks.setSummary(R.string.network_3G_alwe);
++                mButtonEnabledNetworks.setSummary(R.string.network_2G);
+                 mButtonEnabledNetworks.setEnabled(false);
+             }
+         }
+@@ -2408,7 +2416,7 @@
+                 log("--- go to c2k 5M ---");
+             }
+             if (!TelephonyUtilsEx.isCDMAPhone(mPhone)) {
+-                mButtonEnabledNetworks.setEntries(R.array.enabled_networks_4g_choices_alie);
++                mButtonEnabledNetworks.setEntries(R.array.enabled_networks_4g_choices);
+                 mButtonEnabledNetworks.setEntryValues(R.array.enabled_networks_values_c2k);
+             }
+         }
+Index: packages/services/Telephony/res/values/strings.xml
+===================================================================
+--- packages/services/Telephony/res/values/strings.xml	(revision 13113)
++++ packages/services/Telephony/res/values/strings.xml	(revision 13114)
+@@ -1662,7 +1662,14 @@
+         <item>@string/network_4G_alie</item>
+         <item>@string/network_3G_alie</item>
+         <item>@string/network_3G_alwe</item>
++		<item>@string/network_2G</item>
+     </string-array>
++	<string-array name="enabled_networks_values_alie" translatable="false">
++        <item>9</item>
++        <item>0</item>
++		<item>2</item>
++        <item>1</item>
++    </string-array>
+     <string name="sum_search_available_networks">Searching for all available networks will disconnect the data connection which is in use. Continue?</string>
+ 	<!-- wxr end -->
+ </resources>
+\ No newline at end of file

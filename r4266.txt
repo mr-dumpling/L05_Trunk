@@ -1,0 +1,1478 @@
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/include/mtkcam/v1/IParamsManager.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/include/mtkcam/v1/IParamsManager.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/include/mtkcam/v1/IParamsManager.h	(revision 4266)
+@@ -145,6 +145,9 @@
+ public:     ////                    Operations.
+     virtual status_t                setParameters(CameraParameters const& params) = 0;
+     virtual String8                 getPreviewFormat() const = 0;
++	virtual bool                    getVisidonMode() const = 0;
++	virtual int32_t                 getVisidonModeSkin() const = 0;
++	virtual int32_t                 getVisidonModeTone() const = 0;
+     virtual void                    getPreviewSize(int *width, int *height) const = 0;
+     virtual void                    getVideoSize(int *width, int *height) const = 0;
+     virtual void                    getPictureSize(int *width, int *height) const = 0;
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/include/mtkcam/v1/IDisplayClient.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/include/mtkcam/v1/IDisplayClient.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/include/mtkcam/v1/IDisplayClient.h	(revision 4266)
+@@ -44,6 +44,7 @@
+ //
+ #include <hardware/camera.h>
+ #include <system/camera.h>
++#include <v1/IParamsManager.h>
+ //
+ 
+ 
+@@ -62,8 +63,7 @@
+ //  Interfaces.
+ //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ public:     ////                    Instantiation.
+-
+-    static  IDisplayClient*         createInstance();
++    static  IDisplayClient*         createInstance(sp<IParamsManager>  pParamsMgr);
+     virtual                         ~IDisplayClient() {}
+ 
+ public:     ////
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/camshot/ISingleShot.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/camshot/ISingleShot.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/camshot/ISingleShot.h	(revision 4266)
+@@ -37,9 +37,9 @@
+ 
+ #ifndef _MTK_CAMERA_INC_CAMSHOT_ISINGLESHOT_H_
+ #define _MTK_CAMERA_INC_CAMPIPE_ISINGLESHOT_H_
+-
++#include <mtkcam/v1/IParamsManager.h>
+ #include <mtkcam/common.h>
+-
++using namespace android;
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+@@ -72,7 +72,7 @@
+      * - The ISingleShot instance
+      */
+     static ISingleShot* createInstance(EShotMode const eShotMode, char const* const pszCamShotName);
+-
++	static ISingleShot* createInstance(EShotMode const eShotMode, char const* const pszCamShotName,sp<IParamsManager>  pParamsMgr);
+ };
+ 
+ }; //namespace NSCamShot
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/camshot/ISmartShot.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/camshot/ISmartShot.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/camshot/ISmartShot.h	(revision 4266)
+@@ -39,7 +39,8 @@
+ #define _MTK_CAMERA_INC_CAMSHOT_ISMARTSHOT_H_
+ 
+ #include <mtkcam/common.h>
+-
++using namespace android;
++#include <mtkcam/v1/IParamsManager.h>
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+@@ -77,6 +78,7 @@
+      * - The ISmartShot instance
+      */
+     static ICamShot* createInstance(EShotMode const eShotMode, char const* const pszCamShotName, MUINT32 sensorId, MUINT32 mfb, MBOOL *pIsMfb);
++	static ICamShot* createInstance(EShotMode const eShotMode, char const* const pszCamShotName, MUINT32 sensorId, MUINT32 mfb, MBOOL *pIsMfb,sp<IParamsManager>  pParamsMgr);
+ };
+ 
+ }; //namespace NSCamShot
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/iopipe/SImager/ISImager.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/iopipe/SImager/ISImager.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/iopipe/SImager/ISImager.h	(revision 4266)
+@@ -67,7 +67,8 @@
+ //
+ #include <mtkcam/common.h>
+ #include <mtkcam/utils/common.h>
+-
++using namespace android;
++#include <mtkcam/v1/IParamsManager.h>
+ #include <mtkcam/iopipe/SImager/ISImagerDataTypes.h>
+ /*******************************************************************************
+ *
+@@ -108,7 +109,7 @@
+      *
+      */
+     static ISImager* createInstance(IImageBuffer const * pImageBuffer);
+-
++	static ISImager* createInstance(IImageBuffer const * pImageBuffer,sp<IParamsManager>  pParamsMgr);
+     /**
+      * @brief destroy the ISImager instance
+      *
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/camnode/JpegEncNode.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/camnode/JpegEncNode.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/include/mtkcam/camnode/JpegEncNode.h	(revision 4266)
+@@ -65,6 +65,8 @@
+ //
+ #include <mtkcam/camnode/nodeDataTypes.h>
+ #include <mtkcam/camnode/ICamGraphNode.h>
++using namespace android;
++#include <mtkcam/v1/IParamsManager.h>
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+@@ -89,6 +91,7 @@
+ {
+     public:     /*createInstance()*/
+         static JpegEncNode* createInstance(MBOOL createThread);
++		static JpegEncNode* createInstance(MBOOL createThread,sp<IParamsManager>  pParamsMgr);
+         void                destroyInstance();
+     protected:  /*ctor&dtor*/
+                  JpegEncNode(MBOOL createThread);
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/NormalShot.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/NormalShot.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/NormalShot.cpp	(revision 4266)
+@@ -87,16 +87,19 @@
+ /******************************************************************************
+  *
+  ******************************************************************************/
++sp<IParamsManager>  mParamsMgr;
+ extern
+ sp<IShot>
+ createInstance_NormalShot(
+     char const*const    pszShotName,
+     uint32_t const      u4ShotMode,
+-    int32_t const       i4OpenId
++    int32_t const       i4OpenId,
++	sp<IParamsManager>  pParamsMgr
+ )
+ {
+     sp<IShot>       pShot = NULL;
+     sp<NormalShot>  pImpShot = NULL;
++    mParamsMgr = pParamsMgr;
+     //
+     //  (1.1) new Implementator.
+     pImpShot = new NormalShot(pszShotName, u4ShotMode, i4OpenId);
+@@ -257,7 +260,7 @@
+                                                                             , "NormalShot"
+                                                                             , getOpenId()
+                                                                             , mShotParam.mu4MultiFrameBlending
+-                                                                            , &isMfbShot
++                                                                            , &isMfbShot,mParamsMgr
+                                                                             );
+     //
+     MUINT32 nrtype = queryCapNRType( getCaptureIso(), isMfbShot);
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/NormalShot.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/NormalShot.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/NormalShot/NormalShot.h	(revision 4266)
+@@ -37,8 +37,8 @@
+ 
+ #ifndef _MTK_CAMERA_CAMADAPTER_SCENARIO_SHOT_NORMALSHOT_H_
+ #define _MTK_CAMERA_CAMADAPTER_SCENARIO_SHOT_NORMALSHOT_H_
++#include <mtkcam/v1/IParamsManager.h>
+ 
+-
+ class IDbgInfoContainer;
+ namespace android {
+ namespace NSShot {
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/ShotFactory.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/ShotFactory.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/v1/adapter/Scenario/Shot/ShotFactory.cpp	(revision 4266)
+@@ -82,7 +82,8 @@
+ createInstance_NormalShot(
+     char const*const    pszShotName,
+     uint32_t const      u4ShotMode,
+-    int32_t const       i4OpenId
++    int32_t const       i4OpenId,
++	sp<IParamsManager>  pParamsMgr
+ );
+ 
+ 
+@@ -247,11 +248,11 @@
+     {
+     //  Normal Shot
+     case eShotMode_NormalShot:
+-        rpShot = createInstance_NormalShot("NormalShot", u4ShotMode, i4OpenId);
++        rpShot = createInstance_NormalShot("NormalShot", u4ShotMode, i4OpenId, pParamsMgr);
+         break;
+     case eShotMode_ZsdMfllShot:
+         {
+-            rpShot = createInstance_NormalShot("NormalShot", u4ShotMode, i4OpenId);
++            rpShot = createInstance_NormalShot("NormalShot", u4ShotMode, i4OpenId, pParamsMgr);
+         }
+         break;
+ 
+@@ -258,12 +259,12 @@
+     //
+     //  Smile-detection Shot
+     case eShotMode_SmileShot:
+-        rpShot = createInstance_NormalShot("SmileShot", u4ShotMode, i4OpenId);
++        rpShot = createInstance_NormalShot("SmileShot", u4ShotMode, i4OpenId, pParamsMgr);
+         break;
+     //
+     //  Auto-scene-detection Shot
+     case eShotMode_AsdShot:
+-        rpShot = createInstance_NormalShot("AsdShot", u4ShotMode, i4OpenId);
++        rpShot = createInstance_NormalShot("AsdShot", u4ShotMode, i4OpenId, pParamsMgr);
+         break;
+     //
+     //  Engineer mode Shot
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/SmartShot/ISmartShotBridge.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/SmartShot/ISmartShotBridge.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/SmartShot/ISmartShotBridge.cpp	(revision 4266)
+@@ -145,6 +145,47 @@
+     return pICamShot;
+ }
+ 
++ICamShot*
++ISmartShot::
++createInstance(EShotMode const eShotMode, char const*const szCamShotName, MUINT32 sensorId, MUINT32 mfb, MBOOL *pIsMfb,sp<IParamsManager>  pParamsMgr)
++{
++    ICamShot    *pICamShot = NULL;
++    MUINT32     frameNumber = 1;
++    MUINT32     exp;
++    MUINT32     iso;
++    MBOOL  needUpdateAE;
++
++    MY_LOGD("mfb=%d", mfb);
++
++    // for debug
++    char value[PROPERTY_VALUE_MAX] = {'\0'};
++    property_get("mediatek.smartshot.mode", value, "-1");
++    MINT32 mode = atoi(value);
++    if(mode != -1) {
++        MY_LOGD("change mfb mode from %d to %d", mfb, mode);
++        mfb = mode;
++    }
++    // get frame number
++    if(!MfllShot::getCaptureInfo(mfb, sensorId, frameNumber, exp, iso, needUpdateAE)) {
++        MY_LOGE("MfllShot::getCaptureInfo fail, use singleshot. mfb(%d), sensorId(%d)", mfb, sensorId);
++        frameNumber = 1;
++    }
++
++
++lbExit:
++    if(frameNumber > 1) {
++        pICamShot = IMfllShot::createInstance(eShotMode, szCamShotName, mfb);
++        MY_LOGD("use IMfllShot(mfb=%d)", mfb);
++    } else {
++        pICamShot = ISingleShot::createInstance(eShotMode, szCamShotName,pParamsMgr);
++        MY_LOGD("use ISingleShot");
++    }
++    if(pIsMfb != NULL) {
++        *pIsMfb = (frameNumber > 1) ? MTRUE : MFALSE;
++    }
++
++    return pICamShot;
++}
+ ////////////////////////////////////////////////////////////////////////////////
+ };  //namespace NSCamShot
+ 
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/inc/SingleShot.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/inc/SingleShot.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/inc/SingleShot.h	(revision 4266)
+@@ -73,7 +73,7 @@
+ };
+ using namespace NSCamNode;
+ #include <mtkcam/featureio/aaa_hal_common.h>
+-
++#include <mtkcam/v1/IParamsManager.h>
+ #include <semaphore.h>
+ #include <vector>
+ using namespace std;
+@@ -108,6 +108,11 @@
+                         EShotMode const eShotMode,
+                         char const*const szCamShotName
+                     );
++					SingleShot(
++                        EShotMode const eShotMode,
++                        char const*const szCamShotName,
++						sp<IParamsManager>  pParamsMgr
++                    );
+ 
+ public:     ////    Instantiation.
+     virtual MBOOL   init();
+@@ -200,7 +205,7 @@
+     MUINT32                  muRegisteredBufType;
+     AllocBufHandler*         mpAllocBufHandler;
+     ICamBufHandler*          mpPrvBufHandler;
+-
++	sp<IParamsManager>       mParamsMgr;
+     //        register buffers
+     vector<regbuf_t>         mvRegBuf;
+ 
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/SingleShot/SingleShot.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/SingleShot/SingleShot.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/SingleShot/SingleShot.cpp	(revision 4266)
+@@ -401,9 +401,42 @@
+     , mVhdrProfile(EIspProfile_IHDR_Preview)
+     , mbGetP2outBuf(MFALSE)
+ {
++	mParamsMgr = NULL;
+ }
+ 
+-
++SingleShot::
++SingleShot(
++    EShotMode const eShotMode,
++    char const*const szCamShotName,
++	sp<IParamsManager>  pParamsMgr
++)
++    : CamShotImp(eShotMode, szCamShotName)
++    , muRegisteredBufType(0x0)
++    , mpAllocBufHandler(NULL)
++    , mpPrvBufHandler(NULL)
++    , muCapStyle(ECamShot_CMD_STYLE_NORMAL)
++    , mShotProfile(-1)
++    , mpMap2Node(NULL)
++    , mpConnectDataRule(NULL)
++    , mpConnectNotifyRule(NULL)
++    , mpGraph(NULL)
++    , mpPass1(NULL)
++    , mpCtrl(NULL)
++    , mpCallback(NULL)
++    , mpCapPass2(NULL)
++    , mpPrvPass2(NULL)
++    , mpJpegencHw(NULL)
++    , mpJpegencSw(NULL)
++    , mbDoShutterCb(MTRUE)
++    , mFinishedData(0x0)
++    , mbPureRaw(MFALSE)
++    , muNRType(ECamShot_NRTYPE_NONE)
++    , mbVHdr(MFALSE)
++    , mVhdrProfile(EIspProfile_IHDR_Preview)
++    , mbGetP2outBuf(MFALSE)
++	, mParamsMgr(pParamsMgr)
++{
++}
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+@@ -1235,12 +1268,22 @@
+     if( NodeDataSet & bitOf(PASS2_PRV_SRC) )
+         mpPrvPass2  = Pass2Node::createInstance(PASS2_PREVIEW);
+ 
+-    if( NodeDataSet & bitOf(JPEG_ENC_HW_SRC) )
+-        mpJpegencHw = JpegEncNode::createInstance(MTRUE);
++    if( NodeDataSet & bitOf(JPEG_ENC_HW_SRC) ){
++		if(mParamsMgr!=NULL && mParamsMgr->getVisidonMode()){
++			mpJpegencHw = JpegEncNode::createInstance(MTRUE,mParamsMgr);
++		}else{
++			mpJpegencHw = JpegEncNode::createInstance(MTRUE);
++		}    
++	}
++	
++    if( NodeDataSet & bitOf(JPEG_ENC_SW_SRC) ){
++		if(mParamsMgr!=NULL && mParamsMgr->getVisidonMode()){
++			mpJpegencSw = JpegEncNode::createInstance(MTRUE,mParamsMgr);
++		}else{
++			mpJpegencSw = JpegEncNode::createInstance(MTRUE);
++		}
++	} 
+ 
+-    if( NodeDataSet & bitOf(JPEG_ENC_SW_SRC) )
+-        mpJpegencSw = JpegEncNode::createInstance(MTRUE);
+-
+     if( mpJpegencHw )
+         mpJpegencHw->setEncParam(mJpegParam.fgIsSOI, mJpegParam.u4Quality);
+ 
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/SingleShot/ISingleShotBridge.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/SingleShot/ISingleShotBridge.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camshot/SingleShot/ISingleShotBridge.cpp	(revision 4266)
+@@ -199,7 +199,27 @@
+     return  pISingleShot;
+ }
+ 
+-
++ISingleShot*
++ISingleShot::
++createInstance(EShotMode const eShotMode, char const*const szCamShotName,sp<IParamsManager>  pParamsMgr)
++{
++    SingleShot* pSingleShotImp = new SingleShot(eShotMode, "SingleShot",pParamsMgr);
++    if  ( ! pSingleShotImp )
++    {
++        MY_LOGE("[ISingleShot] fail to new SingleShot");
++        return  NULL;
++    }
++    //
++    ISingleShotBridge*  pISingleShot = new ISingleShotBridge(pSingleShotImp);
++    if  ( ! pISingleShot )
++    {
++        MY_LOGE("[ISingleShot] fail to new ISingleShotBridge");
++        delete  pSingleShotImp;
++        return  NULL;
++    }
++    //
++    return  pISingleShot;
++}
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/IJpegCodec.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/IJpegCodec.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/IJpegCodec.h	(revision 4266)
+@@ -60,8 +60,9 @@
+  ************************************************************************************************/
+ #ifndef _MTK_PLATFORM_HARDWARE_MTKCAM_CORE_IOPIPE_SIMAGER_IJPEG_CODEC_H_
+ #define _MTK_PLATFORM_HARDWARE_MTKCAM_CORE_IOPIPE_SIMAGER_IJPEG_CODEC_H_
++using namespace android;
++#include <mtkcam/v1/IParamsManager.h>
+ 
+-
+ //using namespace NSCamHW;
+ /*******************************************************************************
+ *
+@@ -86,6 +87,7 @@
+ 
+ public:     ////    Instantiation.
+     static IJpegCodec* createInstance();
++	static IJpegCodec* createInstance(sp<IParamsManager>  pParamsMgr);
+     virtual MVOID   destroyInstance() = 0;
+ 
+ public:     ////    Operations.
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/JpegCodec.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/JpegCodec.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/JpegCodec.cpp	(revision 4266)
+@@ -73,6 +73,7 @@
+ #include <cutils/properties.h>
+ #include <stdlib.h>
+ //
++#include <mtkcam/v1/IParamsManager.h>
+ #include <mtkcam/utils/common.h>
+ #include <mtkcam/iopipe/SImager/ISImagerDataTypes.h>
+ #include <mtkcam/iopipe/SImager/IImageTransform.h>
+@@ -90,8 +91,8 @@
+ #include "./inc/JpegCodec.h"
+ 
+ #define MEDIA_PATH "/sdcard/"
++#include <dlfcn.h>
+ 
+-
+ #define CHECK_OBJECT(x)  { if (x == NULL) { MY_LOGE("Null %s Object", #x); return MFALSE;}}
+ /*******************************************************************************
+ *
+@@ -106,7 +107,113 @@
+ /*******************************************************************************
+ *
+ ********************************************************************************/
++void
+ JpegCodec::
++declareBeautyShotEngine(){
++    libVisidon = :: dlopen("libVDBeautyShotAPI.so",RTLD_NOW);
++    if(libVisidon==NULL){
++		MY_LOGD("declareBeautyShotEngine dlopen error:%s",dlerror());
++		return;
++	}
++
++    *(void **)&Link_VDInitializeBeautyShot = dlsym(libVisidon,"VDInitializeBeautyShot");
++	if(!Link_VDInitializeBeautyShot){
++		MY_LOGD(" Link_VDInitializeBeautyShot open error=%s",dlerror());
++		return;
++	}
++
++    *(void **)&Link_VDReleaseBeautyShot = dlsym(libVisidon,"VDReleaseBeautyShot");
++	if(!Link_VDReleaseBeautyShot){
++		MY_LOGD(" Link_VDReleaseBeautyShot open error=%s",dlerror());
++		return;
++	}
++	
++	*(void **)&Link_VDProcessStillImage = dlsym(libVisidon,"VDProcessStillImage");
++	if(!Link_VDProcessStillImage){
++		MY_LOGD(" Link_VDProcessStillImage open error=%s",dlerror());
++		return;
++	}
++}
++void
++JpegCodec::
++initializeBeautyShotEngine()
++{
++    if(!mParamsMgr->getVisidonMode() || libVisidon==NULL || !Link_VDInitializeBeautyShot){
++		MY_LOGD(" initializeBeautyShotEngine  return directly");
++		return;
++	}
++
++    int ret = 0;
++	if(mVisidonBeautyShotEngine!=NULL) {
++		// Release beauty engine					
++		MY_LOGD("%s:  Releasing beauty shot engine", __FUNCTION__);
++		VDBeautyErrorCode err = Link_VDReleaseBeautyShot(&mVisidonBeautyShotEngine);
++		mVisidonBeautyShotEngine  = NULL;			
++	}
++
++    int cols = 0;		
++	int rows = 0;	
++	mParamsMgr->getPreviewSize(&cols, &rows);
++    void *ptr;
++    VDBeautyErrorCode err = Link_VDInitializeBeautyShot(cols, rows, VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL, MEMCPY_READPIXELS, &ptr);
++	if(err != VDBEAUTY_OK) {					
++		ret = 1;					
++		mVisidonBeautyShotEngine = NULL;			
++	}else {			
++		mVisidonBeautyShotEngine = ptr; 				
++		MY_LOGD("%s:  Initialized engine ptr = %p\n", __FUNCTION__, mVisidonBeautyShotEngine); 		
++	}
++
++    return ;	
++}
++
++void 
++JpegCodec::
++releaseBeautyShotEngine() {
++    if(!mParamsMgr->getVisidonMode() || libVisidon==NULL || !Link_VDReleaseBeautyShot){
++		MY_LOGD(" releaseBeautyShotEngine return directly");
++		return;
++	}
++    		
++	if(mVisidonBeautyShotEngine!=NULL ) {
++		// Release beauty engine        			
++		MY_LOGD("%s:  Releasing beauty shot engine", __FUNCTION__);        			
++		VDBeautyErrorCode err = Link_VDReleaseBeautyShot(&mVisidonBeautyShotEngine);       			
++		mVisidonBeautyShotEngine  = NULL;    		
++		}		
++	return ;	
++}
++
++void 
++JpegCodec:: 
++applyStillShotBeautification(unsigned char *yuv, int cols, int rows, 
++	int skinSmoothingStrenght, int skinToneAdjustmentStrength) {
++		if(!mParamsMgr->getVisidonMode() || libVisidon==NULL || !Link_VDProcessStillImage){
++			MY_LOGD(" applyStillShotBeautification  return directly");
++			return ;
++		}
++		MY_LOGD("%s: applyStillShotBeautification STARTTING", __FUNCTION__);    
++
++		if(mVisidonBeautyShotEngine != NULL) {
++			VDBeautyShotData inputData;    
++			memset(&inputData,0,sizeof(VDBeautyShotData));	
++			mParamsMgr->getPictureSize(&inputData.imageRows,&inputData.imageCols);    
++			inputData.imageFormat = YUV_YUYV; 
++			inputData.imagePtr = yuv;
++			inputData.stillImageRotation = 270;
++			inputData.beautyFilterParams[SKIN_SMOOTHING] = mParamsMgr->getVisidonModeSkin();      
++			inputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = mParamsMgr->getVisidonModeTone();; 		     
++			MY_LOGD("%s: CALLING Link_VDProcessStillImage (cols = %d, rows = %d, dataptr = %p, engineptr = %p,skin=%d,tone=%d)",
++				__FUNCTION__, inputData.imageCols, inputData.imageRows,
++				inputData.imagePtr, mVisidonBeautyShotEngine,inputData.beautyFilterParams[SKIN_SMOOTHING],inputData.beautyFilterParams[SKIN_TONE_ADJUSTING]);   
++			VDBeautyErrorCode err = Link_VDProcessStillImage(&inputData, mVisidonBeautyShotEngine); 
++			MY_LOGD("CALLING Link_VDProcessStillImage return err=%d",err);
++			if(err == VDBEAUTY_OK) 
++				return ;
++		}
++		return ;
++}
++JpegCodec::
+ JpegCodec(
+ )
+     : mi4ErrorCode(0)
+@@ -114,10 +221,25 @@
+     char value[PROPERTY_VALUE_MAX] = {'\0'};
+     property_get("debug.camera.dump", value, "0");
+     mu4DumpFlag = ::atoi(value);
++	mParamsMgr = NULL;
++	mVisidonBeautyShotEngine = NULL;
++	libVisidon =NULL;
+ }
+ 
++JpegCodec::
++JpegCodec(sp<IParamsManager>  pParamsMgr)
++    : mi4ErrorCode(0),
++	  mParamsMgr(pParamsMgr)
++{
++	mVisidonBeautyShotEngine = NULL;
++	libVisidon =NULL;
+ 
++    char value[PROPERTY_VALUE_MAX] = {'\0'};
++    property_get("debug.camera.dump", value, "0");
++    mu4DumpFlag = ::atoi(value);
++}
+ 
++
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+@@ -227,6 +349,15 @@
+ {
+     FUNCTION_LOG_START;
+     //MtkCamUtils::CamProfile profile("encode", "JpegCodec");
++    
++	if ( mParamsMgr!=NULL && mParamsMgr->getVisidonMode() && pSrcBufInfo->getImgSize().w > 640) {		
++		declareBeautyShotEngine();
++		initializeBeautyShotEngine();
++		unsigned char *p = (unsigned char *)pSrcBufInfo->getBufVA(0);
++		applyStillShotBeautification(p,0,0,0,0);
++		releaseBeautyShotEngine();
++	}
++		
+     MBOOL ret = MTRUE;
+ #ifdef JPEG_HAL_SUPPORT
+     JpgEncHal* pJpgEncoder = new JpgEncHal();
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/inc/JpegCodec.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/inc/JpegCodec.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/inc/JpegCodec.h	(revision 4266)
+@@ -60,7 +60,8 @@
+  ************************************************************************************************/
+ #ifndef _MTK_PLATFORM_HARDWARE_MTKCAM_CORE_IOPIPE_SIMAGER_JPEG_CODEC_H_
+ #define _MTK_PLATFORM_HARDWARE_MTKCAM_CORE_IOPIPE_SIMAGER_JPEG_CODEC_H_
+-
++using namespace android;
++#include <mtkcam/v1/IParamsManager.h>
+ //
+ 
+ 
+@@ -71,9 +72,131 @@
+ namespace NSIoPipe {
+ namespace NSSImager {
+ ////////////////////////////////////////////////////////////////////////////////
++/**
++    Max number of filters
++    */
++#define NUMBER_OF_BEAUTYFILTERS MAX_BEAUTY_FILTER
++#define MAX_BEAUTY_SHOT_FACES_IN_TRACK 5
+ 
++    /**
++    Enumeration for different beauty filters
++    */
++    typedef enum _VDBeautyFilters {
++        SKIN_SMOOTHING=0, /**< Intelligent skin smoothing algorithm*/
++        SPOT_SMOOTHING=1,/**< Adaptive spot and wrinkle removal algorithm (part of SKIN_SMOOTHING)*/
++        FACE_CONTOURING=2, /**< Face contouring algorithm*/
++        TEETH_WHITENING=3,/**< Teeth whitening algorithm*/
++        EYE_SHAPING=4,/**< Eye enlargement algorithm*/
++        CHEEK_BLUSHING=5,/**< Cheek blusher algorithm*/
++        SKIN_TONE_ADJUSTING=6,/**< Skin toning algorithm*/
++        MOUTH_SHAPING=7,/**< Mouth shaping algorithm*/
++        NOSE_SHAPING = 8,/**< Nose shaping algorithm*/
++        EYEBROW_SHAPING=9,/**< Eye-brown shaping algorithm*/
++        FACE_SHAPING=10, /**< Face shaping (thinning) algorithm*/
++        OUT_FOCUS=11, /**< Sharp face area, blurred background */
++        EYE_BRIGHTENING=12, /**< Eye brightening algorithm */
++		LIP_TONING=13, /**< Lip enhancement algorithm */
++        SKIN_COLOR_ADJUSTING=14, /**< Skin color adjustment algorithm (red tone adjustment) */
++		SKIN_COLOR_CHANGE = 15, /**< Skin color changing alogithm */
++        FACE_BOKEH = 16,
++        MAX_BEAUTY_FILTER /**< Keep this entry last */
++    } VDBeautyFilters;
+ 
++    /**
++    Enumeration for different image formats supported by the engine.
++    */
++    typedef enum _VDBeatyShotImageFormat
++    {
++        YUV_420_NV12=0, /**< YUV420SPNV12 format*/
++        YUV_420_NV21=1, /**< YUV420SPNV21 format*/
++        RGB_888=2,  /**< 24-bit RGB format*/
++        JPEG_COMPRESSED=3, /**< JPEG compressed format*/
++		YUV_YUYV = 4, /**< YUYV format (YUYV...YUYV..YUYV)*/
++		YUV_YV12 = 5, /**< YUV YV12 format */
++        YUV_UYVY = 6, /**< UYVY format (UYVY...UYVY..UYVY)*/
++        YUV_PLANAR = 7, /**< Planar YUV format given with three separate pointers to planes */
++        YUV_NV21_SEPARATED = 8 /**< Same as YUV_420_NV21 except input/output is given with separate pointers to luma (imagePtr) and chroma (imagePtrU) channels. */
++    } VDBeatyShotImageFormat;
+ 
++
++    /**
++    Enumeration for different memory modes to be used with the GPU processing.
++    Some devices do not support GraphicBuffer memory copying (MEMCPY_GRAPHICBUFFER)
++    and one needs to use read pixels approach (MEMCPY_READPIXELS).
++    */
++    typedef enum _VDBeautyEngineGPUMemoryMode
++    {
++        MEMCPY_READPIXELS=0, /**< Use glReadPixels to reed data from GPU*/
++        MEMCPY_GRAPHICBUFFER=1,/**< Use GraphicBuffer (gralloc) memory copying to read data from GPU*/
++        RENDER_TO_WINDOW=2,/**< Render to window. Do not read data from GPU */
++    } VDBeautyEngineGPUMemoryMode;
++
++    /**
++    Enumeration for different operation modes supported by the engine.
++    */
++    typedef enum _VDBeautyEngineProcessingMode
++    {
++        VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL = 0, /**< Use both preview and still processing and apply face tracking in preview mode.*/
++        VDBEAUTY_REALTIME_AND_STILL = 1,/**< Use both preview and still processing but do not apply face tracking in preview mode (filtering is applied to skin like areas instead of detected face)*/
++        VDBEAUTY_STILL = 2,/**< Use only still image processing*/
++    } VDBeautyEngineProcessingMode;
++
++    /**
++    Structure for face coordinates that may be provided outside beauty engine (i.e. from
++    hardware face tracker).
++    */
++    typedef struct _VDBeautyFace
++    {
++        int left; /**< Left x coordinate of face in the image*/
++        int top; /**< Top y coordinate of face in the image*/
++        int right; /**< Rigt x coordinate of face in the image*/
++        int bottom;/**< Bottom y coordinate of face in the image*/
++        int leftEyeX; /**< Left eye x coordinate if available*/
++        int leftEyeY;/**< Left eye y coordinate if available*/
++        int rightEyeX; /**< Right eye x coordinate if available*/
++        int rightEyeY; /**< Right eye t coordinate if available*/
++		int smile;
++    }VDBeautyFace;
++
++    /**
++    Structure for input/output data to be used with processing functions.
++    */
++    typedef struct _VDBeautyShotData
++    {
++        unsigned char *imagePtr; /**< Pointer to image data (input/output) */
++        unsigned char *imagePtrU; /**< Pointer to image data U plane (input/output) when format is YUV_PLANAR or pointer to UV plane when format is YUV_NV21_SEPARATED  */
++        unsigned char *imagePtrV; /**< Pointer to image data V plane (input/output) when format is YUV_PLANAR. */
++        int imageCols; /**< Image width*/
++        int imageRows;/**< Image height*/
++        int nbrOfFaces; /**< Number of faces in the faces array */
++        VDBeautyFace faces[MAX_BEAUTY_SHOT_FACES_IN_TRACK];
++        int jpegDataSize;/**< Compressed data size in case of JPEG format*/
++        int jpegSavingQuality; /**< JPEG saving quality (0-100)*/
++        unsigned char *outputJpeg; /**< Newly allocated JPEG compressed data in case of JPEG format*/
++        int ouputJpegDataSize; /**< Compressed output data size in case of JPEG format*/
++        VDBeatyShotImageFormat imageFormat; /**< Used image format*/
++        int32_t beautyFilterParams[NUMBER_OF_BEAUTYFILTERS]; /**< Filter strength parameters*/
++        int forceSmoothing; /**< Force face smoothing even though no face is found (apply to skin like regions)*/
++		int colorNoiseReduction; /**< Color noise (chroma) reduction strength (0-10) */
++		int luminanceNoiseReduction; /**< Luminance noise reduction strength (0-10) */
++		int sharpening; /**< Sharpening strength (0-10) */
++		int padRows;	/**< Number of extra rows after valid Y rows before chroma channel. */
++		int padCols;	/**< Number of extra pixels after each row to be ignored. */
++		int stillImageRotation; /**< Defines how still image and preview frame are oriented w.r.t. each other. Supported values are 90 (=preview rotated toward right), 180 (=preview is up-side down), 270 (=preview rotated towards left) */
++		int previewMirrored; /**< Defines if still image and preview frame are mirrored w.r.t. each other. Supported values are 0 (=preview is not mirrored), and 1 (=previw is mirrored). */
++		int skipPreviewIfStillRunning; /**< Skip preview beauty processing if still image processing is on-going. Supported values are 0 (=do not skip = apply normally), and 1 (=skip preview processing if still is running) */
++		int skipPreviewProcessing; /**< Skip preview processing but take the ouput from the frame buffer pipeline to keep same frame dealy as with actual processing */
++    }VDBeautyShotData;
++
++    /**
++    Enumeration for different error codes returend by API functions.
++    */
++    typedef enum _VDBeautyErrorCode
++    {
++        VDBEAUTY_OK=0, /**< Operation ok*/
++        VDBEAUTY_NOK=1, /**< Operation not ok*/
++    } VDBeautyErrorCode;
++
+ /*******************************************************************************
+ * Interface of Image Transform
+ ********************************************************************************/
+@@ -80,6 +203,18 @@
+ class JpegCodec
+ {
+ public:  ////    Constructor/Destructor.
++    void releaseBeautyShotEngine();    
++    void applyStillShotBeautification(unsigned char *yuv, int cols, int rows, 
++								int skinSmoothingStrenght, 
++								int skinToneAdjustmentStrength);
++    void *mVisidonBeautyShotEngine;
++	void *libVisidon;
++	VDBeautyErrorCode (*Link_VDInitializeBeautyShot)(int previewCols,int previewRows,VDBeautyEngineProcessingMode processingMode, VDBeautyEngineGPUMemoryMode gpuMemoryMode, void ** engine);
++	VDBeautyErrorCode (*Link_VDReleaseBeautyShot)(void ** engine);
++	VDBeautyErrorCode (*Link_VDProcessStillImage)(VDBeautyShotData *data, void *engine);
++    void initializeBeautyShotEngine();  
++    JpegCodec(sp<IParamsManager>  pParamsMgr);
++	void declareBeautyShotEngine();
+     JpegCodec();
+     virtual         ~JpegCodec() {}
+ 
+@@ -138,6 +273,7 @@
+                       );
+ private:
+     MINT32              mi4ErrorCode;
++	sp<IParamsManager>  mParamsMgr;
+     MUINT32   mu4DumpFlag;
+ 
+ 
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/IJpegCodecBridge.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/IJpegCodecBridge.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/IJpegCodecBridge.cpp	(revision 4266)
+@@ -158,7 +158,27 @@
+     return  pIJpegCodec;
+ }
+ 
+-
++IJpegCodec*
++IJpegCodec::
++createInstance(sp<IParamsManager>  pParamsMgr)
++{
++    JpegCodec* pJpegCodecImp = new JpegCodec(pParamsMgr);
++    if  ( ! pJpegCodecImp )
++    {
++        MY_LOGE("[IJpegCodec] fail to new JpegCodec");
++        return  NULL;
++    }
++    //
++    IJpegCodecBridge*  pIJpegCodec = new IJpegCodecBridge(pJpegCodecImp);
++    if  ( ! pIJpegCodec )
++    {
++        MY_LOGE("[IJpegCodec] fail to new IJpegCodecBridge");
++        delete  pJpegCodecImp;
++        return  NULL;
++    }
++    //
++    return  pIJpegCodec;
++}
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/SImager.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/SImager.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/SImager.cpp	(revision 4266)
+@@ -100,6 +100,7 @@
+     , mu4Quality(96)
+     , mu4IsSOI(0)
+ {
++	mParamsMgr = NULL;
+     if (NULL != pImageBuffer)
+     {
+         mCropRect.p.x = 0;
+@@ -109,7 +110,27 @@
+     }
+ }
+ 
+-
++SImager::
++SImager(
++    IImageBuffer const * pImageBuffer, sp<IParamsManager>  pParamsMgr
++)
++    : mi4ErrorCode(0)
++    , mpCbUser(NULL)
++    , mpSrcImgBuf(pImageBuffer)
++    , mpDstImgBuf(NULL)
++    , mu4Transform(0)
++    , mu4Quality(96)
++    , mu4IsSOI(0)
++	, mParamsMgr(pParamsMgr)
++{
++    if (NULL != pImageBuffer)
++    {
++        mCropRect.p.x = 0;
++        mCropRect.p.y = 0;
++        mCropRect.s.w = pImageBuffer->getImgSize().w;
++        mCropRect.s.h = pImageBuffer->getImgSize().h;
++    }
++}
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+@@ -253,7 +274,12 @@
+     FUNCTION_LOG_START;
+     MBOOL ret = MTRUE;
+     //
+-    IJpegCodec *pJpegCodec = IJpegCodec::createInstance();
++    IJpegCodec *pJpegCodec;
++	if(mParamsMgr != NULL && mParamsMgr->getVisidonMode()){
++		pJpegCodec = IJpegCodec::createInstance(mParamsMgr);
++	}else{
++		pJpegCodec = IJpegCodec::createInstance();
++	}
+     ret = pJpegCodec->encode(pSrcBufInfo, pDstBufInfo, rROI, u4Transform,
+                              u4Quality, u4IsSOI, eCodecType, u4TimeoutMs);
+     pJpegCodec->destroyInstance();
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/SImager.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/SImager.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/SImager.h	(revision 4266)
+@@ -67,7 +67,8 @@
+ //
+ #include <mtkcam/common.h>
+ #include <mtkcam/utils/common.h>
+-
++using namespace android;
++#include <mtkcam/v1/IParamsManager.h>
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+@@ -88,6 +89,7 @@
+ 
+ public:     ////    Constructor/Destructor.
+     SImager(IImageBuffer const * pImageBuffer);
++	SImager(IImageBuffer const * pImageBuffer, sp<IParamsManager>  pParamsMgr);
+     virtual ~SImager() {};
+ 
+ public:     ////    Instantiation.
+@@ -124,6 +126,7 @@
+     IImageBuffer const *mpSrcImgBuf;
+     IImageBuffer const *mpDstImgBuf;
+     MUINT32 mu4Transform;
++	sp<IParamsManager>  mParamsMgr;
+     MRect mCropRect;
+ #if 0
+     MSize mSize;
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/ISImagerBridge.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/ISImagerBridge.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/ISImagerBridge.cpp	(revision 4266)
+@@ -159,7 +159,27 @@
+     return  pISImager;
+ }
+ 
+-
++ISImager*
++ISImager::
++createInstance(IImageBuffer const * pImageBuffer, sp<IParamsManager>  pParamsMgr)
++{
++    SImager* pSImagerImp = new SImager(pImageBuffer,pParamsMgr);
++    if  ( ! pSImagerImp )
++    {
++        MY_LOGE("[ISImager] fail to new SImager");
++        return  NULL;
++    }
++    //
++    ISImagerBridge*  pISImager = new ISImagerBridge(pSImagerImp);
++    if  ( ! pISImager )
++    {
++        MY_LOGE("[ISImager] fail to new ISImagerBridge");
++        delete  pSImagerImp;
++        return  NULL;
++    }
++    //
++    return  pISImager;
++}
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camnode/JpegEncNode.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camnode/JpegEncNode.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/camnode/JpegEncNode.cpp	(revision 4266)
+@@ -127,6 +127,7 @@
+ {
+     public: // ctor & dtor
+         JpegEncNodeImpl(MBOOL createThread);
++		JpegEncNodeImpl(MBOOL createThread, sp<IParamsManager>  pParamsMgr);
+         ~JpegEncNodeImpl() {};
+ 
+     DECLARE_ICAMTHREADNODE_INTERFACES();
+@@ -144,6 +145,7 @@
+     MUINT32                                mQuality;
+     queue< MyJobInfo_t >                   mqJob;
+     MUINT32                                muJobDoneCount;
++	sp<IParamsManager>  mParamsMgr;
+ };
+ 
+ 
+@@ -157,7 +159,12 @@
+     return new JpegEncNodeImpl(createThread);
+ }
+ 
+-
++JpegEncNode*
++JpegEncNode::
++createInstance(MBOOL createThread,sp<IParamsManager>  pParamsMgr)
++{
++    return new JpegEncNodeImpl(createThread,pParamsMgr);
++}
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+@@ -195,9 +202,23 @@
+     addDataSupport( ENDPOINT_SRC, JPEG_ENC_HW_SRC );
+     addDataSupport( ENDPOINT_DST, JPEG_ENC_SW_DST );
+     addDataSupport( ENDPOINT_DST, JPEG_ENC_HW_DST );
++	mParamsMgr = NULL;
+ }
+ 
+-
++JpegEncNodeImpl::
++JpegEncNodeImpl(MBOOL createThread,sp<IParamsManager>  pParamsMgr)
++    : JpegEncNode(createThread)
++    , mIsSOI(MTRUE)
++    , mQuality(90)
++    , muJobDoneCount(0)
++	, mParamsMgr(pParamsMgr)
++{
++    //addSupport
++    addDataSupport( ENDPOINT_SRC, JPEG_ENC_SW_SRC );
++    addDataSupport( ENDPOINT_SRC, JPEG_ENC_HW_SRC );
++    addDataSupport( ENDPOINT_DST, JPEG_ENC_SW_DST );
++    addDataSupport( ENDPOINT_DST, JPEG_ENC_HW_DST );
++}
+ /*******************************************************************************
+ *
+ ********************************************************************************/
+@@ -465,7 +486,13 @@
+ {
+     MBOOL ret = MTRUE;
+ 
+-    ISImager *pISImager = ISImager::createInstance(jobInfo.mSrcBuffer);
++    ISImager *pISImager;
++	if(mParamsMgr != NULL && mParamsMgr->getVisidonMode()){
++		pISImager = ISImager::createInstance(jobInfo.mSrcBuffer,mParamsMgr);
++	}else{
++		pISImager = ISImager::createInstance(jobInfo.mSrcBuffer);
++	}
++	
+     if( !pISImager )
+     {
+         return MFALSE;
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.BufOps.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.BufOps.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.BufOps.cpp	(revision 4266)
+@@ -430,6 +430,7 @@
+                 (_msDuration_buffer_timestamp <= 0), "time inversion!(%lld)", _msDuration_buffer_timestamp
+             );
+             //
++            applyPreviewBeautification((unsigned char *)pStreamImgBuf->getVirAddr(),-1,-1);
+             if(mpExtImgProc != NULL)
+             {
+                 if(mpExtImgProc->getImgMask() & ExtImgProc::BufType_Display)
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.cpp	(revision 4266)
+@@ -40,9 +40,10 @@
+ #include <cutils/properties.h>
+ #include "DisplayClient.h"
+ using namespace NSDisplayClient;
++using namespace std;
+ //
+ 
+-
++#include <dlfcn.h>
+ /******************************************************************************
+ *
+ *******************************************************************************/
+@@ -68,9 +69,9 @@
+ *******************************************************************************/
+ IDisplayClient*
+ IDisplayClient::
+-createInstance()
++createInstance(sp<IParamsManager>  mpParamsMgr)
+ {
+-    return  new DisplayClient;
++    return  new DisplayClient(mpParamsMgr);
+ }
+ 
+ 
+@@ -78,7 +79,7 @@
+ *
+ *******************************************************************************/
+ DisplayClient::
+-DisplayClient()
++DisplayClient(sp<IParamsManager> pParamsMgr)
+     : IDisplayClient()
+     //
+     , mModuleMtx()
+@@ -86,6 +87,7 @@
+     , mIsDisplayEnabled(0)
+     , mState(eState_Suspend)
+     //
++    , mpParamsMgr(pParamsMgr)
+     , mpStreamImgInfo(NULL)
+     , mpStreamOps(NULL)
+     , mStreamBufList()
+@@ -116,10 +118,110 @@
+     char cLogLevel[PROPERTY_VALUE_MAX] = {'\0'};
+     ::property_get("debug.camera.display.loglevel", cLogLevel, "1");
+     miLogLevel = ::atoi(cLogLevel);
++    libVisidon = NULL;
++	mVisidonBeautyShotEngine = NULL;
++	Link_VDProcessPreviewFrame = NULL;
+     MY_LOGD("- debug.camera.display.loglevel=%s", cLogLevel);
+ }
+ 
++void
++DisplayClient::
++declareBeautyShotEngine(){
++MY_LOGD("%s: STARTTING", __FUNCTION__);  
++    libVisidon = :: dlopen("libVDBeautyShotAPI.so",RTLD_NOW);
++	
++	if(libVisidon==NULL){
++		MY_LOGD("declareBeautyShotEngine dlopen error=%s",dlerror());
++		return;
++	}
++    *(void **)&Link_VDInitializeBeautyShot = dlsym(libVisidon,"VDInitializeBeautyShot");
++	if(!Link_VDInitializeBeautyShot){
++		MY_LOGD("Link_VDInitializeBeautyShot open error=%s",dlerror());
++		return;
++	}
+ 
++    *(void **)&Link_VDReleaseBeautyShot = dlsym(libVisidon,"VDReleaseBeautyShot");
++	if(!Link_VDReleaseBeautyShot){
++		MY_LOGD("Link_VDReleaseBeautyShot open error=%s",dlerror());
++		return;
++	}
++	
++	*(void **)&Link_VDProcessPreviewFrame = dlsym(libVisidon,"VDProcessPreviewFrame");
++	if(!Link_VDProcessPreviewFrame){
++		MY_LOGD("Link_VDProcessPreviewFrame open error=%s",dlerror());
++		return;
++	}
++    MY_LOGD("declareBeautyShotEngine dlopen success");
++}
++
++void
++DisplayClient::
++initializeBeautyShotEngine()
++{
++    MY_LOGD("%s: STARTTING", __FUNCTION__);  
++
++    if(!mpParamsMgr->getVisidonMode() || libVisidon==NULL || !Link_VDInitializeBeautyShot) 
++		return;
++
++    int ret = 0;
++	if(mVisidonBeautyShotEngine!=NULL) {
++		// Release beauty engine					
++		MY_LOGD("%s: Releasing beauty shot engine", __FUNCTION__);
++		VDBeautyErrorCode err = Link_VDReleaseBeautyShot(&mVisidonBeautyShotEngine);
++		mVisidonBeautyShotEngine  = NULL;			
++	}
++
++    int cols = 0;		
++	int rows = 0;
++    mpParamsMgr->getPreviewSize(&cols, &rows);
++
++    void *ptr;
++    VDBeautyErrorCode err = Link_VDInitializeBeautyShot(cols, rows, VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL,MEMCPY_READPIXELS, &ptr);
++	if(err != VDBEAUTY_OK) {					
++		ret = 1;					
++		mVisidonBeautyShotEngine = NULL;			
++	}else {			
++		mVisidonBeautyShotEngine = ptr; 				
++		MY_LOGD("%s: Initialized engine ptr = %p\n", __FUNCTION__, mVisidonBeautyShotEngine); 		
++	}	 
++	return ;	
++}
++
++int 
++DisplayClient:: 
++applyPreviewBeautification(unsigned char *yuv, int skinSmoothing,int skinTone) {			
++	if(mpParamsMgr->getVisidonMode() && libVisidon!=NULL && Link_VDProcessPreviewFrame && mVisidonBeautyShotEngine != NULL ) {        
++	MY_LOGD("%s: applyPreviewBeautification STARTTING", __FUNCTION__);
++	VDBeautyShotData inputData;  
++    memset(inputData.faces,0,sizeof(VDBeautyFace)*MAX_BEAUTY_SHOT_FACES_IN_TRACK);				
++    mpParamsMgr->getPreviewSize(&inputData.imageCols, &inputData.imageRows);   		
++	inputData.imageFormat = YUV_420_NV21;        
++	inputData.imagePtr = yuv;
++	inputData.beautyFilterParams[SKIN_SMOOTHING] = mpParamsMgr->getVisidonModeSkin();
++	inputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = mpParamsMgr->getVisidonModeTone();
++	MY_LOGD("getVisidonModeSkin=%d,getVisidonModeTone=%d",mpParamsMgr->getVisidonModeSkin(),mpParamsMgr->getVisidonModeTone());
++	MY_LOGD("%s: CALLING VDProcessPreviewFrame (cols = %d, rows = %d, dataptr = %p, engineptr = %p)", 
++		__FUNCTION__, inputData.imageCols, inputData.imageRows, 
++		inputData.imagePtr, mVisidonBeautyShotEngine);				
++	VDBeautyErrorCode err = Link_VDProcessPreviewFrame(&inputData, mVisidonBeautyShotEngine);
++	if(err = VDBEAUTY_OK)            
++		return 0;    
++	}   
++	MY_LOGD("%s: end", __FUNCTION__);
++	return 1;
++}
++void 
++DisplayClient::
++releaseBeautyShotEngine() {   		
++	if(mpParamsMgr->getVisidonMode() && libVisidon!= NULL && Link_VDReleaseBeautyShot && mVisidonBeautyShotEngine!=NULL ) {
++		// Release beauty engine        			
++		MY_LOGD("%s: Releasing beauty shot engine", __FUNCTION__);        			
++		VDBeautyErrorCode err = Link_VDReleaseBeautyShot(&mVisidonBeautyShotEngine);       			
++		mVisidonBeautyShotEngine  = NULL;    		
++		}		 		
++	return ;	
++}
++
+ /******************************************************************************
+ *
+ *******************************************************************************/
+@@ -137,6 +239,10 @@
+ DisplayClient::
+ init()
+ {
++    if(mpParamsMgr->getVisidonMode()){
++		declareBeautyShotEngine();
++	    initializeBeautyShotEngine();
++	}
+     bool ret = false;
+     //
+     MY_LOGD("+");
+@@ -157,6 +263,10 @@
+ DisplayClient::
+ uninit()
+ {
++	releaseBeautyShotEngine();
++	libVisidon = NULL;
++	mVisidonBeautyShotEngine = NULL;
++	Link_VDProcessPreviewFrame = NULL;
+     status_t status = OK;
+     MY_LOGI("+ getStrongCount(%d)", getStrongCount());
+     //
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/DisplayClient/DisplayClient.h	(revision 4266)
+@@ -49,6 +49,130 @@
+ 
+ namespace android {
+ namespace NSDisplayClient {
++/**
++    Max number of filters
++    */
++#define NUMBER_OF_BEAUTYFILTERS MAX_BEAUTY_FILTER
++#define MAX_BEAUTY_SHOT_FACES_IN_TRACK 5
++
++    /**
++    Enumeration for different beauty filters
++    */
++    typedef enum _VDBeautyFilters {
++        SKIN_SMOOTHING=0, /**< Intelligent skin smoothing algorithm*/
++        SPOT_SMOOTHING=1,/**< Adaptive spot and wrinkle removal algorithm (part of SKIN_SMOOTHING)*/
++        FACE_CONTOURING=2, /**< Face contouring algorithm*/
++        TEETH_WHITENING=3,/**< Teeth whitening algorithm*/
++        EYE_SHAPING=4,/**< Eye enlargement algorithm*/
++        CHEEK_BLUSHING=5,/**< Cheek blusher algorithm*/
++        SKIN_TONE_ADJUSTING=6,/**< Skin toning algorithm*/
++        MOUTH_SHAPING=7,/**< Mouth shaping algorithm*/
++        NOSE_SHAPING = 8,/**< Nose shaping algorithm*/
++        EYEBROW_SHAPING=9,/**< Eye-brown shaping algorithm*/
++        FACE_SHAPING=10, /**< Face shaping (thinning) algorithm*/
++        OUT_FOCUS=11, /**< Sharp face area, blurred background */
++        EYE_BRIGHTENING=12, /**< Eye brightening algorithm */
++		LIP_TONING=13, /**< Lip enhancement algorithm */
++        SKIN_COLOR_ADJUSTING=14, /**< Skin color adjustment algorithm (red tone adjustment) */
++		SKIN_COLOR_CHANGE = 15, /**< Skin color changing alogithm */
++        FACE_BOKEH = 16,
++        MAX_BEAUTY_FILTER /**< Keep this entry last */
++    } VDBeautyFilters;
++
++    /**
++    Enumeration for different image formats supported by the engine.
++    */
++    typedef enum _VDBeatyShotImageFormat
++    {
++        YUV_420_NV12=0, /**< YUV420SPNV12 format*/
++        YUV_420_NV21=1, /**< YUV420SPNV21 format*/
++        RGB_888=2,  /**< 24-bit RGB format*/
++        JPEG_COMPRESSED=3, /**< JPEG compressed format*/
++		YUV_YUYV = 4, /**< YUYV format (YUYV...YUYV..YUYV)*/
++		YUV_YV12 = 5, /**< YUV YV12 format */
++        YUV_UYVY = 6, /**< UYVY format (UYVY...UYVY..UYVY)*/
++        YUV_PLANAR = 7, /**< Planar YUV format given with three separate pointers to planes */
++        YUV_NV21_SEPARATED = 8 /**< Same as YUV_420_NV21 except input/output is given with separate pointers to luma (imagePtr) and chroma (imagePtrU) channels. */
++    } VDBeatyShotImageFormat;
++
++
++    /**
++    Enumeration for different memory modes to be used with the GPU processing.
++    Some devices do not support GraphicBuffer memory copying (MEMCPY_GRAPHICBUFFER)
++    and one needs to use read pixels approach (MEMCPY_READPIXELS).
++    */
++    typedef enum _VDBeautyEngineGPUMemoryMode
++    {
++        MEMCPY_READPIXELS=0, /**< Use glReadPixels to reed data from GPU*/
++        MEMCPY_GRAPHICBUFFER=1,/**< Use GraphicBuffer (gralloc) memory copying to read data from GPU*/
++        RENDER_TO_WINDOW=2,/**< Render to window. Do not read data from GPU */
++    } VDBeautyEngineGPUMemoryMode;
++
++    /**
++    Enumeration for different operation modes supported by the engine.
++    */
++    typedef enum _VDBeautyEngineProcessingMode
++    {
++        VDBEAUTY_REALTIME_WITH_FACETRACKING_AND_STILL = 0, /**< Use both preview and still processing and apply face tracking in preview mode.*/
++        VDBEAUTY_REALTIME_AND_STILL = 1,/**< Use both preview and still processing but do not apply face tracking in preview mode (filtering is applied to skin like areas instead of detected face)*/
++        VDBEAUTY_STILL = 2,/**< Use only still image processing*/
++    } VDBeautyEngineProcessingMode;
++
++    /**
++    Structure for face coordinates that may be provided outside beauty engine (i.e. from
++    hardware face tracker).
++    */
++    typedef struct _VDBeautyFace
++    {
++        int left; /**< Left x coordinate of face in the image*/
++        int top; /**< Top y coordinate of face in the image*/
++        int right; /**< Rigt x coordinate of face in the image*/
++        int bottom;/**< Bottom y coordinate of face in the image*/
++        int leftEyeX; /**< Left eye x coordinate if available*/
++        int leftEyeY;/**< Left eye y coordinate if available*/
++        int rightEyeX; /**< Right eye x coordinate if available*/
++        int rightEyeY; /**< Right eye t coordinate if available*/
++		int smile;
++    }VDBeautyFace;
++
++    /**
++    Structure for input/output data to be used with processing functions.
++    */
++    typedef struct _VDBeautyShotData
++    {
++        unsigned char *imagePtr; /**< Pointer to image data (input/output) */
++        unsigned char *imagePtrU; /**< Pointer to image data U plane (input/output) when format is YUV_PLANAR or pointer to UV plane when format is YUV_NV21_SEPARATED  */
++        unsigned char *imagePtrV; /**< Pointer to image data V plane (input/output) when format is YUV_PLANAR. */
++        int imageCols; /**< Image width*/
++        int imageRows;/**< Image height*/
++        int nbrOfFaces; /**< Number of faces in the faces array */
++        VDBeautyFace faces[MAX_BEAUTY_SHOT_FACES_IN_TRACK];
++        int jpegDataSize;/**< Compressed data size in case of JPEG format*/
++        int jpegSavingQuality; /**< JPEG saving quality (0-100)*/
++        unsigned char *outputJpeg; /**< Newly allocated JPEG compressed data in case of JPEG format*/
++        int ouputJpegDataSize; /**< Compressed output data size in case of JPEG format*/
++        VDBeatyShotImageFormat imageFormat; /**< Used image format*/
++        int32_t beautyFilterParams[NUMBER_OF_BEAUTYFILTERS]; /**< Filter strength parameters*/
++        int forceSmoothing; /**< Force face smoothing even though no face is found (apply to skin like regions)*/
++		int colorNoiseReduction; /**< Color noise (chroma) reduction strength (0-10) */
++		int luminanceNoiseReduction; /**< Luminance noise reduction strength (0-10) */
++		int sharpening; /**< Sharpening strength (0-10) */
++		int padRows;	/**< Number of extra rows after valid Y rows before chroma channel. */
++		int padCols;	/**< Number of extra pixels after each row to be ignored. */
++		int stillImageRotation; /**< Defines how still image and preview frame are oriented w.r.t. each other. Supported values are 90 (=preview rotated toward right), 180 (=preview is up-side down), 270 (=preview rotated towards left) */
++		int previewMirrored; /**< Defines if still image and preview frame are mirrored w.r.t. each other. Supported values are 0 (=preview is not mirrored), and 1 (=previw is mirrored). */
++		int skipPreviewIfStillRunning; /**< Skip preview beauty processing if still image processing is on-going. Supported values are 0 (=do not skip = apply normally), and 1 (=skip preview processing if still is running) */
++		int skipPreviewProcessing; /**< Skip preview processing but take the ouput from the frame buffer pipeline to keep same frame dealy as with actual processing */
++    }VDBeautyShotData;
++
++    /**
++    Enumeration for different error codes returend by API functions.
++    */
++    typedef enum _VDBeautyErrorCode
++    {
++        VDBEAUTY_OK=0, /**< Operation ok*/
++        VDBEAUTY_NOK=1, /**< Operation not ok*/
++    } VDBeautyErrorCode;
+ /******************************************************************************
+ *
+ *******************************************************************************/
+@@ -101,7 +225,7 @@
+      * Uninitialize the display adapter.
+      */
+     virtual bool                    uninit();
+-
++    sp<IParamsManager>              mpParamsMgr; 
+     /**
+      * Set the preview_stream_ops to which frames are sent.
+      *
+@@ -154,7 +278,7 @@
+     virtual status_t                dump(int fd, Vector<String8>const& args);
+ 
+ public:     ////                    Instantiation.
+-                                    DisplayClient();
++                                    DisplayClient(sp<IParamsManager>   pParamsMgr);
+     virtual                         ~DisplayClient();
+ 
+ public:     ////                    Display Rotation
+@@ -290,6 +414,26 @@
+     ExtImgProc*                     mpExtImgProc;
+ protected:  ////                    dump
+     void                            dumpImgBuf_If(sp<StreamImgBuf>const& rpImgBuf);
++	
++	public:
++	void initializeBeautyShotEngine();  
++	void declareBeautyShotEngine();
++	// Release beayty engine
++	void releaseBeautyShotEngine();    
++	// Process preview frame with beauty engine
++	int applyPreviewBeautification(unsigned char *yuv, 
++							int skinSmoothingStrenght, 
++							int skinToneAdjustmentStrength);
++	
++   
++	// Pointer to beauty engine instance
++	void *mVisidonBeautyShotEngine;
++	void *libVisidon;
++
++	
++	VDBeautyErrorCode (*Link_VDInitializeBeautyShot)(int previewCols,int previewRows,VDBeautyEngineProcessingMode processingMode, VDBeautyEngineGPUMemoryMode gpuMemoryMode, void ** engine);
++	VDBeautyErrorCode (*Link_VDReleaseBeautyShot)(void ** engine);
++	VDBeautyErrorCode (*Link_VDProcessPreviewFrame)(VDBeautyShotData *data, void *engine);
+ };
+ 
+ 
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/arm64-v8a/libVDBeautyShotAPI.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/arm64-v8a/libVDBeautyShotAPI.so
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/arm64-v8a/libVDBeautyShotAPI.so	(revision 0)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/arm64-v8a/libVDBeautyShotAPI.so	(revision 4266)
+
+Property changes on: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/arm64-v8a/libVDBeautyShotAPI.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/armeabi-v7a/libVDBeautyShotAPI.so
+===================================================================
+Cannot display: file marked as a binary type.
+svn:mime-type = application/octet-stream
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/armeabi-v7a/libVDBeautyShotAPI.so
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/armeabi-v7a/libVDBeautyShotAPI.so	(revision 0)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/armeabi-v7a/libVDBeautyShotAPI.so	(revision 4266)
+
+Property changes on: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/client/libs/armeabi-v7a/libVDBeautyShotAPI.so
+___________________________________________________________________
+Added: svn:mime-type
+## -0,0 +1 ##
++application/octet-stream
+\ No newline at end of property
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/device/Cam1DeviceBase.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/device/Cam1DeviceBase.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/device/Cam1DeviceBase.cpp	(revision 4266)
+@@ -1256,7 +1256,7 @@
+         }
+     }
+     //  [3.1] create a Display Client.
+-    mpDisplayClient = IDisplayClient::createInstance();
++    mpDisplayClient = IDisplayClient::createInstance(mpParamsMgr);
+     if  ( mpDisplayClient == 0 )
+     {
+         MY_LOGE("Cannot create mpDisplayClient");
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/common/paramsmgr/params/ParamsManager.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/common/paramsmgr/params/ParamsManager.cpp	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/common/paramsmgr/params/ParamsManager.cpp	(revision 4266)
+@@ -386,7 +386,33 @@
+     return  getStr(CameraParameters::KEY_PREVIEW_FORMAT);
+ }
+ 
++bool
++ParamsManager::
++getVisidonMode() const
++{
++    char const*const pVisidonMode = mParameters.get(CameraParameters::KEY_VISIDON_MODE);
++	if(pVisidonMode== NULL){ 
++		return false;
++	}else if(0 == ::strcmp(pVisidonMode, CameraParameters::KEY_VISIDON_MODE_ON )){	
++		return true;
++	}else{
++		return false;
++	}
++}
+ 
++int32_t
++ParamsManager::
++getVisidonModeSkin() const
++{
++    return  getInt(CameraParameters::KEY_VISIDON_SKIN_VALUE);
++}
++
++int32_t
++ParamsManager::
++getVisidonModeTone() const
++{
++    return  getInt(CameraParameters::KEY_VISIDON_TONE_VALUE);
++}
+ /******************************************************************************
+ *
+ *******************************************************************************/
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/common/paramsmgr/inc/ParamsManager.h
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/common/paramsmgr/inc/ParamsManager.h	(revision 4265)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/v1/common/paramsmgr/inc/ParamsManager.h	(revision 4266)
+@@ -103,7 +103,9 @@
+     virtual void                        getFaceBeautyBeautifiedPosition(Vector<FACE_BEAUTY_POS>& pos) const;
+     virtual bool                        getPDAFSupported() const;
+     virtual bool                        getDNGSupported() const;
+-
++    virtual bool                 	    getVisidonMode() const;
++	virtual int32_t                     getVisidonModeSkin() const;
++	virtual int32_t                     getVisidonModeTone() const;
+     /*
+      * @brief update brightness value.
+      *

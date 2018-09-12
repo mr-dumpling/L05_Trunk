@@ -1,0 +1,99 @@
+Index: packages/apps/Bluetooth/src/com/android/bluetooth/opp/BluetoothOppNotification.java
+===================================================================
+--- packages/apps/Bluetooth/src/com/android/bluetooth/opp/BluetoothOppNotification.java	(revision 5631)
++++ packages/apps/Bluetooth/src/com/android/bluetooth/opp/BluetoothOppNotification.java	(revision 5632)
+@@ -54,6 +54,7 @@
+ import android.os.Handler;
+ import android.os.Message;
+ import android.os.Process;
++import android.media.AudioManager;
+ 
+ import java.util.HashMap;
+ import android.os.PowerManager;
+@@ -641,29 +642,63 @@
+                     PendingIntent.getBroadcast(mContext, 0,
+                             new Intent(baseIntent).setAction(Constants.ACTION_DECLINE), 0)).build();
+ 
+-            Notification n = new Notification.Builder(mContext)
+-                .setOnlyAlertOnce(true)
+-                .setOngoing(true)
+-                .setVibrate(new long[] { 200 })
+-                .setWhen(info.mTimeStamp)
+-                .setDefaults(Notification.DEFAULT_SOUND)
+-                .setPriority(Notification.PRIORITY_HIGH)
+-                .addAction(declineAction)
+-                .addAction(acceptAction)
+-                .setContentIntent(PendingIntent.getBroadcast(mContext, 0,
+-                        new Intent(baseIntent).setAction(Constants.ACTION_INCOMING_FILE_CONFIRM), 0))
+-                .setDeleteIntent(PendingIntent.getBroadcast(mContext, 0,
+-                        new Intent(baseIntent).setAction(Constants.ACTION_HIDE), 0))
+-                .setColor(mContext.getResources().getColor(
+-                        com.android.internal.R.color.system_notification_accent_color))
+-                .setContentTitle(mContext.getText(R.string.incoming_file_confirm_Notification_title))
+-                .setContentText(info.mFileName)
+-                .setStyle(new Notification.BigTextStyle().bigText(mContext.getString(
+-                        R.string.incoming_file_confirm_Notification_content,
+-                        info.mDeviceName, info.mFileName)))
+-                .setSubText(Formatter.formatFileSize(mContext, info.mTotalBytes))
+-                .setSmallIcon(R.drawable.bt_incomming_file_notification)
+-                .build();
++            AudioManager audioManager =
++                    (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
++            Notification n = null;
++            int mode = audioManager.getRingerMode();
++            switch (mode) {
++                case AudioManager.RINGER_MODE_VIBRATE:
++                    n = new Notification.Builder(mContext)
++                            .setOnlyAlertOnce(true)
++                            .setOngoing(true)
++                            .setVibrate(new long[]{200, 1000})
++                            .setWhen(info.mTimeStamp)
++                            .setDefaults(Notification.DEFAULT_SOUND)
++                            .setPriority(Notification.PRIORITY_HIGH)
++                            .addAction(declineAction)
++                            .addAction(acceptAction)
++                            .setContentIntent(PendingIntent.getBroadcast(mContext, 0,
++                                    new Intent(baseIntent).setAction(Constants.ACTION_INCOMING_FILE_CONFIRM), 0))
++                            .setDeleteIntent(PendingIntent.getBroadcast(mContext, 0,
++                                    new Intent(baseIntent).setAction(Constants.ACTION_HIDE), 0))
++                            .setColor(mContext.getResources().getColor(
++                                    com.android.internal.R.color.system_notification_accent_color))
++                            .setContentTitle(mContext.getText(R.string.incoming_file_confirm_Notification_title))
++                            .setContentText(info.mFileName)
++                            .setStyle(new Notification.BigTextStyle().bigText(mContext.getString(
++                                    R.string.incoming_file_confirm_Notification_content,
++                                    info.mDeviceName, info.mFileName)))
++                            .setSubText(Formatter.formatFileSize(mContext, info.mTotalBytes))
++                            .setSmallIcon(R.drawable.bt_incomming_file_notification)
++                            .build();
++                    break;
++                default:
++                    n = new Notification.Builder(mContext)
++                            .setOnlyAlertOnce(true)
++                            .setOngoing(true)
++                            .setVibrate(new long[]{200})
++                            .setWhen(info.mTimeStamp)
++                            .setDefaults(Notification.DEFAULT_SOUND)
++                            .setPriority(Notification.PRIORITY_HIGH)
++                            .addAction(declineAction)
++                            .addAction(acceptAction)
++                            .setContentIntent(PendingIntent.getBroadcast(mContext, 0,
++                                    new Intent(baseIntent).setAction(Constants.ACTION_INCOMING_FILE_CONFIRM), 0))
++                            .setDeleteIntent(PendingIntent.getBroadcast(mContext, 0,
++                                    new Intent(baseIntent).setAction(Constants.ACTION_HIDE), 0))
++                            .setColor(mContext.getResources().getColor(
++                                    com.android.internal.R.color.system_notification_accent_color))
++                            .setContentTitle(mContext.getText(R.string.incoming_file_confirm_Notification_title))
++                            .setContentText(info.mFileName)
++                            .setStyle(new Notification.BigTextStyle().bigText(mContext.getString(
++                                    R.string.incoming_file_confirm_Notification_content,
++                                    info.mDeviceName, info.mFileName)))
++                            .setSubText(Formatter.formatFileSize(mContext, info.mTotalBytes))
++                            .setSmallIcon(R.drawable.bt_incomming_file_notification)
++                            .build();
++                    break;
++            }
++
+             mNotificationMgr.notify(info.mID, n);
+             PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+             PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, "MMS_RECEIVER");

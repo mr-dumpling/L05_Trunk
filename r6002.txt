@@ -1,0 +1,40 @@
+Index: frameworks/base/services/core/java/com/android/server/MountService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/MountService.java	(revision 6001)
++++ frameworks/base/services/core/java/com/android/server/MountService.java	(revision 6002)
+@@ -1286,6 +1286,9 @@
+                 Slog.d(TAG, "VOLUME_DESTROYED");
+                 if (cooked.length != 2) break;
+                 Slog.d(TAG, "destroyed volumeInfo=" + mVolumes.get(cooked[1]));
++                // Qj add for show toast message when usb otg unmounted for 115675 by zhangle at 2018/01/10 start
++                popUSBOTGUnmountToast(mVolumes.get(cooked[1]));
++                // Qj add for show toast message when usb otg unmounted for 115675 by zhangle at 2018/01/10 end
+                 mVolumes.remove(cooked[1]);
+                 break;
+             }
+@@ -4499,7 +4502,25 @@
+         });
+     }
+ 
++    // Qj add for show toast message when usb otg unmounted for 115675 by zhangle at 2018/01/10 start
+     /**
++     * show toast message when USBOTG unmounted
++     */
++    private void popUSBOTGUnmountToast(VolumeInfo vol) {
++        if(!vol.isUSBOTG()) {
++            return;
++        }
++        mHandler.post(new Runnable() {
++            public void run() {
++                Toast.makeText(mContext,String.format(mContext.getString(
++                        com.android.internal.R.string.otgusb_device_unmount),vol.fsLabel),
++                        Toast.LENGTH_LONG).show();
++            }
++        });
++    }
++    // Qj add for show toast message when usb otg unmounted for 115675 by zhangle at 2018/01/10 end
++
++    /**
+      * open setting activity about Storage & USB
+      *
+      */

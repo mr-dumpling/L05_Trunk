@@ -1,0 +1,397 @@
+Index: frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+===================================================================
+--- frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 2974)
++++ frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java	(revision 2975)
+@@ -21955,7 +21955,8 @@
+     }
+ 
+     //ADD-S By Justin.Shen for Hide/Show navigation-bar
+-    private String mLastPkgName = "camer_closed";
++    private String mLastStatus = null;
++    private String mLastPkgName = null;
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
+     
+     private final ActivityRecord resumedAppLocked() {
+@@ -21988,14 +21989,25 @@
+         if(act != null) {
+             if(!pkg.equals("com.google.android.packageinstaller")) {
+                 String str = (pkg.equals("com.mediatek.hz.camera") ? 1 : 0) + ";" + (act.mActivityType==ActivityRecord.HOME_ACTIVITY_TYPE ? 1 : 0);
+-                if(mLastPkgName == null || !str.equals(mLastPkgName)) {
++                if(mLastStatus == null || !str.equals(mLastStatus)) {
+                     Settings.System.putString(mContext.getContentResolver(),"tct_top_package_name", str);
+-                    mLastPkgName = str;
+-                    Log.d(TAG, "resumedAppLocked: mLastPkgName = " + mLastPkgName);
++                    mLastStatus = str;
++                    Log.d(TAG, "resumedAppLocked: mLastStatus = " + mLastStatus);
+                 }
+             }
+         }
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
++        
++        //ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9
++        if ("1".equals(SystemProperties.get("ro.mtk_fullscreen_switch"))) {
++            if(pkg != null) {
++                if(mLastPkgName == null || !pkg.equals(mLastPkgName)) {
++                    Settings.System.putString(mContext.getContentResolver(),"current_package_name", pkg);
++                    mLastPkgName = pkg;
++                }
++            }
++        }
++        //ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9
+         return act;
+     }
+ 
+Index: frameworks/base/packages/SystemUI/Android.mk
+===================================================================
+--- frameworks/base/packages/SystemUI/Android.mk	(revision 2974)
++++ frameworks/base/packages/SystemUI/Android.mk	(revision 2975)
+@@ -31,6 +31,10 @@
+     framework-protos \
+     SystemUI-proto-tags
+ 
++ifeq ($(strip $(MTK_FULLSCREEN_SWITCH_SUPPORT)),yes)
++LOCAL_STATIC_JAVA_LIBRARIES += FullscreenSwitchService
++endif
++
+ # LOCAL_JNI_SHARED_LIBRARIES := libyv12util
+ 
+ ifeq (yes,$(strip $(TCL_LSCREEN_SUPPORT)))
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 2974)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java	(revision 2975)
+@@ -49,6 +49,9 @@
+ import android.content.IntentSender;
+ import android.content.pm.IPackageManager;
+ import android.content.pm.PackageManager;
++import android.content.pm.PackageManager.NameNotFoundException;
++import android.content.pm.PackageInfo;
++import android.content.pm.ResolveInfo;
+ import android.content.pm.UserInfo;
+ import android.content.res.Configuration;
+ import android.content.res.Resources;
+@@ -104,6 +107,7 @@
+ import android.view.KeyEvent;
+ import android.view.LayoutInflater;
+ import android.view.MotionEvent;
++import android.view.Surface;
+ import android.view.ThreadedRenderer;
+ import android.view.View;
+ import android.view.ViewGroup;
+@@ -118,6 +122,7 @@
+ import android.widget.ImageView;
+ import android.widget.LinearLayout;
+ import android.widget.TextView;
++import android.widget.Toast;
+ 
+ import com.android.internal.logging.MetricsLogger;
+ import com.android.internal.logging.MetricsProto.MetricsEvent;
+@@ -201,6 +206,7 @@
+ /// M: BMW
+ import com.mediatek.multiwindow.MultiWindowManager;
+ 
++import com.mediatek.fullscreenswitch.IFullscreenSwitchManager;
+ 
+ import com.mediatek.systemui.ext.IStatusBarPlmnPlugin;
+ import com.mediatek.systemui.PluginManager;
+@@ -808,6 +814,14 @@
+                     Settings.System.getUriFor("tct_top_package_name"), true,
+                     mActivityRecordObserver);
+         //ADD-E By Justin.Shen for Hide/Show navigation-bar
++        
++        //ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9
++        mFullscreenSwitchManager = IFullscreenSwitchManager.Stub.asInterface(ServiceManager
++                .checkService("FullscreenSwitchService"));
++        mContext.getContentResolver().registerContentObserver(
++                    Settings.System.getUriFor("current_package_name"), true,
++                    mSwitchFullScreenObserver);
++        //ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9
+     }
+ 	
+ 	//add by wqq for turn to mute start{
+@@ -5823,4 +5837,193 @@
+         }
+     };
+     //ADD-E By Justin.Shen for Hide/Show navigation-bar
++    
++    //ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9
++    private LinearLayout mSwitchScreenModeView = null;
++    private TextView mSwitchFullScreenTextView = null;
++    private String mPackageName = null;
++    private String mClassName = null;
++    private IFullscreenSwitchManager mFullscreenSwitchManager = null;
++    
++    private void showToast() {
++        Toast.makeText(mContext, R.string.switch_screen_mode_toast, Toast.LENGTH_LONG).show();
++    }
++    
++    private void setFullscreenMode() {
++        try {
++            mFullscreenSwitchManager.setFullscreenMode(mPackageName, true);
++        } catch (RemoteException e) {
++            Log.e(TAG, "setFullscreenMode error in " + e.toString());
++        }
++    }
++    
++    private String getClassNameByPackageName(String packageName) {
++        String className = null;
++        PackageInfo packageinfo = null;
++        try {
++            packageinfo = mContext.getPackageManager().getPackageInfo(packageName, 0);
++        } catch (NameNotFoundException e) {
++            e.printStackTrace();
++        }
++        
++        if (packageinfo == null) {
++            return null;
++        }
++        
++        Intent resolveIntent = new Intent(Intent.ACTION_MAIN, null);
++        resolveIntent.addCategory(Intent.CATEGORY_LAUNCHER);
++        resolveIntent.setPackage(packageinfo.packageName);
++        
++        List<ResolveInfo> resolveinfoList = mContext.getPackageManager().queryIntentActivities(resolveIntent, 0);
++      
++        ResolveInfo resolveinfo = resolveinfoList.iterator().next();
++        if (resolveinfo != null) {
++            className = resolveinfo.activityInfo.name;
++        }
++        Log.d(TAG, "getClassNameByPackageName: className = " + className);
++        return className;
++    }
++    
++    private void restartApplication() {
++        Log.d(TAG, "restartApplication: mPackageName = " + mPackageName);
++        Log.d(TAG, "restartApplication: mClassName = " + mClassName);
++        if(mPackageName != null && mClassName != null) {
++            Intent intent = new Intent(Intent.ACTION_MAIN);
++            intent.addCategory(Intent.CATEGORY_LAUNCHER);
++            ComponentName cn = new ComponentName(mPackageName, mClassName);
++            
++            intent.setComponent(cn);
++            mContext.startActivity(intent);
++        }
++    }
++    
++    private void createSwitchScreenModeView(Context context) {
++        mSwitchScreenModeView = (LinearLayout) View.inflate(
++                context, R.layout.switch_full_screen_mode, null);
++                
++        mSwitchFullScreenTextView = (TextView)mSwitchScreenModeView.findViewById(R.id.switch_full_screen_butn);
++        
++        mSwitchFullScreenTextView.setOnTouchListener(new View.OnTouchListener() {
++            @Override
++            public boolean onTouch(View v, MotionEvent event) {
++                checkUserAutohide(v, event);
++                switch (event.getAction()) {
++                    case MotionEvent.ACTION_DOWN:
++                        setFullscreenMode();
++                        removeSwitchScreenModeView();
++                        mHandler.postDelayed(new Runnable() {
++                            @Override
++                            public void run() {
++                                restartApplication();
++                                showToast();
++                            }
++                        }, 10);
++                        break;
++                        
++                    case MotionEvent.ACTION_UP:
++                    case MotionEvent.ACTION_CANCEL:
++                        break;
++                }
++                return false;
++            }
++        });
++        
++        try {
++            WindowManagerGlobal.getWindowManagerService()
++                    .watchRotation(new IRotationWatcher.Stub() {
++                @Override
++                public void onRotationChanged(int rotation) throws RemoteException {
++                    Message msg = Message.obtain(mHandler, () -> {
++                        if(mSwitchScreenModeView != null) {
++                            mWindowManager.updateViewLayout(mSwitchScreenModeView, getSwitchScreenModeLayoutParams(rotation));
++                        }
++                    });
++                    msg.setAsynchronous(true);
++                    mHandler.sendMessageAtFrontOfQueue(msg);
++                }
++            });
++        } catch (RemoteException e) {
++            throw e.rethrowFromSystemServer();
++        }
++        
++        final int rot = mDisplay.getRotation();
++        mWindowManager.addView(mSwitchScreenModeView, getSwitchScreenModeLayoutParams(rot));
++    }
++    
++    private void removeSwitchScreenModeView() {
++        if(mSwitchScreenModeView != null) {
++            mWindowManager.removeView(mSwitchScreenModeView);
++            mSwitchScreenModeView = null;
++        }
++    }
++
++    private WindowManager.LayoutParams getSwitchScreenModeLayoutParams(int rotation) {
++        Log.d(TAG, "getSwitchScreenModeLayoutParams: rotation = " + rotation);
++        int w = LayoutParams.MATCH_PARENT;
++        int h = 80;
++        int xpos = 0;
++        int ypos = 1312;
++        if(rotation == Surface.ROTATION_0) {
++            w = LayoutParams.MATCH_PARENT;
++            h = 80;
++            xpos = 0;
++            ypos = 1312;
++        } else if(rotation == Surface.ROTATION_90) {
++            w = 80;
++            h = LayoutParams.MATCH_PARENT;
++            xpos = 1312;
++            ypos = 0;
++        } else if(rotation == Surface.ROTATION_180) {
++            w = LayoutParams.MATCH_PARENT;
++            h = 80;
++            xpos = 0;
++            ypos = 0;
++        } else if(rotation == Surface.ROTATION_270) {
++            w = 80;
++            h = LayoutParams.MATCH_PARENT;
++            xpos = -656;
++            ypos = 0;
++        }
++        
++        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
++                w, h, xpos, ypos,
++                WindowManager.LayoutParams.TYPE_SYSTEM_ALERT,
++                    0
++                    | WindowManager.LayoutParams.FLAG_TOUCHABLE_WHEN_WAKING
++                    | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
++                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
++                PixelFormat.TRANSLUCENT);
++        if (ActivityManager.isHighEndGfx()) {
++            lp.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
++        }
++
++        lp.setTitle("SwitchScreenModeView");
++        lp.windowAnimations = 0;
++        return lp;
++    }
++    
++    final private ContentObserver mSwitchFullScreenObserver = new ContentObserver(mHandler) {
++        @Override
++        public void onChange(boolean selfChange) {
++            boolean isFull = false;
++            String packageName = Settings.System.getString(mContext.getContentResolver(), "current_package_name");
++            Log.d(TAG, "mSwitchFullScreenObserver: packageName = " + packageName);
++            if(packageName != null) {
++                try {
++                    isFull = mWindowManagerService.getFullscreenMode(packageName);
++                } catch (RemoteException e) {
++                    throw e.rethrowFromSystemServer();
++                }
++                
++                if(isFull) {
++                    removeSwitchScreenModeView();
++                } else {
++                    mPackageName = packageName;
++                    mClassName = getClassNameByPackageName(packageName);
++                    createSwitchScreenModeView(mContext);
++                }
++            }
++        }
++    };
++    //ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9
+ }
+Index: frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml	(revision 2974)
++++ frameworks/base/packages/SystemUI/res/values-zh-rCN/strings.xml	(revision 2975)
+@@ -680,4 +680,9 @@
+     	<string name="navigation_bar_tips_settings_button">设置</string>
+ 	<string name="face_discern_failure">识别失败</string>
+ 	<string name="face_overtime">没有被发现的面孔</string>
++    
++    <!-- ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++    <string name="switch_screen_mode">点击此处切换到全屏模式</string>
++    <string name="switch_screen_mode_toast">屏幕切换成18:9，正在重启应用...</string>
++    <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml	(revision 2974)
++++ frameworks/base/packages/SystemUI/res/values-zh-rTW/strings.xml	(revision 2975)
+@@ -675,4 +675,9 @@
+     	<string name="navigation_bar_tips_settings_button">設置</string>
+ 	<string name="face_discern_failure">識別失敗</string>
+ 	<string name="face_overtime">沒有被發現的面孔</string>
++    
++    <!-- ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++    <string name="switch_screen_mode">點擊此處切換為全屏模式</string>
++    <string name="switch_screen_mode_toast">屏幕切換為18:9，正在重啓應用...</string>
++    <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml	(revision 2974)
++++ frameworks/base/packages/SystemUI/res/values-zh-rHK/strings.xml	(revision 2975)
+@@ -677,4 +677,9 @@
+     	<string name="navigation_bar_tips_settings_button">設置</string>
+ 	<string name="face_discern_failure">識別失敗</string>
+ 	<string name="face_overtime">沒有被發現的面孔</string>
++    
++    <!-- ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++    <string name="switch_screen_mode">點擊此處切換為全屏模式</string>
++    <string name="switch_screen_mode_toast">屏幕切換為18:9，正在重啓應用...</string>
++    <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+ </resources>
+Index: frameworks/base/packages/SystemUI/res/layout/switch_full_screen_mode.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/layout/switch_full_screen_mode.xml	(revision 0)
++++ frameworks/base/packages/SystemUI/res/layout/switch_full_screen_mode.xml	(revision 2975)
+@@ -0,0 +1,16 @@
++<?xml version="1.0" encoding="utf-8"?>
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="#FF888888">
++
++    <TextView
++        android:id="@+id/switch_full_screen_butn"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:text="@string/switch_screen_mode"
++        android:textSize="16dp"
++        android:gravity="center"
++        android:background="#00000000"/>
++</LinearLayout>
+Index: frameworks/base/packages/SystemUI/res/values/strings.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 2974)
++++ frameworks/base/packages/SystemUI/res/values/strings.xml	(revision 2975)
+@@ -1706,4 +1706,9 @@
+ 	<string name="face_overtime">"No face was detected"</string>
+     <!-- ADD-E By Justin.Shen for Hide/Show navigation-bar -->
+     
++    <!-- ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++    <string name="switch_screen_mode">Touch here to fill entire screen</string>
++    <string name="switch_screen_mode_toast">Screen change to 18:9 and restart application now ...</string>
++    <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++    
+ </resources>
+Index: frameworks/base/packages/SystemUI/AndroidManifest.xml
+===================================================================
+--- frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 2974)
++++ frameworks/base/packages/SystemUI/AndroidManifest.xml	(revision 2975)
+@@ -188,6 +188,10 @@
+ 
+     <!-- shortcut manager -->
+     <uses-permission android:name="android.permission.RESET_SHORTCUT_MANAGER_THROTTLING" />
++    
++    <!-- ADD-S By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
++    <uses-permission android:name="android.permission.FORCE_STOP_PACKAGES"/>
++    <!-- ADD-E By Justin.Shen for switch screen mode from 16:9 to 18:9 -->
+ 
+     <application
+         android:name=".SystemUIApplication"

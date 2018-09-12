@@ -1,0 +1,23 @@
+Index: vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/JpegCodec.cpp
+===================================================================
+--- vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/JpegCodec.cpp	(revision 6201)
++++ vendor/mediatek/proprietary/hardware/mtkcam/legacy/platform/mt6739/core/iopipe/SImager/JpegCodec/JpegCodec.cpp	(revision 6202)
+@@ -196,11 +196,15 @@
+ 
+ 		if(mVisidonBeautyShotEngine != NULL) {
+ 			VDBeautyShotData inputData;    
+-			memset(&inputData,0,sizeof(VDBeautyShotData));	
+-			mParamsMgr->getPictureSize(&inputData.imageRows,&inputData.imageCols);    
++			memset(&inputData,0,sizeof(VDBeautyShotData));
++			if(mParamsMgr->getInt("rotation") == 0 || mParamsMgr->getInt("rotation") == 180){
++				mParamsMgr->getPictureSize(&inputData.imageCols,&inputData.imageRows); 
++			}else{
++				mParamsMgr->getPictureSize(&inputData.imageRows,&inputData.imageCols); 
++			}
++			inputData.stillImageRotation = 270 - mParamsMgr->getInt("rotation");  
+ 			inputData.imageFormat = YUV_YUYV; 
+ 			inputData.imagePtr = yuv;
+-			inputData.stillImageRotation = 270;
+ 			inputData.beautyFilterParams[SKIN_SMOOTHING] = mParamsMgr->getVisidonModeSkin();      
+ 			inputData.beautyFilterParams[SKIN_TONE_ADJUSTING] = mParamsMgr->getVisidonModeTone();; 		     
+ 			MY_LOGD("%s: CALLING Link_VDProcessStillImage (cols = %d, rows = %d, dataptr = %p, engineptr = %p,skin=%d,tone=%d)",

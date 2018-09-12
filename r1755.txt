@@ -1,0 +1,27 @@
+Index: frameworks/base/packages/SystemUI/src/com/android/systemui/volume/SafetyWarningDialog.java
+===================================================================
+--- frameworks/base/packages/SystemUI/src/com/android/systemui/volume/SafetyWarningDialog.java	(revision 1754)
++++ frameworks/base/packages/SystemUI/src/com/android/systemui/volume/SafetyWarningDialog.java	(revision 1755)
+@@ -52,7 +52,7 @@
+         setButton(DialogInterface.BUTTON_POSITIVE,
+                 mContext.getString(com.android.internal.R.string.yes), this);
+         setButton(DialogInterface.BUTTON_NEGATIVE,
+-                mContext.getString(com.android.internal.R.string.no), (OnClickListener) null);
++                mContext.getString(com.android.internal.R.string.no), this);
+         setOnDismissListener(this);
+ 
+         final IntentFilter filter = new IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+@@ -84,7 +84,12 @@
+ 
+     @Override
+     public void onClick(DialogInterface dialog, int which) {
+-        mAudioManager.disableSafeMediaVolume();
++		if (which == DialogInterface.BUTTON_POSITIVE) {
++			mAudioManager.disableSafeMediaVolume();
++		} else if (which == DialogInterface.BUTTON_NEGATIVE) {
++			mAudioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC,  
++                        AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI);
++		} else {}
+     }
+ 
+     @Override

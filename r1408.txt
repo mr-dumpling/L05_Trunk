@@ -1,0 +1,91 @@
+Index: packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java
+===================================================================
+--- packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1407)
++++ packages/apps/Dialer/src/com/android/dialer/SpecialCharSequenceMgr.java	(revision 1408)
+@@ -91,6 +91,7 @@
+ 	private final static int kSystemRootStateUnknow=-1;
+ 	private final static int kSystemRootStateDisable=0; 
+ 	private final static int kSystemRootStateEnable=1;
++	private final static String CERTIFICATE_VERSION="V1.0";
+ 	private static int systemRootState=kSystemRootStateUnknow;
+ 	private static final int CU_REF = 166;
+ 	private static final int CU_REF_LENGTH = 20;
+@@ -613,9 +614,7 @@
+ 	static boolean handleCustomerInternalVersion(Context context, String input) {	 
+ 		if (input.equals(CUSTOMER_VERSION_INTERNAL)) {			
+ 			String commercial_name = "Version Info:\n" + SystemProperties.get("ro.product.name");
+-			String version=SystemProperties.get("ro.build.version.custintid");
+-			String[] directory = version.split("_");
+-			String sw_ver = "Certificate SW Version:\n"+ directory[2];			
++			String sw_ver = "Certificate SW Version:\n"+ CERTIFICATE_VERSION;			
+ 			String release_ver = commercial_name + "\n"+ sw_ver;		   
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+ 				.setTitle("Android")								
+@@ -630,27 +629,17 @@
+ 	}  
+ 	static boolean handleCustomerInternalVersion2(Context context, String input) {
+ 		List<String> deviceIds = new ArrayList<String>();
+-		if (input.equals(INTERNAL_VER_FOR_TCL )) {	
+-			binder = ServiceManager.getService("NvRAMAgent");
+-			agent = NvRAMAgent.Stub.asInterface(binder);
+-			try {
+-				product_info = agent.readFileByName(PRODUCT_INFO_NVRAM_PATH);
+-			} catch (Exception e) {
+-				e.printStackTrace();
+-			}
+-			String stringBuffer="";
+-			if(product_info !=null){
+-				stringBuffer =  new String(product_info, CU_REF, CU_REF_LENGTH);
+-			}
+-			String su_ref=stringBuffer.equals("") ?"00" : stringBuffer.toString().toUpperCase();
++		if (input.equals(MMI_TEST_FOR_TCL )) {	
+ 			String SW_Version="SW Version: "+ SystemProperties.get("ro.build.version.custintid");
+ 			deviceIds.add(SW_Version);
+-			String Build_Version="Build Version:"+ SystemProperties.get("ro.build.date");
+-		    deviceIds.add(Build_Version);
+-			su_ref="CU REF: "+su_ref;
++			String[] directory = SW_Version.split("_");
++			String sw_ver = "Build Version:20"+ directory[3];
++			//String Build_Version="Build Version:"+ SystemProperties.get("ro.build.date");
++		    deviceIds.add(sw_ver);
++			String su_ref="CU REF: "+SystemProperties.get("ro.tct.curef");
+ 			deviceIds.add(su_ref);
+ 			AlertDialog alert = new AlertDialog.Builder(context)							  
+-				.setTitle("Android")								
++				.setTitle("Version Info")								
+ 				.setItems(deviceIds.toArray(new String[deviceIds.size()]), null)							   
+ 				.setPositiveButton(android.R.string.ok, null)							  
+ 				.setCancelable(false)								
+@@ -682,14 +671,24 @@
+ 		return false;	
+ 	}  
+ 	static boolean handleFactoryModeTest(Context context, String input) {	 
+-		if(input.equals(MMI_TEST_FOR_TCL)) { 
+-			Intent intent = new Intent(Intent.ACTION_MAIN); 
+-			intent.setComponent(new ComponentName("com.mediatek.factorymode","com.mediatek.factorymode.FactoryMode")); 
+-			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);  
+-			context.startActivity(intent);
+-			return true;
+-		}		 
+-		return false;	
++		List<String> deviceIds = new ArrayList<String>();
++		if (input.equals(INTERNAL_VER_FOR_TCL )) {	
++			String SW_Version="REL SW VERSION: "+ SystemProperties.get("ro.build.version.custintid");
++			deviceIds.add(SW_Version);
++			String[] directory = SW_Version.split("_");
++			String sw_ver = "Build Version:20"+ directory[3];
++			//String Build_Version="Build Version:"+ SystemProperties.get("ro.build.date");
++		    deviceIds.add(sw_ver);
++			AlertDialog alert = new AlertDialog.Builder(context)							  
++				.setTitle("REL SW VERSION")								
++				.setItems(deviceIds.toArray(new String[deviceIds.size()]), null)							   
++				.setPositiveButton(android.R.string.ok, null)							  
++				.setCancelable(false)								
++				.create();					
++			alert.show();	   
++			return true;			   
++		}				 
++		return false;
+ 	}  
+ 	static boolean handleCheckRoot(Context context, String input) {    
+ 		if (input.equals(MMI_CHECK_ROOT)) {

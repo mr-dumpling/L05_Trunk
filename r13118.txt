@@ -1,0 +1,39 @@
+Index: vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/transaction/MessagingNotification.java
+===================================================================
+--- vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/transaction/MessagingNotification.java	(revision 13117)
++++ vendor/mediatek/proprietary/packages/apps/Mms/src/com/android/mms/transaction/MessagingNotification.java	(revision 13118)
+@@ -442,7 +442,7 @@
+ 			ComponentName component = new ComponentName("com.android.mms","com.android.mms.ui.ConversationList");
+ 			Intent mIntent = new Intent("com.intent.unread");
+ 			mIntent.putExtra("componentName",component);
+-			mIntent.putExtra("unreadNum",mmsUnReadCount+smsUnReadCount);
++			mIntent.putExtra("unreadNum",getNewMmsCount(context)+getNewSmsCount(context));
+ 			context.sendBroadcast(mIntent);
+             sLastNotificationTime = currentTime;
+         }
+@@ -458,6 +458,25 @@
+         threads.clear();
+     }
+ 
++	private static int getNewMmsCount(Context context) { 
++		int result = 0; 
++		Cursor csr = context.getContentResolver().query(Uri.parse("content://mms/inbox"), null, "read = 0", null, null); 
++		if (csr != null) { 
++			result = csr.getCount(); 
++			csr.close(); 
++		} 
++		return result; 
++	} 
++	
++	private static int getNewSmsCount(Context context) { 
++		int result = 0; 
++		Cursor csr = context.getContentResolver().query(Uri.parse("content://sms"), null, "type = 1 and read = 0", null, null); 
++		if (csr != null) { 
++			result = csr.getCount(); 
++			csr.close(); 
++		} 
++		return result; 
++	}
+     /**
+      * Play the in-conversation notification sound (it's the regular notification sound, but
+      * played at half-volume
